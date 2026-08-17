@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/auth_destination_mapper.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_text_styles.dart';
+import '../../../auth/presentation/controllers/auth_role_resolver.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -15,6 +17,8 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
+  bool _checking = false;
+
   @override
   void initState() {
     super.initState();
@@ -25,43 +29,91 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _checkAuthentication() async {
+    if (_checking) {
+      return;
+    }
+
+    _checking = true;
+
     try {
+      debugPrint('SPLASH: Checking authentication...');
+
       final repository = ref.read(authRepositoryProvider);
-      final user = repository.currentUser;
+      final firebaseUser = repository.currentUser;
 
       if (!mounted) {
         return;
       }
 
-      if (user == null) {
+      if (firebaseUser == null) {
+        debugPrint('SPLASH: No authenticated user');
+
         context.go(RouteNames.login);
         return;
       }
 
-      final profile = await ref.read(
-        userProfileRepositoryProvider,
-      ).getUserByUid(user.uid);
+      debugPrint(
+        'SPLASH: Firebase user found: ${firebaseUser.uid}',
+      );
 
-      
+      final profile = await ref
+          .read(userProfileRepositoryProvider)
+          .getUserByUid(firebaseUser.uid);
+
       if (!mounted) {
         return;
       }
 
       if (profile == null) {
+        debugPrint(
+          'SPLASH: User profile not found. Going to onboarding.',
+        );
+
         context.go(RouteNames.onboarding);
         return;
       }
 
-      // Existing-user destination will be connected
-      // after role-based dashboard and membership flow.
-    } catch (error) {
-      debugPrint('Splash authentication check failed: $error');
+      debugPrint(
+        'SPLASH: Profile found: ${profile.publicId}',
+      );
+
+      debugPrint(
+        'SPLASH: User role: ${profile.role}',
+      );
+
+      final destination = AuthRoleResolver.resolve(
+        profile.role,
+      );
+
+      final route = AuthDestinationMapper.routeFor(
+        destination,
+      );
+
+      debugPrint(
+        'SPLASH: Destination = $destination',
+      );
+
+      debugPrint(
+        'SPLASH: Navigating to $route',
+      );
+
+      context.go(route);
+    } catch (error, stackTrace) {
+      debugPrint(
+        'SPLASH ERROR: $error',
+      );
+
+      debugPrint(
+        'SPLASH STACK: $stackTrace',
+      );
 
       if (!mounted) {
         return;
       }
 
       context.go(RouteNames.login);
+    } finally {
+      _checking = false;
     }
   }
 
@@ -86,17 +138,23 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                 color: Colors.white,
               ),
             ),
+
             const SizedBox(height: 20),
+
             const Text(
               'GriHo',
               style: AppTextStyles.headlineLarge,
             ),
+
             const SizedBox(height: 6),
+
             const Text(
               'Manage Every Home',
               style: AppTextStyles.bodyMedium,
             ),
+
             const SizedBox(height: 24),
+
             const SizedBox(
               width: 24,
               height: 24,
