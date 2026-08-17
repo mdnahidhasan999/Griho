@@ -42,6 +42,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         userProfileRepositoryProvider,
       ).getUserByUid(user.uid);
 
+      
       if (!mounted) {
         return;
       }

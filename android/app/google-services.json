@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "730568159232",
+    "project_id": "griho-crafttech",
+    "storage_bucket": "griho-crafttech.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:730568159232:android:18b0f9bee156f57b9a28e5",
+        "android_client_info": {
+          "package_name": "com.crafttech.griho"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6QcDUVROFZs3vnLPEY9Qoxe4mhZZhVBc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
