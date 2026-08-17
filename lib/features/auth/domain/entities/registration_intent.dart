@@ -1,0 +1,4 @@
+enum RegistrationIntent {
+  owner,
+  tenant,
+}

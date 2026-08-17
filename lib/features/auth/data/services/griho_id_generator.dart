@@ -9,7 +9,8 @@ class GrihoIdGenerator {
   GrihoIdGenerator({
     FirebaseFirestore? firestore,
     Random? random,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+  })
+      : _firestore = firestore ?? FirebaseFirestore.instance,
         _random = random ?? Random.secure();
 
   static const String _characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -47,6 +48,13 @@ class GrihoIdGenerator {
     throw StateError(
       'Unable to generate a unique Griho ID after $_maxAttempts attempts.',
     );
+  }
+
+  Future<void> releaseReservation(String publicId) async {
+    await _firestore
+        .collection('public_ids')
+        .doc(publicId)
+        .delete();
   }
 
   String _generateId() {
