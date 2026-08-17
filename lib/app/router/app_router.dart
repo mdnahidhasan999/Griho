@@ -4,22 +4,20 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/otp_verification_screen.dart';
 import '../../features/auth/presentation/screens/phone_login_screen.dart';
+import '../../features/home/presentation/screens/caretaker_home_screen.dart';
+import '../../features/home/presentation/screens/manager_home_screen.dart';
+import '../../features/home/presentation/screens/owner_home_screen.dart';
+import '../../features/home/presentation/screens/tenant_home_screen.dart';
 import '../../features/splash/presentation/screens/splash_screen.dart';
 import 'auth_route_guard.dart';
-import 'auth_router_refresh.dart';
 import 'route_names.dart';
 
 abstract final class AppRouter {
   static GoRouter create(Ref ref) {
     final guard = AuthRouteGuard(ref);
-    final authRefresh = AuthRouterRefresh();
-
-    ref.onDispose(authRefresh.dispose);
 
     return GoRouter(
       initialLocation: RouteNames.splash,
-
-      refreshListenable: authRefresh,
 
       redirect: (context, state) {
         return guard.redirect(
@@ -59,6 +57,40 @@ abstract final class AppRouter {
             return const OnboardingScreen();
           },
         ),
+
+
+
+        GoRoute(
+          path: RouteNames.ownerHome,
+          builder: (context, state) {
+            return const OwnerHomeScreen();
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.managerHome,
+          builder: (context, state) {
+            return const ManagerHomeScreen();
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.caretakerHome,
+          builder: (context, state) {
+            return const CaretakerHomeScreen();
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.tenantHome,
+          builder: (context, state) {
+            return const TenantHomeScreen();
+          },
+        ),
+
+
+
+
       ],
     );
   }

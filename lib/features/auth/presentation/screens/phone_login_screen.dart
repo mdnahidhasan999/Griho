@@ -12,7 +12,8 @@ class PhoneLoginScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<PhoneLoginScreen> createState() => _PhoneLoginScreenState();
+  ConsumerState<PhoneLoginScreen> createState() =>
+      _PhoneLoginScreenState();
 }
 
 class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
@@ -32,20 +33,43 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
       return;
     }
 
-    final controller = ref.read(authControllerProvider.notifier);
+    final phoneNumber = _completePhoneNumber;
 
-    await controller.sendOtp(
-      _completePhoneNumber,
+    if (phoneNumber.isEmpty) {
+      return;
+    }
+
+    await ref.read(authControllerProvider.notifier).sendOtp(
+      phoneNumber,
     );
+  }
 
+  void _handleAuthState(
+      AuthControllerState? previous,
+      AuthControllerState next,
+      ) {
     if (!mounted) {
       return;
     }
 
-    final authState = ref.read(authControllerProvider);
+    if (next.errorMessage != null &&
+        next.errorMessage != previous?.errorMessage) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(next.errorMessage!),
+        ),
+      );
+    }
 
-    if (authState.otpSent &&
-        authState.verificationId != null) {
+    if (next.otpSent &&
+        next.verificationId != null &&
+        previous?.otpSent != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('OTP sent successfully.'),
+        ),
+      );
+
       context.push(
         RouteNames.otpVerification,
         extra: _completePhoneNumber,
@@ -57,26 +81,9 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
 
-    ref.listen(
+    ref.listen<AuthControllerState>(
       authControllerProvider,
-          (previous, next) {
-        if (next.errorMessage != null &&
-            next.errorMessage != previous?.errorMessage) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(next.errorMessage!),
-            ),
-          );
-        }
-
-        if (next.otpSent && previous?.otpSent != true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('OTP sent successfully.'),
-            ),
-          );
-        }
-      },
+      _handleAuthState,
     );
 
     return Scaffold(
@@ -95,20 +102,14 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
                 Text(
                   'Welcome to Griho',
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .headlineMedium,
+                  style: Theme.of(context).textTheme.headlineMedium,
                 ),
 
                 const SizedBox(height: 8),
 
                 Text(
                   'Enter your phone number to continue.',
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .bodyMedium,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
 
                 const SizedBox(height: 32),
