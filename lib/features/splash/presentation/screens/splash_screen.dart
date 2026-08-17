@@ -64,7 +64,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         return;
       }
 
-
       if (profile == null) {
         debugPrint(
           'SPLASH: User profile not found. Going to onboarding.',
