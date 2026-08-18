@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/auth/presentation/controllers/auth_role_resolver.dart';
+import 'auth_destination_mapper.dart';
 import 'route_names.dart';
 
 class AuthRouteGuard {
@@ -23,14 +25,10 @@ class AuthRouteGuard {
     final isTenantRoute = location == RouteNames.tenantHome;
 
     final isProtectedRoute =
-        isOwnerRoute ||
-            isManagerRoute ||
-            isCaretakerRoute ||
-            isTenantRoute;
+        isOwnerRoute || isManagerRoute || isCaretakerRoute || isTenantRoute;
 
     // ------------------------------------------------------------
-    // 1. Splash is always allowed.
-    // SplashScreen itself decides where the user should go.
+    // 1. Splash
     // ------------------------------------------------------------
 
     if (isSplashRoute) {
@@ -38,7 +36,7 @@ class AuthRouteGuard {
     }
 
     // ------------------------------------------------------------
-    // 2. User is NOT authenticated.
+    // 2. User is NOT authenticated
     // ------------------------------------------------------------
 
     if (firebaseUser == null) {
@@ -50,36 +48,17 @@ class AuthRouteGuard {
     }
 
     // ------------------------------------------------------------
-    // 3. User IS authenticated.
+    // 3. User IS authenticated
     // ------------------------------------------------------------
 
-    // Authenticated users should not stay on login.
     if (isLoginRoute) {
       return RouteNames.splash;
     }
 
     // ------------------------------------------------------------
-    // 4. Onboarding.
-    // ------------------------------------------------------------
-
-    if (isOnboardingRoute) {
-      final profile = await ref.read(
-        userProfileRepositoryProvider,
-      ).getUserByUid(firebaseUser.uid);
-
-      // Profile already exists → onboarding is no longer needed.
-      if (profile != null) {
-        return RouteNames.splash;
-      }
-
-      // Authenticated but no profile → allow onboarding.
-      return null;
-    }
-
-    // ------------------------------------------------------------
-    // 5. OTP route.
+    // 4. OTP
     //
-    // If Firebase authentication is already completed,
+    // Once Firebase authentication is completed,
     // OTP screen should no longer be accessible.
     // ------------------------------------------------------------
 
@@ -88,14 +67,49 @@ class AuthRouteGuard {
     }
 
     // ------------------------------------------------------------
-    // 6. Protected home routes.
-    //
-    // For now, allow them because the actual role validation
-    // happens when OTP verification resolves the user.
+    // 5. Onboarding
+    // ------------------------------------------------------------
+
+    if (isOnboardingRoute) {
+      final profile = await ref
+          .read(userProfileRepositoryProvider)
+          .getUserByUid(firebaseUser.uid);
+
+      if (profile != null) {
+        return AuthDestinationMapper.routeFor(
+          AuthRoleResolver.resolve(profile.role),
+        );
+      }
+
+      return null;
+    }
+
+    // ------------------------------------------------------------
+    // 6. Protected routes
     // ------------------------------------------------------------
 
     if (isProtectedRoute) {
-      return null;
+      final profile = await ref
+          .read(userProfileRepositoryProvider)
+          .getUserByUid(firebaseUser.uid);
+
+      // Authenticated but profile doesn't exist.
+      // User must complete onboarding.
+      if (profile == null) {
+        return RouteNames.onboarding;
+      }
+
+      final destination = AuthRoleResolver.resolve(profile.role);
+
+      final correctRoute = AuthDestinationMapper.routeFor(destination);
+
+      // User is already on the correct route.
+      if (location == correctRoute) {
+        return null;
+      }
+
+      // User tried to access another role's dashboard.
+      return correctRoute;
     }
 
     return null;

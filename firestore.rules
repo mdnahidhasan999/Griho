@@ -1,0 +1,94 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================================
+    // USER PROFILE
+    // ============================================================
+
+    match /users/{userId} {
+
+      // A user can read only their own profile.
+      allow get: if isAuthenticated()
+                 && request.auth.uid == userId;
+
+      // A user can create only their own profile.
+      allow create: if isAuthenticated()
+                    && request.auth.uid == userId
+                    && request.resource.data.uid == request.auth.uid;
+
+      // Sensitive identity and authorization fields
+      // cannot be changed by the client.
+      allow update: if isAuthenticated()
+                    && request.auth.uid == userId
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.publicId == resource.data.publicId
+                    && request.resource.data.role == resource.data.role
+                    && request.resource.data.createdAt == resource.data.createdAt;
+
+      // Client-side profile deletion is not allowed.
+      allow delete: if false;
+    }
+
+
+    // ============================================================
+    // GRIHO PUBLIC ID RESERVATIONS
+    // ============================================================
+
+    match /public_ids/{publicId} {
+
+      // Only a specific reservation can be checked.
+      // Collection listing/querying is not allowed.
+      allow get: if isAuthenticated();
+
+      // A user can reserve an ID only for themselves.
+      allow create: if isAuthenticated()
+                    && request.resource.data.publicId == publicId
+                    && request.resource.data.createdBy == request.auth.uid;
+
+      // Reservations are immutable.
+      allow update: if false;
+
+      // Only the creator can release their reservation.
+      allow delete: if isAuthenticated()
+                    && resource.data.createdBy == request.auth.uid;
+    }
+
+
+    // ============================================================
+    // PROPERTIES
+    // ============================================================
+
+    match /properties/{propertyId} {
+
+      // A user can read a property only if they own it.
+      allow get: if isAuthenticated()
+                 && resource.data.ownerId == request.auth.uid;
+
+      // A user can create a property only for themselves.
+      allow create: if isAuthenticated()
+                    && request.resource.data.ownerId == request.auth.uid;
+
+      // A property owner can update only their own property.
+      //
+      // ownerId cannot be transferred through the client.
+      allow update: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid
+                    && request.resource.data.ownerId == resource.data.ownerId;
+
+      // Only the property owner can delete it.
+      allow delete: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid;
+    }
+
+
+    // ============================================================
+    // AUTHENTICATION HELPER
+    // ============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+  }
+}

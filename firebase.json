@@ -1,1 +1,34 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"griho-crafttech","appId":"1:730568159232:android:18b0f9bee156f57b9a28e5","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"griho-crafttech","appId":"1:730568159232:ios:ee9ec4f909b099179a28e5","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"griho-crafttech","configurations":{"android":"1:730568159232:android:18b0f9bee156f57b9a28e5","ios":"1:730568159232:ios:ee9ec4f909b099179a28e5"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "griho-crafttech",
+          "appId": "1:730568159232:android:18b0f9bee156f57b9a28e5",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "griho-crafttech",
+          "appId": "1:730568159232:ios:ee9ec4f909b099179a28e5",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "griho-crafttech",
+          "configurations": {
+            "android": "1:730568159232:android:18b0f9bee156f57b9a28e5",
+            "ios": "1:730568159232:ios:ee9ec4f909b099179a28e5"
+          }
+        }
+      }
+    }
+  },
+
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}
