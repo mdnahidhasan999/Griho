@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/route_names.dart';
 import '../../../../app/utils/app_snackbar.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 
 class OwnerHomeScreen extends ConsumerWidget {
   const OwnerHomeScreen({super.key});
@@ -64,24 +67,36 @@ class OwnerHomeScreen extends ConsumerWidget {
 
                 const SizedBox(height: 12),
 
-                const Row(
-                  children: [
-                    Expanded(
-                      child: _SummaryCard(
-                        icon: Icons.home_work_outlined,
-                        title: 'Properties',
-                        value: '0',
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryCard(
-                        icon: Icons.people_outline,
-                        title: 'Tenants',
-                        value: '0',
-                      ),
-                    ),
-                  ],
+                Consumer(
+                  builder: (context, ref, child) {
+                    final propertiesAsync = ref.watch(
+                      currentOwnerPropertiesProvider,
+                    );
+
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _SummaryCard(
+                            icon: Icons.home_work_outlined,
+                            title: 'Properties',
+                            value: propertiesAsync.when(
+                              loading: () => '...',
+                              error: (_, _) => '0',
+                              data: (properties) => '${properties.length}',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: _SummaryCard(
+                            icon: Icons.people_outline,
+                            title: 'Tenants',
+                            value: '0',
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 12),
@@ -119,11 +134,14 @@ class OwnerHomeScreen extends ConsumerWidget {
                   icon: Icons.add_home_work_outlined,
                   title: 'Add Property',
                   description: 'Add and manage your property.',
-                  onTap: () {
-                    AppSnackbar.info(
-                      context,
-                      'Property management will be available in the next step.',
-                    );
+                  onTap: () async {
+                    await context.push(RouteNames.addProperty);
+
+                    if (!context.mounted) {
+                      return;
+                    }
+
+                    ref.invalidate(currentOwnerPropertiesProvider);
                   },
                 ),
 

@@ -8,4 +8,6 @@ abstract final class RouteNames {
   static const managerHome = '/manager';
   static const caretakerHome = '/caretaker';
   static const tenantHome = '/tenant';
+
+  static const addProperty = '/owner/add-property';
 }

@@ -2,7 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/create_property_request.dart';
 import '../../domain/entities/property.dart';
-import '../providers/property_provider.dart';
+import '../../domain/usecases/create_property.dart';
+import '../../domain/usecases/delete_property.dart';
+import '../../domain/usecases/get_properties.dart';
+import '../../domain/usecases/get_property.dart';
+import '../../domain/usecases/update_property.dart';
+import '../providers/property_usecase_provider.dart';
 
 final propertyControllerProvider =
 NotifierProvider<PropertyController, PropertyControllerState>(
@@ -45,8 +50,20 @@ class PropertyControllerState {
 
 class PropertyController
     extends Notifier<PropertyControllerState> {
+  late final CreateProperty _createProperty;
+  late final GetProperties _getProperties;
+  late final GetProperty _getProperty;
+  late final UpdateProperty _updateProperty;
+  late final DeleteProperty _deleteProperty;
+
   @override
   PropertyControllerState build() {
+    _createProperty = ref.read(createPropertyProvider);
+    _getProperties = ref.read(getPropertiesProvider);
+    _getProperty = ref.read(getPropertyProvider);
+    _updateProperty = ref.read(updatePropertyProvider);
+    _deleteProperty = ref.read(deletePropertyProvider);
+
     return const PropertyControllerState();
   }
 
@@ -59,13 +76,7 @@ class PropertyController
     );
 
     try {
-      final repository = ref.read(
-        propertyRepositoryProvider,
-      );
-
-      final properties = await repository.getPropertiesByOwnerId(
-        ownerId,
-      );
+      final properties = await _getProperties(ownerId);
 
       state = state.copyWith(
         isLoading: false,
@@ -88,13 +99,7 @@ class PropertyController
     );
 
     try {
-      final repository = ref.read(
-        propertyRepositoryProvider,
-      );
-
-      final property = await repository.getPropertyById(
-        propertyId,
-      );
+      final property = await _getProperty(propertyId);
 
       if (property == null) {
         state = state.copyWith(
@@ -125,13 +130,7 @@ class PropertyController
     );
 
     try {
-      final repository = ref.read(
-        propertyRepositoryProvider,
-      );
-
-      final createdProperty = await repository.createProperty(
-        request,
-      );
+      final createdProperty = await _createProperty(request);
 
       state = state.copyWith(
         isLoading: false,
@@ -162,13 +161,7 @@ class PropertyController
     );
 
     try {
-      final repository = ref.read(
-        propertyRepositoryProvider,
-      );
-
-      final updatedProperty = await repository.updateProperty(
-        property,
-      );
+      final updatedProperty = await _updateProperty(property);
 
       final updatedProperties = state.properties.map(
             (item) {
@@ -206,13 +199,7 @@ class PropertyController
     );
 
     try {
-      final repository = ref.read(
-        propertyRepositoryProvider,
-      );
-
-      await repository.deleteProperty(
-        propertyId,
-      );
+      await _deleteProperty(propertyId);
 
       final remainingProperties = state.properties
           .where(

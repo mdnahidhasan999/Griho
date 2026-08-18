@@ -60,27 +60,27 @@ service cloud.firestore {
     // PROPERTIES
     // ============================================================
 
-    match /properties/{propertyId} {
+match /properties/{propertyId} {
 
-      // A user can read a property only if they own it.
-      allow get: if isAuthenticated()
-                 && resource.data.ownerId == request.auth.uid;
+  // Owner can read their own properties.
+  // "read" covers both get and query/list.
+  allow read: if isAuthenticated()
+              && resource.data.ownerId == request.auth.uid;
 
-      // A user can create a property only for themselves.
-      allow create: if isAuthenticated()
-                    && request.resource.data.ownerId == request.auth.uid;
+  // A user can create a property only for themselves.
+  allow create: if isAuthenticated()
+                && request.resource.data.ownerId == request.auth.uid;
 
-      // A property owner can update only their own property.
-      //
-      // ownerId cannot be transferred through the client.
-      allow update: if isAuthenticated()
-                    && resource.data.ownerId == request.auth.uid
-                    && request.resource.data.ownerId == resource.data.ownerId;
+  // Owner can update their own property.
+  // Ownership cannot be transferred.
+  allow update: if isAuthenticated()
+                && resource.data.ownerId == request.auth.uid
+                && request.resource.data.ownerId == resource.data.ownerId;
 
-      // Only the property owner can delete it.
-      allow delete: if isAuthenticated()
-                    && resource.data.ownerId == request.auth.uid;
-    }
+  // Only the owner can delete the property.
+  allow delete: if isAuthenticated()
+                && resource.data.ownerId == request.auth.uid;
+}
 
 
     // ============================================================

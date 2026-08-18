@@ -8,6 +8,7 @@ import '../../features/home/presentation/screens/caretaker_home_screen.dart';
 import '../../features/home/presentation/screens/manager_home_screen.dart';
 import '../../features/home/presentation/screens/owner_home_screen.dart';
 import '../../features/home/presentation/screens/tenant_home_screen.dart';
+import '../../features/properties/presentation/screens/add_property_screen.dart';
 import '../../features/splash/presentation/screens/splash_screen.dart';
 import 'auth_route_guard.dart';
 import 'route_names.dart';
@@ -58,12 +59,17 @@ abstract final class AppRouter {
           },
         ),
 
-
-
         GoRoute(
           path: RouteNames.ownerHome,
           builder: (context, state) {
             return const OwnerHomeScreen();
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.addProperty,
+          builder: (context, state) {
+            return const AddPropertyScreen();
           },
         ),
 
@@ -87,10 +93,6 @@ abstract final class AppRouter {
             return const TenantHomeScreen();
           },
         ),
-
-
-
-
       ],
     );
   }
