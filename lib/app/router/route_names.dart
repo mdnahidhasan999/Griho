@@ -4,6 +4,10 @@ abstract final class RouteNames {
   static const otpVerification = '/otp-verification';
   static const onboarding = '/onboarding';
 
+  // ============================================================
+  // HOME
+  // ============================================================
+
   static const ownerHome = '/owner';
   static const managerHome = '/manager';
   static const caretakerHome = '/caretaker';
@@ -13,9 +17,11 @@ abstract final class RouteNames {
   // PROPERTIES
   // ============================================================
 
-  static const addProperty = '/owner/add-property';
+  static const addProperty =
+      '/owner/add-property';
 
-  static const propertyList = '/owner/properties';
+  static const propertyList =
+      '/owner/properties';
 
   static const propertyDetails =
       '/owner/properties/:propertyId';

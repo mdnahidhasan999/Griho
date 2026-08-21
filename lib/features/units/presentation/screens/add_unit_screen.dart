@@ -6,10 +6,12 @@ import '../controllers/unit_controller.dart';
 
 class AddUnitScreen extends ConsumerStatefulWidget {
   final String propertyId;
+  final int numberOfFloors;
 
   const AddUnitScreen({
     super.key,
     required this.propertyId,
+    required this.numberOfFloors,
   });
 
   @override
@@ -19,12 +21,20 @@ class AddUnitScreen extends ConsumerStatefulWidget {
 
 class _AddUnitScreenState
     extends ConsumerState<AddUnitScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _formKey =
+  GlobalKey<FormState>();
 
-  final _floorController = TextEditingController();
-  final _unitNumberController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _rentController = TextEditingController();
+  final _floorController =
+  TextEditingController();
+
+  final _unitNumberController =
+  TextEditingController();
+
+  final _nameController =
+  TextEditingController();
+
+  final _rentController =
+  TextEditingController();
 
   @override
   void dispose() {
@@ -54,7 +64,8 @@ class _AddUnitScreenState
     final rentText =
     _rentController.text.trim();
 
-    final monthlyRent = rentText.isEmpty
+    final monthlyRent =
+    rentText.isEmpty
         ? null
         : double.parse(rentText);
 
@@ -62,12 +73,16 @@ class _AddUnitScreenState
       propertyId: widget.propertyId,
       floorNumber: floorNumber,
       unitNumber: unitNumber,
-      name: name.isEmpty ? null : name,
+      name: name.isEmpty
+          ? null
+          : name,
       monthlyRent: monthlyRent,
     );
 
     final unit = await ref
-        .read(unitControllerProvider.notifier)
+        .read(
+      unitControllerProvider.notifier,
+    )
         .createUnit(
       request: request,
     );
@@ -81,7 +96,8 @@ class _AddUnitScreenState
         unitControllerProvider,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             state.errorMessage ??
@@ -104,16 +120,23 @@ class _AddUnitScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Unit'),
+        title: const Text(
+          'Add Unit',
+        ),
       ),
+
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding:
+          const EdgeInsets.all(24),
+
           child: Form(
             key: _formKey,
+
             child: Column(
               crossAxisAlignment:
               CrossAxisAlignment.start,
+
               children: [
                 Text(
                   'Unit Information',
@@ -131,36 +154,68 @@ class _AddUnitScreenState
                       .bodyMedium,
                 ),
 
+                const SizedBox(height: 12),
+
+                Text(
+                  'This property has '
+                      '${widget.numberOfFloors} '
+                      '${widget.numberOfFloors == 1 ? 'floor' : 'floors'}.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall,
+                ),
+
                 const SizedBox(height: 32),
 
+                // ==================================================
+                // FLOOR
+                // ==================================================
+
                 TextFormField(
-                  controller: _floorController,
+                  controller:
+                  _floorController,
+
                   keyboardType:
                   TextInputType.number,
+
                   textInputAction:
                   TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Floor Number',
-                    hintText: 'e.g. 1',
-                    border: OutlineInputBorder(),
+
+                  decoration:
+                  const InputDecoration(
+                    labelText:
+                    'Floor Number',
+                    hintText:
+                    'e.g. 1',
+                    border:
+                    OutlineInputBorder(),
                   ),
+
                   validator: (value) {
                     final text =
-                        value?.trim() ?? '';
-
-                    final floor =
-                    int.tryParse(text);
+                        value?.trim() ??
+                            '';
 
                     if (text.isEmpty) {
                       return 'Please enter floor number.';
                     }
 
+                    final floor =
+                    int.tryParse(text);
+
                     if (floor == null) {
                       return 'Floor number must be a number.';
                     }
 
-                    if (floor < 0) {
-                      return 'Floor number cannot be negative.';
+                    if (floor < 1) {
+                      return 'Floor number must be at least 1.';
+                    }
+
+                    if (floor >
+                        widget.numberOfFloors) {
+                      return 'This property has only '
+                          '${widget.numberOfFloors} '
+                          '${widget.numberOfFloors == 1 ? 'floor' : 'floors'}.';
                     }
 
                     return null;
@@ -169,23 +224,38 @@ class _AddUnitScreenState
 
                 const SizedBox(height: 20),
 
+                // ==================================================
+                // UNIT NUMBER
+                // ==================================================
+
                 TextFormField(
                   controller:
                   _unitNumberController,
+
                   textCapitalization:
-                  TextCapitalization.characters,
+                  TextCapitalization
+                      .characters,
+
                   textInputAction:
                   TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Unit Number',
-                    hintText: 'e.g. A-101',
-                    border: OutlineInputBorder(),
+
+                  decoration:
+                  const InputDecoration(
+                    labelText:
+                    'Unit Number',
+                    hintText:
+                    'e.g. A-101',
+                    border:
+                    OutlineInputBorder(),
                   ),
+
                   validator: (value) {
                     final unitNumber =
-                        value?.trim() ?? '';
+                        value?.trim() ??
+                            '';
 
-                    if (unitNumber.isEmpty) {
+                    if (unitNumber
+                        .isEmpty) {
                       return 'Please enter unit number.';
                     }
 
@@ -195,47 +265,75 @@ class _AddUnitScreenState
 
                 const SizedBox(height: 20),
 
+                // ==================================================
+                // UNIT NAME
+                // ==================================================
+
                 TextFormField(
-                  controller: _nameController,
+                  controller:
+                  _nameController,
+
                   textCapitalization:
-                  TextCapitalization.words,
+                  TextCapitalization
+                      .words,
+
                   textInputAction:
                   TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Unit Name',
+
+                  decoration:
+                  const InputDecoration(
+                    labelText:
+                    'Unit Name',
                     hintText:
                     'Optional, e.g. Family Apartment',
-                    border: OutlineInputBorder(),
+                    border:
+                    OutlineInputBorder(),
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
+                // ==================================================
+                // MONTHLY RENT
+                // ==================================================
+
                 TextFormField(
-                  controller: _rentController,
+                  controller:
+                  _rentController,
+
                   keyboardType:
-                  const TextInputType.numberWithOptions(
+                  const TextInputType
+                      .numberWithOptions(
                     decimal: true,
                   ),
+
                   textInputAction:
                   TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: 'Monthly Rent',
+
+                  decoration:
+                  const InputDecoration(
+                    labelText:
+                    'Monthly Rent',
                     hintText:
                     'Optional, e.g. 15000',
                     prefixText: '৳ ',
-                    border: OutlineInputBorder(),
+                    border:
+                    OutlineInputBorder(),
                   ),
+
                   validator: (value) {
                     final text =
-                        value?.trim() ?? '';
+                        value?.trim() ??
+                            '';
 
                     if (text.isEmpty) {
                       return null;
                     }
 
                     final rent =
-                    double.tryParse(text);
+                    double.tryParse(
+                      text,
+                    );
 
                     if (rent == null) {
                       return 'Please enter a valid rent.';
@@ -251,13 +349,22 @@ class _AddUnitScreenState
 
                 const SizedBox(height: 32),
 
+                // ==================================================
+                // CREATE
+                // ==================================================
+
                 SizedBox(
-                  width: double.infinity,
+                  width:
+                  double.infinity,
+
                   child: FilledButton(
-                    onPressed: state.isLoading
+                    onPressed:
+                    state.isLoading
                         ? null
                         : _createUnit,
-                    child: state.isLoading
+
+                    child:
+                    state.isLoading
                         ? const SizedBox(
                       height: 20,
                       width: 20,
