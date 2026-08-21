@@ -9,5 +9,33 @@ abstract final class RouteNames {
   static const caretakerHome = '/caretaker';
   static const tenantHome = '/tenant';
 
+  // ============================================================
+  // PROPERTIES
+  // ============================================================
+
   static const addProperty = '/owner/add-property';
+
+  static const propertyList = '/owner/properties';
+
+  static const propertyDetails =
+      '/owner/properties/:propertyId';
+
+  static const editProperty =
+      '/owner/properties/:propertyId/edit';
+
+  // ============================================================
+  // UNITS
+  // ============================================================
+
+  static const propertyUnits =
+      '/owner/properties/:propertyId/units';
+
+  static const addUnit =
+      '/owner/properties/:propertyId/units/add';
+
+  static const unitDetails =
+      '/owner/units/:unitId';
+
+  static const editUnit =
+      '/owner/units/:unitId/edit';
 }

@@ -22,14 +22,19 @@ class _AddPropertyScreenState
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _numberOfFloorsController =
+  TextEditingController(text: '1');
 
-  PropertyType _selectedType = PropertyType.residential;
+  PropertyType _selectedType =
+      PropertyType.residential;
 
   @override
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
     _descriptionController.dispose();
+    _numberOfFloorsController.dispose();
+
     super.dispose();
   }
 
@@ -37,6 +42,10 @@ class _AddPropertyScreenState
     if (!_formKey.currentState!.validate()) {
       return;
     }
+
+    final numberOfFloors = int.parse(
+      _numberOfFloorsController.text.trim(),
+    );
 
     final request = CreatePropertyRequest(
       name: _nameController.text.trim(),
@@ -48,6 +57,7 @@ class _AddPropertyScreenState
           ? null
           : _descriptionController.text.trim(),
       type: _selectedType,
+      numberOfFloors: numberOfFloors,
     );
 
     final property = await ref
@@ -80,7 +90,9 @@ class _AddPropertyScreenState
     Navigator.of(context).pop(property);
   }
 
-  String _propertyTypeLabel(PropertyType type) {
+  String _propertyTypeLabel(
+      PropertyType type,
+      ) {
     switch (type) {
       case PropertyType.residential:
         return 'Residential';
@@ -109,7 +121,8 @@ class _AddPropertyScreenState
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
               children: [
                 Text(
                   'Property Information',
@@ -139,7 +152,8 @@ class _AddPropertyScreenState
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
-                    final name = value?.trim() ?? '';
+                    final name =
+                        value?.trim() ?? '';
 
                     if (name.isEmpty) {
                       return 'Please enter a property name.';
@@ -163,7 +177,8 @@ class _AddPropertyScreenState
                   ),
                   items: PropertyType.values.map(
                         (type) {
-                      return DropdownMenuItem<PropertyType>(
+                      return DropdownMenuItem<
+                          PropertyType>(
                         value: type,
                         child: Text(
                           _propertyTypeLabel(type),
@@ -185,13 +200,48 @@ class _AddPropertyScreenState
                 const SizedBox(height: 20),
 
                 TextFormField(
-                  controller: _addressController,
+                  controller:
+                  _numberOfFloorsController,
+                  keyboardType:
+                  TextInputType.number,
+                  textInputAction:
+                  TextInputAction.next,
+                  decoration:
+                  const InputDecoration(
+                    labelText: 'Number of Floors',
+                    hintText: 'e.g. 5',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    final floors = int.tryParse(
+                      value?.trim() ?? '',
+                    );
+
+                    if (floors == null) {
+                      return 'Please enter the number of floors.';
+                    }
+
+                    if (floors < 1) {
+                      return 'Number of floors must be at least 1.';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 20),
+
+                TextFormField(
+                  controller:
+                  _addressController,
                   textCapitalization:
                   TextCapitalization.sentences,
                   maxLines: 2,
-                  decoration: const InputDecoration(
+                  decoration:
+                  const InputDecoration(
                     labelText: 'Address',
-                    hintText: 'Enter property address',
+                    hintText:
+                    'Enter property address',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -199,13 +249,16 @@ class _AddPropertyScreenState
                 const SizedBox(height: 20),
 
                 TextFormField(
-                  controller: _descriptionController,
+                  controller:
+                  _descriptionController,
                   textCapitalization:
                   TextCapitalization.sentences,
                   maxLines: 4,
-                  decoration: const InputDecoration(
+                  decoration:
+                  const InputDecoration(
                     labelText: 'Description',
-                    hintText: 'Optional description',
+                    hintText:
+                    'Optional description',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -215,8 +268,7 @@ class _AddPropertyScreenState
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed:
-                    state.isLoading
+                    onPressed: state.isLoading
                         ? null
                         : _createProperty,
                     child: state.isLoading

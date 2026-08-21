@@ -11,11 +11,14 @@ class PropertyModel extends Property {
     super.description,
     required super.type,
     required super.status,
+    required super.numberOfFloors,
     required super.createdAt,
     required super.updatedAt,
   });
 
-  factory PropertyModel.fromEntity(Property property) {
+  factory PropertyModel.fromEntity(
+      Property property,
+      ) {
     return PropertyModel(
       id: property.id,
       ownerId: property.ownerId,
@@ -24,6 +27,7 @@ class PropertyModel extends Property {
       description: property.description,
       type: property.type,
       status: property.status,
+      numberOfFloors: property.numberOfFloors,
       createdAt: property.createdAt,
       updatedAt: property.updatedAt,
     );
@@ -59,10 +63,19 @@ class PropertyModel extends Property {
         'description',
       ),
       type: _propertyTypeFromString(
-        _readRequiredString(data, 'type'),
+        _readRequiredString(
+          data,
+          'type',
+        ),
       ),
       status: _propertyStatusFromString(
-        _readRequiredString(data, 'status'),
+        _readRequiredString(
+          data,
+          'status',
+        ),
+      ),
+      numberOfFloors: _readNumberOfFloors(
+        data,
       ),
       createdAt: _readDateTime(
         data,
@@ -83,8 +96,13 @@ class PropertyModel extends Property {
       'description': description,
       'type': type.name,
       'status': status.name,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': Timestamp.fromDate(updatedAt),
+      'numberOfFloors': numberOfFloors,
+      'createdAt': Timestamp.fromDate(
+        createdAt,
+      ),
+      'updatedAt': Timestamp.fromDate(
+        updatedAt,
+      ),
     };
   }
 
@@ -122,6 +140,34 @@ class PropertyModel extends Property {
     final trimmed = value.trim();
 
     return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static int _readNumberOfFloors(
+      Map<String, dynamic> data,
+      ) {
+    final value = data['numberOfFloors'];
+
+    // Backward compatibility:
+    // old properties may not have this field yet.
+    if (value == null) {
+      return 1;
+    }
+
+    if (value is num) {
+      final floors = value.toInt();
+
+      if (floors < 1) {
+        throw StateError(
+          'Property field "numberOfFloors" must be at least 1.',
+        );
+      }
+
+      return floors;
+    }
+
+    throw StateError(
+      'Property field "numberOfFloors" is invalid.',
+    );
   }
 
   static DateTime _readDateTime(

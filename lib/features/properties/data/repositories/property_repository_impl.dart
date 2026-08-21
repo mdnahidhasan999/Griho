@@ -36,6 +36,7 @@ class PropertyRepositoryImpl implements PropertyRepository {
       address: request.address,
       description: request.description,
       type: request.type,
+      numberOfFloors: request.numberOfFloors,
     );
   }
 

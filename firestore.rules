@@ -9,17 +9,13 @@ service cloud.firestore {
 
     match /users/{userId} {
 
-      // A user can read only their own profile.
       allow get: if isAuthenticated()
                  && request.auth.uid == userId;
 
-      // A user can create only their own profile.
       allow create: if isAuthenticated()
                     && request.auth.uid == userId
                     && request.resource.data.uid == request.auth.uid;
 
-      // Sensitive identity and authorization fields
-      // cannot be changed by the client.
       allow update: if isAuthenticated()
                     && request.auth.uid == userId
                     && request.resource.data.uid == resource.data.uid
@@ -27,7 +23,6 @@ service cloud.firestore {
                     && request.resource.data.role == resource.data.role
                     && request.resource.data.createdAt == resource.data.createdAt;
 
-      // Client-side profile deletion is not allowed.
       allow delete: if false;
     }
 
@@ -38,19 +33,14 @@ service cloud.firestore {
 
     match /public_ids/{publicId} {
 
-      // Only a specific reservation can be checked.
-      // Collection listing/querying is not allowed.
       allow get: if isAuthenticated();
 
-      // A user can reserve an ID only for themselves.
       allow create: if isAuthenticated()
                     && request.resource.data.publicId == publicId
                     && request.resource.data.createdBy == request.auth.uid;
 
-      // Reservations are immutable.
       allow update: if false;
 
-      // Only the creator can release their reservation.
       allow delete: if isAuthenticated()
                     && resource.data.createdBy == request.auth.uid;
     }
@@ -60,35 +50,96 @@ service cloud.firestore {
     // PROPERTIES
     // ============================================================
 
-match /properties/{propertyId} {
+    match /properties/{propertyId} {
 
-  // Owner can read their own properties.
-  // "read" covers both get and query/list.
-  allow read: if isAuthenticated()
-              && resource.data.ownerId == request.auth.uid;
+      // Owner can read their own properties.
+      allow read: if isAuthenticated()
+                  && resource.data.ownerId == request.auth.uid;
 
-  // A user can create a property only for themselves.
-  allow create: if isAuthenticated()
-                && request.resource.data.ownerId == request.auth.uid;
+      // User can create only their own property.
+      allow create: if isAuthenticated()
+                    && request.resource.data.ownerId == request.auth.uid;
 
-  // Owner can update their own property.
-  // Ownership cannot be transferred.
-  allow update: if isAuthenticated()
-                && resource.data.ownerId == request.auth.uid
-                && request.resource.data.ownerId == resource.data.ownerId;
+      // Owner can update their own property.
+      // Ownership cannot be transferred.
+      allow update: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid
+                    && request.resource.data.ownerId
+                       == resource.data.ownerId;
 
-  // Only the owner can delete the property.
-  allow delete: if isAuthenticated()
-                && resource.data.ownerId == request.auth.uid;
-}
+      // Only owner can delete property.
+      allow delete: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid;
+    }
 
 
     // ============================================================
-    // AUTHENTICATION HELPER
+    // UNITS
+    // ============================================================
+
+    match /units/{unitId} {
+
+      // ----------------------------------------------------------
+      // READ
+      // ----------------------------------------------------------
+      // User can read a unit only when the unit belongs to a
+      // property owned by the currently authenticated user.
+      allow read: if isAuthenticated()
+                  && isPropertyOwner(
+                    resource.data.propertyId
+                  );
+
+
+      // ----------------------------------------------------------
+      // CREATE
+      // ----------------------------------------------------------
+      // User can create a unit only under their own property.
+      allow create: if isAuthenticated()
+                    && isPropertyOwner(
+                      request.resource.data.propertyId
+                    );
+
+
+      // ----------------------------------------------------------
+      // UPDATE
+      // ----------------------------------------------------------
+      // User must own both the old and new property reference.
+      allow update: if isAuthenticated()
+                    && isPropertyOwner(
+                      resource.data.propertyId
+                    )
+                    && isPropertyOwner(
+                      request.resource.data.propertyId
+                    );
+
+
+      // ----------------------------------------------------------
+      // DELETE
+      // ----------------------------------------------------------
+      // Only the property owner can delete the unit.
+      allow delete: if isAuthenticated()
+                    && isPropertyOwner(
+                      resource.data.propertyId
+                    );
+    }
+
+
+    // ============================================================
+    // SECURITY HELPERS
     // ============================================================
 
     function isAuthenticated() {
       return request.auth != null;
+    }
+
+
+    function isPropertyOwner(propertyId) {
+      return exists(
+        /databases/$(database)/documents/properties/$(propertyId)
+      )
+      && get(
+        /databases/$(database)/documents/properties/$(propertyId)
+      ).data.ownerId == request.auth.uid;
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,8 +9,17 @@ import '../../features/home/presentation/screens/caretaker_home_screen.dart';
 import '../../features/home/presentation/screens/manager_home_screen.dart';
 import '../../features/home/presentation/screens/owner_home_screen.dart';
 import '../../features/home/presentation/screens/tenant_home_screen.dart';
+import '../../features/properties/domain/entities/property.dart';
 import '../../features/properties/presentation/screens/add_property_screen.dart';
+import '../../features/properties/presentation/screens/edit_property_screen.dart';
+import '../../features/properties/presentation/screens/property_details_screen.dart';
+import '../../features/properties/presentation/screens/property_list_screen.dart';
 import '../../features/splash/presentation/screens/splash_screen.dart';
+import '../../features/units/domain/entities/unit.dart';
+import '../../features/units/presentation/screens/add_unit_screen.dart';
+import '../../features/units/presentation/screens/edit_unit_screen.dart';
+import '../../features/units/presentation/screens/unit_details_screen.dart';
+import '../../features/units/presentation/screens/unit_list_screen.dart';
 import 'auth_route_guard.dart';
 import 'route_names.dart';
 
@@ -27,12 +37,20 @@ abstract final class AppRouter {
       },
 
       routes: [
+        // ========================================================
+        // SPLASH
+        // ========================================================
+
         GoRoute(
           path: RouteNames.splash,
           builder: (context, state) {
             return const SplashScreen();
           },
         ),
+
+        // ========================================================
+        // AUTH
+        // ========================================================
 
         GoRoute(
           path: RouteNames.login,
@@ -44,7 +62,8 @@ abstract final class AppRouter {
         GoRoute(
           path: RouteNames.otpVerification,
           builder: (context, state) {
-            final phoneNumber = state.extra as String;
+            final phoneNumber =
+            state.extra as String;
 
             return OtpVerificationScreen(
               phoneNumber: phoneNumber,
@@ -59,6 +78,10 @@ abstract final class AppRouter {
           },
         ),
 
+        // ========================================================
+        // OWNER
+        // ========================================================
+
         GoRoute(
           path: RouteNames.ownerHome,
           builder: (context, state) {
@@ -66,12 +89,151 @@ abstract final class AppRouter {
           },
         ),
 
+        // ========================================================
+        // PROPERTY
+        // ========================================================
+
         GoRoute(
           path: RouteNames.addProperty,
           builder: (context, state) {
             return const AddPropertyScreen();
           },
         ),
+
+        GoRoute(
+          path: RouteNames.propertyList,
+          builder: (context, state) {
+            return const PropertyListScreen();
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.propertyDetails,
+          builder: (context, state) {
+            final propertyId =
+            state.pathParameters['propertyId'];
+
+            if (propertyId == null ||
+                propertyId.isEmpty) {
+              return const Scaffold(
+                body: Center(
+                  child: Text(
+                    'Invalid property ID.',
+                  ),
+                ),
+              );
+            }
+
+            return PropertyDetailsScreen(
+              propertyId: propertyId,
+            );
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.editProperty,
+          builder: (context, state) {
+            final property =
+            state.extra as Property;
+
+            return EditPropertyScreen(
+              property: property,
+            );
+          },
+        ),
+
+        // ========================================================
+        // UNITS
+        // ========================================================
+
+        GoRoute(
+          path: RouteNames.propertyUnits,
+          builder: (context, state) {
+            final propertyId =
+            state.pathParameters['propertyId'];
+
+            if (propertyId == null ||
+                propertyId.isEmpty) {
+              return const Scaffold(
+                body: Center(
+                  child: Text(
+                    'Invalid property ID.',
+                  ),
+                ),
+              );
+            }
+
+            final propertyName =
+                state.extra as String? ?? 'Property';
+
+            return UnitListScreen(
+              propertyId: propertyId,
+              propertyName: propertyName,
+            );
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.addUnit,
+          builder: (context, state) {
+            final propertyId =
+            state.pathParameters['propertyId'];
+
+            if (propertyId == null ||
+                propertyId.isEmpty) {
+              return const Scaffold(
+                body: Center(
+                  child: Text(
+                    'Invalid property ID.',
+                  ),
+                ),
+              );
+            }
+
+            return AddUnitScreen(
+              propertyId: propertyId,
+            );
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.unitDetails,
+          builder: (context, state) {
+            final unitId =
+            state.pathParameters['unitId'];
+
+            if (unitId == null ||
+                unitId.isEmpty) {
+              return const Scaffold(
+                body: Center(
+                  child: Text(
+                    'Invalid unit ID.',
+                  ),
+                ),
+              );
+            }
+
+            return UnitDetailsScreen(
+              unitId: unitId,
+            );
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.editUnit,
+          builder: (context, state) {
+            final unit =
+            state.extra as Unit;
+
+            return EditUnitScreen(
+              unit: unit,
+            );
+          },
+        ),
+
+        // ========================================================
+        // OTHER ROLES
+        // ========================================================
 
         GoRoute(
           path: RouteNames.managerHome,

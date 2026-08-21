@@ -144,7 +144,16 @@ class OwnerHomeScreen extends ConsumerWidget {
                     ref.invalidate(currentOwnerPropertiesProvider);
                   },
                 ),
+                const SizedBox(height: 12),
 
+                _ActionCard(
+                  icon: Icons.home_work_outlined,
+                  title: 'My Properties',
+                  description: 'View and manage your properties.',
+                  onTap: () {
+                    context.push(RouteNames.propertyList);
+                  },
+                ),
                 const SizedBox(height: 12),
 
                 _ActionCard(

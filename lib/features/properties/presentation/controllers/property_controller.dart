@@ -4,9 +4,9 @@ import '../../domain/entities/create_property_request.dart';
 import '../../domain/entities/property.dart';
 import '../../domain/usecases/create_property.dart';
 import '../../domain/usecases/delete_property.dart';
-import '../../domain/usecases/get_properties.dart';
 import '../../domain/usecases/get_property.dart';
 import '../../domain/usecases/update_property.dart';
+import '../providers/property_provider.dart';
 import '../providers/property_usecase_provider.dart';
 
 final propertyControllerProvider =
@@ -51,46 +51,40 @@ class PropertyControllerState {
 class PropertyController
     extends Notifier<PropertyControllerState> {
   late final CreateProperty _createProperty;
-  late final GetProperties _getProperties;
   late final GetProperty _getProperty;
   late final UpdateProperty _updateProperty;
   late final DeleteProperty _deleteProperty;
 
+  String get currentOwnerId {
+    final currentUserService = ref.read(
+      currentUserServiceProvider,
+    );
+
+    return currentUserService.requiredUid;
+  }
+
   @override
   PropertyControllerState build() {
-    _createProperty = ref.read(createPropertyProvider);
-    _getProperties = ref.read(getPropertiesProvider);
-    _getProperty = ref.read(getPropertyProvider);
-    _updateProperty = ref.read(updatePropertyProvider);
-    _deleteProperty = ref.read(deletePropertyProvider);
+    _createProperty = ref.read(
+      createPropertyProvider,
+    );
+
+    _getProperty = ref.read(
+      getPropertyProvider,
+    );
+
+    _updateProperty = ref.read(
+      updatePropertyProvider,
+    );
+
+    _deleteProperty = ref.read(
+      deletePropertyProvider,
+    );
 
     return const PropertyControllerState();
   }
 
-  Future<void> loadProperties({
-    required String ownerId,
-  }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
-
-    try {
-      final properties = await _getProperties(ownerId);
-
-      state = state.copyWith(
-        isLoading: false,
-        properties: properties,
-      );
-    } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
-    }
-  }
-
-  Future<void> loadProperty({
+  Future<Property?> loadProperty({
     required String propertyId,
   }) async {
     state = state.copyWith(
@@ -99,25 +93,24 @@ class PropertyController
     );
 
     try {
-      final property = await _getProperty(propertyId);
-
-      if (property == null) {
-        state = state.copyWith(
-          isLoading: false,
-          clearSelectedProperty: true,
-        );
-        return;
-      }
+      final property = await _getProperty(
+        propertyId,
+      );
 
       state = state.copyWith(
         isLoading: false,
         selectedProperty: property,
+        clearSelectedProperty: property == null,
       );
+
+      return property;
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: error.toString(),
       );
+
+      return null;
     }
   }
 
@@ -130,7 +123,9 @@ class PropertyController
     );
 
     try {
-      final createdProperty = await _createProperty(request);
+      final createdProperty = await _createProperty(
+        request,
+      );
 
       state = state.copyWith(
         isLoading: false,
@@ -161,17 +156,18 @@ class PropertyController
     );
 
     try {
-      final updatedProperty = await _updateProperty(property);
+      final updatedProperty = await _updateProperty(
+        property,
+      );
 
-      final updatedProperties = state.properties.map(
-            (item) {
-          if (item.id == updatedProperty.id) {
-            return updatedProperty;
-          }
+      final updatedProperties =
+      state.properties.map((item) {
+        if (item.id == updatedProperty.id) {
+          return updatedProperty;
+        }
 
-          return item;
-        },
-      ).toList();
+        return item;
+      }).toList();
 
       state = state.copyWith(
         isLoading: false,
@@ -199,21 +195,24 @@ class PropertyController
     );
 
     try {
-      await _deleteProperty(propertyId);
+      await _deleteProperty(
+        propertyId,
+      );
 
-      final remainingProperties = state.properties
+      final remainingProperties =
+      state.properties
           .where(
-            (property) => property.id != propertyId,
+            (property) =>
+        property.id != propertyId,
       )
           .toList();
-
-      final selectedProperty = state.selectedProperty;
 
       state = state.copyWith(
         isLoading: false,
         properties: remainingProperties,
         clearSelectedProperty:
-        selectedProperty?.id == propertyId,
+        state.selectedProperty?.id ==
+            propertyId,
       );
 
       return true;
