@@ -44,4 +44,14 @@ abstract final class RouteNames {
 
   static const editUnit =
       '/owner/units/:unitId/edit';
+
+  // ============================================================
+// TENANTS
+// ============================================================
+
+  static const addTenant =
+      '/owner/add-tenant';
+
+  static const propertyTenants =
+      '/owner/properties/:propertyId/tenants';
 }

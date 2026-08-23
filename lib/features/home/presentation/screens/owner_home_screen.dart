@@ -155,16 +155,12 @@ class OwnerHomeScreen extends ConsumerWidget {
                   },
                 ),
                 const SizedBox(height: 12),
-
                 _ActionCard(
                   icon: Icons.person_add_alt_1_outlined,
                   title: 'Add Tenant',
-                  description: 'Invite a tenant to your property.',
-                  onTap: () {
-                    AppSnackbar.info(
-                      context,
-                      'Tenant management will be available in the next step.',
-                    );
+                  description: 'Add a tenant to one of your properties.',
+                  onTap: () async {
+                    await context.push(RouteNames.addTenant);
                   },
                 ),
 

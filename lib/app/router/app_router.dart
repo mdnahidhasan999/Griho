@@ -20,6 +20,8 @@ import '../../features/properties/presentation/screens/property_list_screen.dart
 
 import '../../features/splash/presentation/screens/splash_screen.dart';
 
+import '../../features/tenants/presentation/screens/add_tenant_screen.dart';
+import '../../features/tenants/presentation/screens/tenant_list_screen.dart';
 import '../../features/units/domain/entities/unit.dart';
 import '../../features/units/presentation/screens/add_unit_screen.dart';
 import '../../features/units/presentation/screens/edit_unit_screen.dart';
@@ -155,6 +157,38 @@ abstract final class AppRouter {
               propertyName: arguments.propertyName,
               numberOfFloors: arguments.numberOfFloors,
             );
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.propertyTenants,
+          builder: (context, state) {
+            final propertyId = state.pathParameters['propertyId'];
+
+            if (propertyId == null || propertyId.isEmpty) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid property ID.')),
+              );
+            }
+
+            final arguments = state.extra as PropertyTenantsRouteArguments?;
+
+            if (arguments == null) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid property information.')),
+              );
+            }
+
+            return TenantListScreen(
+              propertyId: propertyId,
+              propertyName: arguments.propertyName,
+            );
+          },
+        ),
+        GoRoute(
+          path: RouteNames.addTenant,
+          builder: (context, state) {
+            return const AddTenantScreen();
           },
         ),
 

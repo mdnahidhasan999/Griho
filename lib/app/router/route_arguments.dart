@@ -7,3 +7,11 @@ class PropertyUnitsRouteArguments {
     required this.numberOfFloors,
   });
 }
+
+class PropertyTenantsRouteArguments {
+  final String propertyName;
+
+  const PropertyTenantsRouteArguments({
+    required this.propertyName,
+  });
+}
