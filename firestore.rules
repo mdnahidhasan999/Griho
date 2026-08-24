@@ -52,22 +52,17 @@ service cloud.firestore {
 
     match /properties/{propertyId} {
 
-      // Owner can read their own properties.
       allow read: if isAuthenticated()
                   && resource.data.ownerId == request.auth.uid;
 
-      // User can create only their own property.
       allow create: if isAuthenticated()
                     && request.resource.data.ownerId == request.auth.uid;
 
-      // Owner can update their own property.
-      // Ownership cannot be transferred.
       allow update: if isAuthenticated()
                     && resource.data.ownerId == request.auth.uid
                     && request.resource.data.ownerId
                        == resource.data.ownerId;
 
-      // Only owner can delete property.
       allow delete: if isAuthenticated()
                     && resource.data.ownerId == request.auth.uid;
     }
@@ -79,31 +74,16 @@ service cloud.firestore {
 
     match /units/{unitId} {
 
-      // ----------------------------------------------------------
-      // READ
-      // ----------------------------------------------------------
-      // User can read a unit only when the unit belongs to a
-      // property owned by the currently authenticated user.
       allow read: if isAuthenticated()
                   && isPropertyOwner(
                     resource.data.propertyId
                   );
 
-
-      // ----------------------------------------------------------
-      // CREATE
-      // ----------------------------------------------------------
-      // User can create a unit only under their own property.
       allow create: if isAuthenticated()
                     && isPropertyOwner(
                       request.resource.data.propertyId
                     );
 
-
-      // ----------------------------------------------------------
-      // UPDATE
-      // ----------------------------------------------------------
-      // User must own both the old and new property reference.
       allow update: if isAuthenticated()
                     && isPropertyOwner(
                       resource.data.propertyId
@@ -112,11 +92,41 @@ service cloud.firestore {
                       request.resource.data.propertyId
                     );
 
+      allow delete: if isAuthenticated()
+                    && isPropertyOwner(
+                      resource.data.propertyId
+                    );
+    }
 
-      // ----------------------------------------------------------
-      // DELETE
-      // ----------------------------------------------------------
-      // Only the property owner can delete the unit.
+
+    // ============================================================
+    // TENANTS
+    // ============================================================
+
+    match /tenants/{tenantId} {
+
+      // Owner can read tenants from their own properties.
+      allow read: if isAuthenticated()
+                  && isPropertyOwner(
+                    resource.data.propertyId
+                  );
+
+      // Owner can add tenants to their own properties.
+      allow create: if isAuthenticated()
+                    && isPropertyOwner(
+                      request.resource.data.propertyId
+                    );
+
+      // Owner can update tenants belonging to their own property.
+      allow update: if isAuthenticated()
+                    && isPropertyOwner(
+                      resource.data.propertyId
+                    )
+                    && isPropertyOwner(
+                      request.resource.data.propertyId
+                    );
+
+      // Owner can delete tenants from their own property.
       allow delete: if isAuthenticated()
                     && isPropertyOwner(
                       resource.data.propertyId

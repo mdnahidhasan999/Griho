@@ -8,4 +8,6 @@ abstract class UserProfileRepository {
   Future<void> updateUser(AppUser user);
 
   Future<AppUser?> getUserByPublicId(String publicId);
+
+  Future<AppUser?> getUserByPhone(String phoneNumber);
 }

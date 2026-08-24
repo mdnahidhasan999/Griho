@@ -8,6 +8,7 @@ import '../../domain/entities/repositories/tenant_repository.dart';
 import '../../domain/entities/tenant.dart';
 import '../../domain/usecases/create_tenant.dart';
 import '../../domain/usecases/delete_tenant.dart';
+import '../../domain/usecases/get_tenant.dart';
 import '../../domain/usecases/update_tenant.dart';
 
 final tenantRepositoryProvider = Provider<TenantRepository>((ref) {
@@ -100,3 +101,6 @@ final tenantControllerProvider =
         deleteTenant: ref.read(deleteTenantProvider),
       );
     });
+final getTenantProvider = Provider<GetTenant>((ref) {
+  return GetTenant(repository: ref.read(tenantRepositoryProvider));
+});

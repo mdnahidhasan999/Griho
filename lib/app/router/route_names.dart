@@ -17,41 +17,35 @@ abstract final class RouteNames {
   // PROPERTIES
   // ============================================================
 
-  static const addProperty =
-      '/owner/add-property';
+  static const addProperty = '/owner/add-property';
 
-  static const propertyList =
-      '/owner/properties';
+  static const propertyList = '/owner/properties';
 
-  static const propertyDetails =
-      '/owner/properties/:propertyId';
+  static const propertyDetails = '/owner/properties/:propertyId';
 
-  static const editProperty =
-      '/owner/properties/:propertyId/edit';
+  static const editProperty = '/owner/properties/:propertyId/edit';
 
   // ============================================================
   // UNITS
   // ============================================================
 
-  static const propertyUnits =
-      '/owner/properties/:propertyId/units';
+  static const propertyUnits = '/owner/properties/:propertyId/units';
 
-  static const addUnit =
-      '/owner/properties/:propertyId/units/add';
+  static const addUnit = '/owner/properties/:propertyId/units/add';
 
-  static const unitDetails =
-      '/owner/units/:unitId';
+  static const unitDetails = '/owner/units/:unitId';
 
-  static const editUnit =
-      '/owner/units/:unitId/edit';
+  static const editUnit = '/owner/units/:unitId/edit';
 
   // ============================================================
-// TENANTS
-// ============================================================
+  // TENANTS
+  // ============================================================
 
-  static const addTenant =
-      '/owner/add-tenant';
+  static const tenantDetails = '/owner/tenants/:tenantId';
 
-  static const propertyTenants =
-      '/owner/properties/:propertyId/tenants';
+  static const editTenant = '/owner/tenants/:tenantId/edit';
+
+  static const addTenant = '/owner/add-tenant';
+
+  static const propertyTenants = '/owner/properties/:propertyId/tenants';
 }

@@ -32,4 +32,9 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
   Future<AppUser?> getUserByPublicId(String publicId) {
     return _dataSource.getUserByPublicId(publicId);
   }
+
+  @override
+  Future<AppUser?> getUserByPhone(String phoneNumber) {
+    return _dataSource.getUserByPhone(phoneNumber);
+  }
 }

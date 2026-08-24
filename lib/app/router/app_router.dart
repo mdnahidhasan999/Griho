@@ -20,7 +20,10 @@ import '../../features/properties/presentation/screens/property_list_screen.dart
 
 import '../../features/splash/presentation/screens/splash_screen.dart';
 
+import '../../features/tenants/domain/entities/tenant.dart';
 import '../../features/tenants/presentation/screens/add_tenant_screen.dart';
+import '../../features/tenants/presentation/screens/edit_tenant_screen.dart';
+import '../../features/tenants/presentation/screens/tenant_details_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_list_screen.dart';
 import '../../features/units/domain/entities/unit.dart';
 import '../../features/units/presentation/screens/add_unit_screen.dart';
@@ -189,6 +192,42 @@ abstract final class AppRouter {
           path: RouteNames.addTenant,
           builder: (context, state) {
             return const AddTenantScreen();
+          },
+        ),
+        GoRoute(
+          path: RouteNames.tenantDetails,
+          builder: (context, state) {
+            final tenantId = state.pathParameters['tenantId'];
+
+            if (tenantId == null || tenantId.isEmpty) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid tenant ID.')),
+              );
+            }
+
+            return TenantDetailsScreen(tenantId: tenantId);
+          },
+        ),
+        GoRoute(
+          path: RouteNames.editTenant,
+          builder: (context, state) {
+            final tenantId = state.pathParameters['tenantId'];
+
+            if (tenantId == null || tenantId.isEmpty) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid tenant ID.')),
+              );
+            }
+
+            final tenant = state.extra as Tenant?;
+
+            if (tenant == null) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid tenant information.')),
+              );
+            }
+
+            return EditTenantScreen(tenant: tenant);
           },
         ),
 

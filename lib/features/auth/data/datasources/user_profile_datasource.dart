@@ -5,9 +5,8 @@ import '../models/app_user_model.dart';
 class UserProfileDataSource {
   final FirebaseFirestore _firestore;
 
-  UserProfileDataSource({
-    FirebaseFirestore? firestore,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance;
+  UserProfileDataSource({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _usersCollection {
     return _firestore.collection('users');
@@ -24,20 +23,29 @@ class UserProfileDataSource {
   }
 
   Future<void> createUser(AppUserModel user) async {
-    await _usersCollection.doc(user.uid).set(
-      user.toFirestore(),
-    );
+    await _usersCollection.doc(user.uid).set(user.toFirestore());
   }
 
   Future<void> updateUser(AppUserModel user) async {
-    await _usersCollection.doc(user.uid).update(
-      user.toFirestore(),
-    );
+    await _usersCollection.doc(user.uid).update(user.toFirestore());
   }
 
   Future<AppUserModel?> getUserByPublicId(String publicId) async {
     final query = await _usersCollection
         .where('publicId', isEqualTo: publicId)
+        .limit(1)
+        .get();
+
+    if (query.docs.isEmpty) {
+      return null;
+    }
+
+    return AppUserModel.fromFirestore(query.docs.first);
+  }
+
+  Future<AppUserModel?> getUserByPhone(String phoneNumber) async {
+    final query = await _usersCollection
+        .where('phoneNumber', isEqualTo: phoneNumber)
         .limit(1)
         .get();
 

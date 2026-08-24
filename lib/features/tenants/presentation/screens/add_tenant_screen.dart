@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../auth/domain/entities/app_user.dart';
+import '../../../auth/presentation/providers/user_profile_provider.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../../../units/domain/entities/unit.dart';
@@ -26,6 +28,8 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   Property? _selectedProperty;
   Unit? _selectedUnit;
 
+  String _phoneLookupValue = '';
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -35,6 +39,22 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
     super.dispose();
   }
+
+  // ================================================================
+  // PHONE CHANGE
+  // ================================================================
+
+  void _onPhoneChanged(String value) {
+    final phone = value.trim();
+
+    setState(() {
+      _phoneLookupValue = phone;
+    });
+  }
+
+  // ================================================================
+  // CREATE TENANT
+  // ================================================================
 
   Future<void> _createTenant() async {
     if (!_formKey.currentState!.validate()) {
@@ -48,12 +68,44 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
       return;
     }
 
+    final phone = _phoneController.text.trim();
+
+    // --------------------------------------------------------------
+    // Find existing Griho user by phone.
+    //
+    // IMPORTANT:
+    // Do not use AsyncValue.valueOrNull here.
+    // We directly await the provider's future.
+    // --------------------------------------------------------------
+
+    AppUser? existingUser;
+
+    if (phone.isNotEmpty) {
+      try {
+        existingUser = await ref.read(userByPhoneProvider(phone).future);
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to check this phone number: $error')),
+        );
+
+        return;
+      }
+    }
+
+    // --------------------------------------------------------------
+    // Create tenant request
+    // --------------------------------------------------------------
+
     final request = CreateTenantRequest(
-      userId: null,
+      userId: existingUser?.uid,
       propertyId: property.id,
       unitId: unit.id,
       name: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
+      phone: phone,
       email: _emailController.text.trim().isEmpty
           ? null
           : _emailController.text.trim(),
@@ -61,6 +113,10 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
           ? null
           : _nidController.text.trim(),
     );
+
+    // --------------------------------------------------------------
+    // Create tenant
+    // --------------------------------------------------------------
 
     final tenant = await ref
         .read(tenantControllerProvider.notifier)
@@ -85,6 +141,10 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     Navigator.of(context).pop(tenant);
   }
 
+  // ================================================================
+  // BUILD
+  // ================================================================
+
   @override
   Widget build(BuildContext context) {
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
@@ -97,13 +157,28 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         ? const AsyncValue<List<Unit>>.data([])
         : ref.watch(propertyUnitsProvider(selectedPropertyId));
 
+    // --------------------------------------------------------------
+    // Existing Griho user lookup
+    // --------------------------------------------------------------
+
+    final userAsync = _phoneLookupValue.isEmpty
+        ? null
+        : ref.watch(userByPhoneProvider(_phoneLookupValue));
+
     return Scaffold(
       appBar: AppBar(title: const Text('Add Tenant')),
       body: SafeArea(
         child: propertiesAsync.when(
+          // ==========================================================
+          // PROPERTIES LOADING
+          // ==========================================================
           loading: () {
             return const Center(child: CircularProgressIndicator());
           },
+
+          // ==========================================================
+          // PROPERTIES ERROR
+          // ==========================================================
           error: (error, stackTrace) {
             return _ErrorView(
               message: 'Unable to load your properties.',
@@ -112,6 +187,10 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
               },
             );
           },
+
+          // ==========================================================
+          // PROPERTIES DATA
+          // ==========================================================
           data: (properties) {
             if (properties.isEmpty) {
               return const _NoPropertyView();
@@ -124,6 +203,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ==================================================
+                    // TITLE
+                    // ==================================================
                     Text(
                       'Tenant Information',
                       style: Theme.of(context).textTheme.headlineSmall,
@@ -143,10 +225,12 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     // ==================================================
                     DropdownButtonFormField<Property>(
                       initialValue: _selectedProperty,
+
                       decoration: const InputDecoration(
                         labelText: 'Property',
                         border: OutlineInputBorder(),
                       ),
+
                       items: properties.map((property) {
                         return DropdownMenuItem<Property>(
                           value: property,
@@ -156,13 +240,14 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                           ),
                         );
                       }).toList(),
+
                       onChanged: (property) {
                         setState(() {
                           _selectedProperty = property;
-
                           _selectedUnit = null;
                         });
                       },
+
                       validator: (value) {
                         if (value == null) {
                           return 'Please select a property.';
@@ -174,6 +259,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
                     const SizedBox(height: 8),
 
+                    // --------------------------------------------------
+                    // PROPERTY ID
+                    // --------------------------------------------------
                     if (_selectedProperty != null)
                       Text(
                         'Property ID: ${_selectedProperty!.id}',
@@ -186,26 +274,37 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     // UNIT
                     // ==================================================
                     unitsAsync.when(
+                      // ------------------------------------------------
+                      // UNIT LOADING
+                      // ------------------------------------------------
                       loading: () {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
                           child: Center(child: CircularProgressIndicator()),
                         );
                       },
+
+                      // ------------------------------------------------
+                      // UNIT ERROR
+                      // ------------------------------------------------
                       error: (error, stackTrace) {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text('Unable to load units.'),
+
                             const SizedBox(height: 8),
+
                             OutlinedButton.icon(
                               onPressed: () {
-                                if (_selectedProperty == null) {
+                                final property = _selectedProperty;
+
+                                if (property == null) {
                                   return;
                                 }
 
                                 ref.invalidate(
-                                  propertyUnitsProvider(_selectedProperty!.id),
+                                  propertyUnitsProvider(property.id),
                                 );
                               },
                               icon: const Icon(Icons.refresh),
@@ -214,6 +313,10 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                           ],
                         );
                       },
+
+                      // ------------------------------------------------
+                      // UNIT DATA
+                      // ------------------------------------------------
                       data: (units) {
                         if (_selectedProperty == null) {
                           return const Text('Select a property first.');
@@ -227,10 +330,12 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
                         return DropdownButtonFormField<Unit>(
                           initialValue: _selectedUnit,
+
                           decoration: const InputDecoration(
                             labelText: 'Unit',
                             border: OutlineInputBorder(),
                           ),
+
                           items: units.map((unit) {
                             return DropdownMenuItem<Unit>(
                               value: unit,
@@ -240,11 +345,13 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                               ),
                             );
                           }).toList(),
+
                           onChanged: (unit) {
                             setState(() {
                               _selectedUnit = unit;
                             });
                           },
+
                           validator: (value) {
                             if (value == null) {
                               return 'Please select a unit.';
@@ -263,13 +370,17 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     // ==================================================
                     TextFormField(
                       controller: _nameController,
+
                       textCapitalization: TextCapitalization.words,
+
                       textInputAction: TextInputAction.next,
+
                       decoration: const InputDecoration(
                         labelText: 'Tenant Name',
                         hintText: 'e.g. Rahim Uddin',
                         border: OutlineInputBorder(),
                       ),
+
                       validator: (value) {
                         if (value?.trim().isEmpty ?? true) {
                           return 'Please enter tenant name.';
@@ -286,13 +397,19 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     // ==================================================
                     TextFormField(
                       controller: _phoneController,
+
                       keyboardType: TextInputType.phone,
+
                       textInputAction: TextInputAction.next,
+
                       decoration: const InputDecoration(
                         labelText: 'Phone',
                         hintText: 'e.g. 017XXXXXXXX',
                         border: OutlineInputBorder(),
                       ),
+
+                      onChanged: _onPhoneChanged,
+
                       validator: (value) {
                         if (value?.trim().isEmpty ?? true) {
                           return 'Please enter phone number.';
@@ -302,6 +419,15 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       },
                     ),
 
+                    // ==================================================
+                    // EXISTING GRIHO USER
+                    // ==================================================
+                    if (_phoneLookupValue.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+
+                      _TenantUserLookupView(userAsync: userAsync!),
+                    ],
+
                     const SizedBox(height: 20),
 
                     // ==================================================
@@ -309,8 +435,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     // ==================================================
                     TextFormField(
                       controller: _emailController,
+
                       keyboardType: TextInputType.emailAddress,
+
                       textInputAction: TextInputAction.next,
+
                       decoration: const InputDecoration(
                         labelText: 'Email',
                         hintText: 'Optional',
@@ -325,8 +454,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     // ==================================================
                     TextFormField(
                       controller: _nidController,
+
                       keyboardType: TextInputType.number,
+
                       textInputAction: TextInputAction.done,
+
                       decoration: const InputDecoration(
                         labelText: 'NID Number',
                         hintText: 'Optional',
@@ -336,10 +468,14 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
                     const SizedBox(height: 32),
 
+                    // ==================================================
+                    // ADD TENANT
+                    // ==================================================
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: tenantState.isLoading ? null : _createTenant,
+
                         child: tenantState.isLoading
                             ? const SizedBox(
                                 height: 20,
@@ -362,6 +498,135 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 }
 
+// ==================================================================
+// EXISTING USER LOOKUP
+// ==================================================================
+
+class _TenantUserLookupView extends StatelessWidget {
+  final AsyncValue<AppUser?> userAsync;
+
+  const _TenantUserLookupView({required this.userAsync});
+
+  @override
+  Widget build(BuildContext context) {
+    return userAsync.when(
+      // ============================================================
+      // LOADING
+      // ============================================================
+      loading: () {
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              SizedBox(
+                height: 18,
+                width: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+
+              SizedBox(width: 10),
+
+              Text('Checking Griho user...'),
+            ],
+          ),
+        );
+      },
+
+      // ============================================================
+      // ERROR
+      // ============================================================
+      error: (error, stackTrace) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'Unable to check this phone number.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        );
+      },
+
+      // ============================================================
+      // DATA
+      // ============================================================
+      data: (user) {
+        // ----------------------------------------------------------
+        // No account found
+        // ----------------------------------------------------------
+
+        if (user == null) {
+          return Card(
+            margin: const EdgeInsets.only(top: 8),
+            child: const Padding(
+              padding: EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline),
+
+                  SizedBox(width: 10),
+
+                  Expanded(
+                    child: Text(
+                      'No Griho account found with this phone number.',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // ----------------------------------------------------------
+        // Existing account found
+        // ----------------------------------------------------------
+
+        return Card(
+          margin: const EdgeInsets.only(top: 8),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                const CircleAvatar(child: Icon(Icons.person_outline)),
+
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user.name,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+
+                      const SizedBox(height: 4),
+
+                      Text(
+                        'Griho ID: ${user.publicId}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+
+                      const SizedBox(height: 4),
+
+                      Text(
+                        'Role: ${user.role.name}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ==================================================================
+// NO PROPERTY
+// ==================================================================
+
 class _NoPropertyView extends StatelessWidget {
   const _NoPropertyView();
 
@@ -379,6 +644,10 @@ class _NoPropertyView extends StatelessWidget {
   }
 }
 
+// ==================================================================
+// ERROR VIEW
+// ==================================================================
+
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -394,9 +663,13 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, size: 48),
+
             const SizedBox(height: 16),
+
             Text(message, textAlign: TextAlign.center),
+
             const SizedBox(height: 16),
+
             FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),

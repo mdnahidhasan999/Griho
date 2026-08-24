@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/route_names.dart';
 import '../../domain/entities/tenant.dart';
 import '../providers/property_tenants_provider.dart';
 
@@ -16,26 +18,18 @@ class TenantListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tenantsAsync = ref.watch(
-      propertyTenantsProvider(propertyId),
-    );
+    final tenantsAsync = ref.watch(propertyTenantsProvider(propertyId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('$propertyName Tenants'),
-      ),
+      appBar: AppBar(title: Text('$propertyName Tenants')),
       body: tenantsAsync.when(
         loading: () {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+          return const Center(child: CircularProgressIndicator());
         },
         error: (error, stackTrace) {
           return _TenantErrorView(
             onRetry: () {
-              ref.invalidate(
-                propertyTenantsProvider(propertyId),
-              );
+              ref.invalidate(propertyTenantsProvider(propertyId));
             },
           );
         },
@@ -46,37 +40,19 @@ class TenantListScreen extends ConsumerWidget {
 
           return RefreshIndicator(
             onRefresh: () async {
-              ref.invalidate(
-                propertyTenantsProvider(propertyId),
-              );
+              ref.invalidate(propertyTenantsProvider(propertyId));
 
-              await ref.read(
-                propertyTenantsProvider(propertyId).future,
-              );
+              await ref.read(propertyTenantsProvider(propertyId).future);
             },
             child: ListView.separated(
-              physics:
-              const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                20,
-                20,
-                40,
-              ),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
               itemCount: tenants.length,
-              separatorBuilder: (
-                  context,
-                  index,
-                  ) {
+              separatorBuilder: (context, index) {
                 return const SizedBox(height: 12);
               },
-              itemBuilder: (
-                  context,
-                  index,
-                  ) {
-                return _TenantCard(
-                  tenant: tenants[index],
-                );
+              itemBuilder: (context, index) {
+                return _TenantCard(tenant: tenants[index]);
               },
             ),
           );
@@ -89,9 +65,7 @@ class TenantListScreen extends ConsumerWidget {
 class _TenantCard extends StatelessWidget {
   final Tenant tenant;
 
-  const _TenantCard({
-    required this.tenant,
-  });
+  const _TenantCard({required this.tenant});
 
   @override
   Widget build(BuildContext context) {
@@ -99,71 +73,55 @@ class _TenantCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          // Tenant details will be connected later.
+          context.push(
+            RouteNames.tenantDetails.replaceFirst(':tenantId', tenant.id),
+          );
         },
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Row(
             children: [
-              const CircleAvatar(
-                child: Icon(
-                  Icons.person_outline,
-                ),
-              ),
+              const CircleAvatar(child: Icon(Icons.person_outline)),
 
               const SizedBox(width: 16),
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       tenant.name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
 
                     const SizedBox(height: 6),
 
                     Text(
                       tenant.phone,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium,
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
 
                     if (tenant.email != null &&
-                        tenant.email!
-                            .trim()
-                            .isNotEmpty) ...[
+                        tenant.email!.trim().isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
                         tenant.email!,
                         maxLines: 1,
-                        overflow:
-                        TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
 
                     const SizedBox(height: 8),
 
-                    _TenantStatusChip(
-                      status: tenant.status,
-                    ),
+                    _TenantStatusChip(status: tenant.status),
                   ],
                 ),
               ),
 
               const SizedBox(width: 12),
 
-              const Icon(
-                Icons.chevron_right,
-              ),
+              const Icon(Icons.chevron_right),
             ],
           ),
         ),
@@ -175,35 +133,24 @@ class _TenantCard extends StatelessWidget {
 class _TenantStatusChip extends StatelessWidget {
   final TenantStatus status;
 
-  const _TenantStatusChip({
-    required this.status,
-  });
+  const _TenantStatusChip({required this.status});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
       child: Text(
         _statusLabel(status),
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall,
+        style: Theme.of(context).textTheme.labelSmall,
       ),
     );
   }
 
-  String _statusLabel(
-      TenantStatus status,
-      ) {
+  String _statusLabel(TenantStatus status) {
     switch (status) {
       case TenantStatus.active:
         return 'Active';
@@ -225,18 +172,13 @@ class _EmptyTenantsView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.people_outline,
-              size: 56,
-            ),
+            const Icon(Icons.people_outline, size: 56),
 
             const SizedBox(height: 16),
 
             Text(
               'No tenants yet',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
 
             const SizedBox(height: 8),
@@ -255,9 +197,7 @@ class _EmptyTenantsView extends StatelessWidget {
 class _TenantErrorView extends StatelessWidget {
   final VoidCallback onRetry;
 
-  const _TenantErrorView({
-    required this.onRetry,
-  });
+  const _TenantErrorView({required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -267,26 +207,15 @@ class _TenantErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-            ),
+            const Icon(Icons.error_outline, size: 48),
 
             const SizedBox(height: 16),
 
-            const Text(
-              'Unable to load tenants.',
-              textAlign: TextAlign.center,
-            ),
+            const Text('Unable to load tenants.', textAlign: TextAlign.center),
 
             const SizedBox(height: 16),
 
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text(
-                'Retry',
-              ),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

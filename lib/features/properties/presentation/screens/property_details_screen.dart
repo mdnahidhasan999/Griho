@@ -7,6 +7,7 @@ import '../../../../app/router/route_names.dart';
 
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/property_tenants_provider.dart';
+
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
 
@@ -92,6 +93,8 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
     ref.invalidate(currentOwnerPropertiesProvider);
 
     ref.invalidate(propertyUnitsProvider(result.id));
+
+    ref.invalidate(propertyTenantsProvider(result.id));
 
     await _loadProperty();
   }
@@ -210,7 +213,6 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
       body: Stack(
         children: [
           _PropertyDetails(property: property),
-
           if (_isDeleting)
             const Positioned.fill(
               child: ColoredBox(
@@ -247,6 +249,8 @@ class _PropertyDetails extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final unitsAsync = ref.watch(propertyUnitsProvider(property.id));
 
+    final tenantsAsync = ref.watch(propertyTenantsProvider(property.id));
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -257,16 +261,12 @@ class _PropertyDetails extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.home_work_outlined, size: 48),
-
                 const SizedBox(height: 16),
-
                 Text(
                   property.name,
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
-
                 const SizedBox(height: 8),
-
                 Text(
                   _propertyTypeLabel(property.type),
                   style: Theme.of(context).textTheme.bodyMedium,
@@ -285,19 +285,16 @@ class _PropertyDetails extends ConsumerWidget {
               label: 'Status',
               value: _propertyStatusLabel(property.status),
             ),
-
             _InfoRow(
               label: 'Number of Floors',
               value: property.numberOfFloors.toString(),
             ),
-
             _InfoRow(
               label: 'Address',
               value: property.address?.trim().isNotEmpty == true
                   ? property.address!
                   : 'Not provided',
             ),
-
             _InfoRow(
               label: 'Description',
               value: property.description?.trim().isNotEmpty == true
@@ -318,7 +315,13 @@ class _PropertyDetails extends ConsumerWidget {
 
         const SizedBox(height: 20),
 
-        _TenantsSection(propertyId: property.id, propertyName: property.name),
+        _TenantsSection(
+          propertyId: property.id,
+          propertyName: property.name,
+          tenantsAsync: tenantsAsync,
+        ),
+
+        const SizedBox(height: 20),
       ],
     );
   }
@@ -402,7 +405,6 @@ class _UnitsSection extends ConsumerWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-
                 TextButton(
                   onPressed: () {
                     _openUnitList(context);
@@ -427,16 +429,12 @@ class _UnitsSection extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Unable to load units.'),
-
                     const SizedBox(height: 8),
-
                     Text(
                       error.toString(),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-
                     const SizedBox(height: 12),
-
                     OutlinedButton.icon(
                       onPressed: () {
                         ref.invalidate(propertyUnitsProvider(propertyId));
@@ -454,9 +452,7 @@ class _UnitsSection extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('No units added yet.'),
-
                       const SizedBox(height: 12),
-
                       FilledButton.icon(
                         onPressed: () {
                           _addUnit(context, ref);
@@ -478,14 +474,12 @@ class _UnitsSection extends ConsumerWidget {
                       index++
                     ) ...[
                       _UnitCard(unit: previewUnits[index]),
-
                       if (index != previewUnits.length - 1)
                         const Divider(height: 24),
                     ],
 
                     if (units.length > 5) ...[
                       const SizedBox(height: 8),
-
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
@@ -519,47 +513,16 @@ class _UnitCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 0),
-
       leading: const CircleAvatar(child: Icon(Icons.apartment_outlined)),
-
       title: Text(
         unit.unitNumber,
         style: Theme.of(context).textTheme.titleMedium,
       ),
-
       subtitle: Text('Floor ${unit.floorNumber}'),
-
       trailing: const Icon(Icons.chevron_right),
-
       onTap: () {
         context.push(RouteNames.unitDetails.replaceFirst(':unitId', unit.id));
       },
-    );
-  }
-}
-
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _InfoCard({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-
-            const SizedBox(height: 16),
-
-            ...children,
-          ],
-        ),
-      ),
     );
   }
 }
@@ -568,7 +531,13 @@ class _TenantsSection extends ConsumerWidget {
   final String propertyId;
   final String propertyName;
 
-  const _TenantsSection({required this.propertyId, required this.propertyName});
+  final AsyncValue<List<Tenant>> tenantsAsync;
+
+  const _TenantsSection({
+    required this.propertyId,
+    required this.propertyName,
+    required this.tenantsAsync,
+  });
 
   Future<void> _openTenantList(BuildContext context) async {
     await context.push(
@@ -577,10 +546,18 @@ class _TenantsSection extends ConsumerWidget {
     );
   }
 
+  Future<void> _addTenant(BuildContext context, WidgetRef ref) async {
+    await context.push(RouteNames.addTenant);
+
+    if (!context.mounted) {
+      return;
+    }
+
+    ref.invalidate(propertyTenantsProvider(propertyId));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tenantsAsync = ref.watch(propertyTenantsProvider(propertyId));
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -595,7 +572,6 @@ class _TenantsSection extends ConsumerWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-
                 TextButton(
                   onPressed: () {
                     _openTenantList(context);
@@ -620,9 +596,7 @@ class _TenantsSection extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Unable to load tenants.'),
-
                     const SizedBox(height: 12),
-
                     OutlinedButton.icon(
                       onPressed: () {
                         ref.invalidate(propertyTenantsProvider(propertyId));
@@ -640,15 +614,13 @@ class _TenantsSection extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('No tenants added yet.'),
-
                       const SizedBox(height: 12),
-
                       FilledButton.icon(
                         onPressed: () {
-                          _openTenantList(context);
+                          _addTenant(context, ref);
                         },
-                        icon: const Icon(Icons.people_outline),
-                        label: const Text('Manage Tenants'),
+                        icon: const Icon(Icons.person_add_alt_1),
+                        label: const Text('Add Tenant'),
                       ),
                     ],
                   );
@@ -664,21 +636,22 @@ class _TenantsSection extends ConsumerWidget {
                       index++
                     ) ...[
                       _TenantPreviewCard(tenant: previewTenants[index]),
-
                       if (index != previewTenants.length - 1)
                         const Divider(height: 24),
                     ],
 
                     if (tenants.length > 5) ...[
                       const SizedBox(height: 8),
-
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () {
                             _openTenantList(context);
                           },
-                          child: Text('View all ${tenants.length} tenants'),
+                          child: Text(
+                            'View all '
+                            '${tenants.length} tenants',
+                          ),
                         ),
                       ),
                     ],
@@ -709,13 +682,62 @@ class _TenantPreviewCard extends StatelessWidget {
 
       subtitle: Text(tenant.phone),
 
-      trailing: const Icon(Icons.chevron_right),
+      trailing: _TenantStatusChip(status: tenant.status),
+    );
+  }
+}
 
-      onTap: () {
-        context.push(
-          RouteNames.unitDetails.replaceFirst(':unitId', tenant.unitId),
-        );
-      },
+class _TenantStatusChip extends StatelessWidget {
+  final TenantStatus status;
+
+  const _TenantStatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      ),
+      child: Text(
+        _statusLabel(status),
+        style: Theme.of(context).textTheme.labelSmall,
+      ),
+    );
+  }
+
+  String _statusLabel(TenantStatus status) {
+    switch (status) {
+      case TenantStatus.active:
+        return 'Active';
+
+      case TenantStatus.inactive:
+        return 'Inactive';
+    }
+  }
+}
+
+class _InfoCard extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _InfoCard({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
     );
   }
 }
@@ -734,9 +756,7 @@ class _InfoRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: Theme.of(context).textTheme.labelMedium),
-
           const SizedBox(height: 4),
-
           Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
@@ -759,13 +779,9 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, size: 48),
-
             const SizedBox(height: 16),
-
             Text(message, textAlign: TextAlign.center),
-
             const SizedBox(height: 16),
-
             FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
