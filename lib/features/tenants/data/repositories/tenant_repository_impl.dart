@@ -20,6 +20,11 @@ class TenantRepositoryImpl implements TenantRepository {
   }
 
   @override
+  Future<List<Tenant>> searchTenants(String search) {
+    return _dataSource.searchTenants(search);
+  }
+
+  @override
   Future<Tenant?> getTenantByUnitId(String unitId) {
     return _dataSource.getTenantByUnitId(unitId);
   }

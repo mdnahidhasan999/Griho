@@ -48,4 +48,6 @@ abstract final class RouteNames {
   static const addTenant = '/owner/add-tenant';
 
   static const propertyTenants = '/owner/properties/:propertyId/tenants';
+
+  static const ownerTenants = '/owner/tenants';
 }

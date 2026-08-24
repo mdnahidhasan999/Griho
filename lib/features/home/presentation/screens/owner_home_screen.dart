@@ -154,7 +154,21 @@ class OwnerHomeScreen extends ConsumerWidget {
                     context.push(RouteNames.propertyList);
                   },
                 ),
+
                 const SizedBox(height: 12),
+
+                _ActionCard(
+                  icon: Icons.people_outline,
+                  title: 'My Tenants',
+                  description:
+                      'View and search tenants across your properties.',
+                  onTap: () {
+                    context.push(RouteNames.ownerTenants);
+                  },
+                ),
+
+                const SizedBox(height: 12),
+
                 _ActionCard(
                   icon: Icons.person_add_alt_1_outlined,
                   title: 'Add Tenant',

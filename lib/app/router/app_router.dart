@@ -23,6 +23,7 @@ import '../../features/splash/presentation/screens/splash_screen.dart';
 import '../../features/tenants/domain/entities/tenant.dart';
 import '../../features/tenants/presentation/screens/add_tenant_screen.dart';
 import '../../features/tenants/presentation/screens/edit_tenant_screen.dart';
+import '../../features/tenants/presentation/screens/owner_tenant_list_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_details_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_list_screen.dart';
 import '../../features/units/domain/entities/unit.dart';
@@ -228,6 +229,13 @@ abstract final class AppRouter {
             }
 
             return EditTenantScreen(tenant: tenant);
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.ownerTenants,
+          builder: (context, state) {
+            return const OwnerTenantListScreen();
           },
         ),
 

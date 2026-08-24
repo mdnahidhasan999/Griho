@@ -6,65 +6,37 @@ import '../models/tenant_model.dart';
 class TenantDataSource {
   final FirebaseFirestore _firestore;
 
-  TenantDataSource({
-    FirebaseFirestore? firestore,
-  }) : _firestore =
-      firestore ?? FirebaseFirestore.instance;
+  TenantDataSource({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'tenants';
 
-  CollectionReference<Map<String, dynamic>>
-  get _tenants =>
+  CollectionReference<Map<String, dynamic>> get _tenants =>
       _firestore.collection(_collectionName);
 
-  Future<TenantModel?> getTenantById(
-      String tenantId,
-      ) async {
-    final document =
-    await _tenants.doc(tenantId).get();
+  Future<TenantModel?> getTenantById(String tenantId) async {
+    final document = await _tenants.doc(tenantId).get();
 
     if (!document.exists) {
       return null;
     }
 
-    return TenantModel.fromFirestore(
-      document,
-    );
+    return TenantModel.fromFirestore(document);
   }
 
-  Future<List<TenantModel>> getTenantsByPropertyId(
-      String propertyId,
-      ) async {
+  Future<List<TenantModel>> getTenantsByPropertyId(String propertyId) async {
     final snapshot = await _tenants
-        .where(
-      'propertyId',
-      isEqualTo: propertyId,
-    )
-        .orderBy(
-      'createdAt',
-      descending: true,
-    )
+        .where('propertyId', isEqualTo: propertyId)
+        .orderBy('createdAt', descending: true)
         .get();
 
-    return snapshot.docs
-        .map(
-      TenantModel.fromFirestore,
-    )
-        .toList();
+    return snapshot.docs.map(TenantModel.fromFirestore).toList();
   }
 
-  Future<TenantModel?> getTenantByUnitId(
-      String unitId,
-      ) async {
+  Future<TenantModel?> getTenantByUnitId(String unitId) async {
     final snapshot = await _tenants
-        .where(
-      'unitId',
-      isEqualTo: unitId,
-    )
-        .where(
-      'status',
-      isEqualTo: TenantStatus.active.name,
-    )
+        .where('unitId', isEqualTo: unitId)
+        .where('status', isEqualTo: TenantStatus.active.name)
         .limit(1)
         .get();
 
@@ -72,50 +44,68 @@ class TenantDataSource {
       return null;
     }
 
-    return TenantModel.fromFirestore(
-      snapshot.docs.first,
-    );
+    return TenantModel.fromFirestore(snapshot.docs.first);
   }
 
-  Future<TenantModel> createTenant({
-    required TenantModel tenant,
-  }) async {
+  Future<TenantModel> createTenant({required TenantModel tenant}) async {
     final document = _tenants.doc(tenant.id);
 
-    await document.set(
-      tenant.toFirestore(),
-    );
+    await document.set(tenant.toFirestore());
 
     return tenant;
   }
 
-  Future<TenantModel> updateTenant(
-      TenantModel tenant,
-      ) async {
-    final document =
-    _tenants.doc(tenant.id);
+  Future<TenantModel> updateTenant(TenantModel tenant) async {
+    final document = _tenants.doc(tenant.id);
 
-    await document.update(
-      tenant.toFirestore(),
-    );
+    await document.update(tenant.toFirestore());
 
-    final updatedDocument =
-    await document.get();
+    final updatedDocument = await document.get();
 
     if (!updatedDocument.exists) {
-      throw StateError(
-        'Tenant was updated but could not be retrieved.',
-      );
+      throw StateError('Tenant was updated but could not be retrieved.');
     }
 
-    return TenantModel.fromFirestore(
-      updatedDocument,
-    );
+    return TenantModel.fromFirestore(updatedDocument);
   }
 
-  Future<void> deleteTenant(
-      String tenantId,
-      ) async {
+  Future<void> deleteTenant(String tenantId) async {
     await _tenants.doc(tenantId).delete();
+  }
+
+  Future<List<TenantModel>> searchTenants(String search) async {
+    final normalizedSearch = search.trim().toLowerCase();
+
+    if (normalizedSearch.isEmpty) {
+      return [];
+    }
+
+    final results = <String, TenantModel>{};
+
+    final nameQuery = await _tenants
+        .where('name', isGreaterThanOrEqualTo: normalizedSearch)
+        .where('name', isLessThan: '$normalizedSearch\uf8ff')
+        .limit(20)
+        .get();
+
+    for (final document in nameQuery.docs) {
+      final tenant = TenantModel.fromFirestore(document);
+
+      results[tenant.id] = tenant;
+    }
+
+    final phoneQuery = await _tenants
+        .where('phone', isGreaterThanOrEqualTo: normalizedSearch)
+        .where('phone', isLessThan: '$normalizedSearch\uf8ff')
+        .limit(20)
+        .get();
+
+    for (final document in phoneQuery.docs) {
+      final tenant = TenantModel.fromFirestore(document);
+
+      results[tenant.id] = tenant;
+    }
+
+    return results.values.toList();
   }
 }
