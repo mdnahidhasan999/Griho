@@ -4,28 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/property.dart';
 import '../controllers/property_controller.dart';
 
-class EditPropertyScreen
-    extends ConsumerStatefulWidget {
+class EditPropertyScreen extends ConsumerStatefulWidget {
   final Property property;
 
-  const EditPropertyScreen({
-    super.key,
-    required this.property,
-  });
+  const EditPropertyScreen({super.key, required this.property});
 
   @override
-  ConsumerState<EditPropertyScreen> createState() =>
-      _EditPropertyScreenState();
+  ConsumerState<EditPropertyScreen> createState() => _EditPropertyScreenState();
 }
 
-class _EditPropertyScreenState
-    extends ConsumerState<EditPropertyScreen> {
+class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _addressController;
-  late final TextEditingController
-  _descriptionController;
-  late final TextEditingController
-  _numberOfFloorsController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _numberOfFloorsController;
 
   late PropertyType _selectedType;
   late PropertyStatus _selectedStatus;
@@ -34,24 +26,19 @@ class _EditPropertyScreenState
   void initState() {
     super.initState();
 
-    _nameController = TextEditingController(
-      text: widget.property.name,
-    );
+    _nameController = TextEditingController(text: widget.property.name);
 
     _addressController = TextEditingController(
       text: widget.property.address ?? '',
     );
 
-    _descriptionController =
-        TextEditingController(
-          text: widget.property.description ?? '',
-        );
+    _descriptionController = TextEditingController(
+      text: widget.property.description ?? '',
+    );
 
-    _numberOfFloorsController =
-        TextEditingController(
-          text: widget.property.numberOfFloors
-              .toString(),
-        );
+    _numberOfFloorsController = TextEditingController(
+      text: widget.property.numberOfFloors.toString(),
+    );
 
     _selectedType = widget.property.type;
     _selectedStatus = widget.property.status;
@@ -70,31 +57,25 @@ class _EditPropertyScreenState
   Future<void> _updateProperty() async {
     final name = _nameController.text.trim();
 
-    final numberOfFloors = int.tryParse(
-      _numberOfFloorsController.text.trim(),
-    );
+    final numberOfFloors = int.tryParse(_numberOfFloorsController.text.trim());
 
     if (name.isEmpty) {
       return;
     }
 
-    if (numberOfFloors == null ||
-        numberOfFloors < 1) {
+    if (numberOfFloors == null || numberOfFloors < 1) {
       return;
     }
 
     final updatedProperty = Property(
       id: widget.property.id,
+      propertyCode: widget.property.propertyCode,
       ownerId: widget.property.ownerId,
       name: name,
-      address:
-      _addressController.text.trim().isEmpty
+      address: _addressController.text.trim().isEmpty
           ? null
           : _addressController.text.trim(),
-      description: _descriptionController
-          .text
-          .trim()
-          .isEmpty
+      description: _descriptionController.text.trim().isEmpty
           ? null
           : _descriptionController.text.trim(),
       type: _selectedType,
@@ -104,14 +85,9 @@ class _EditPropertyScreenState
       updatedAt: DateTime.now(),
     );
 
-    final controller = ref.read(
-      propertyControllerProvider.notifier,
-    );
+    final controller = ref.read(propertyControllerProvider.notifier);
 
-    final result =
-    await controller.updateProperty(
-      property: updatedProperty,
-    );
+    final result = await controller.updateProperty(property: updatedProperty);
 
     if (!mounted) {
       return;
@@ -122,9 +98,7 @@ class _EditPropertyScreenState
     }
   }
 
-  String _propertyTypeLabel(
-      PropertyType type,
-      ) {
+  String _propertyTypeLabel(PropertyType type) {
     switch (type) {
       case PropertyType.residential:
         return 'Residential';
@@ -137,9 +111,7 @@ class _EditPropertyScreenState
     }
   }
 
-  String _propertyStatusLabel(
-      PropertyStatus status,
-      ) {
+  String _propertyStatusLabel(PropertyStatus status) {
     switch (status) {
       case PropertyStatus.active:
         return 'Active';
@@ -151,54 +123,35 @@ class _EditPropertyScreenState
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(
-      propertyControllerProvider,
-    );
+    final state = ref.watch(propertyControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Property'),
-      ),
+      appBar: AppBar(title: const Text('Edit Property')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
               controller: _nameController,
-              textInputAction:
-              TextInputAction.next,
-              decoration:
-              const InputDecoration(
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
                 labelText: 'Property Name',
-                hintText:
-                'Enter property name',
+                hintText: 'Enter property name',
               ),
             ),
 
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<
-                PropertyType>(
+            DropdownButtonFormField<PropertyType>(
               initialValue: _selectedType,
-              decoration:
-              const InputDecoration(
-                labelText: 'Property Type',
-              ),
-              items: PropertyType.values.map(
-                    (type) {
-                  return DropdownMenuItem<
-                      PropertyType>(
-                    value: type,
-                    child: Text(
-                      _propertyTypeLabel(
-                        type,
-                      ),
-                    ),
-                  );
-                },
-              ).toList(),
+              decoration: const InputDecoration(labelText: 'Property Type'),
+              items: PropertyType.values.map((type) {
+                return DropdownMenuItem<PropertyType>(
+                  value: type,
+                  child: Text(_propertyTypeLabel(type)),
+                );
+              }).toList(),
               onChanged: (type) {
                 if (type == null) {
                   return;
@@ -212,26 +165,15 @@ class _EditPropertyScreenState
 
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<
-                PropertyStatus>(
+            DropdownButtonFormField<PropertyStatus>(
               initialValue: _selectedStatus,
-              decoration:
-              const InputDecoration(
-                labelText: 'Status',
-              ),
-              items: PropertyStatus.values.map(
-                    (status) {
-                  return DropdownMenuItem<
-                      PropertyStatus>(
-                    value: status,
-                    child: Text(
-                      _propertyStatusLabel(
-                        status,
-                      ),
-                    ),
-                  );
-                },
-              ).toList(),
+              decoration: const InputDecoration(labelText: 'Status'),
+              items: PropertyStatus.values.map((status) {
+                return DropdownMenuItem<PropertyStatus>(
+                  value: status,
+                  child: Text(_propertyStatusLabel(status)),
+                );
+              }).toList(),
               onChanged: (status) {
                 if (status == null) {
                   return;
@@ -246,14 +188,10 @@ class _EditPropertyScreenState
             const SizedBox(height: 16),
 
             TextField(
-              controller:
-              _numberOfFloorsController,
-              keyboardType:
-              TextInputType.number,
-              textInputAction:
-              TextInputAction.next,
-              decoration:
-              const InputDecoration(
+              controller: _numberOfFloorsController,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
                 labelText: 'Number of Floors',
                 hintText: 'e.g. 5',
               ),
@@ -263,48 +201,35 @@ class _EditPropertyScreenState
 
             TextField(
               controller: _addressController,
-              textInputAction:
-              TextInputAction.next,
-              decoration:
-              const InputDecoration(
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
                 labelText: 'Address',
-                hintText:
-                'Enter property address',
+                hintText: 'Enter property address',
               ),
             ),
 
             const SizedBox(height: 16),
 
             TextField(
-              controller:
-              _descriptionController,
+              controller: _descriptionController,
               maxLines: 4,
-              decoration:
-              const InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Description',
-                hintText:
-                'Enter property description',
+                hintText: 'Enter property description',
               ),
             ),
 
             const SizedBox(height: 24),
 
             FilledButton(
-              onPressed: state.isLoading
-                  ? null
-                  : _updateProperty,
+              onPressed: state.isLoading ? null : _updateProperty,
               child: state.isLoading
                   ? const SizedBox(
-                height: 20,
-                width: 20,
-                child:
-                CircularProgressIndicator(
-                  strokeWidth: 2,
-                ),
-              )
-                  : const Text(
-                'Save Changes',
-              ),
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save Changes'),
             ),
           ],
         ),

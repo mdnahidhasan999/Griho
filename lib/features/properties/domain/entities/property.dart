@@ -10,7 +10,16 @@ enum PropertyStatus {
 }
 
 class Property {
+  /// Internal Firestore document ID.
   final String id;
+
+  /// Human-readable property ID shown to users.
+  ///
+  /// Example:
+  /// PROP-0001
+  final String propertyCode;
+
+  /// Internal owner reference.
   final String ownerId;
 
   final String name;
@@ -28,6 +37,7 @@ class Property {
 
   const Property({
     required this.id,
+    required this.propertyCode,
     required this.ownerId,
     required this.name,
     this.address,
@@ -41,6 +51,7 @@ class Property {
 
   Property copyWith({
     String? id,
+    String? propertyCode,
     String? ownerId,
     String? name,
     String? address,
@@ -53,6 +64,7 @@ class Property {
   }) {
     return Property(
       id: id ?? this.id,
+      propertyCode: propertyCode ?? this.propertyCode,
       ownerId: ownerId ?? this.ownerId,
       name: name ?? this.name,
       address: address ?? this.address,

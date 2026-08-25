@@ -5,6 +5,7 @@ import '../../domain/entities/property.dart';
 class PropertyModel extends Property {
   const PropertyModel({
     required super.id,
+    required super.propertyCode,
     required super.ownerId,
     required super.name,
     super.address,
@@ -21,6 +22,7 @@ class PropertyModel extends Property {
       ) {
     return PropertyModel(
       id: property.id,
+      propertyCode: property.propertyCode,
       ownerId: property.ownerId,
       name: property.name,
       address: property.address,
@@ -46,41 +48,55 @@ class PropertyModel extends Property {
 
     return PropertyModel(
       id: document.id,
+
+      propertyCode: _readPropertyCode(
+        data,
+        document.id,
+      ),
+
       ownerId: _readRequiredString(
         data,
         'ownerId',
       ),
+
       name: _readRequiredString(
         data,
         'name',
       ),
+
       address: _readOptionalString(
         data,
         'address',
       ),
+
       description: _readOptionalString(
         data,
         'description',
       ),
+
       type: _propertyTypeFromString(
         _readRequiredString(
           data,
           'type',
         ),
       ),
+
       status: _propertyStatusFromString(
         _readRequiredString(
           data,
           'status',
         ),
       ),
+
       numberOfFloors: _readNumberOfFloors(
         data,
       ),
+
       createdAt: _readDateTime(
         data,
         'createdAt',
       ),
+
       updatedAt: _readDateTime(
         data,
         'updatedAt',
@@ -90,6 +106,7 @@ class PropertyModel extends Property {
 
   Map<String, dynamic> toFirestore() {
     return {
+      'propertyCode': propertyCode,
       'ownerId': ownerId,
       'name': name,
       'address': address,
@@ -106,6 +123,63 @@ class PropertyModel extends Property {
     };
   }
 
+  // ============================================================
+  // PROPERTY CODE
+  // ============================================================
+
+  static String _readPropertyCode(
+      Map<String, dynamic> data,
+      String documentId,
+      ) {
+    final value = data['propertyCode'];
+
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+
+    // ----------------------------------------------------------
+    // Backward compatibility
+    // ----------------------------------------------------------
+    //
+    // Existing properties created before propertyCode was added
+    // do not have a propertyCode.
+    //
+    // We temporarily generate a readable code from the document
+    // ID so old documents do not crash the application.
+    //
+    // New properties will always receive a proper sequential code.
+    // ----------------------------------------------------------
+
+    return 'PROP-${_legacyCodeFromDocumentId(documentId)}';
+  }
+
+  static String _legacyCodeFromDocumentId(
+      String documentId,
+      ) {
+    final cleaned = documentId
+        .replaceAll(
+      RegExp(r'[^a-zA-Z0-9]'),
+      '',
+    )
+        .toUpperCase();
+
+    if (cleaned.length <= 8) {
+      return cleaned.padLeft(
+        8,
+        '0',
+      );
+    }
+
+    return cleaned.substring(
+      0,
+      8,
+    );
+  }
+
+  // ============================================================
+  // STRING READERS
+  // ============================================================
+
   static String _readRequiredString(
       Map<String, dynamic> data,
       String field,
@@ -118,7 +192,7 @@ class PropertyModel extends Property {
       );
     }
 
-    return value;
+    return value.trim();
   }
 
   static String? _readOptionalString(
@@ -141,6 +215,10 @@ class PropertyModel extends Property {
 
     return trimmed.isEmpty ? null : trimmed;
   }
+
+  // ============================================================
+  // NUMBER OF FLOORS
+  // ============================================================
 
   static int _readNumberOfFloors(
       Map<String, dynamic> data,
@@ -170,6 +248,10 @@ class PropertyModel extends Property {
     );
   }
 
+  // ============================================================
+  // DATE
+  // ============================================================
+
   static DateTime _readDateTime(
       Map<String, dynamic> data,
       String field,
@@ -189,6 +271,10 @@ class PropertyModel extends Property {
     );
   }
 
+  // ============================================================
+  // PROPERTY TYPE
+  // ============================================================
+
   static PropertyType _propertyTypeFromString(
       String value,
       ) {
@@ -201,6 +287,10 @@ class PropertyModel extends Property {
       },
     );
   }
+
+  // ============================================================
+  // PROPERTY STATUS
+  // ============================================================
 
   static PropertyStatus _propertyStatusFromString(
       String value,

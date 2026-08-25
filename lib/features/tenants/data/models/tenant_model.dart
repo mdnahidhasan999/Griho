@@ -5,6 +5,7 @@ import '../../domain/entities/tenant.dart';
 class TenantModel extends Tenant {
   const TenantModel({
     required super.id,
+    required super.ownerId,
     super.userId,
     required super.propertyId,
     required super.unitId,
@@ -17,11 +18,10 @@ class TenantModel extends Tenant {
     required super.updatedAt,
   });
 
-  factory TenantModel.fromEntity(
-      Tenant tenant,
-      ) {
+  factory TenantModel.fromEntity(Tenant tenant) {
     return TenantModel(
       id: tenant.id,
+      ownerId: tenant.ownerId,
       userId: tenant.userId,
       propertyId: tenant.propertyId,
       unitId: tenant.unitId,
@@ -48,41 +48,58 @@ class TenantModel extends Tenant {
 
     return TenantModel(
       id: document.id,
-      userId: _readOptionalString(data, 'userId'),
+
+      ownerId: _readRequiredString(
+        data,
+        'ownerId',
+      ),
+
+      userId: _readOptionalString(
+        data,
+        'userId',
+      ),
+
       propertyId: _readRequiredString(
         data,
         'propertyId',
       ),
+
       unitId: _readRequiredString(
         data,
         'unitId',
       ),
+
       name: _readRequiredString(
         data,
         'name',
       ),
+
       phone: _readRequiredString(
         data,
         'phone',
       ),
+
       email: _readOptionalString(
         data,
         'email',
       ),
+
       nidNumber: _readOptionalString(
         data,
         'nidNumber',
       ),
-      status: _tenantStatusFromString(
-        _readRequiredString(
-          data,
-          'status',
-        ),
+
+      status: TenantStatus.values.firstWhere(
+            (status) =>
+        status.name == data['status'],
+        orElse: () => TenantStatus.active,
       ),
+
       createdAt: _readDateTime(
         data,
         'createdAt',
       ),
+
       updatedAt: _readDateTime(
         data,
         'updatedAt',
@@ -92,6 +109,7 @@ class TenantModel extends Tenant {
 
   Map<String, dynamic> toFirestore() {
     return {
+      'ownerId': ownerId,
       'userId': userId,
       'propertyId': propertyId,
       'unitId': unitId,
@@ -100,12 +118,8 @@ class TenantModel extends Tenant {
       'email': email,
       'nidNumber': nidNumber,
       'status': status.name,
-      'createdAt': Timestamp.fromDate(
-        createdAt,
-      ),
-      'updatedAt': Timestamp.fromDate(
-        updatedAt,
-      ),
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
@@ -121,7 +135,7 @@ class TenantModel extends Tenant {
       );
     }
 
-    return value.trim();
+    return value;
   }
 
   static String? _readOptionalString(
@@ -155,25 +169,8 @@ class TenantModel extends Tenant {
       return value.toDate();
     }
 
-    if (value is DateTime) {
-      return value;
-    }
-
     throw StateError(
       'Tenant field "$field" is missing or invalid.',
-    );
-  }
-
-  static TenantStatus _tenantStatusFromString(
-      String value,
-      ) {
-    return TenantStatus.values.firstWhere(
-          (status) => status.name == value,
-      orElse: () {
-        throw StateError(
-          'Unknown tenant status: $value',
-        );
-      },
     );
   }
 }

@@ -1,42 +1,107 @@
+import '../../../../core/services/current_user_service.dart';
+
 import '../../domain/entities/create_tenant_request.dart';
 import '../../domain/entities/repositories/tenant_repository.dart';
 import '../../domain/entities/tenant.dart';
+
 import '../datasources/tenant_data_source.dart';
 import '../models/tenant_model.dart';
 
 class TenantRepositoryImpl implements TenantRepository {
   final TenantDataSource _dataSource;
+  final CurrentUserService _currentUserService;
 
-  const TenantRepositoryImpl({required this._dataSource});
+  const TenantRepositoryImpl({
+    required this._dataSource,
+    required this._currentUserService,
+  });
+
+  // ============================================================
+  // GET TENANT BY ID
+  // ============================================================
 
   @override
-  Future<Tenant?> getTenantById(String tenantId) {
-    return _dataSource.getTenantById(tenantId);
+  Future<Tenant?> getTenantById(
+      String tenantId,
+      ) {
+    return _dataSource.getTenantById(
+      tenantId,
+    );
   }
 
-  @override
-  Future<List<Tenant>> getTenantsByPropertyId(String propertyId) {
-    return _dataSource.getTenantsByPropertyId(propertyId);
-  }
+  // ============================================================
+  // GET TENANTS BY PROPERTY
+  // ============================================================
 
   @override
-  Future<List<Tenant>> searchTenants(String search) {
-    return _dataSource.searchTenants(search);
+  Future<List<Tenant>> getTenantsByPropertyId(
+      String propertyId,
+      ) {
+    return _dataSource.getTenantsByPropertyId(
+      propertyId,
+    );
   }
 
-  @override
-  Future<Tenant?> getTenantByUnitId(String unitId) {
-    return _dataSource.getTenantByUnitId(unitId);
-  }
+  // ============================================================
+  // GET TENANT BY UNIT
+  // ============================================================
 
   @override
-  Future<Tenant> createTenant(CreateTenantRequest request) async {
+  Future<Tenant?> getTenantByUnitId(
+      String unitId,
+      ) {
+    return _dataSource.getTenantByUnitId(
+      unitId,
+    );
+  }
+
+  // ============================================================
+  // SEARCH TENANTS
+  // ============================================================
+
+  @override
+  Future<List<Tenant>> searchTenants(
+      String search,
+      ) {
+    return _dataSource.searchTenants(
+      search,
+    );
+  }
+
+  // ============================================================
+  // FIND TENANT BY PHONE
+  // CURRENT OWNER ONLY
+  // ============================================================
+
+  @override
+  Future<Tenant?> findTenantByPhone({
+    required String phone,
+    required String ownerId,
+  }) {
+    return _dataSource.findTenantByPhone(
+      phone: phone,
+      ownerId: ownerId,
+    );
+  }
+
+  // ============================================================
+  // CREATE TENANT
+  // ============================================================
+
+  @override
+  Future<Tenant> createTenant(
+      CreateTenantRequest request,
+      ) async {
     final now = DateTime.now();
 
-    final documentId = DateTime.now().microsecondsSinceEpoch.toString();
+    final documentId =
+    DateTime.now().microsecondsSinceEpoch.toString();
+
+    final ownerId = _currentUserService.requiredUid;
 
     final tenant = TenantModel(
       id: documentId,
+      ownerId: ownerId,
       userId: request.userId,
       propertyId: request.propertyId,
       unitId: request.unitId,
@@ -49,18 +114,38 @@ class TenantRepositoryImpl implements TenantRepository {
       updatedAt: now,
     );
 
-    return _dataSource.createTenant(tenant: tenant);
+    return _dataSource.createTenant(
+      tenant: tenant,
+    );
   }
 
-  @override
-  Future<Tenant> updateTenant(Tenant tenant) async {
-    final model = TenantModel.fromEntity(tenant);
+  // ============================================================
+  // UPDATE TENANT
+  // ============================================================
 
-    return _dataSource.updateTenant(model);
+  @override
+  Future<Tenant> updateTenant(
+      Tenant tenant,
+      ) async {
+    final model = TenantModel.fromEntity(
+      tenant,
+    );
+
+    return _dataSource.updateTenant(
+      model,
+    );
   }
 
+  // ============================================================
+  // DELETE TENANT
+  // ============================================================
+
   @override
-  Future<void> deleteTenant(String tenantId) {
-    return _dataSource.deleteTenant(tenantId);
+  Future<void> deleteTenant(
+      String tenantId,
+      ) {
+    return _dataSource.deleteTenant(
+      tenantId,
+    );
   }
 }

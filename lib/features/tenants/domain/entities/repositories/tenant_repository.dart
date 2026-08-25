@@ -4,27 +4,21 @@ import '../tenant.dart';
 abstract class TenantRepository {
   Future<Tenant?> getTenantById(String tenantId);
 
-  Future<List<Tenant>> getTenantsByPropertyId(
-      String propertyId,
-      );
+  Future<List<Tenant>> getTenantsByPropertyId(String propertyId);
 
-  Future<Tenant?> getTenantByUnitId(
-      String unitId,
-      );
+  Future<Tenant?> getTenantByUnitId(String unitId);
 
-  Future<List<Tenant>> searchTenants(
-      String search,
-      );
+  Future<List<Tenant>> searchTenants(String search);
 
-  Future<Tenant> createTenant(
-      CreateTenantRequest request,
-      );
+  // নতুন
+  Future<Tenant?> findTenantByPhone({
+    required String phone,
+    required String ownerId,
+  });
 
-  Future<Tenant> updateTenant(
-      Tenant tenant,
-      );
+  Future<Tenant> createTenant(CreateTenantRequest request);
 
-  Future<void> deleteTenant(
-      String tenantId,
-      );
+  Future<Tenant> updateTenant(Tenant tenant);
+
+  Future<void> deleteTenant(String tenantId);
 }

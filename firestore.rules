@@ -3,10 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ============================================================
-    // USER PROFILE
-    // ============================================================
-
+    // USERS
     match /users/{userId} {
 
       allow get: if isAuthenticated()
@@ -27,10 +24,33 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
-    // GRIHO PUBLIC ID RESERVATIONS
-    // ============================================================
+  // ============================================================
+  // PHONE LOOKUPS
+  // ============================================================
 
+  match /phone_lookups/{phoneNumber} {
+
+    // Any authenticated user can search a phone number.
+    allow get: if isAuthenticated();
+
+    // Phone lookup documents are created together with user
+    // profile creation.
+    allow create: if isAuthenticated()
+                  && request.resource.data.uid == request.auth.uid
+                  && request.resource.data.phoneNumber == phoneNumber;
+
+    // User can update their own lookup.
+    allow update: if isAuthenticated()
+                  && resource.data.uid == request.auth.uid
+                  && request.resource.data.uid == request.auth.uid
+                  && request.resource.data.phoneNumber == phoneNumber;
+
+    // User can delete their own lookup.
+    allow delete: if isAuthenticated()
+                  && resource.data.uid == request.auth.uid;
+  }
+
+    // PUBLIC IDS
     match /public_ids/{publicId} {
 
       allow get: if isAuthenticated();
@@ -46,10 +66,7 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
     // PROPERTIES
-    // ============================================================
-
     match /properties/{propertyId} {
 
       allow read: if isAuthenticated()
@@ -68,10 +85,7 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
     // UNITS
-    // ============================================================
-
     match /units/{unitId} {
 
       allow read: if isAuthenticated()
@@ -99,25 +113,19 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
     // TENANTS
-    // ============================================================
-
     match /tenants/{tenantId} {
 
-      // Owner can read tenants from their own properties.
       allow read: if isAuthenticated()
                   && isPropertyOwner(
                     resource.data.propertyId
                   );
 
-      // Owner can add tenants to their own properties.
       allow create: if isAuthenticated()
                     && isPropertyOwner(
                       request.resource.data.propertyId
                     );
 
-      // Owner can update tenants belonging to their own property.
       allow update: if isAuthenticated()
                     && isPropertyOwner(
                       resource.data.propertyId
@@ -126,7 +134,6 @@ service cloud.firestore {
                       request.resource.data.propertyId
                     );
 
-      // Owner can delete tenants from their own property.
       allow delete: if isAuthenticated()
                     && isPropertyOwner(
                       resource.data.propertyId
@@ -134,14 +141,11 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
     // SECURITY HELPERS
-    // ============================================================
 
     function isAuthenticated() {
       return request.auth != null;
     }
-
 
     function isPropertyOwner(propertyId) {
       return exists(

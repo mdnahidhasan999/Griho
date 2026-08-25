@@ -5,6 +5,11 @@ enum TenantStatus {
 
 class Tenant {
   final String id;
+
+  // Tenant-এর property owner-এর Firebase Auth UID
+  final String ownerId;
+
+  // Tenant-এর নিজের Griho account থাকলে Firebase Auth UID
   final String? userId;
 
   final String propertyId;
@@ -22,6 +27,7 @@ class Tenant {
 
   const Tenant({
     required this.id,
+    required this.ownerId,
     this.userId,
     required this.propertyId,
     required this.unitId,
@@ -34,8 +40,13 @@ class Tenant {
     required this.updatedAt,
   });
 
+  // ============================================================
+  // COPY WITH
+  // ============================================================
+
   Tenant copyWith({
     String? id,
+    String? ownerId,
     String? userId,
     String? propertyId,
     String? unitId,
@@ -49,6 +60,7 @@ class Tenant {
   }) {
     return Tenant(
       id: id ?? this.id,
+      ownerId: ownerId ?? this.ownerId,
       userId: userId ?? this.userId,
       propertyId: propertyId ?? this.propertyId,
       unitId: unitId ?? this.unitId,

@@ -1,33 +1,74 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../../../core/services/current_user_service.dart';
+
 import '../../data/datasources/tenant_data_source.dart';
 import '../../data/repositories/tenant_repository_impl.dart';
+
 import '../../domain/entities/create_tenant_request.dart';
 import '../../domain/entities/repositories/tenant_repository.dart';
 import '../../domain/entities/tenant.dart';
+
 import '../../domain/usecases/create_tenant.dart';
 import '../../domain/usecases/delete_tenant.dart';
 import '../../domain/usecases/get_tenant.dart';
 import '../../domain/usecases/update_tenant.dart';
 
+// ================================================================
+// TENANT REPOSITORY
+// ================================================================
+
 final tenantRepositoryProvider = Provider<TenantRepository>((ref) {
   final dataSource = TenantDataSource();
 
-  return TenantRepositoryImpl(dataSource: dataSource);
+  final currentUserService = CurrentUserService();
+
+  return TenantRepositoryImpl(
+    dataSource: dataSource,
+    currentUserService: currentUserService,
+  );
 });
+
+// ================================================================
+// CREATE TENANT
+// ================================================================
 
 final createTenantProvider = Provider<CreateTenant>((ref) {
-  return CreateTenant(repository: ref.read(tenantRepositoryProvider));
+  return CreateTenant(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
+
+// ================================================================
+// UPDATE TENANT
+// ================================================================
 
 final updateTenantProvider = Provider<UpdateTenant>((ref) {
-  return UpdateTenant(repository: ref.read(tenantRepositoryProvider));
+  return UpdateTenant(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
 
+// ================================================================
+// DELETE TENANT
+// ================================================================
+
 final deleteTenantProvider = Provider<DeleteTenant>((ref) {
-  return DeleteTenant(repository: ref.read(tenantRepositoryProvider));
+  return DeleteTenant(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
+
+// ================================================================
+// CONTROLLER
+// ================================================================
 
 class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   final CreateTenant _createTenant;
@@ -40,7 +81,13 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
     required this._deleteTenant,
   }) : super(const AsyncData(null));
 
-  Future<Tenant?> createTenant(CreateTenantRequest request) async {
+  // ==============================================================
+  // CREATE
+  // ==============================================================
+
+  Future<Tenant?> createTenant(
+      CreateTenantRequest request,
+      ) async {
     state = const AsyncLoading();
 
     try {
@@ -50,13 +97,22 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
 
       return tenant;
     } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
+      state = AsyncError(
+        error,
+        stackTrace,
+      );
 
       return null;
     }
   }
 
-  Future<Tenant?> updateTenant(Tenant tenant) async {
+  // ==============================================================
+  // UPDATE
+  // ==============================================================
+
+  Future<Tenant?> updateTenant(
+      Tenant tenant,
+      ) async {
     state = const AsyncLoading();
 
     try {
@@ -66,13 +122,22 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
 
       return updatedTenant;
     } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
+      state = AsyncError(
+        error,
+        stackTrace,
+      );
 
       return null;
     }
   }
 
-  Future<bool> deleteTenant(String tenantId) async {
+  // ==============================================================
+  // DELETE
+  // ==============================================================
+
+  Future<bool> deleteTenant(
+      String tenantId,
+      ) async {
     state = const AsyncLoading();
 
     try {
@@ -82,25 +147,53 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
 
       return true;
     } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
+      state = AsyncError(
+        error,
+        stackTrace,
+      );
 
       return false;
     }
   }
+
+  // ==============================================================
+  // CLEAR
+  // ==============================================================
 
   void clear() {
     state = const AsyncData(null);
   }
 }
 
+// ================================================================
+// PROVIDER
+// ================================================================
+
 final tenantControllerProvider =
-    StateNotifierProvider<TenantController, AsyncValue<Tenant?>>((ref) {
-      return TenantController(
-        createTenant: ref.read(createTenantProvider),
-        updateTenant: ref.read(updateTenantProvider),
-        deleteTenant: ref.read(deleteTenantProvider),
-      );
-    });
+StateNotifierProvider<TenantController, AsyncValue<Tenant?>>(
+      (ref) {
+    return TenantController(
+      createTenant: ref.read(
+        createTenantProvider,
+      ),
+      updateTenant: ref.read(
+        updateTenantProvider,
+      ),
+      deleteTenant: ref.read(
+        deleteTenantProvider,
+      ),
+    );
+  },
+);
+
+// ================================================================
+// GET TENANT
+// ================================================================
+
 final getTenantProvider = Provider<GetTenant>((ref) {
-  return GetTenant(repository: ref.read(tenantRepositoryProvider));
+  return GetTenant(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });

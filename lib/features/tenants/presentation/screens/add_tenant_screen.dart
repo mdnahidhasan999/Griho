@@ -3,12 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/user_profile_provider.dart';
+
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
+
 import '../../domain/entities/create_tenant_request.dart';
+import '../../domain/entities/tenant.dart';
+
 import '../controllers/tenant_controller.dart';
+import '../providers/tenant_by_phone_provider.dart';
 
 class AddTenantScreen extends ConsumerStatefulWidget {
   const AddTenantScreen({super.key});
@@ -21,14 +27,23 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _nameController = TextEditingController();
+
   final _phoneController = TextEditingController();
+
   final _emailController = TextEditingController();
+
   final _nidController = TextEditingController();
 
   Property? _selectedProperty;
   Unit? _selectedUnit;
 
-  String _phoneLookupValue = '';
+  AppUser? _existingUser;
+  Tenant? _existingTenant;
+
+  bool _isSearching = false;
+  bool _hasSearched = false;
+
+  String? _searchError;
 
   @override
   void dispose() {
@@ -41,14 +56,167 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   // ================================================================
-  // PHONE CHANGE
+  // SEARCH
+  // ================================================================
+
+  Future<void> _searchPhone() async {
+    final phone = _phoneController.text.trim();
+
+    if (phone.isEmpty) {
+      setState(() {
+        _hasSearched = false;
+        _existingUser = null;
+        _existingTenant = null;
+        _searchError = 'Please enter a phone number.';
+      });
+
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      _hasSearched = true;
+
+      _existingUser = null;
+      _existingTenant = null;
+
+      _searchError = null;
+    });
+
+    try {
+      // ============================================================
+      // STEP 1 — SEARCH GRIHO USER
+      // ============================================================
+
+      final user =
+      await ref.read(
+        userByPhoneProvider(phone).future,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      // ------------------------------------------------------------
+      // GRIHO USER FOUND
+      // ------------------------------------------------------------
+
+      if (user != null) {
+        setState(() {
+          _existingUser = user;
+          _isSearching = false;
+        });
+
+        _fillFromUser(user);
+
+        return;
+      }
+
+      // ============================================================
+      // STEP 2 — SEARCH EXISTING TENANT
+      // ============================================================
+
+      final tenant =
+      await ref.read(
+        tenantByPhoneProvider(phone).future,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      // ------------------------------------------------------------
+      // EXISTING TENANT FOUND
+      // ------------------------------------------------------------
+
+      if (tenant != null) {
+        setState(() {
+          _existingTenant = tenant;
+          _isSearching = false;
+        });
+
+        _fillFromTenant(tenant);
+
+        return;
+      }
+
+      // ============================================================
+      // STEP 3 — NOTHING FOUND
+      // ============================================================
+
+      setState(() {
+        _isSearching = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isSearching = false;
+        _searchError =
+        'Unable to search this phone number.';
+      });
+    }
+  }
+
+  // ================================================================
+  // FILL FROM GRIHO USER
+  // ================================================================
+
+  void _fillFromUser(AppUser user) {
+    if (user.name.trim().isNotEmpty) {
+      _nameController.text = user.name;
+    }
+
+    final email = user.email?.trim();
+
+    if (email != null && email.isNotEmpty) {
+      _emailController.text = email;
+    }
+
+    // NID AppUser-এ নেই।
+    // তাই NID manually editable থাকবে।
+  }
+
+  // ================================================================
+  // FILL FROM EXISTING TENANT
+  // ================================================================
+
+  void _fillFromTenant(Tenant tenant) {
+    if (tenant.name.trim().isNotEmpty) {
+      _nameController.text = tenant.name;
+    }
+
+    final email = tenant.email?.trim();
+
+    if (email != null && email.isNotEmpty) {
+      _emailController.text = email;
+    }
+
+    final nid = tenant.nidNumber?.trim();
+
+    if (nid != null && nid.isNotEmpty) {
+      _nidController.text = nid;
+    }
+  }
+
+  // ================================================================
+  // PHONE CHANGED
   // ================================================================
 
   void _onPhoneChanged(String value) {
-    final phone = value.trim();
+    if (!_hasSearched && _existingUser == null && _existingTenant == null) {
+      return;
+    }
 
     setState(() {
-      _phoneLookupValue = phone;
+      _hasSearched = false;
+
+      _existingUser = null;
+      _existingTenant = null;
+
+      _searchError = null;
     });
   }
 
@@ -62,6 +230,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     }
 
     final property = _selectedProperty;
+
     final unit = _selectedUnit;
 
     if (property == null || unit == null) {
@@ -70,53 +239,28 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
     final phone = _phoneController.text.trim();
 
-    // --------------------------------------------------------------
-    // Find existing Griho user by phone.
-    //
-    // IMPORTANT:
-    // Do not use AsyncValue.valueOrNull here.
-    // We directly await the provider's future.
-    // --------------------------------------------------------------
-
-    AppUser? existingUser;
-
-    if (phone.isNotEmpty) {
-      try {
-        existingUser = await ref.read(userByPhoneProvider(phone).future);
-      } catch (error) {
-        if (!mounted) {
-          return;
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to check this phone number: $error')),
-        );
-
-        return;
-      }
-    }
-
-    // --------------------------------------------------------------
-    // Create tenant request
-    // --------------------------------------------------------------
-
     final request = CreateTenantRequest(
-      userId: existingUser?.uid,
+      // Existing Griho user হলে UID থাকবে।
+      //
+      // Existing manual tenant হলে null থাকবে।
+      userId: _existingUser?.uid,
+
       propertyId: property.id,
+
       unitId: unit.id,
+
       name: _nameController.text.trim(),
+
       phone: phone,
+
       email: _emailController.text.trim().isEmpty
           ? null
           : _emailController.text.trim(),
+
       nidNumber: _nidController.text.trim().isEmpty
           ? null
           : _nidController.text.trim(),
     );
-
-    // --------------------------------------------------------------
-    // Create tenant
-    // --------------------------------------------------------------
 
     final tenant = await ref
         .read(tenantControllerProvider.notifier)
@@ -157,28 +301,14 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         ? const AsyncValue<List<Unit>>.data([])
         : ref.watch(propertyUnitsProvider(selectedPropertyId));
 
-    // --------------------------------------------------------------
-    // Existing Griho user lookup
-    // --------------------------------------------------------------
-
-    final userAsync = _phoneLookupValue.isEmpty
-        ? null
-        : ref.watch(userByPhoneProvider(_phoneLookupValue));
-
     return Scaffold(
       appBar: AppBar(title: const Text('Add Tenant')),
       body: SafeArea(
         child: propertiesAsync.when(
-          // ==========================================================
-          // PROPERTIES LOADING
-          // ==========================================================
           loading: () {
             return const Center(child: CircularProgressIndicator());
           },
 
-          // ==========================================================
-          // PROPERTIES ERROR
-          // ==========================================================
           error: (error, stackTrace) {
             return _ErrorView(
               message: 'Unable to load your properties.',
@@ -188,9 +318,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
             );
           },
 
-          // ==========================================================
-          // PROPERTIES DATA
-          // ==========================================================
           data: (properties) {
             if (properties.isEmpty) {
               return const _NoPropertyView();
@@ -198,14 +325,14 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
+
               child: Form(
                 key: _formKey,
+
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+
                   children: [
-                    // ==================================================
-                    // TITLE
-                    // ==================================================
                     Text(
                       'Tenant Information',
                       style: Theme.of(context).textTheme.headlineSmall,
@@ -234,6 +361,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       items: properties.map((property) {
                         return DropdownMenuItem<Property>(
                           value: property,
+
                           child: Text(
                             property.name,
                             overflow: TextOverflow.ellipsis,
@@ -244,6 +372,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       onChanged: (property) {
                         setState(() {
                           _selectedProperty = property;
+
                           _selectedUnit = null;
                         });
                       },
@@ -257,26 +386,12 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       },
                     ),
 
-                    const SizedBox(height: 8),
-
-                    // --------------------------------------------------
-                    // PROPERTY ID
-                    // --------------------------------------------------
-                    if (_selectedProperty != null)
-                      Text(
-                        'Property ID: ${_selectedProperty!.id}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-
                     const SizedBox(height: 20),
 
                     // ==================================================
                     // UNIT
                     // ==================================================
                     unitsAsync.when(
-                      // ------------------------------------------------
-                      // UNIT LOADING
-                      // ------------------------------------------------
                       loading: () {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
@@ -284,9 +399,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                         );
                       },
 
-                      // ------------------------------------------------
-                      // UNIT ERROR
-                      // ------------------------------------------------
                       error: (error, stackTrace) {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,14 +426,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                         );
                       },
 
-                      // ------------------------------------------------
-                      // UNIT DATA
-                      // ------------------------------------------------
                       data: (units) {
-                        if (_selectedProperty == null) {
-                          return const Text('Select a property first.');
-                        }
-
                         if (units.isEmpty) {
                           return const Text(
                             'No units are available in this property.',
@@ -339,6 +444,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                           items: units.map((unit) {
                             return DropdownMenuItem<Unit>(
                               value: unit,
+
                               child: Text(
                                 '${unit.unitNumber} — Floor ${unit.floorNumber}',
                                 overflow: TextOverflow.ellipsis,
@@ -366,6 +472,95 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     const SizedBox(height: 28),
 
                     // ==================================================
+                    // PHONE + SEARCH
+                    // ==================================================
+                    TextFormField(
+                      controller: _phoneController,
+
+                      keyboardType: TextInputType.phone,
+
+                      textInputAction: TextInputAction.search,
+
+                      decoration: InputDecoration(
+                        labelText: 'Phone',
+                        hintText: 'e.g. 018XXXXXXXX',
+
+                        border: const OutlineInputBorder(),
+
+                        suffixIcon: _isSearching
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : IconButton(
+                                tooltip: 'Search tenant',
+                                onPressed: _searchPhone,
+                                icon: const Icon(Icons.search),
+                              ),
+                      ),
+
+                      onChanged: _onPhoneChanged,
+
+                      onFieldSubmitted: (_) => _searchPhone(),
+
+                      validator: (value) {
+                        if (value?.trim().isEmpty ?? true) {
+                          return 'Please enter phone number.';
+                        }
+
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // ==================================================
+                    // SEARCH ERROR
+                    // ==================================================
+                    if (_searchError != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          _searchError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+
+                    // ==================================================
+                    // GRIHO USER FOUND
+                    // ==================================================
+                    if (!_isSearching && _existingUser != null)
+                      _ExistingUserCard(user: _existingUser!),
+
+                    // ==================================================
+                    // EXISTING TENANT FOUND
+                    // ==================================================
+                    if (!_isSearching &&
+                        _existingUser == null &&
+                        _existingTenant != null)
+                      _ExistingTenantCard(tenant: _existingTenant!),
+
+                    // ==================================================
+                    // NOTHING FOUND
+                    // ==================================================
+                    if (!_isSearching &&
+                        _hasSearched &&
+                        _existingUser == null &&
+                        _existingTenant == null &&
+                        _searchError == null)
+                      const _UserNotFoundView(),
+
+                    const SizedBox(height: 20),
+
+                    // ==================================================
                     // NAME
                     // ==================================================
                     TextFormField(
@@ -389,44 +584,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                         return null;
                       },
                     ),
-
-                    const SizedBox(height: 20),
-
-                    // ==================================================
-                    // PHONE
-                    // ==================================================
-                    TextFormField(
-                      controller: _phoneController,
-
-                      keyboardType: TextInputType.phone,
-
-                      textInputAction: TextInputAction.next,
-
-                      decoration: const InputDecoration(
-                        labelText: 'Phone',
-                        hintText: 'e.g. 017XXXXXXXX',
-                        border: OutlineInputBorder(),
-                      ),
-
-                      onChanged: _onPhoneChanged,
-
-                      validator: (value) {
-                        if (value?.trim().isEmpty ?? true) {
-                          return 'Please enter phone number.';
-                        }
-
-                        return null;
-                      },
-                    ),
-
-                    // ==================================================
-                    // EXISTING GRIHO USER
-                    // ==================================================
-                    if (_phoneLookupValue.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-
-                      _TenantUserLookupView(userAsync: userAsync!),
-                    ],
 
                     const SizedBox(height: 20),
 
@@ -469,10 +626,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     const SizedBox(height: 32),
 
                     // ==================================================
-                    // ADD TENANT
+                    // ADD
                     // ==================================================
                     SizedBox(
                       width: double.infinity,
+
                       child: FilledButton(
                         onPressed: tenantState.isLoading ? null : _createTenant,
 
@@ -499,126 +657,167 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 }
 
 // ==================================================================
-// EXISTING USER LOOKUP
+// GRIHO USER CARD
 // ==================================================================
 
-class _TenantUserLookupView extends StatelessWidget {
-  final AsyncValue<AppUser?> userAsync;
+class _ExistingUserCard extends StatelessWidget {
+  final AppUser user;
 
-  const _TenantUserLookupView({required this.userAsync});
+  const _ExistingUserCard({required this.user});
 
   @override
   Widget build(BuildContext context) {
-    return userAsync.when(
-      // ============================================================
-      // LOADING
-      // ============================================================
-      loading: () {
-        return const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              SizedBox(
-                height: 18,
-                width: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
 
-              SizedBox(width: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
 
-              Text('Checking Griho user...'),
-            ],
-          ),
-        );
-      },
+        child: Row(
+          children: [
+            const CircleAvatar(child: Icon(Icons.person_outline)),
 
-      // ============================================================
-      // ERROR
-      // ============================================================
-      error: (error, stackTrace) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            'Unable to check this phone number.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        );
-      },
+            const SizedBox(width: 12),
 
-      // ============================================================
-      // DATA
-      // ============================================================
-      data: (user) {
-        // ----------------------------------------------------------
-        // No account found
-        // ----------------------------------------------------------
-
-        if (user == null) {
-          return Card(
-            margin: const EdgeInsets.only(top: 8),
-            child: const Padding(
-              padding: EdgeInsets.all(12),
-              child: Row(
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.info_outline),
+                  Text(
+                    'Griho user found',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
 
-                  SizedBox(width: 10),
+                  const SizedBox(height: 4),
 
-                  Expanded(
-                    child: Text(
-                      'No Griho account found with this phone number.',
+                  Text(
+                    user.name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+
+                  if (user.email != null && user.email!.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        user.email!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    'Griho ID: ${user.publicId}',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
             ),
-          );
-        }
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-        // ----------------------------------------------------------
-        // Existing account found
-        // ----------------------------------------------------------
+// ==================================================================
+// EXISTING TENANT CARD
+// ==================================================================
 
-        return Card(
-          margin: const EdgeInsets.only(top: 8),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                const CircleAvatar(child: Icon(Icons.person_outline)),
+class _ExistingTenantCard extends StatelessWidget {
+  final Tenant tenant;
 
-                const SizedBox(width: 12),
+  const _ExistingTenantCard({required this.tenant});
 
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user.name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
 
-                      const SizedBox(height: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
 
-                      Text(
-                        'Griho ID: ${user.publicId}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+        child: Row(
+          children: [
+            const CircleAvatar(child: Icon(Icons.person)),
 
-                      const SizedBox(height: 4),
+            const SizedBox(width: 12),
 
-                      Text(
-                        'Role: ${user.role.name}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Existing tenant found',
+                    style: Theme.of(context).textTheme.labelLarge,
                   ),
-                ),
-              ],
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    tenant.name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+
+                  if (tenant.email != null && tenant.email!.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(tenant.email!),
+                    ),
+
+                  if (tenant.nidNumber != null &&
+                      tenant.nidNumber!.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text('NID: ${tenant.nidNumber}'),
+                    ),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    'This tenant was previously added by you.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================================================================
+// USER / TENANT NOT FOUND
+// ==================================================================
+
+class _UserNotFoundView extends StatelessWidget {
+  const _UserNotFoundView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
+
+      child: const Padding(
+        padding: EdgeInsets.all(12),
+
+        child: Row(
+          children: [
+            Icon(Icons.info_outline),
+
+            SizedBox(width: 10),
+
+            Expanded(
+              child: Text(
+                'No Griho user or previous tenant found. You can enter the tenant information manually.',
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -635,6 +834,7 @@ class _NoPropertyView extends StatelessWidget {
     return const Center(
       child: Padding(
         padding: EdgeInsets.all(24),
+
         child: Text(
           'You need to add a property before adding a tenant.',
           textAlign: TextAlign.center,
@@ -645,7 +845,7 @@ class _NoPropertyView extends StatelessWidget {
 }
 
 // ==================================================================
-// ERROR VIEW
+// ERROR
 // ==================================================================
 
 class _ErrorView extends StatelessWidget {
@@ -659,8 +859,10 @@ class _ErrorView extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
+
         child: Column(
           mainAxisSize: MainAxisSize.min,
+
           children: [
             const Icon(Icons.error_outline, size: 48),
 
