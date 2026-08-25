@@ -113,8 +113,8 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
           title: const Text('Delete Property?'),
           content: Text(
             'Are you sure you want to delete '
-            '"${property.name}"?\n\n'
-            'This action cannot be undone.',
+                '"${property.name}"?\n\n'
+                'This action cannot be undone.',
           ),
           actions: [
             TextButton(
@@ -162,7 +162,9 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
       _isDeleting = false;
     });
 
-    final errorMessage = ref.read(propertyControllerProvider).errorMessage;
+    final errorMessage = ref
+        .read(propertyControllerProvider)
+        .errorMessage;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(errorMessage ?? 'Unable to delete property.')),
@@ -264,12 +266,18 @@ class _PropertyDetails extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Text(
                   property.name,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  style: Theme
+                      .of(context)
+                      .textTheme
+                      .headlineSmall,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   _propertyTypeLabel(property.type),
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme
+                      .of(context)
+                      .textTheme
+                      .bodyMedium,
                 ),
               ],
             ),
@@ -291,13 +299,17 @@ class _PropertyDetails extends ConsumerWidget {
             ),
             _InfoRow(
               label: 'Address',
-              value: property.address?.trim().isNotEmpty == true
+              value: property.address
+                  ?.trim()
+                  .isNotEmpty == true
                   ? property.address!
                   : 'Not provided',
             ),
             _InfoRow(
               label: 'Description',
-              value: property.description?.trim().isNotEmpty == true
+              value: property.description
+                  ?.trim()
+                  .isNotEmpty == true
                   ? property.description!
                   : 'Not provided',
             ),
@@ -402,7 +414,10 @@ class _UnitsSection extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     'Units',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme
+                        .of(context)
+                        .textTheme
+                        .titleMedium,
                   ),
                 ),
                 TextButton(
@@ -432,7 +447,10 @@ class _UnitsSection extends ConsumerWidget {
                     const SizedBox(height: 8),
                     Text(
                       error.toString(),
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme
+                          .of(context)
+                          .textTheme
+                          .bodySmall,
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
@@ -469,9 +487,9 @@ class _UnitsSection extends ConsumerWidget {
                 return Column(
                   children: [
                     for (
-                      int index = 0;
-                      index < previewUnits.length;
-                      index++
+                    int index = 0;
+                    index < previewUnits.length;
+                    index++
                     ) ...[
                       _UnitCard(unit: previewUnits[index]),
                       if (index != previewUnits.length - 1)
@@ -488,7 +506,7 @@ class _UnitsSection extends ConsumerWidget {
                           },
                           child: Text(
                             'View all '
-                            '${units.length} units',
+                                '${units.length} units',
                           ),
                         ),
                       ),
@@ -516,7 +534,10 @@ class _UnitCard extends StatelessWidget {
       leading: const CircleAvatar(child: Icon(Icons.apartment_outlined)),
       title: Text(
         unit.unitNumber,
-        style: Theme.of(context).textTheme.titleMedium,
+        style: Theme
+            .of(context)
+            .textTheme
+            .titleMedium,
       ),
       subtitle: Text('Floor ${unit.floorNumber}'),
       trailing: const Icon(Icons.chevron_right),
@@ -569,7 +590,10 @@ class _TenantsSection extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     'Tenants',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme
+                        .of(context)
+                        .textTheme
+                        .titleMedium,
                   ),
                 ),
                 TextButton(
@@ -595,11 +619,40 @@ class _TenantsSection extends ConsumerWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Unable to load tenants.'),
+                    const Text(
+                      'Unable to load tenants.',
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    SelectableText(
+                      error.toString(),
+                      style: TextStyle(
+                        color: Theme
+                            .of(context)
+                            .colorScheme
+                            .error,
+                        fontSize: 12,
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    SelectableText(
+                      stackTrace.toString(),
+                      style: Theme
+                          .of(context)
+                          .textTheme
+                          .bodySmall,
+                    ),
+
                     const SizedBox(height: 12),
+
                     OutlinedButton.icon(
                       onPressed: () {
-                        ref.invalidate(propertyTenantsProvider(propertyId));
+                        ref.invalidate(
+                          propertyTenantsProvider(propertyId),
+                        );
                       },
                       icon: const Icon(Icons.refresh),
                       label: const Text('Try Again'),
@@ -631,9 +684,9 @@ class _TenantsSection extends ConsumerWidget {
                 return Column(
                   children: [
                     for (
-                      int index = 0;
-                      index < previewTenants.length;
-                      index++
+                    int index = 0;
+                    index < previewTenants.length;
+                    index++
                     ) ...[
                       _TenantPreviewCard(tenant: previewTenants[index]),
                       if (index != previewTenants.length - 1)
@@ -650,7 +703,7 @@ class _TenantsSection extends ConsumerWidget {
                           },
                           child: Text(
                             'View all '
-                            '${tenants.length} tenants',
+                                '${tenants.length} tenants',
                           ),
                         ),
                       ),
@@ -678,7 +731,10 @@ class _TenantPreviewCard extends StatelessWidget {
 
       leading: const CircleAvatar(child: Icon(Icons.person_outline)),
 
-      title: Text(tenant.name, style: Theme.of(context).textTheme.titleMedium),
+      title: Text(tenant.name, style: Theme
+          .of(context)
+          .textTheme
+          .titleMedium),
 
       subtitle: Text(tenant.phone),
 
@@ -698,11 +754,17 @@ class _TenantStatusChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: Theme
+            .of(context)
+            .colorScheme
+            .surfaceContainerHighest,
       ),
       child: Text(
         _statusLabel(status),
-        style: Theme.of(context).textTheme.labelSmall,
+        style: Theme
+            .of(context)
+            .textTheme
+            .labelSmall,
       ),
     );
   }
@@ -732,7 +794,10 @@ class _InfoCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Text(title, style: Theme
+                .of(context)
+                .textTheme
+                .titleMedium),
             const SizedBox(height: 16),
             ...children,
           ],
@@ -755,9 +820,15 @@ class _InfoRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          Text(label, style: Theme
+              .of(context)
+              .textTheme
+              .labelMedium),
           const SizedBox(height: 4),
-          Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          Text(value, style: Theme
+              .of(context)
+              .textTheme
+              .bodyMedium),
         ],
       ),
     );

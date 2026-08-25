@@ -113,32 +113,51 @@ service cloud.firestore {
     }
 
 
-    // TENANTS
-    match /tenants/{tenantId} {
+// TENANTS
+match /tenants/{tenantId} {
 
-      allow read: if isAuthenticated()
-                  && isPropertyOwner(
-                    resource.data.propertyId
-                  );
+  // ------------------------------------------------------------
+  // READ
+  //
+  // Owner can read tenants that belong to their ownership.
+  // This also allows searching a previously added tenant
+  // by ownerId + phone.
+  // ------------------------------------------------------------
+  allow read: if isAuthenticated()
+              && resource.data.ownerId == request.auth.uid;
 
-      allow create: if isAuthenticated()
-                    && isPropertyOwner(
-                      request.resource.data.propertyId
-                    );
+  // ------------------------------------------------------------
+  // CREATE
+  //
+  // Tenant must be created by the owner of the property.
+  // ownerId must also match the authenticated user.
+  // ------------------------------------------------------------
+  allow create: if isAuthenticated()
+                && request.resource.data.ownerId == request.auth.uid
+                && isPropertyOwner(
+                  request.resource.data.propertyId
+                );
 
-      allow update: if isAuthenticated()
-                    && isPropertyOwner(
-                      resource.data.propertyId
-                    )
-                    && isPropertyOwner(
-                      request.resource.data.propertyId
-                    );
+  // ------------------------------------------------------------
+  // UPDATE
+  //
+  // Existing tenant must belong to current owner.
+  // New ownerId cannot be changed.
+  // New property must also belong to current owner.
+  // ------------------------------------------------------------
+  allow update: if isAuthenticated()
+                && resource.data.ownerId == request.auth.uid
+                && request.resource.data.ownerId == resource.data.ownerId
+                && isPropertyOwner(
+                  request.resource.data.propertyId
+                );
 
-      allow delete: if isAuthenticated()
-                    && isPropertyOwner(
-                      resource.data.propertyId
-                    );
-    }
+  // ------------------------------------------------------------
+  // DELETE
+  // ------------------------------------------------------------
+  allow delete: if isAuthenticated()
+                && resource.data.ownerId == request.auth.uid;
+}
 
 
     // SECURITY HELPERS

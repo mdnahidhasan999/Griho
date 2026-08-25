@@ -5,25 +5,22 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/router/route_names.dart';
 
 import '../../domain/entities/tenant.dart';
-
 import '../providers/property_tenants_provider.dart';
 
-class TenantListScreen extends ConsumerWidget {
+class PropertyTenantsScreen extends ConsumerWidget {
   final String propertyId;
   final String propertyName;
 
-  const TenantListScreen({
+  const PropertyTenantsScreen({
     super.key,
     required this.propertyId,
     required this.propertyName,
   });
 
-  // ================================================================
-  // ADD TENANT
-  // ================================================================
-
-  Future<void> _addTenant(BuildContext context,
-      WidgetRef ref,) async {
+  Future<void> _addTenant(
+      BuildContext context,
+      WidgetRef ref,
+      ) async {
     final result = await context.push(
       RouteNames.addTenant,
     );
@@ -39,13 +36,11 @@ class TenantListScreen extends ConsumerWidget {
     }
   }
 
-  // ================================================================
-  // BUILD
-  // ================================================================
-
   @override
-  Widget build(BuildContext context,
-      WidgetRef ref,) {
+  Widget build(
+      BuildContext context,
+      WidgetRef ref,
+      ) {
     final tenantsAsync = ref.watch(
       propertyTenantsProvider(propertyId),
     );
@@ -57,16 +52,9 @@ class TenantListScreen extends ConsumerWidget {
         ),
       ),
 
-      // ============================================================
-      // ADD TENANT
-      // ============================================================
-
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          _addTenant(
-            context,
-            ref,
-          );
+          _addTenant(context, ref);
         },
         icon: const Icon(
           Icons.person_add_alt_1,
@@ -76,24 +64,12 @@ class TenantListScreen extends ConsumerWidget {
         ),
       ),
 
-      // ============================================================
-      // BODY
-      // ============================================================
-
       body: tenantsAsync.when(
-        // ----------------------------------------------------------
-        // LOADING
-        // ----------------------------------------------------------
-
         loading: () {
           return const Center(
             child: CircularProgressIndicator(),
           );
         },
-
-        // ----------------------------------------------------------
-        // ERROR
-        // ----------------------------------------------------------
 
         error: (error, stackTrace) {
           return _TenantErrorView(
@@ -106,13 +82,9 @@ class TenantListScreen extends ConsumerWidget {
           );
         },
 
-        // ----------------------------------------------------------
-        // DATA
-        // ----------------------------------------------------------
-
         data: (tenants) {
           if (tenants.isEmpty) {
-            return _EmptyTenantsView(
+            return _EmptyTenantView(
               onAddTenant: () {
                 _addTenant(
                   context,
@@ -134,9 +106,6 @@ class TenantListScreen extends ConsumerWidget {
             },
 
             child: ListView.separated(
-              physics:
-              const AlwaysScrollableScrollPhysics(),
-
               padding: const EdgeInsets.fromLTRB(
                 20,
                 20,
@@ -146,20 +115,27 @@ class TenantListScreen extends ConsumerWidget {
 
               itemCount: tenants.length,
 
-              separatorBuilder: (context,
-                  index,) {
+              separatorBuilder: (
+                  context,
+                  index,
+                  ) {
                 return const SizedBox(
                   height: 12,
                 );
               },
 
-              itemBuilder: (context,
-                  index,) {
+              itemBuilder: (
+                  context,
+                  index,
+                  ) {
                 final tenant = tenants[index];
 
                 return _TenantCard(
                   tenant: tenant,
-                  propertyId: propertyId,
+                  onTap: () {
+                    // Tenant Details will be added
+                    // in the next step.
+                  },
                 );
               },
             ),
@@ -174,101 +150,75 @@ class TenantListScreen extends ConsumerWidget {
 // TENANT CARD
 // ============================================================================
 
-class _TenantCard extends ConsumerWidget {
+class _TenantCard extends StatelessWidget {
   final Tenant tenant;
-  final String propertyId;
+  final VoidCallback onTap;
 
   const _TenantCard({
     required this.tenant,
-    required this.propertyId,
+    required this.onTap,
   });
 
   @override
-  Widget build(BuildContext context,
-      WidgetRef ref,) {
+  Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
-
       child: InkWell(
-        onTap: () async {
-          final result = await context.push(
-            RouteNames.tenantDetails.replaceFirst(
-              ':tenantId',
-              tenant.id,
-            ),
-          );
-
-          if (!context.mounted) {
-            return;
-          }
-
-          // Tenant deleted
-          if (result == true) {
-            ref.invalidate(
-              propertyTenantsProvider(propertyId),
-            );
-          }
-        },
+        onTap: onTap,
 
         child: Padding(
-          padding: const EdgeInsets.all(18),
-
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // ==================================================
+              // ------------------------------------------------------------
               // AVATAR
-              // ==================================================
+              // ------------------------------------------------------------
 
               CircleAvatar(
                 radius: 26,
-
                 child: Text(
-                  _initial(tenant.name),
-
-                  style: Theme
-                      .of(context)
+                  _initial(
+                    tenant.name,
+                  ),
+                  style: Theme.of(context)
                       .textTheme
                       .titleMedium,
                 ),
               ),
 
               const SizedBox(
-                width: 16,
+                width: 14,
               ),
 
-              // ==================================================
-              // INFORMATION
-              // ==================================================
+              // ------------------------------------------------------------
+              // TENANT INFO
+              // ------------------------------------------------------------
 
               Expanded(
                 child: Column(
                   crossAxisAlignment:
                   CrossAxisAlignment.start,
-
                   children: [
                     Text(
                       tenant.name,
-
                       maxLines: 1,
-
                       overflow:
                       TextOverflow.ellipsis,
-
-                      style: Theme
-                          .of(context)
+                      style: Theme.of(context)
                           .textTheme
                           .titleMedium,
                     ),
 
                     const SizedBox(
-                      height: 6,
+                      height: 5,
                     ),
 
                     Text(
                       tenant.phone,
-
-                      style: Theme
-                          .of(context)
+                      maxLines: 1,
+                      overflow:
+                      TextOverflow.ellipsis,
+                      style: Theme.of(context)
                           .textTheme
                           .bodyMedium,
                     ),
@@ -278,19 +228,15 @@ class _TenantCard extends ConsumerWidget {
                             .trim()
                             .isNotEmpty) ...[
                       const SizedBox(
-                        height: 4,
+                        height: 3,
                       ),
 
                       Text(
                         tenant.email!,
-
                         maxLines: 1,
-
                         overflow:
                         TextOverflow.ellipsis,
-
-                        style: Theme
-                            .of(context)
+                        style: Theme.of(context)
                             .textTheme
                             .bodySmall,
                       ),
@@ -308,7 +254,7 @@ class _TenantCard extends ConsumerWidget {
               ),
 
               const SizedBox(
-                width: 12,
+                width: 8,
               ),
 
               const Icon(
@@ -344,13 +290,11 @@ class _TenantStatusChip extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context,) {
+  Widget build(BuildContext context) {
     final colorScheme =
-        Theme
-            .of(context)
-            .colorScheme;
+        Theme.of(context).colorScheme;
 
-    final isActive =
+    final bool isActive =
         status == TenantStatus.active;
 
     return Container(
@@ -360,12 +304,12 @@ class _TenantStatusChip extends StatelessWidget {
       ),
 
       decoration: BoxDecoration(
-        borderRadius:
-        BorderRadius.circular(20),
-
         color: isActive
             ? colorScheme.primaryContainer
             : colorScheme.surfaceContainerHighest,
+
+        borderRadius:
+        BorderRadius.circular(20),
       ),
 
       child: Text(
@@ -373,15 +317,15 @@ class _TenantStatusChip extends StatelessWidget {
             ? 'Active'
             : 'Inactive',
 
-        style: Theme
-            .of(context)
+        style: Theme.of(context)
             .textTheme
             .labelSmall
             ?.copyWith(
           color: isActive
-              ? colorScheme.onPrimaryContainer
-              : colorScheme.onSurfaceVariant,
-
+              ? colorScheme
+              .onPrimaryContainer
+              : colorScheme
+              .onSurfaceVariant,
           fontWeight:
           FontWeight.w600,
         ),
@@ -391,33 +335,31 @@ class _TenantStatusChip extends StatelessWidget {
 }
 
 // ============================================================================
-// EMPTY TENANTS
+// EMPTY VIEW
 // ============================================================================
 
-class _EmptyTenantsView extends StatelessWidget {
+class _EmptyTenantView extends StatelessWidget {
   final VoidCallback onAddTenant;
 
-  const _EmptyTenantsView({
+  const _EmptyTenantView({
     required this.onAddTenant,
   });
 
   @override
-  Widget build(BuildContext context,) {
+  Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
 
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+          MainAxisSize.min,
 
           children: [
             Icon(
               Icons.people_outline,
-
               size: 64,
-
-              color: Theme
-                  .of(context)
+              color: Theme.of(context)
                   .colorScheme
                   .onSurfaceVariant,
             ),
@@ -428,9 +370,7 @@ class _EmptyTenantsView extends StatelessWidget {
 
             Text(
               'No tenants yet',
-
-              style: Theme
-                  .of(context)
+              style: Theme.of(context)
                   .textTheme
                   .titleLarge,
             ),
@@ -439,10 +379,13 @@ class _EmptyTenantsView extends StatelessWidget {
               height: 8,
             ),
 
-            const Text(
-              'No tenants have been added to this property yet.',
-
-              textAlign: TextAlign.center,
+            Text(
+              'Add a tenant to this property.',
+              textAlign:
+              TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium,
             ),
 
             const SizedBox(
@@ -451,11 +394,9 @@ class _EmptyTenantsView extends StatelessWidget {
 
             FilledButton.icon(
               onPressed: onAddTenant,
-
               icon: const Icon(
                 Icons.person_add_alt_1,
               ),
-
               label: const Text(
                 'Add Tenant',
               ),
@@ -468,10 +409,11 @@ class _EmptyTenantsView extends StatelessWidget {
 }
 
 // ============================================================================
-// ERROR
+// ERROR VIEW
 // ============================================================================
 
-class _TenantErrorView extends StatelessWidget {
+class _TenantErrorView
+    extends StatelessWidget {
   final Object error;
   final VoidCallback onRetry;
 
@@ -481,22 +423,22 @@ class _TenantErrorView extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context,) {
+  Widget build(
+      BuildContext context,
+      ) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
 
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+          MainAxisSize.min,
 
           children: [
             Icon(
               Icons.error_outline,
-
               size: 52,
-
-              color: Theme
-                  .of(context)
+              color: Theme.of(context)
                   .colorScheme
                   .error,
             ),
@@ -505,10 +447,13 @@ class _TenantErrorView extends StatelessWidget {
               height: 16,
             ),
 
-            const Text(
+            Text(
               'Unable to load tenants.',
-
-              textAlign: TextAlign.center,
+              textAlign:
+              TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium,
             ),
 
             const SizedBox(
@@ -517,11 +462,9 @@ class _TenantErrorView extends StatelessWidget {
 
             Text(
               error.toString(),
-
-              textAlign: TextAlign.center,
-
-              style: Theme
-                  .of(context)
+              textAlign:
+              TextAlign.center,
+              style: Theme.of(context)
                   .textTheme
                   .bodySmall,
             ),
@@ -532,11 +475,9 @@ class _TenantErrorView extends StatelessWidget {
 
             OutlinedButton.icon(
               onPressed: onRetry,
-
               icon: const Icon(
                 Icons.refresh,
               ),
-
               label: const Text(
                 'Try Again',
               ),

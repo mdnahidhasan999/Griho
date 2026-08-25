@@ -21,8 +21,7 @@ class EditTenantScreen extends ConsumerStatefulWidget {
       _EditTenantScreenState();
 }
 
-class _EditTenantScreenState
-    extends ConsumerState<EditTenantScreen> {
+class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _nameController;
@@ -78,36 +77,150 @@ class _EditTenantScreenState
     final property = _selectedProperty;
     final unit = _selectedUnit;
 
-    if (property == null || unit == null) {
+    // ============================================================
+    // PROPERTY CHECK
+    // ============================================================
+
+    if (property == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select a property.',
+          ),
+        ),
+      );
+
       return;
     }
+
+    // ============================================================
+    // UNIT CHECK
+    // ============================================================
+
+    if (unit == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select a unit.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // ============================================================
+    // CREATE UPDATED TENANT
+    // ============================================================
 
     final updatedTenant = widget.tenant.copyWith(
       propertyId: property.id,
       unitId: unit.id,
+
       name: _nameController.text.trim(),
+
       phone: _phoneController.text.trim(),
-      email: _emailController.text.trim().isEmpty
+
+      email: _emailController.text
+          .trim()
+          .isEmpty
           ? null
           : _emailController.text.trim(),
-      nidNumber: _nidController.text.trim().isEmpty
+
+      nidNumber: _nidController.text
+          .trim()
+          .isEmpty
           ? null
           : _nidController.text.trim(),
+
       status: _status,
+
       updatedAt: DateTime.now(),
     );
 
+    // ============================================================
+    // DEBUG
+    // ============================================================
+
+    debugPrint(
+        '========== UPDATE TENANT =========='
+    );
+
+    debugPrint(
+      'Tenant ID: ${updatedTenant.id}',
+    );
+
+    debugPrint(
+      'Owner ID: ${updatedTenant.ownerId}',
+    );
+
+    debugPrint(
+      'Property ID: ${updatedTenant.propertyId}',
+    );
+
+    debugPrint(
+      'Unit ID: ${updatedTenant.unitId}',
+    );
+
+    debugPrint(
+      'Name: ${updatedTenant.name}',
+    );
+
+    debugPrint(
+      'Phone: ${updatedTenant.phone}',
+    );
+
+    debugPrint(
+      'Email: ${updatedTenant.email}',
+    );
+
+    debugPrint(
+      'NID: ${updatedTenant.nidNumber}',
+    );
+
+    debugPrint(
+      'Status: ${updatedTenant.status.name}',
+    );
+
+    debugPrint(
+      '==================================',
+    );
+
+    // ============================================================
+    // UPDATE
+    // ============================================================
+
     final result = await ref
-        .read(tenantControllerProvider.notifier)
-        .updateTenant(updatedTenant);
+        .read(
+      tenantControllerProvider.notifier,
+    )
+        .updateTenant(
+      updatedTenant,
+    );
 
     if (!mounted) {
       return;
     }
 
+    // ============================================================
+    // FAILED
+    // ============================================================
+
     if (result == null) {
       final state = ref.read(
         tenantControllerProvider,
+      );
+
+      debugPrint(
+          '========== UPDATE FAILED =========='
+      );
+
+      debugPrint(
+        'Error: ${state.error}',
+      );
+
+      debugPrint(
+        '===================================',
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -116,13 +229,38 @@ class _EditTenantScreenState
             state.error?.toString() ??
                 'Unable to update tenant.',
           ),
+          duration: const Duration(
+            seconds: 6,
+          ),
         ),
       );
 
       return;
     }
 
-    Navigator.of(context).pop(result);
+    // ============================================================
+    // SUCCESS
+    // ============================================================
+
+    debugPrint(
+        '========== UPDATE SUCCESS =========='
+    );
+
+    debugPrint(
+      'Tenant ID: ${result.id}',
+    );
+
+    debugPrint(
+      'Updated Name: ${result.name}',
+    );
+
+    debugPrint(
+      '====================================',
+    );
+
+    Navigator.of(context).pop(
+      result,
+    );
   }
 
   @override
@@ -198,7 +336,8 @@ class _EditTenantScreenState
                   children: [
                     Text(
                       'Tenant Information',
-                      style: Theme.of(context)
+                      style: Theme
+                          .of(context)
                           .textTheme
                           .headlineSmall,
                     ),
@@ -207,7 +346,8 @@ class _EditTenantScreenState
 
                     Text(
                       'Update the tenant information below.',
-                      style: Theme.of(context)
+                      style: Theme
+                          .of(context)
                           .textTheme
                           .bodyMedium,
                     ),
@@ -262,7 +402,8 @@ class _EditTenantScreenState
                       Text(
                         'Property ID: '
                             '${_selectedProperty!.id}',
-                        style: Theme.of(context)
+                        style: Theme
+                            .of(context)
                             .textTheme
                             .bodySmall,
                       ),
@@ -400,7 +541,9 @@ class _EditTenantScreenState
                         OutlineInputBorder(),
                       ),
                       validator: (value) {
-                        if (value?.trim().isEmpty ??
+                        if (value
+                            ?.trim()
+                            .isEmpty ??
                             true) {
                           return 'Please enter tenant name.';
                         }
@@ -428,7 +571,9 @@ class _EditTenantScreenState
                         OutlineInputBorder(),
                       ),
                       validator: (value) {
-                        if (value?.trim().isEmpty ??
+                        if (value
+                            ?.trim()
+                            .isEmpty ??
                             true) {
                           return 'Please enter phone number.';
                         }

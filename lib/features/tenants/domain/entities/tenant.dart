@@ -52,8 +52,11 @@ class Tenant {
     String? unitId,
     String? name,
     String? phone,
-    String? email,
-    String? nidNumber,
+
+    // Nullable fields
+    Object? email = _keep,
+    Object? nidNumber = _keep,
+
     TenantStatus? status,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -62,15 +65,27 @@ class Tenant {
       id: id ?? this.id,
       ownerId: ownerId ?? this.ownerId,
       userId: userId ?? this.userId,
+
       propertyId: propertyId ?? this.propertyId,
       unitId: unitId ?? this.unitId,
+
       name: name ?? this.name,
       phone: phone ?? this.phone,
-      email: email ?? this.email,
-      nidNumber: nidNumber ?? this.nidNumber,
+
+      email: email == _keep
+          ? this.email
+          : email as String?,
+
+      nidNumber: nidNumber == _keep
+          ? this.nidNumber
+          : nidNumber as String?,
+
       status: status ?? this.status,
+
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  static const Object _keep = Object();
 }

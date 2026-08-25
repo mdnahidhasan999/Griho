@@ -34,13 +34,23 @@ class TenantDataSource {
   // GET TENANTS BY PROPERTY
   // ============================================================
 
-  Future<List<TenantModel>> getTenantsByPropertyId(
-      String propertyId,
-      ) async {
+// ============================================================
+// GET TENANTS BY PROPERTY
+// CURRENT OWNER ONLY
+// ============================================================
+
+  Future<List<TenantModel>> getTenantsByPropertyId({
+    required String propertyId,
+    required String ownerId,
+  }) async {
     final snapshot = await _tenants
         .where(
       'propertyId',
       isEqualTo: propertyId,
+    )
+        .where(
+      'ownerId',
+      isEqualTo: ownerId,
     )
         .orderBy(
       'createdAt',
@@ -57,9 +67,7 @@ class TenantDataSource {
   // GET ACTIVE TENANT BY UNIT
   // ============================================================
 
-  Future<TenantModel?> getTenantByUnitId(
-      String unitId,
-      ) async {
+  Future<TenantModel?> getTenantByUnitId(String unitId,) async {
     final snapshot = await _tenants
         .where(
       'unitId',
@@ -101,9 +109,7 @@ class TenantDataSource {
   // UPDATE TENANT
   // ============================================================
 
-  Future<TenantModel> updateTenant(
-      TenantModel tenant,
-      ) async {
+  Future<TenantModel> updateTenant(TenantModel tenant,) async {
     final document = _tenants.doc(tenant.id);
 
     await document.update(
@@ -127,9 +133,7 @@ class TenantDataSource {
   // DELETE TENANT
   // ============================================================
 
-  Future<void> deleteTenant(
-      String tenantId,
-      ) async {
+  Future<void> deleteTenant(String tenantId,) async {
     await _tenants.doc(tenantId).delete();
   }
 
@@ -137,9 +141,7 @@ class TenantDataSource {
   // SEARCH TENANTS
   // ============================================================
 
-  Future<List<TenantModel>> searchTenants(
-      String search,
-      ) async {
+  Future<List<TenantModel>> searchTenants(String search,) async {
     final normalizedSearch = search.trim().toLowerCase();
 
     if (normalizedSearch.isEmpty) {

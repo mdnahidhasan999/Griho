@@ -21,24 +21,24 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant?> getTenantById(
-      String tenantId,
-      ) {
+  Future<Tenant?> getTenantById(String tenantId,) {
     return _dataSource.getTenantById(
       tenantId,
     );
   }
 
   // ============================================================
-  // GET TENANTS BY PROPERTY
-  // ============================================================
+// GET TENANTS BY PROPERTY
+// CURRENT OWNER ONLY
+// ============================================================
 
   @override
-  Future<List<Tenant>> getTenantsByPropertyId(
-      String propertyId,
-      ) {
+  Future<List<Tenant>> getTenantsByPropertyId(String propertyId,) {
+    final ownerId = _currentUserService.requiredUid;
+
     return _dataSource.getTenantsByPropertyId(
-      propertyId,
+      propertyId: propertyId,
+      ownerId: ownerId,
     );
   }
 
@@ -47,9 +47,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant?> getTenantByUnitId(
-      String unitId,
-      ) {
+  Future<Tenant?> getTenantByUnitId(String unitId,) {
     return _dataSource.getTenantByUnitId(
       unitId,
     );
@@ -60,9 +58,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<List<Tenant>> searchTenants(
-      String search,
-      ) {
+  Future<List<Tenant>> searchTenants(String search,) {
     return _dataSource.searchTenants(
       search,
     );
@@ -89,13 +85,14 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant> createTenant(
-      CreateTenantRequest request,
-      ) async {
+  Future<Tenant> createTenant(CreateTenantRequest request,) async {
     final now = DateTime.now();
 
     final documentId =
-    DateTime.now().microsecondsSinceEpoch.toString();
+    DateTime
+        .now()
+        .microsecondsSinceEpoch
+        .toString();
 
     final ownerId = _currentUserService.requiredUid;
 
@@ -124,9 +121,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant> updateTenant(
-      Tenant tenant,
-      ) async {
+  Future<Tenant> updateTenant(Tenant tenant,) async {
     final model = TenantModel.fromEntity(
       tenant,
     );
@@ -141,9 +136,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<void> deleteTenant(
-      String tenantId,
-      ) {
+  Future<void> deleteTenant(String tenantId,) {
     return _dataSource.deleteTenant(
       tenantId,
     );
