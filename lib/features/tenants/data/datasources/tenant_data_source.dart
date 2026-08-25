@@ -63,15 +63,23 @@ class TenantDataSource {
         .toList();
   }
 
-  // ============================================================
-  // GET ACTIVE TENANT BY UNIT
-  // ============================================================
+// ============================================================
+// GET ACTIVE TENANT BY UNIT
+// CURRENT OWNER ONLY
+// ============================================================
 
-  Future<TenantModel?> getTenantByUnitId(String unitId,) async {
+  Future<TenantModel?> getTenantByUnitId({
+    required String unitId,
+    required String ownerId,
+  }) async {
     final snapshot = await _tenants
         .where(
       'unitId',
       isEqualTo: unitId,
+    )
+        .where(
+      'ownerId',
+      isEqualTo: ownerId,
     )
         .where(
       'status',

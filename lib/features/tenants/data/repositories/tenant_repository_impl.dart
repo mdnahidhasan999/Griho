@@ -43,13 +43,17 @@ class TenantRepositoryImpl implements TenantRepository {
   }
 
   // ============================================================
-  // GET TENANT BY UNIT
-  // ============================================================
+// GET ACTIVE TENANT BY UNIT
+// CURRENT OWNER ONLY
+// ============================================================
 
   @override
-  Future<Tenant?> getTenantByUnitId(String unitId,) {
+  Future<Tenant?> getTenantByUnitId(String unitId) {
+    final ownerId = _currentUserService.requiredUid;
+
     return _dataSource.getTenantByUnitId(
-      unitId,
+      unitId: unitId,
+      ownerId: ownerId,
     );
   }
 
