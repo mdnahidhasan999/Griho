@@ -14,9 +14,15 @@ class TenantModel extends Tenant {
     super.email,
     super.nidNumber,
     required super.status,
+    required super.accountStatus,
+    required super.confirmationStatus,
     required super.createdAt,
     required super.updatedAt,
   });
+
+  // ============================================================
+  // FROM ENTITY
+  // ============================================================
 
   factory TenantModel.fromEntity(Tenant tenant) {
     return TenantModel(
@@ -30,10 +36,16 @@ class TenantModel extends Tenant {
       email: tenant.email,
       nidNumber: tenant.nidNumber,
       status: tenant.status,
+      accountStatus: tenant.accountStatus,
+      confirmationStatus: tenant.confirmationStatus,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
     );
   }
+
+  // ============================================================
+  // FROM FIRESTORE
+  // ============================================================
 
   factory TenantModel.fromFirestore(
       DocumentSnapshot<Map<String, dynamic>> document,
@@ -49,15 +61,27 @@ class TenantModel extends Tenant {
     return TenantModel(
       id: document.id,
 
+      // --------------------------------------------------------
+      // OWNER
+      // --------------------------------------------------------
+
       ownerId: _readRequiredString(
         data,
         'ownerId',
       ),
 
+      // --------------------------------------------------------
+      // USER ACCOUNT
+      // --------------------------------------------------------
+
       userId: _readOptionalString(
         data,
         'userId',
       ),
+
+      // --------------------------------------------------------
+      // PROPERTY / UNIT
+      // --------------------------------------------------------
 
       propertyId: _readRequiredString(
         data,
@@ -68,6 +92,10 @@ class TenantModel extends Tenant {
         data,
         'unitId',
       ),
+
+      // --------------------------------------------------------
+      // PERSONAL INFORMATION
+      // --------------------------------------------------------
 
       name: _readRequiredString(
         data,
@@ -89,11 +117,41 @@ class TenantModel extends Tenant {
         'nidNumber',
       ),
 
+      // --------------------------------------------------------
+      // TENANCY STATUS
+      // --------------------------------------------------------
+
       status: TenantStatus.values.firstWhere(
-            (status) =>
-        status.name == data['status'],
+            (status) => status.name == data['status'],
         orElse: () => TenantStatus.active,
       ),
+
+      // --------------------------------------------------------
+      // ACCOUNT STATUS
+      //
+      // Old documents may not have this field.
+      // In that case we safely derive it from userId.
+      // --------------------------------------------------------
+
+      accountStatus: _readAccountStatus(
+        data,
+      ),
+
+      // --------------------------------------------------------
+      // CONFIRMATION STATUS
+      //
+      // Old tenant documents do not have this field.
+      // They will therefore default to pending.
+      // --------------------------------------------------------
+
+      confirmationStatus: TenantConfirmationStatus.values.firstWhere(
+            (status) => status.name == data['confirmationStatus'],
+        orElse: () => TenantConfirmationStatus.pending,
+      ),
+
+      // --------------------------------------------------------
+      // DATES
+      // --------------------------------------------------------
 
       createdAt: _readDateTime(
         data,
@@ -107,21 +165,93 @@ class TenantModel extends Tenant {
     );
   }
 
+  // ============================================================
+  // TO FIRESTORE
+  // ============================================================
+
   Map<String, dynamic> toFirestore() {
     return {
       'ownerId': ownerId,
+
+      // Tenant's Firebase Auth UID
       'userId': userId,
+
       'propertyId': propertyId,
       'unitId': unitId,
+
       'name': name,
       'phone': phone,
       'email': email,
       'nidNumber': nidNumber,
+
+      // Tenant active/inactive
       'status': status.name,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': Timestamp.fromDate(updatedAt),
+
+      // Tenant account registration status
+      'accountStatus': accountStatus.name,
+
+      // Tenant tenancy confirmation status
+      'confirmationStatus': confirmationStatus.name,
+
+      'createdAt': Timestamp.fromDate(
+        createdAt,
+      ),
+
+      'updatedAt': Timestamp.fromDate(
+        updatedAt,
+      ),
     };
   }
+
+  // ============================================================
+  // READ ACCOUNT STATUS
+  // ============================================================
+
+  static TenantAccountStatus _readAccountStatus(
+      Map<String, dynamic> data,
+      ) {
+    final value = data['accountStatus'];
+
+    // ----------------------------------------------------------
+    // NEW DATA
+    // ----------------------------------------------------------
+
+    if (value is String) {
+      return TenantAccountStatus.values.firstWhere(
+            (status) => status.name == value,
+        orElse: () {
+          // If accountStatus is invalid, derive from userId.
+          return _accountStatusFromUserId(data);
+        },
+      );
+    }
+
+    // ----------------------------------------------------------
+    // OLD DATA
+    // ----------------------------------------------------------
+
+    return _accountStatusFromUserId(data);
+  }
+
+  // ============================================================
+  // ACCOUNT STATUS FROM USER ID
+  // ============================================================
+
+  static TenantAccountStatus _accountStatusFromUserId(
+      Map<String, dynamic> data,
+      ) {
+    final userId = data['userId'];
+
+    if (userId is String && userId.trim().isNotEmpty) {
+      return TenantAccountStatus.registered;
+    }
+
+    return TenantAccountStatus.notRegistered;
+  }
+
+  // ============================================================
+  // REQUIRED STRING
+  // ============================================================
 
   static String _readRequiredString(
       Map<String, dynamic> data,
@@ -137,6 +267,10 @@ class TenantModel extends Tenant {
 
     return value;
   }
+
+  // ============================================================
+  // OPTIONAL STRING
+  // ============================================================
 
   static String? _readOptionalString(
       Map<String, dynamic> data,
@@ -158,6 +292,10 @@ class TenantModel extends Tenant {
 
     return trimmed.isEmpty ? null : trimmed;
   }
+
+  // ============================================================
+  // DATE TIME
+  // ============================================================
 
   static DateTime _readDateTime(
       Map<String, dynamic> data,

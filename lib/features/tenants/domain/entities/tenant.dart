@@ -1,7 +1,39 @@
+// ============================================================
+// TENANT STATUS
+// ============================================================
+
 enum TenantStatus {
   active,
   inactive,
 }
+
+// ============================================================
+// TENANT ACCOUNT STATUS
+//
+// Indicates whether this tenant has linked their Griho
+// account with the tenant record.
+// ============================================================
+
+enum TenantAccountStatus {
+  notRegistered,
+  registered,
+}
+
+// ============================================================
+// TENANT CONFIRMATION STATUS
+//
+// Indicates whether the tenant has confirmed the tenancy.
+// ============================================================
+
+enum TenantConfirmationStatus {
+  pending,
+  confirmed,
+  rejected,
+}
+
+// ============================================================
+// TENANT ENTITY
+// ============================================================
 
 class Tenant {
   final String id;
@@ -20,7 +52,14 @@ class Tenant {
   final String? email;
   final String? nidNumber;
 
+  // Tenant বর্তমানে unit-এ active/inactive কি না
   final TenantStatus status;
+
+  // Tenant-এর Griho account registration/linking status
+  final TenantAccountStatus accountStatus;
+
+  // Tenant tenancy confirm করেছে কি না
+  final TenantConfirmationStatus confirmationStatus;
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -36,6 +75,8 @@ class Tenant {
     this.email,
     this.nidNumber,
     required this.status,
+    required this.accountStatus,
+    required this.confirmationStatus,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -58,6 +99,9 @@ class Tenant {
     Object? nidNumber = _keep,
 
     TenantStatus? status,
+    TenantAccountStatus? accountStatus,
+    TenantConfirmationStatus? confirmationStatus,
+
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -81,6 +125,12 @@ class Tenant {
           : nidNumber as String?,
 
       status: status ?? this.status,
+
+      accountStatus:
+      accountStatus ?? this.accountStatus,
+
+      confirmationStatus:
+      confirmationStatus ?? this.confirmationStatus,
 
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

@@ -38,8 +38,7 @@ class TenantRepositoryImpl implements TenantRepository {
   Future<List<Tenant>> getTenantsByPropertyId(
       String propertyId,
       ) {
-    final ownerId =
-        _currentUserService.requiredUid;
+    final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.getTenantsByPropertyId(
       propertyId: propertyId,
@@ -55,8 +54,7 @@ class TenantRepositoryImpl implements TenantRepository {
   Future<Tenant?> getTenantByUnitId(
       String unitId,
       ) {
-    final ownerId =
-        _currentUserService.requiredUid;
+    final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.getTenantByUnitId(
       unitId: unitId,
@@ -72,8 +70,7 @@ class TenantRepositoryImpl implements TenantRepository {
   Future<List<Tenant>> getActiveTenantsByUnitId(
       String unitId,
       ) {
-    final ownerId =
-        _currentUserService.requiredUid;
+    final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.getActiveTenantsByUnitId(
       unitId: unitId,
@@ -119,16 +116,17 @@ class TenantRepositoryImpl implements TenantRepository {
       ) async {
     final now = DateTime.now();
 
-    final documentId =
-    DateTime.now()
+    final documentId = DateTime.now()
         .microsecondsSinceEpoch
         .toString();
 
-    final ownerId =
-        _currentUserService.requiredUid;
+    final ownerId = _currentUserService.requiredUid;
 
-    final normalizedPhone =
-    request.phone.trim();
+    // ----------------------------------------------------------
+    // NORMALIZE PHONE
+    // ----------------------------------------------------------
+
+    final normalizedPhone = request.phone.trim();
 
     if (normalizedPhone.isEmpty) {
       throw ArgumentError(
@@ -136,20 +134,86 @@ class TenantRepositoryImpl implements TenantRepository {
       );
     }
 
+    // ----------------------------------------------------------
+    // CREATE TENANT
+    // ----------------------------------------------------------
+    //
+    // At this stage:
+    //
+    // userId = null
+    // accountStatus = notRegistered
+    // confirmationStatus = pending
+    //
+    // Later, after tenant registration:
+    //
+    // userId = Firebase Auth UID
+    // accountStatus = registered
+    //
+    // After tenant confirms:
+    //
+    // confirmationStatus = confirmed
+    //
+    // ----------------------------------------------------------
+
     final tenant = TenantModel(
       id: documentId,
+
       ownerId: ownerId,
+
+      // Tenant has not created an account yet.
       userId: request.userId,
+
       propertyId: request.propertyId,
+
       unitId: request.unitId,
+
       name: request.name.trim(),
+
       phone: normalizedPhone,
+
       email: request.email?.trim(),
+
       nidNumber: request.nidNumber?.trim(),
+
+      // --------------------------------------------------------
+      // TENANCY STATUS
+      // --------------------------------------------------------
+
       status: request.status,
+
+      // --------------------------------------------------------
+      // ACCOUNT STATUS
+      // --------------------------------------------------------
+      //
+      // If userId already exists, the account is registered.
+      // Otherwise the tenant has not registered yet.
+      //
+      // --------------------------------------------------------
+
+      accountStatus: request.userId != null &&
+          request.userId!.trim().isNotEmpty
+          ? TenantAccountStatus.registered
+          : TenantAccountStatus.notRegistered,
+
+      // --------------------------------------------------------
+      // CONFIRMATION STATUS
+      // --------------------------------------------------------
+      //
+      // Newly created tenant has not confirmed the tenancy yet.
+      //
+      // --------------------------------------------------------
+
+      confirmationStatus:
+      TenantConfirmationStatus.pending,
+
       createdAt: now,
+
       updatedAt: now,
     );
+
+    // ----------------------------------------------------------
+    // SAVE TENANT
+    // ----------------------------------------------------------
 
     return _dataSource.createTenant(
       tenant: tenant,
@@ -164,8 +228,7 @@ class TenantRepositoryImpl implements TenantRepository {
   Future<Tenant> updateTenant(
       Tenant tenant,
       ) async {
-    final model =
-    TenantModel.fromEntity(
+    final model = TenantModel.fromEntity(
       tenant,
     );
 
@@ -184,8 +247,7 @@ class TenantRepositoryImpl implements TenantRepository {
     required String ownerId,
     required String keepTenantId,
   }) {
-    return _dataSource
-        .cleanupDuplicateActiveTenants(
+    return _dataSource.cleanupDuplicateActiveTenants(
       unitId: unitId,
       ownerId: ownerId,
       keepTenantId: keepTenantId,
