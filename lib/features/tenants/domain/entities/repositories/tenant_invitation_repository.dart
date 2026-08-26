@@ -16,52 +16,42 @@ abstract class TenantInvitationRepository {
   // GET INVITATION BY ID
   // ============================================================
 
-  Future<TenantInvitation?> getInvitationById(
-      String invitationId,
-      );
+  Future<TenantInvitation?> getInvitationById(String invitationId,);
 
   // ============================================================
   // GET INVITATION BY TOKEN
   //
-  // Used when tenant opens invitation link/code.
+  // Used by tenant registration.
   // ============================================================
 
-  Future<TenantInvitation?> getInvitationByToken(
-      String token,
-      );
+  Future<TenantInvitation?> getInvitationByToken(String token,);
 
   // ============================================================
   // GET PENDING INVITATION BY TENANT
   //
-  // Used by owner to check invitation status.
+  // Used by owner.
   // ============================================================
 
-  Future<TenantInvitation?>
-  getPendingInvitationByTenantId(
-      String tenantId,
-      );
+  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId,);
 
   // ============================================================
   // ACCEPT INVITATION
   // ============================================================
 
-  Future<void> acceptInvitation(
-      String invitationId,
-      );
+  Future<void> acceptInvitation(String invitationId,);
 
   // ============================================================
   // CANCEL INVITATION
+  //
+  // Both owner and tenant can cancel,
+  // but authorization will be enforced separately.
   // ============================================================
 
-  Future<void> cancelInvitation(
-      String invitationId,
-      );
+  Future<void> cancelInvitation(String invitationId,);
 
   // ============================================================
   // EXPIRE INVITATION
   // ============================================================
 
-  Future<void> expireInvitation(
-      String invitationId,
-      );
+  Future<void> expireInvitation(String invitationId,);
 }
