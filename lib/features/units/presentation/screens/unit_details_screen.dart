@@ -25,9 +25,11 @@ class UnitDetailsScreen extends ConsumerStatefulWidget {
       _UnitDetailsScreenState();
 }
 
-class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
+class _UnitDetailsScreenState
+    extends ConsumerState<UnitDetailsScreen> {
   Unit? _unit;
-  Tenant? _tenant;
+
+  List<Tenant> _activeTenants = [];
 
   bool _isLoading = true;
   bool _isDeleting = false;
@@ -37,12 +39,11 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
   @override
   void initState() {
     super.initState();
-
     _loadUnit();
   }
 
   // ============================================================
-  // LOAD UNIT + CURRENT TENANT
+  // LOAD UNIT + ACTIVE TENANTS
   // ============================================================
 
   Future<void> _loadUnit() async {
@@ -51,8 +52,8 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
         getUnitProvider,
       );
 
-      final getTenantByUnitId = ref.read(
-        getTenantByUnitIdProvider,
+      final getActiveTenantsByUnitId = ref.read(
+        getActiveTenantsByUnitIdProvider,
       );
 
       final unit = await getUnit(
@@ -63,10 +64,11 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
         return;
       }
 
-      Tenant? tenant;
+      List<Tenant> activeTenants = [];
 
       if (unit != null) {
-        tenant = await getTenantByUnitId(
+        activeTenants =
+        await getActiveTenantsByUnitId(
           unit.id,
         );
       }
@@ -77,7 +79,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
       setState(() {
         _unit = unit;
-        _tenant = tenant;
+        _activeTenants = activeTenants;
         _isLoading = false;
         _errorMessage = null;
       });
@@ -125,6 +127,8 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
         updatedUnit.propertyId,
       ),
     );
+
+    await _loadUnit();
   }
 
   // ============================================================
@@ -318,7 +322,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
         children: [
           _UnitDetails(
             unit: unit,
-            tenant: _tenant,
+            activeTenants: _activeTenants,
           ),
 
           if (_isDeleting)
@@ -357,11 +361,11 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
 class _UnitDetails extends StatelessWidget {
   final Unit unit;
-  final Tenant? tenant;
+  final List<Tenant> activeTenants;
 
   const _UnitDetails({
     required this.unit,
-    required this.tenant,
+    required this.activeTenants,
   });
 
   @override
@@ -454,11 +458,11 @@ class _UnitDetails extends StatelessWidget {
         const SizedBox(height: 20),
 
         // ==========================================================
-        // CURRENT TENANT
+        // CURRENT TENANTS
         // ==========================================================
 
         _TenantSection(
-          tenant: tenant,
+          tenants: activeTenants,
         ),
       ],
     );
@@ -468,7 +472,9 @@ class _UnitDetails extends StatelessWidget {
   // UNIT STATUS LABEL
   // ============================================================
 
-  String _statusLabel(UnitStatus status) {
+  String _statusLabel(
+      UnitStatus status,
+      ) {
     switch (status) {
       case UnitStatus.available:
         return 'Available';
@@ -529,10 +535,10 @@ class _InfoCard extends StatelessWidget {
 // ============================================================================
 
 class _TenantSection extends StatelessWidget {
-  final Tenant? tenant;
+  final List<Tenant> tenants;
 
   const _TenantSection({
-    required this.tenant,
+    required this.tenants,
   });
 
   @override
@@ -541,7 +547,7 @@ class _TenantSection extends StatelessWidget {
     // NO ACTIVE TENANT
     // ==========================================================
 
-    if (tenant == null) {
+    if (tenants.isEmpty) {
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -550,7 +556,7 @@ class _TenantSection extends StatelessWidget {
             CrossAxisAlignment.start,
             children: [
               Text(
-                'Current Tenant',
+                'Current Tenants',
                 style: Theme.of(context)
                     .textTheme
                     .titleMedium,
@@ -586,9 +592,68 @@ class _TenantSection extends StatelessWidget {
     }
 
     // ==========================================================
-    // CURRENT TENANT
+    // ACTIVE TENANTS
     // ==========================================================
 
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Current Tenants',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium,
+                  ),
+                ),
+
+                Text(
+                  tenants.length.toString(),
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            ...tenants.map(
+                  (tenant) => Padding(
+                padding: const EdgeInsets.only(
+                  bottom: 12,
+                ),
+                child: _TenantTile(
+                  tenant: tenant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// TENANT TILE
+// ============================================================================
+
+class _TenantTile extends StatelessWidget {
+  final Tenant tenant;
+
+  const _TenantTile({
+    required this.tenant,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -596,82 +661,80 @@ class _TenantSection extends StatelessWidget {
           context.push(
             RouteNames.tenantDetails.replaceFirst(
               ':tenantId',
-              tenant!.id,
+              tenant.id,
             ),
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+          padding: const EdgeInsets.all(16),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Current Tenant',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium,
-                    ),
+              CircleAvatar(
+                radius: 26,
+                child: Text(
+                  _initial(
+                    tenant.name,
                   ),
-
-                  const Icon(
-                    Icons.chevron_right,
-                  ),
-                ],
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium,
+                ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(width: 16),
 
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    child: Text(
-                      _initial(tenant!.name),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tenant.name,
+                      maxLines: 1,
+                      overflow:
+                      TextOverflow.ellipsis,
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium,
                     ),
-                  ),
 
-                  const SizedBox(width: 16),
+                    const SizedBox(height: 5),
 
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                    Text(
+                      tenant.phone,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium,
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    Row(
                       children: [
-                        Text(
-                          tenant!.name,
-                          maxLines: 1,
-                          overflow:
-                          TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium,
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        Text(
-                          tenant!.phone,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium,
-                        ),
-
-                        const SizedBox(height: 8),
-
                         _TenantStatusChip(
-                          status: tenant!.status,
+                          status: tenant.status,
                         ),
+
+                        const SizedBox(width: 8),
+
+                        if (tenant.userId == null)
+                          const _AccountStatusChip(
+                            label: 'Not registered',
+                          )
+                        else
+                          const _AccountStatusChip(
+                            label: 'Registered',
+                          ),
                       ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              const Icon(
+                Icons.chevron_right,
               ),
             ],
           ),
@@ -680,10 +743,6 @@ class _TenantSection extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  // INITIAL
-  // ============================================================
-
   String _initial(String name) {
     final value = name.trim();
 
@@ -691,7 +750,9 @@ class _TenantSection extends StatelessWidget {
       return '?';
     }
 
-    return value.characters.first.toUpperCase();
+    return value.characters
+        .first
+        .toUpperCase();
   }
 }
 
@@ -724,7 +785,8 @@ class _TenantStatusChip extends StatelessWidget {
         BorderRadius.circular(20),
         color: isActive
             ? colorScheme.primaryContainer
-            : colorScheme.surfaceContainerHighest,
+            : colorScheme
+            .surfaceContainerHighest,
       ),
       child: Text(
         isActive ? 'Active' : 'Inactive',
@@ -733,9 +795,55 @@ class _TenantStatusChip extends StatelessWidget {
             .labelSmall
             ?.copyWith(
           color: isActive
-              ? colorScheme.onPrimaryContainer
-              : colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
+              ? colorScheme
+              .onPrimaryContainer
+              : colorScheme
+              .onSurfaceVariant,
+          fontWeight:
+          FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// ACCOUNT STATUS CHIP
+// ============================================================================
+
+class _AccountStatusChip extends StatelessWidget {
+  final String label;
+
+  const _AccountStatusChip({
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme =
+        Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        borderRadius:
+        BorderRadius.circular(20),
+        color: colorScheme
+            .surfaceContainerHighest,
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(
+          color:
+          colorScheme.onSurfaceVariant,
+          fontWeight:
+          FontWeight.w600,
         ),
       ),
     );
@@ -817,7 +925,8 @@ class _ErrorView extends StatelessWidget {
 
             Text(
               message,
-              textAlign: TextAlign.center,
+              textAlign:
+              TextAlign.center,
             ),
 
             const SizedBox(height: 16),
@@ -849,7 +958,8 @@ class _NotFoundView extends StatelessWidget {
         padding: EdgeInsets.all(24),
         child: Text(
           'Unit not found.',
-          textAlign: TextAlign.center,
+          textAlign:
+          TextAlign.center,
         ),
       ),
     );

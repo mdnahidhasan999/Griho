@@ -8,9 +8,10 @@ abstract class TenantRepository {
 
   Future<Tenant?> getTenantByUnitId(String unitId);
 
+  Future<List<Tenant>> getActiveTenantsByUnitId(String unitId);
+
   Future<List<Tenant>> searchTenants(String search);
 
-  // নতুন
   Future<Tenant?> findTenantByPhone({
     required String phone,
     required String ownerId,
@@ -19,6 +20,12 @@ abstract class TenantRepository {
   Future<Tenant> createTenant(CreateTenantRequest request);
 
   Future<Tenant> updateTenant(Tenant tenant);
+
+  Future<void> cleanupDuplicateActiveTenants({
+    required String unitId,
+    required String ownerId,
+    required String keepTenantId,
+  });
 
   Future<void> deleteTenant(String tenantId);
 }

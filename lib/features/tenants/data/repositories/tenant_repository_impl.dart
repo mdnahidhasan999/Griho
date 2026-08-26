@@ -21,20 +21,25 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant?> getTenantById(String tenantId,) {
+  Future<Tenant?> getTenantById(
+      String tenantId,
+      ) {
     return _dataSource.getTenantById(
       tenantId,
     );
   }
 
   // ============================================================
-// GET TENANTS BY PROPERTY
-// CURRENT OWNER ONLY
-// ============================================================
+  // GET TENANTS BY PROPERTY
+  // CURRENT OWNER ONLY
+  // ============================================================
 
   @override
-  Future<List<Tenant>> getTenantsByPropertyId(String propertyId,) {
-    final ownerId = _currentUserService.requiredUid;
+  Future<List<Tenant>> getTenantsByPropertyId(
+      String propertyId,
+      ) {
+    final ownerId =
+        _currentUserService.requiredUid;
 
     return _dataSource.getTenantsByPropertyId(
       propertyId: propertyId,
@@ -43,15 +48,34 @@ class TenantRepositoryImpl implements TenantRepository {
   }
 
   // ============================================================
-// GET ACTIVE TENANT BY UNIT
-// CURRENT OWNER ONLY
-// ============================================================
+  // GET TENANT BY UNIT
+  // ============================================================
 
   @override
-  Future<Tenant?> getTenantByUnitId(String unitId) {
-    final ownerId = _currentUserService.requiredUid;
+  Future<Tenant?> getTenantByUnitId(
+      String unitId,
+      ) {
+    final ownerId =
+        _currentUserService.requiredUid;
 
     return _dataSource.getTenantByUnitId(
+      unitId: unitId,
+      ownerId: ownerId,
+    );
+  }
+
+  // ============================================================
+  // GET ACTIVE TENANTS BY UNIT
+  // ============================================================
+
+  @override
+  Future<List<Tenant>> getActiveTenantsByUnitId(
+      String unitId,
+      ) {
+    final ownerId =
+        _currentUserService.requiredUid;
+
+    return _dataSource.getActiveTenantsByUnitId(
       unitId: unitId,
       ownerId: ownerId,
     );
@@ -62,7 +86,9 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<List<Tenant>> searchTenants(String search,) {
+  Future<List<Tenant>> searchTenants(
+      String search,
+      ) {
     return _dataSource.searchTenants(
       search,
     );
@@ -70,7 +96,6 @@ class TenantRepositoryImpl implements TenantRepository {
 
   // ============================================================
   // FIND TENANT BY PHONE
-  // CURRENT OWNER ONLY
   // ============================================================
 
   @override
@@ -89,16 +114,27 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant> createTenant(CreateTenantRequest request,) async {
+  Future<Tenant> createTenant(
+      CreateTenantRequest request,
+      ) async {
     final now = DateTime.now();
 
     final documentId =
-    DateTime
-        .now()
+    DateTime.now()
         .microsecondsSinceEpoch
         .toString();
 
-    final ownerId = _currentUserService.requiredUid;
+    final ownerId =
+        _currentUserService.requiredUid;
+
+    final normalizedPhone =
+    request.phone.trim();
+
+    if (normalizedPhone.isEmpty) {
+      throw ArgumentError(
+        'Tenant phone number cannot be empty.',
+      );
+    }
 
     final tenant = TenantModel(
       id: documentId,
@@ -106,10 +142,10 @@ class TenantRepositoryImpl implements TenantRepository {
       userId: request.userId,
       propertyId: request.propertyId,
       unitId: request.unitId,
-      name: request.name,
-      phone: request.phone,
-      email: request.email,
-      nidNumber: request.nidNumber,
+      name: request.name.trim(),
+      phone: normalizedPhone,
+      email: request.email?.trim(),
+      nidNumber: request.nidNumber?.trim(),
       status: request.status,
       createdAt: now,
       updatedAt: now,
@@ -125,8 +161,11 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant> updateTenant(Tenant tenant,) async {
-    final model = TenantModel.fromEntity(
+  Future<Tenant> updateTenant(
+      Tenant tenant,
+      ) async {
+    final model =
+    TenantModel.fromEntity(
       tenant,
     );
 
@@ -136,11 +175,31 @@ class TenantRepositoryImpl implements TenantRepository {
   }
 
   // ============================================================
+  // CLEANUP DUPLICATE ACTIVE TENANTS
+  // ============================================================
+
+  @override
+  Future<void> cleanupDuplicateActiveTenants({
+    required String unitId,
+    required String ownerId,
+    required String keepTenantId,
+  }) {
+    return _dataSource
+        .cleanupDuplicateActiveTenants(
+      unitId: unitId,
+      ownerId: ownerId,
+      keepTenantId: keepTenantId,
+    );
+  }
+
+  // ============================================================
   // DELETE TENANT
   // ============================================================
 
   @override
-  Future<void> deleteTenant(String tenantId,) {
+  Future<void> deleteTenant(
+      String tenantId,
+      ) {
     return _dataSource.deleteTenant(
       tenantId,
     );
