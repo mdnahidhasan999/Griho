@@ -4,8 +4,8 @@ class CancelTenantInvitation {
   final TenantInvitationRepository _repository;
 
   const CancelTenantInvitation({
-    required TenantInvitationRepository repository,
-  }) : _repository = repository;
+    required this._repository,
+  });
 
   Future<void> call(
       String invitationId,

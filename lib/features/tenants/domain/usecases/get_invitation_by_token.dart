@@ -5,8 +5,8 @@ class GetInvitationByToken {
   final TenantInvitationRepository _repository;
 
   const GetInvitationByToken({
-    required TenantInvitationRepository repository,
-  }) : _repository = repository;
+    required this._repository,
+  });
 
   Future<TenantInvitation?> call(
       String token,

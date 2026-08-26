@@ -21,9 +21,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant?> getTenantById(
-      String tenantId,
-      ) {
+  Future<Tenant?> getTenantById(String tenantId,) {
     return _dataSource.getTenantById(
       tenantId,
     );
@@ -35,9 +33,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<List<Tenant>> getTenantsByPropertyId(
-      String propertyId,
-      ) {
+  Future<List<Tenant>> getTenantsByPropertyId(String propertyId,) {
     final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.getTenantsByPropertyId(
@@ -51,9 +47,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant?> getTenantByUnitId(
-      String unitId,
-      ) {
+  Future<Tenant?> getTenantByUnitId(String unitId,) {
     final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.getTenantByUnitId(
@@ -67,9 +61,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<List<Tenant>> getActiveTenantsByUnitId(
-      String unitId,
-      ) {
+  Future<List<Tenant>> getActiveTenantsByUnitId(String unitId,) {
     final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.getActiveTenantsByUnitId(
@@ -83,9 +75,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<List<Tenant>> searchTenants(
-      String search,
-      ) {
+  Future<List<Tenant>> searchTenants(String search,) {
     return _dataSource.searchTenants(
       search,
     );
@@ -111,12 +101,11 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant> createTenant(
-      CreateTenantRequest request,
-      ) async {
+  Future<Tenant> createTenant(CreateTenantRequest request,) async {
     final now = DateTime.now();
 
-    final documentId = DateTime.now()
+    final documentId = DateTime
+        .now()
         .microsecondsSinceEpoch
         .toString();
 
@@ -225,15 +214,31 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<Tenant> updateTenant(
-      Tenant tenant,
-      ) async {
+  Future<Tenant> updateTenant(Tenant tenant,) async {
     final model = TenantModel.fromEntity(
       tenant,
     );
 
     return _dataSource.updateTenant(
       model,
+    );
+  }
+
+// ============================================================
+// LINK TENANT ACCOUNT
+// ============================================================
+//
+// Links the tenant's Firebase Auth UID to the tenant record.
+// ============================================================
+
+  @override
+  Future<Tenant> linkTenantAccount({
+    required String tenantId,
+    required String userId,
+  }) {
+    return _dataSource.linkTenantAccount(
+      tenantId: tenantId,
+      userId: userId,
     );
   }
 
@@ -259,9 +264,7 @@ class TenantRepositoryImpl implements TenantRepository {
   // ============================================================
 
   @override
-  Future<void> deleteTenant(
-      String tenantId,
-      ) {
+  Future<void> deleteTenant(String tenantId,) {
     return _dataSource.deleteTenant(
       tenantId,
     );

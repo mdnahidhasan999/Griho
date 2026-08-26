@@ -4,8 +4,8 @@ class ExpireTenantInvitation {
   final TenantInvitationRepository _repository;
 
   const ExpireTenantInvitation({
-    required TenantInvitationRepository repository,
-  }) : _repository = repository;
+    required this._repository,
+  });
 
   Future<void> call(
       String invitationId,

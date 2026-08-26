@@ -7,7 +7,7 @@ class TenantDataSource {
   final FirebaseFirestore _firestore;
 
   TenantDataSource({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _tenantCollectionName = 'tenants';
 
@@ -141,7 +141,7 @@ class TenantDataSource {
 
       throw StateError(
         'A tenant with this phone number already exists: '
-        '${existingTenant.name} (${existingTenant.phone}).',
+            '${existingTenant.name} (${existingTenant.phone}).',
       );
     }
 
@@ -164,8 +164,8 @@ class TenantDataSource {
 
         throw StateError(
           'This unit already has an active tenant: '
-          '${existingTenant.name} '
-          '(${existingTenant.phone}).',
+              '${existingTenant.name} '
+              '(${existingTenant.phone}).',
         );
       }
     }
@@ -215,6 +215,154 @@ class TenantDataSource {
     return tenant;
   }
 
+
+// ============================================================
+// LINK TENANT ACCOUNT
+// ============================================================
+//
+// Links a Firebase Auth UID to a tenant.
+//
+// Rules:
+// 1. Tenant must exist.
+// 2. Tenant cannot already belong to another account.
+// 3. One Firebase Auth UID cannot be linked to another tenant.
+// ============================================================
+
+  Future<TenantModel> linkTenantAccount({
+    required String tenantId,
+    required String userId,
+  }) async {
+    final normalizedUserId = userId.trim();
+
+    if (normalizedUserId.isEmpty) {
+      throw ArgumentError(
+        'Tenant user ID cannot be empty.',
+      );
+    }
+
+    final tenantDocument = _tenants.doc(tenantId);
+
+    // ----------------------------------------------------------
+    // READ TENANT
+    // ----------------------------------------------------------
+
+    final tenantSnapshot =
+    await tenantDocument.get();
+
+    if (!tenantSnapshot.exists) {
+      throw StateError(
+        'Tenant $tenantId does not exist.',
+      );
+    }
+
+    final tenant =
+    TenantModel.fromFirestore(
+      tenantSnapshot,
+    );
+
+    // ----------------------------------------------------------
+    // ALREADY LINKED
+    // ----------------------------------------------------------
+
+    if (tenant.userId != null &&
+        tenant.userId!.trim().isNotEmpty) {
+      if (tenant.userId == normalizedUserId) {
+        return tenant;
+      }
+
+      throw StateError(
+        'This tenant is already linked to another account.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // CHECK WHETHER THIS USER ID IS ALREADY LINKED
+    // ----------------------------------------------------------
+    //
+    // Query cannot be used directly inside transaction.get().
+    // Therefore this check is performed before the transaction.
+    // ----------------------------------------------------------
+
+    final existingUserSnapshot = await _tenants
+        .where(
+      'userId',
+      isEqualTo: normalizedUserId,
+    )
+        .limit(1)
+        .get();
+
+    if (existingUserSnapshot.docs.isNotEmpty) {
+      final existingTenant =
+      TenantModel.fromFirestore(
+        existingUserSnapshot.docs.first,
+      );
+
+      if (existingTenant.id != tenantId) {
+        throw StateError(
+          'This account is already linked to another tenant.',
+        );
+      }
+
+      return existingTenant;
+    }
+
+    // ----------------------------------------------------------
+    // CREATE UPDATED MODEL
+    // ----------------------------------------------------------
+
+    final updatedTenant =
+    tenant.copyWith(
+      userId: normalizedUserId,
+      updatedAt: DateTime.now(),
+    );
+
+    final updatedModel =
+    TenantModel.fromEntity(
+      updatedTenant,
+    );
+
+    // ----------------------------------------------------------
+    // UPDATE TENANT
+    // ----------------------------------------------------------
+
+    await _firestore.runTransaction(
+          (transaction) async {
+        final currentSnapshot =
+        await transaction.get(
+          tenantDocument,
+        );
+
+        if (!currentSnapshot.exists) {
+          throw StateError(
+            'Tenant $tenantId no longer exists.',
+          );
+        }
+
+        final currentTenant =
+        TenantModel.fromFirestore(
+          currentSnapshot,
+        );
+
+        // Prevent overwriting a link created by another request.
+        if (currentTenant.userId != null &&
+            currentTenant.userId!.trim().isNotEmpty &&
+            currentTenant.userId != normalizedUserId) {
+          throw StateError(
+            'This tenant is already linked to another account.',
+          );
+        }
+
+        transaction.update(
+          tenantDocument,
+          updatedModel.toFirestore(),
+        );
+      },
+    );
+
+    return updatedModel;
+  }
+
+
   // ============================================================
   // UPDATE TENANT
   // TENANT + OLD UNIT + NEW UNIT
@@ -256,8 +404,8 @@ class TenantDataSource {
 
         throw StateError(
           'A tenant with this phone number already exists: '
-          '${existingPhoneTenant.name} '
-          '(${existingPhoneTenant.phone}).',
+              '${existingPhoneTenant.name} '
+              '(${existingPhoneTenant.phone}).',
         );
       }
     }
@@ -283,8 +431,8 @@ class TenantDataSource {
 
           throw StateError(
             'This unit already has an active tenant: '
-            '${existingActiveTenant.name} '
-            '(${existingActiveTenant.phone}).',
+                '${existingActiveTenant.name} '
+                '(${existingActiveTenant.phone}).',
           );
         }
       }

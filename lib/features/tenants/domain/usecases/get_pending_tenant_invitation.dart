@@ -5,8 +5,8 @@ class GetPendingTenantInvitation {
   final TenantInvitationRepository _repository;
 
   const GetPendingTenantInvitation({
-    required TenantInvitationRepository repository,
-  }) : _repository = repository;
+    required this._repository,
+  });
 
   Future<TenantInvitation?> call(
       String tenantId,

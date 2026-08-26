@@ -21,6 +21,11 @@ abstract class TenantRepository {
 
   Future<Tenant> updateTenant(Tenant tenant);
 
+  Future<Tenant> linkTenantAccount({
+    required String tenantId,
+    required String userId,
+  });
+
   Future<void> cleanupDuplicateActiveTenants({
     required String unitId,
     required String ownerId,
