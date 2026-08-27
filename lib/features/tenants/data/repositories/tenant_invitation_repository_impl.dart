@@ -5,7 +5,8 @@ import '../../domain/entities/tenant_invitation.dart';
 
 import '../datasources/tenant_invitation_data_source.dart';
 
-class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
+class TenantInvitationRepositoryImpl
+    implements TenantInvitationRepository {
   final TenantInvitationDataSource _dataSource;
   final CurrentUserService _currentUserService;
 
@@ -42,8 +43,10 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
   // ============================================================
 
   @override
-  Future<TenantInvitation?> getInvitationById(String invitationId) {
-    return _dataSource.getInvitationById(invitationId);
+  Future<TenantInvitation?> getInvitationById(String invitationId,) {
+    return _dataSource.getInvitationById(
+      invitationId,
+    );
   }
 
   // ============================================================
@@ -53,8 +56,10 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
   // ============================================================
 
   @override
-  Future<TenantInvitation?> getInvitationByToken(String token) {
-    return _dataSource.getInvitationByToken(token);
+  Future<TenantInvitation?> getInvitationByToken(String token,) {
+    return _dataSource.getInvitationByToken(
+      token,
+    );
   }
 
   // ============================================================
@@ -63,8 +68,29 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
   // ============================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId) {
-    return _dataSource.getPendingInvitationByTenantId(tenantId);
+  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId,) {
+    return _dataSource.getPendingInvitationByTenantId(
+      tenantId,
+    );
+  }
+
+  // ============================================================
+  // GET PENDING INVITATION BY PHONE
+  //
+  // Used during tenant account linking.
+  //
+  // Firebase Auth phone
+  //        ↓
+  // pending invitation
+  //        ↓
+  // tenantId
+  // ============================================================
+
+  @override
+  Future<TenantInvitation?> getPendingInvitationByPhone(String phone,) {
+    return _dataSource.getPendingInvitationByPhone(
+      phone,
+    );
   }
 
   // ============================================================
@@ -72,8 +98,10 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
   // ============================================================
 
   @override
-  Future<void> acceptInvitation(String invitationId) {
-    return _dataSource.acceptInvitation(invitationId);
+  Future<void> acceptInvitation(String invitationId,) {
+    return _dataSource.acceptInvitation(
+      invitationId,
+    );
   }
 
   // ============================================================
@@ -81,8 +109,10 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
   // ============================================================
 
   @override
-  Future<void> cancelInvitation(String invitationId) {
-    return _dataSource.cancelInvitation(invitationId);
+  Future<void> cancelInvitation(String invitationId,) {
+    return _dataSource.cancelInvitation(
+      invitationId,
+    );
   }
 
   // ============================================================
@@ -90,7 +120,9 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
   // ============================================================
 
   @override
-  Future<void> expireInvitation(String invitationId) {
-    return _dataSource.expireInvitation(invitationId);
+  Future<void> expireInvitation(String invitationId,) {
+    return _dataSource.expireInvitation(
+      invitationId,
+    );
   }
 }

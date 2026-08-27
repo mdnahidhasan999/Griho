@@ -12,8 +12,11 @@ import '../../domain/usecases/cancel_tenant_invitation.dart';
 import '../../domain/usecases/create_tenant_invitation.dart';
 import '../../domain/usecases/expire_tenant_invitation.dart';
 import '../../domain/usecases/get_invitation_by_token.dart';
+import '../../domain/usecases/get_pending_invitation_by_phone.dart';
 import '../../domain/usecases/get_pending_tenant_invitation.dart';
 import '../../domain/usecases/get_tenant_invitation.dart';
+import '../../domain/usecases/link_and_accept_tenant_invitation.dart';
+import '../controllers/tenant_controller.dart';
 
 // ================================================================
 // TENANT INVITATION REPOSITORY
@@ -72,11 +75,28 @@ Provider<GetInvitationByToken>((ref) {
 
 // ================================================================
 // GET PENDING TENANT INVITATION
+// BY TENANT ID
 // ================================================================
 
 final getPendingTenantInvitationProvider =
 Provider<GetPendingTenantInvitation>((ref) {
   return GetPendingTenantInvitation(
+    repository: ref.read(
+      tenantInvitationRepositoryProvider,
+    ),
+  );
+});
+
+// ================================================================
+// GET PENDING TENANT INVITATION
+// BY PHONE
+//
+// Used for tenant account linking.
+// ================================================================
+
+final getPendingInvitationByPhoneProvider =
+Provider<GetPendingInvitationByPhone>((ref) {
+  return GetPendingInvitationByPhone(
     repository: ref.read(
       tenantInvitationRepositoryProvider,
     ),
@@ -117,6 +137,22 @@ final expireTenantInvitationProvider =
 Provider<ExpireTenantInvitation>((ref) {
   return ExpireTenantInvitation(
     repository: ref.read(
+      tenantInvitationRepositoryProvider,
+    ),
+  );
+});
+
+// ================================================================
+// LINK AND ACCEPT TENANT INVITATION
+// ================================================================
+
+final linkAndAcceptTenantInvitationProvider =
+Provider<LinkAndAcceptTenantInvitation>((ref) {
+  return LinkAndAcceptTenantInvitation(
+    tenantRepository: ref.read(
+      tenantRepositoryProvider,
+    ),
+    invitationRepository: ref.read(
       tenantInvitationRepositoryProvider,
     ),
   );

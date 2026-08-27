@@ -8,8 +8,10 @@ import '../../domain/usecases/cancel_tenant_invitation.dart';
 import '../../domain/usecases/create_tenant_invitation.dart';
 import '../../domain/usecases/expire_tenant_invitation.dart';
 import '../../domain/usecases/get_invitation_by_token.dart';
+import '../../domain/usecases/get_pending_invitation_by_phone.dart';
 import '../../domain/usecases/get_pending_tenant_invitation.dart';
 import '../../domain/usecases/get_tenant_invitation.dart';
+
 import '../providers/tenant_invitation_provider.dart';
 
 // ================================================================
@@ -22,6 +24,7 @@ class TenantInvitationController
   final GetTenantInvitation _getInvitation;
   final GetInvitationByToken _getInvitationByToken;
   final GetPendingTenantInvitation _getPendingInvitation;
+  final GetPendingInvitationByPhone _getPendingInvitationByPhone;
   final AcceptTenantInvitation _acceptInvitation;
   final CancelTenantInvitation _cancelInvitation;
   final ExpireTenantInvitation _expireInvitation;
@@ -31,6 +34,7 @@ class TenantInvitationController
     required this._getInvitation,
     required this._getInvitationByToken,
     required this._getPendingInvitation,
+    required this._getPendingInvitationByPhone,
     required this._acceptInvitation,
     required this._cancelInvitation,
     required this._expireInvitation,
@@ -104,8 +108,7 @@ class TenantInvitationController
     state = const AsyncLoading();
 
     try {
-      final invitation =
-      await _getInvitationByToken(
+      final invitation = await _getInvitationByToken(
         token,
       );
 
@@ -132,9 +135,42 @@ class TenantInvitationController
     state = const AsyncLoading();
 
     try {
-      final invitation =
-      await _getPendingInvitation(
+      final invitation = await _getPendingInvitation(
         tenantId,
+      );
+
+      state = AsyncData(invitation);
+
+      return invitation;
+    } catch (error, stackTrace) {
+      state = AsyncError(
+        error,
+        stackTrace,
+      );
+
+      return null;
+    }
+  }
+
+  // ==============================================================
+  // GET PENDING INVITATION BY PHONE
+  //
+  // Used for tenant account linking.
+  //
+  // Firebase Auth phone
+  //        ↓
+  // Pending invitation
+  //        ↓
+  // Tenant ID
+  // ==============================================================
+
+  Future<TenantInvitation?> getPendingInvitationByPhone(String phone,) async {
+    state = const AsyncLoading();
+
+    try {
+      final invitation =
+      await _getPendingInvitationByPhone(
+        phone,
       );
 
       state = AsyncData(invitation);
@@ -255,6 +291,9 @@ StateNotifierProvider<
       ),
       getPendingInvitation: ref.read(
         getPendingTenantInvitationProvider,
+      ),
+      getPendingInvitationByPhone: ref.read(
+        getPendingInvitationByPhoneProvider,
       ),
       acceptInvitation: ref.read(
         acceptTenantInvitationProvider,

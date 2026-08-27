@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../tenants/data/datasources/tenant_invitation_data_source.dart';
+import '../../../tenants/presentation/providers/tenant_invitation_provider.dart';
 import '../../data/datasources/firebase_auth_datasource.dart';
 import '../../data/services/user_registration_service.dart';
 import '../../domain/entities/app_user.dart';
@@ -8,20 +10,28 @@ import '../../domain/entities/auth_result.dart';
 import '../../domain/entities/registration_intent.dart';
 import 'auth_provider.dart';
 
-final firebaseAuthDataSourceProvider = Provider<FirebaseAuthDataSource>((ref) {
+final firebaseAuthDataSourceProvider =
+Provider<FirebaseAuthDataSource>((ref) {
   return FirebaseAuthDataSource();
 });
 
-final userRegistrationServiceProvider = Provider<UserRegistrationService>((
-  ref,
-) {
+final userRegistrationServiceProvider =
+Provider<UserRegistrationService>((ref) {
   return UserRegistrationService(
-    userProfileDataSource: ref.watch(userProfileDataSourceProvider),
+    userProfileDataSource: ref.watch(
+      userProfileDataSourceProvider,
+    ),
+    tenantInvitationDataSource:
+    TenantInvitationDataSource(),
+    linkAndAcceptTenantInvitation:
+    ref.watch(
+      linkAndAcceptTenantInvitationProvider,
+    ),
   );
 });
 
 final authControllerProvider =
-    NotifierProvider<AuthController, AuthControllerState>(AuthController.new);
+NotifierProvider<AuthController, AuthControllerState>(AuthController.new);
 
 class AuthControllerState {
   final bool isLoading;
@@ -101,7 +111,7 @@ class AuthController extends Notifier<AuthControllerState> {
     if (verificationId == null || verificationId.isEmpty) {
       state = state.copyWith(
         errorMessage:
-            'Verification session has expired. Please request a new OTP.',
+        'Verification session has expired. Please request a new OTP.',
       );
       return null;
     }

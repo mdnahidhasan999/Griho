@@ -355,6 +355,72 @@ class TenantInvitationDataSource {
     return invitation;
   }
 
+
+// ============================================================
+// GET PENDING INVITATION BY PHONE
+//
+// TENANT ACCOUNT LINKING
+//
+// Firebase Auth-এর phone number দিয়ে pending invitation খোঁজা হয়.
+//
+// Rules:
+// 1. Phone empty হলে null.
+// 2. শুধু pending invitation খোঁজা হবে.
+// 3. Expired হলে permanently delete হবে.
+// 4. Valid invitation return হবে.
+// ============================================================
+
+  Future<TenantInvitationModel?> getPendingInvitationByPhone(
+      String phone,
+      ) async {
+    final normalizedPhone = phone.trim();
+
+    if (normalizedPhone.isEmpty) {
+      return null;
+    }
+
+    final snapshot = await _invitations
+        .where(
+      'phone',
+      isEqualTo: normalizedPhone,
+    )
+        .where(
+      'status',
+      isEqualTo: TenantInvitationStatus.pending.name,
+    )
+        .orderBy(
+      'createdAt',
+      descending: true,
+    )
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) {
+      return null;
+    }
+
+    final invitation = TenantInvitationModel.fromFirestore(
+      snapshot.docs.first,
+    );
+
+    // ----------------------------------------------------------
+    // EXPIRED
+    // ----------------------------------------------------------
+
+    if (invitation.isExpired) {
+      await _deleteInvitationDocument(
+        invitation.id,
+      );
+
+      return null;
+    }
+
+    return invitation;
+  }
+
+
+
+
   // ============================================================
   // ACCEPT INVITATION
   //

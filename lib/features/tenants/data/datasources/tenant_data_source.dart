@@ -215,7 +215,6 @@ class TenantDataSource {
     return tenant;
   }
 
-
 // ============================================================
 // LINK TENANT ACCOUNT
 // ============================================================
@@ -361,7 +360,6 @@ class TenantDataSource {
 
     return updatedModel;
   }
-
 
   // ============================================================
   // UPDATE TENANT

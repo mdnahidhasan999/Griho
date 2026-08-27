@@ -16,15 +16,19 @@ abstract class TenantInvitationRepository {
   // GET INVITATION BY ID
   // ============================================================
 
-  Future<TenantInvitation?> getInvitationById(String invitationId,);
+  Future<TenantInvitation?> getInvitationById(
+      String invitationId,
+      );
 
   // ============================================================
   // GET INVITATION BY TOKEN
   //
-  // Used by tenant registration.
+  // Used when tenant opens an invitation link/code.
   // ============================================================
 
-  Future<TenantInvitation?> getInvitationByToken(String token,);
+  Future<TenantInvitation?> getInvitationByToken(
+      String token,
+      );
 
   // ============================================================
   // GET PENDING INVITATION BY TENANT
@@ -32,26 +36,47 @@ abstract class TenantInvitationRepository {
   // Used by owner.
   // ============================================================
 
-  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId,);
+  Future<TenantInvitation?> getPendingInvitationByTenantId(
+      String tenantId,
+      );
+
+  // ============================================================
+  // GET PENDING INVITATION BY PHONE
+  //
+  // Used during tenant account linking.
+  //
+  // Firebase Auth phone number is matched against the
+  // invitation phone number.
+  // ============================================================
+
+  Future<TenantInvitation?> getPendingInvitationByPhone(
+      String phone,
+      );
 
   // ============================================================
   // ACCEPT INVITATION
   // ============================================================
 
-  Future<void> acceptInvitation(String invitationId,);
+  Future<void> acceptInvitation(
+      String invitationId,
+      );
 
   // ============================================================
   // CANCEL INVITATION
   //
-  // Both owner and tenant can cancel,
-  // but authorization will be enforced separately.
+  // Both owner and tenant can cancel.
+  // Authorization must be enforced in the data layer / rules.
   // ============================================================
 
-  Future<void> cancelInvitation(String invitationId,);
+  Future<void> cancelInvitation(
+      String invitationId,
+      );
 
   // ============================================================
   // EXPIRE INVITATION
   // ============================================================
 
-  Future<void> expireInvitation(String invitationId,);
+  Future<void> expireInvitation(
+      String invitationId,
+      );
 }

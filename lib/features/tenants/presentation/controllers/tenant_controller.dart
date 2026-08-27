@@ -16,16 +16,19 @@ import '../../domain/usecases/delete_tenant.dart';
 import '../../domain/usecases/get_active_tenants_by_unit_id.dart';
 import '../../domain/usecases/get_tenant.dart';
 import '../../domain/usecases/get_tenant_by_unit_id.dart';
+import '../../domain/usecases/link_tenant_account.dart';
 import '../../domain/usecases/update_tenant.dart';
 
 // ================================================================
 // TENANT REPOSITORY
 // ================================================================
 
-final tenantRepositoryProvider = Provider<TenantRepository>((ref) {
+final tenantRepositoryProvider =
+Provider<TenantRepository>((ref) {
   final dataSource = TenantDataSource();
 
-  final currentUserService = CurrentUserService();
+  final currentUserService =
+  CurrentUserService();
 
   return TenantRepositoryImpl(
     dataSource: dataSource,
@@ -37,50 +40,78 @@ final tenantRepositoryProvider = Provider<TenantRepository>((ref) {
 // CREATE TENANT
 // ================================================================
 
-final createTenantProvider = Provider<CreateTenant>((ref) {
-  return CreateTenant(repository: ref.read(tenantRepositoryProvider));
+final createTenantProvider =
+Provider<CreateTenant>((ref) {
+  return CreateTenant(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
 
 // ================================================================
 // UPDATE TENANT
 // ================================================================
 
-final updateTenantProvider = Provider<UpdateTenant>((ref) {
-  return UpdateTenant(repository: ref.read(tenantRepositoryProvider));
+final updateTenantProvider =
+Provider<UpdateTenant>((ref) {
+  return UpdateTenant(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
 
 // ================================================================
 // DELETE TENANT
 // ================================================================
 
-final deleteTenantProvider = Provider<DeleteTenant>((ref) {
-  return DeleteTenant(repository: ref.read(tenantRepositoryProvider));
+final deleteTenantProvider =
+Provider<DeleteTenant>((ref) {
+  return DeleteTenant(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
 
 // ================================================================
 // GET TENANT
 // ================================================================
 
-final getTenantProvider = Provider<GetTenant>((ref) {
-  return GetTenant(repository: ref.read(tenantRepositoryProvider));
+final getTenantProvider =
+Provider<GetTenant>((ref) {
+  return GetTenant(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
 
 // ================================================================
 // GET TENANT BY UNIT
 // ================================================================
 
-final getTenantByUnitIdProvider = Provider<GetTenantByUnitId>((ref) {
-  return GetTenantByUnitId(ref.read(tenantRepositoryProvider));
+final getTenantByUnitIdProvider =
+Provider<GetTenantByUnitId>((ref) {
+  return GetTenantByUnitId(
+    ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
 
 // ================================================================
 // GET ACTIVE TENANTS BY UNIT
 // ================================================================
 
-final getActiveTenantsByUnitIdProvider = Provider<GetActiveTenantsByUnitId>((
-  ref,
-) {
-  return GetActiveTenantsByUnitId(ref.read(tenantRepositoryProvider));
+final getActiveTenantsByUnitIdProvider =
+Provider<GetActiveTenantsByUnitId>((ref) {
+  return GetActiveTenantsByUnitId(
+    ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
 });
 
 // ================================================================
@@ -88,9 +119,29 @@ final getActiveTenantsByUnitIdProvider = Provider<GetActiveTenantsByUnitId>((
 // ================================================================
 
 final cleanupDuplicateActiveTenantsProvider =
-    Provider<CleanupDuplicateActiveTenants>((ref) {
-      return CleanupDuplicateActiveTenants(ref.read(tenantRepositoryProvider));
-    });
+Provider<CleanupDuplicateActiveTenants>((ref) {
+  return CleanupDuplicateActiveTenants(
+    ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
+});
+
+// ================================================================
+// LINK TENANT ACCOUNT
+// ================================================================
+//
+// Links a Firebase Auth UID to the tenant record.
+//
+
+final linkTenantAccountProvider =
+Provider<LinkTenantAccount>((ref) {
+  return LinkTenantAccount(
+    repository: ref.read(
+      tenantRepositoryProvider,
+    ),
+  );
+});
 
 // ================================================================
 // TENANT CONTROLLER
@@ -100,28 +151,40 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   final CreateTenant _createTenant;
   final UpdateTenant _updateTenant;
   final DeleteTenant _deleteTenant;
+  final LinkTenantAccount _linkTenantAccount;
 
   TenantController({
     required this._createTenant,
     required this._updateTenant,
     required this._deleteTenant,
-  }) : super(const AsyncData(null));
+    required this._linkTenantAccount,
+  }) : super(
+    const AsyncData(null),
+  );
 
   // ==============================================================
   // CREATE
   // ==============================================================
 
-  Future<Tenant?> createTenant(CreateTenantRequest request) async {
+  Future<Tenant?> createTenant(CreateTenantRequest request,) async {
     state = const AsyncLoading();
 
     try {
-      final tenant = await _createTenant(request);
+      final tenant =
+      await _createTenant(
+        request,
+      );
 
-      state = AsyncData(tenant);
+      state = AsyncData(
+        tenant,
+      );
 
       return tenant;
     } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
+      state = AsyncError(
+        error,
+        stackTrace,
+      );
 
       return null;
     }
@@ -131,17 +194,57 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   // UPDATE
   // ==============================================================
 
-  Future<Tenant?> updateTenant(Tenant tenant) async {
+  Future<Tenant?> updateTenant(Tenant tenant,) async {
     state = const AsyncLoading();
 
     try {
-      final updatedTenant = await _updateTenant(tenant);
+      final updatedTenant =
+      await _updateTenant(
+        tenant,
+      );
 
-      state = AsyncData(updatedTenant);
+      state = AsyncData(
+        updatedTenant,
+      );
 
       return updatedTenant;
     } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
+      state = AsyncError(
+        error,
+        stackTrace,
+      );
+
+      return null;
+    }
+  }
+
+  // ==============================================================
+  // LINK TENANT ACCOUNT
+  // ==============================================================
+
+  Future<Tenant?> linkTenantAccount({
+    required String tenantId,
+    required String userId,
+  }) async {
+    state = const AsyncLoading();
+
+    try {
+      final linkedTenant =
+      await _linkTenantAccount(
+        tenantId: tenantId,
+        userId: userId,
+      );
+
+      state = AsyncData(
+        linkedTenant,
+      );
+
+      return linkedTenant;
+    } catch (error, stackTrace) {
+      state = AsyncError(
+        error,
+        stackTrace,
+      );
 
       return null;
     }
@@ -151,17 +254,22 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   // DELETE
   // ==============================================================
 
-  Future<bool> deleteTenant(String tenantId) async {
+  Future<bool> deleteTenant(String tenantId,) async {
     state = const AsyncLoading();
 
     try {
-      await _deleteTenant(tenantId);
+      await _deleteTenant(
+        tenantId,
+      );
 
       state = const AsyncData(null);
 
       return true;
     } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
+      state = AsyncError(
+        error,
+        stackTrace,
+      );
 
       return false;
     }
@@ -175,15 +283,29 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
     state = const AsyncData(null);
   }
 }
+
 // ================================================================
 // TENANT CONTROLLER PROVIDER
 // ================================================================
 
 final tenantControllerProvider =
-    StateNotifierProvider<TenantController, AsyncValue<Tenant?>>((ref) {
-      return TenantController(
-        createTenant: ref.read(createTenantProvider),
-        updateTenant: ref.read(updateTenantProvider),
-        deleteTenant: ref.read(deleteTenantProvider),
-      );
-    });
+StateNotifierProvider<
+    TenantController,
+    AsyncValue<Tenant?>>(
+      (ref) {
+    return TenantController(
+      createTenant: ref.read(
+        createTenantProvider,
+      ),
+      updateTenant: ref.read(
+        updateTenantProvider,
+      ),
+      deleteTenant: ref.read(
+        deleteTenantProvider,
+      ),
+      linkTenantAccount: ref.read(
+        linkTenantAccountProvider,
+      ),
+    );
+  },
+);
