@@ -299,16 +299,16 @@ class TenantInvitationDataSource {
     return invitation;
   }
 
+
   // ============================================================
-  // GET PENDING INVITATION BY TENANT ID
-  //
-  // OWNER USE
-  // ============================================================
+// GET PENDING INVITATION BY TENANT ID
+//
+// OWNER USE
+// ============================================================
 
   Future<TenantInvitationModel?>
-  getPendingInvitationByTenantId(String tenantId,) async {
-    final currentUserId =
-        _currentUserId;
+  getPendingInvitationByTenantId(String tenantId) async {
+    final currentUserId = _currentUserId;
 
     final snapshot = await _invitations
         .where(
@@ -321,12 +321,7 @@ class TenantInvitationDataSource {
     )
         .where(
       'status',
-      isEqualTo:
-      TenantInvitationStatus.pending.name,
-    )
-        .orderBy(
-      'createdAt',
-      descending: true,
+      isEqualTo: TenantInvitationStatus.pending.name,
     )
         .limit(1)
         .get();
@@ -335,8 +330,7 @@ class TenantInvitationDataSource {
       return null;
     }
 
-    final invitation =
-    TenantInvitationModel.fromFirestore(
+    final invitation = TenantInvitationModel.fromFirestore(
       snapshot.docs.first,
     );
 
@@ -371,8 +365,7 @@ class TenantInvitationDataSource {
 // ============================================================
 
   Future<TenantInvitationModel?> getPendingInvitationByPhone(
-      String phone,
-      ) async {
+      String phone,) async {
     final normalizedPhone = phone.trim();
 
     if (normalizedPhone.isEmpty) {
@@ -417,8 +410,6 @@ class TenantInvitationDataSource {
 
     return invitation;
   }
-
-
 
 
   // ============================================================

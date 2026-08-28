@@ -24,6 +24,7 @@ import '../../features/tenants/domain/entities/tenant.dart';
 import '../../features/tenants/presentation/screens/add_tenant_screen.dart';
 import '../../features/tenants/presentation/screens/edit_tenant_screen.dart';
 import '../../features/tenants/presentation/screens/owner_tenant_list_screen.dart';
+import '../../features/tenants/presentation/screens/tenant_account_link_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_details_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_list_screen.dart';
 import '../../features/units/domain/entities/unit.dart';
@@ -291,7 +292,39 @@ abstract final class AppRouter {
             return EditUnitScreen(unit: unit);
           },
         ),
+        GoRoute(
+          path: RouteNames.tenantAccountLink,
+          name: 'tenantAccountLink',
+          builder: (context, state) {
+            final tenantId =
+            state.uri.queryParameters['tenantId'];
 
+            final invitationId =
+            state.uri.queryParameters['invitationId'];
+
+            if (tenantId == null ||
+                tenantId
+                    .trim()
+                    .isEmpty ||
+                invitationId == null ||
+                invitationId
+                    .trim()
+                    .isEmpty) {
+              return const Scaffold(
+                body: Center(
+                  child: Text(
+                    'Invalid tenant invitation.',
+                  ),
+                ),
+              );
+            }
+
+            return TenantAccountLinkScreen(
+              tenantId: tenantId,
+              invitationId: invitationId,
+            );
+          },
+        ),
         // ========================================================
         // OTHER ROLES
         // ========================================================

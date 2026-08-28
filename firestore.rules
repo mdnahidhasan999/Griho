@@ -3,7 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ============================================================
     // USERS
+    // ============================================================
+
     match /users/{userId} {
 
       allow get: if isAuthenticated()
@@ -24,33 +27,32 @@ service cloud.firestore {
     }
 
 
-  // ============================================================
-  // PHONE LOOKUPS
-  // ============================================================
+    // ============================================================
+    // PHONE LOOKUPS
+    // ============================================================
 
-  match /phone_lookups/{phoneNumber} {
+    match /phone_lookups/{phoneNumber} {
 
-    // Any authenticated user can search a phone number.
-    allow get: if isAuthenticated();
+      allow get: if isAuthenticated();
 
-    // Phone lookup documents are created together with user
-    // profile creation.
-    allow create: if isAuthenticated()
-                  && request.resource.data.uid == request.auth.uid
-                  && request.resource.data.phoneNumber == phoneNumber;
+      allow create: if isAuthenticated()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.phoneNumber == phoneNumber;
 
-    // User can update their own lookup.
-    allow update: if isAuthenticated()
-                  && resource.data.uid == request.auth.uid
-                  && request.resource.data.uid == request.auth.uid
-                  && request.resource.data.phoneNumber == phoneNumber;
+      allow update: if isAuthenticated()
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.phoneNumber == phoneNumber;
 
-    // User can delete their own lookup.
-    allow delete: if isAuthenticated()
-                  && resource.data.uid == request.auth.uid;
-  }
+      allow delete: if isAuthenticated()
+                    && resource.data.uid == request.auth.uid;
+    }
 
+
+    // ============================================================
     // PUBLIC IDS
+    // ============================================================
+
     match /public_ids/{publicId} {
 
       allow get: if isAuthenticated();
@@ -66,7 +68,10 @@ service cloud.firestore {
     }
 
 
+    // ============================================================
     // PROPERTIES
+    // ============================================================
+
     match /properties/{propertyId} {
 
       allow read: if isAuthenticated()
@@ -85,7 +90,10 @@ service cloud.firestore {
     }
 
 
+    // ============================================================
     // UNITS
+    // ============================================================
+
     match /units/{unitId} {
 
       allow read: if isAuthenticated()
@@ -113,64 +121,233 @@ service cloud.firestore {
     }
 
 
-// TENANTS
-match /tenants/{tenantId} {
+    // ============================================================
+    // TENANTS
+    // ============================================================
 
-  // ------------------------------------------------------------
-  // READ
-  //
-  // Owner can read tenants that belong to their ownership.
-  // This also allows searching a previously added tenant
-  // by ownerId + phone.
-  // ------------------------------------------------------------
-  allow read: if isAuthenticated()
-              && resource.data.ownerId == request.auth.uid;
+    match /tenants/{tenantId} {
 
-  // ------------------------------------------------------------
-  // CREATE
-  //
-  // Tenant must be created by the owner of the property.
-  // ownerId must also match the authenticated user.
-  // ------------------------------------------------------------
-  allow create: if isAuthenticated()
-                && request.resource.data.ownerId == request.auth.uid
-                && isPropertyOwner(
-                  request.resource.data.propertyId
-                );
+      // ----------------------------------------------------------
+      // READ
+      //
+      // OWNER:
+      // Own tenants দেখতে পারবে।
+      //
+      // TENANT:
+      // নিজের linked tenant document দেখতে পারবে।
+      // ----------------------------------------------------------
 
-  // ------------------------------------------------------------
-  // UPDATE
-  //
-  // Existing tenant must belong to current owner.
-  // New ownerId cannot be changed.
-  // New property must also belong to current owner.
-  // ------------------------------------------------------------
-  allow update: if isAuthenticated()
-                && resource.data.ownerId == request.auth.uid
-                && request.resource.data.ownerId == resource.data.ownerId
-                && isPropertyOwner(
-                  request.resource.data.propertyId
-                );
-
-  // ------------------------------------------------------------
-  // DELETE
-  // ------------------------------------------------------------
-  allow delete: if isAuthenticated()
-                && resource.data.ownerId == request.auth.uid;
-}
+      allow read: if isAuthenticated()
+                  && (
+                    resource.data.ownerId == request.auth.uid
+                    ||
+                    resource.data.userId == request.auth.uid
+                  );
 
 
+      // ----------------------------------------------------------
+      // CREATE
+      //
+      // Only property owner can create tenant.
+      // ----------------------------------------------------------
+
+      allow create: if isAuthenticated()
+                    && request.resource.data.ownerId == request.auth.uid
+                    && isPropertyOwner(
+                      request.resource.data.propertyId
+                    );
+
+
+      // ----------------------------------------------------------
+      // UPDATE
+      //
+      // OWNER:
+      // Own tenant update করতে পারবে।
+      //
+      // TENANT:
+      // নিজের linked tenant document update করতে পারবে।
+      //
+      // ----------------------------------------------------------
+
+      allow update: if isAuthenticated()
+                    && (
+                      (
+                        resource.data.ownerId == request.auth.uid
+                        &&
+                        request.resource.data.ownerId
+                            == resource.data.ownerId
+                        &&
+                        isPropertyOwner(
+                          request.resource.data.propertyId
+                        )
+                      )
+                      ||
+                      (
+                        resource.data.userId == request.auth.uid
+                        &&
+                        request.resource.data.userId
+                            == resource.data.userId
+                        &&
+                        request.resource.data.ownerId
+                            == resource.data.ownerId
+                        &&
+                        request.resource.data.propertyId
+                            == resource.data.propertyId
+                        &&
+                        request.resource.data.unitId
+                            == resource.data.unitId
+                        &&
+                        request.resource.data.phone
+                            == resource.data.phone
+                      )
+                    );
+
+
+      // ----------------------------------------------------------
+      // DELETE
+      //
+      // Only owner can delete tenant.
+      // ----------------------------------------------------------
+
+      allow delete: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid;
+    }
+
+
+    // ============================================================
+    // TENANT INVITATIONS
+    // ============================================================
+
+    match /tenantInvitations/{invitationId} {
+
+      // ----------------------------------------------------------
+      // CREATE
+      //
+      // Only authenticated owner can create invitation.
+      //
+      // invitation.ownerId must be current user.
+      //
+      // tenantId must belong to current owner.
+      // ----------------------------------------------------------
+
+      allow create: if isAuthenticated()
+                    && request.resource.data.ownerId
+                       == request.auth.uid
+                    && exists(
+                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+                    )
+                    && get(
+                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+                    ).data.ownerId == request.auth.uid;
+
+
+      // ----------------------------------------------------------
+      // READ
+      //
+      // OWNER:
+      // নিজের invitation দেখতে পারবে।
+      //
+      // TENANT:
+      // invitation-এর phone Firebase Auth-এর verified
+      // phone number-এর সাথে match করলে দেখতে পারবে।
+      //
+      // ----------------------------------------------------------
+
+      allow read: if isAuthenticated()
+                  && (
+                    resource.data.ownerId == request.auth.uid
+                    ||
+                    (
+                      request.auth.token.phone_number != null
+                      &&
+                      resource.data.phone
+                          == request.auth.token.phone_number
+                    )
+                  );
+
+
+      // ----------------------------------------------------------
+      // UPDATE
+      //
+      // Owner অথবা invitation-এর phone-এর authenticated
+      // tenant status update করতে পারবে।
+      //
+      // গুরুত্বপূর্ণ fields immutable.
+      // ----------------------------------------------------------
+
+      allow update: if isAuthenticated()
+                    && (
+                      resource.data.ownerId == request.auth.uid
+                      ||
+                      (
+                        request.auth.token.phone_number != null
+                        &&
+                        resource.data.phone
+                            == request.auth.token.phone_number
+                      )
+                    )
+                    &&
+                    request.resource.data.ownerId
+                        == resource.data.ownerId
+                    &&
+                    request.resource.data.tenantId
+                        == resource.data.tenantId
+                    &&
+                    request.resource.data.propertyId
+                        == resource.data.propertyId
+                    &&
+                    request.resource.data.unitId
+                        == resource.data.unitId
+                    &&
+                    request.resource.data.phone
+                        == resource.data.phone
+                    &&
+                    request.resource.data.token
+                        == resource.data.token
+                    &&
+                    request.resource.data.createdAt
+                        == resource.data.createdAt
+                    &&
+                    request.resource.data.expiresAt
+                        == resource.data.expiresAt;
+
+
+      // ----------------------------------------------------------
+      // DELETE
+      //
+      // Owner অথবা invitation-এর phone-এর authenticated
+      // tenant delete করতে পারবে।
+      // ----------------------------------------------------------
+
+      allow delete: if isAuthenticated()
+                    && (
+                      resource.data.ownerId == request.auth.uid
+                      ||
+                      (
+                        request.auth.token.phone_number != null
+                        &&
+                        resource.data.phone
+                            == request.auth.token.phone_number
+                      )
+                    );
+    }
+
+
+    // ============================================================
     // SECURITY HELPERS
+    // ============================================================
 
     function isAuthenticated() {
       return request.auth != null;
     }
 
+
     function isPropertyOwner(propertyId) {
       return exists(
         /databases/$(database)/documents/properties/$(propertyId)
       )
-      && get(
+      &&
+      get(
         /databases/$(database)/documents/properties/$(propertyId)
       ).data.ownerId == request.auth.uid;
     }

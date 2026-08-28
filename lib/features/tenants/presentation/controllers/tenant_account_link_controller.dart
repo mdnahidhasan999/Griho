@@ -45,8 +45,7 @@ class TenantAccountLinkState {
 
 class TenantAccountLinkController
     extends StateNotifier<TenantAccountLinkState> {
-  final LinkAndAcceptTenantInvitation
-  _linkAndAcceptTenantInvitation;
+  final LinkAndAcceptTenantInvitation _linkAndAcceptTenantInvitation;
 
   TenantAccountLinkController({
     required this._linkAndAcceptTenantInvitation,
@@ -68,8 +67,7 @@ class TenantAccountLinkController
     );
 
     try {
-      final tenant =
-      await _linkAndAcceptTenantInvitation(
+      final tenant = await _linkAndAcceptTenantInvitation(
         tenantId: tenantId,
         userId: userId,
         invitationId: invitationId,
@@ -113,8 +111,7 @@ StateNotifierProvider<
     TenantAccountLinkState>(
       (ref) {
     return TenantAccountLinkController(
-      linkAndAcceptTenantInvitation:
-      ref.read(
+      linkAndAcceptTenantInvitation: ref.read(
         linkAndAcceptTenantInvitationProvider,
       ),
     );
