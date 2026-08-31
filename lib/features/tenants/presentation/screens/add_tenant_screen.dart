@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
+
+import '../../../../core/utils/phone_number_utils.dart';
 
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/user_profile_provider.dart';
@@ -29,8 +32,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
+
   final _emailController = TextEditingController();
+
   final _nidController = TextEditingController();
 
   Property? _selectedProperty;
@@ -44,10 +48,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
   String? _searchError;
 
+  String _phoneNumber = '';
+
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
     _emailController.dispose();
     _nidController.dispose();
 
@@ -55,18 +60,32 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   // ================================================================
+  // PHONE
+  // ================================================================
+
+  String? _getValidatedPhone() {
+    final value = _phoneNumber.trim();
+
+    if (!PhoneNumberUtils.isValid(value)) {
+      return null;
+    }
+
+    return PhoneNumberUtils.normalize(value);
+  }
+
+  // ================================================================
   // SEARCH PHONE
   // ================================================================
 
   Future<void> _searchPhone() async {
-    final phone = _phoneController.text.trim();
+    final phone = _getValidatedPhone();
 
-    if (phone.isEmpty) {
+    if (phone == null) {
       setState(() {
         _hasSearched = false;
         _existingUser = null;
         _existingTenant = null;
-        _searchError = 'Please enter a phone number.';
+        _searchError = 'Please enter a valid international phone number.';
       });
 
       return;
@@ -130,7 +149,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
       setState(() {
         _isSearching = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
@@ -185,6 +204,8 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   // ================================================================
 
   void _onPhoneChanged(String value) {
+    _phoneNumber = value;
+
     if (!_hasSearched && _existingUser == null && _existingTenant == null) {
       return;
     }
@@ -207,13 +228,24 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     }
 
     final property = _selectedProperty;
+
     final unit = _selectedUnit;
 
     if (property == null || unit == null) {
       return;
     }
 
-    final phone = _phoneController.text.trim();
+    final phone = _getValidatedPhone();
+
+    if (phone == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid international phone number.'),
+        ),
+      );
+
+      return;
+    }
 
     final request = CreateTenantRequest(
       userId: _existingUser?.uid,
@@ -249,28 +281,17 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
       return;
     }
 
-    // ==========================================================
-    // TENANT CREATED SUCCESSFULLY
-    // ==========================================================
-
     final sendInvitation = await _showInvitationConfirmation(tenant: tenant);
 
     if (!mounted) {
       return;
     }
 
-    // ----------------------------------------------------------
-    // USER CHOSE NO
-    // ----------------------------------------------------------
-
     if (sendInvitation != true) {
       Navigator.of(context).pop(tenant);
+
       return;
     }
-
-    // ----------------------------------------------------------
-    // USER CHOSE YES
-    // ----------------------------------------------------------
 
     await _createInvitation(tenant: tenant);
   }
@@ -316,14 +337,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   // ================================================================
 
   Future<void> _createInvitation({required Tenant tenant}) async {
-    final propertyId = tenant.propertyId;
-    final unitId = tenant.unitId;
-
     try {
       final invitation = await ref.read(createTenantInvitationProvider)(
         tenantId: tenant.id,
-        propertyId: propertyId,
-        unitId: unitId,
+        propertyId: tenant.propertyId,
+        unitId: tenant.unitId,
         phone: tenant.phone,
       );
 
@@ -331,11 +349,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         return;
       }
 
-      await _showInvitationCreatedDialog(
-        tenantId: tenant.id,
-        invitationId: invitation.id,
-        token: invitation.token,
-      );
+      await _showInvitationCreatedDialog(invitationId: invitation.id);
 
       if (!mounted) {
         return;
@@ -351,8 +365,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
 
-      // Tenant already exists.
-      // Only invitation creation failed.
       Navigator.of(context).pop(tenant);
     }
   }
@@ -362,19 +374,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   // ================================================================
 
   Future<void> _showInvitationCreatedDialog({
-    required String tenantId,
-
     required String invitationId,
-
-    required String token,
   }) async {
-    final invitationLink = _buildInvitationLink(
-      tenantId: tenantId,
-
-      invitationId: invitationId,
-
-      token: token,
-    );
+    final invitationLink = _buildInvitationLink(invitationId: invitationId);
 
     await showDialog<void>(
       context: context,
@@ -387,27 +389,19 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.check_circle_outline, size: 52),
-
+                const Center(child: Icon(Icons.check_circle_outline, size: 52)),
                 const SizedBox(height: 16),
-
                 const Text(
                   'The tenant invitation has been created successfully.',
                 ),
-
                 const SizedBox(height: 20),
-
                 const Text(
                   'Invitation Link',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-
                 const SizedBox(height: 8),
-
                 SelectableText(invitationLink),
-
                 const SizedBox(height: 16),
-
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -447,26 +441,14 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   // ================================================================
-  // BUILD INVITATION LINK
+  // INVITATION LINK
   // ================================================================
-  //
-  // IMPORTANT:
-  // তোমার current router query parameters ব্যবহার করছে:
-  //
-  // tenantId
-  // invitationId
-  //
-  // তাই link এই format-এ হবে।
-  //
-  // ================================================================
-  String _buildInvitationLink({
-    required String tenantId,
-    required String invitationId,
-    required String token,
-  }) {
-    return 'tenantId=${Uri.encodeComponent(tenantId)}'
-        '&invitationId=${Uri.encodeComponent(invitationId)}'
-        '&token=${Uri.encodeComponent(token)}';
+
+  String _buildInvitationLink({required String invitationId}) {
+    const hostingDomain = 'griho-crafttech.web.app';
+
+    return 'https://$hostingDomain/i/'
+        '${Uri.encodeComponent(invitationId)}';
   }
 
   // ================================================================
@@ -516,14 +498,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       'Tenant Information',
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
-
                     const SizedBox(height: 8),
-
                     Text(
                       'Select a property and unit, then enter the tenant information.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-
                     const SizedBox(height: 32),
 
                     // ==================================================
@@ -638,36 +617,28 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     // ==================================================
                     // PHONE
                     // ==================================================
-                    TextFormField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      textInputAction: TextInputAction.search,
-                      decoration: InputDecoration(
-                        labelText: 'Phone',
-                        hintText: 'e.g. 018XXXXXXXX',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: _isSearching
-                            ? const Padding(
-                                padding: EdgeInsets.all(12),
-                                child: SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            : IconButton(
-                                tooltip: 'Search tenant',
-                                onPressed: _searchPhone,
-                                icon: const Icon(Icons.search),
-                              ),
+                    IntlPhoneField(
+                      initialCountryCode: 'US',
+                      decoration: const InputDecoration(
+                        labelText: 'Phone Number',
+                        hintText: 'Select country and enter phone number',
+                        border: OutlineInputBorder(),
                       ),
-                      onChanged: _onPhoneChanged,
-                      onFieldSubmitted: (_) => _searchPhone(),
-                      validator: (value) {
-                        if (value?.trim().isEmpty ?? true) {
+                      textInputAction: TextInputAction.search,
+                      onChanged: (phone) {
+                        _onPhoneChanged(phone.completeNumber);
+                      },
+                      onSubmitted: (_) {
+                        _searchPhone();
+                      },
+                      validator: (phone) {
+                        if (phone == null ||
+                            phone.completeNumber.trim().isEmpty) {
                           return 'Please enter phone number.';
+                        }
+
+                        if (!PhoneNumberUtils.isValid(phone.completeNumber)) {
+                          return 'Please enter a valid international phone number.';
                         }
 
                         return null;
@@ -675,6 +646,23 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     ),
 
                     const SizedBox(height: 8),
+
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        onPressed: _isSearching ? null : _searchPhone,
+                        icon: _isSearching
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.search),
+                        label: const Text('Search Phone'),
+                      ),
+                    ),
 
                     if (_searchError != null)
                       Padding(
@@ -713,7 +701,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Tenant Name',
-                        hintText: 'e.g. Rahim Uddin',
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
@@ -759,9 +746,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
                     const SizedBox(height: 32),
 
-                    // ==================================================
-                    // ADD TENANT
-                    // ==================================================
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
@@ -911,9 +895,9 @@ class _UserNotFoundView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(top: 8),
-      child: const Padding(
+    return const Card(
+      margin: EdgeInsets.only(top: 8),
+      child: Padding(
         padding: EdgeInsets.all(12),
         child: Row(
           children: [

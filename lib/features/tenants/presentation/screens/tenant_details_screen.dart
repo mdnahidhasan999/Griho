@@ -21,6 +21,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
   Tenant? _tenant;
 
   bool _isLoading = true;
+
   String? _errorMessage;
 
   @override
@@ -179,7 +180,6 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                   },
             icon: const Icon(Icons.edit_outlined),
           ),
-
           IconButton(
             tooltip: 'Delete Tenant',
             onPressed: tenantState.isLoading ? null : _deleteTenant,
@@ -202,37 +202,29 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                       radius: 36,
                       child: Icon(Icons.person_outline, size: 36),
                     ),
-
                     const SizedBox(height: 16),
-
                     Text(
                       tenant.name,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
-
                     const SizedBox(height: 8),
-
                     _TenantStatusChip(status: tenant.status),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
             _InfoCard(
               title: 'Tenant Information',
               children: [
                 _InfoRow(label: 'Phone', value: tenant.phone),
-
                 _InfoRow(
                   label: 'Email',
                   value: tenant.email?.trim().isNotEmpty == true
                       ? tenant.email!
                       : 'Not provided',
                 ),
-
                 _InfoRow(
                   label: 'NID Number',
                   value: tenant.nidNumber?.trim().isNotEmpty == true
@@ -241,37 +233,29 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                 ),
               ],
             ),
-
             const SizedBox(height: 20),
-
             _InfoCard(
               title: 'Property Information',
               children: [
                 _InfoRow(label: 'Property ID', value: tenant.propertyId),
-
                 _InfoRow(label: 'Unit ID', value: tenant.unitId),
               ],
             ),
-
             const SizedBox(height: 20),
-
             _InfoCard(
               title: 'Account Information',
               children: [
                 _InfoRow(label: 'Tenant ID', value: tenant.id),
-
                 _InfoRow(
                   label: 'User ID',
                   value: tenant.userId?.trim().isNotEmpty == true
                       ? tenant.userId!
                       : 'Not linked',
                 ),
-
                 _InfoRow(
                   label: 'Created',
                   value: _formatDate(tenant.createdAt),
                 ),
-
                 _InfoRow(
                   label: 'Last Updated',
                   value: _formatDate(tenant.updatedAt),
@@ -309,20 +293,10 @@ class _TenantStatusChip extends StatelessWidget {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
       child: Text(
-        _statusLabel(status),
+        status == TenantStatus.active ? 'Active' : 'Inactive',
         style: Theme.of(context).textTheme.labelMedium,
       ),
     );
-  }
-
-  String _statusLabel(TenantStatus status) {
-    switch (status) {
-      case TenantStatus.active:
-        return 'Active';
-
-      case TenantStatus.inactive:
-        return 'Inactive';
-    }
   }
 }
 
@@ -341,9 +315,7 @@ class _InfoCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
-
             const SizedBox(height: 16),
-
             ...children,
           ],
         ),
@@ -366,9 +338,7 @@ class _InfoRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: Theme.of(context).textTheme.labelMedium),
-
           const SizedBox(height: 4),
-
           SelectableText(value, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
@@ -391,13 +361,9 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, size: 48),
-
             const SizedBox(height: 16),
-
             Text(message, textAlign: TextAlign.center),
-
             const SizedBox(height: 16),
-
             FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),

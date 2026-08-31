@@ -20,9 +20,9 @@ class TenantModel extends Tenant {
     required super.updatedAt,
   });
 
-  // ============================================================
+  // ==========================================================================
   // FROM ENTITY
-  // ============================================================
+  // ==========================================================================
 
   factory TenantModel.fromEntity(Tenant tenant) {
     return TenantModel(
@@ -43,203 +43,116 @@ class TenantModel extends Tenant {
     );
   }
 
-  // ============================================================
+  // ==========================================================================
   // FROM FIRESTORE
-  // ============================================================
+  // ==========================================================================
 
   factory TenantModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> document,
-      ) {
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
     final data = document.data();
 
     if (data == null) {
-      throw StateError(
-        'Tenant document ${document.id} contains no data.',
-      );
+      throw StateError('Tenant document ${document.id} contains no data.');
     }
 
     return TenantModel(
       id: document.id,
 
-      // --------------------------------------------------------
-      // OWNER
-      // --------------------------------------------------------
+      ownerId: _readRequiredString(data, 'ownerId'),
 
-      ownerId: _readRequiredString(
-        data,
-        'ownerId',
-      ),
+      userId: _readOptionalString(data, 'userId'),
 
-      // --------------------------------------------------------
-      // USER ACCOUNT
-      // --------------------------------------------------------
+      propertyId: _readRequiredString(data, 'propertyId'),
 
-      userId: _readOptionalString(
-        data,
-        'userId',
-      ),
+      unitId: _readRequiredString(data, 'unitId'),
 
-      // --------------------------------------------------------
-      // PROPERTY / UNIT
-      // --------------------------------------------------------
+      name: _readRequiredString(data, 'name'),
 
-      propertyId: _readRequiredString(
-        data,
-        'propertyId',
-      ),
+      phone: _readRequiredString(data, 'phone'),
 
-      unitId: _readRequiredString(
-        data,
-        'unitId',
-      ),
+      email: _readOptionalString(data, 'email'),
 
-      // --------------------------------------------------------
-      // PERSONAL INFORMATION
-      // --------------------------------------------------------
+      nidNumber: _readOptionalString(data, 'nidNumber'),
 
-      name: _readRequiredString(
-        data,
-        'name',
-      ),
+      status: _readTenantStatus(data),
 
-      phone: _readRequiredString(
-        data,
-        'phone',
-      ),
+      accountStatus: _readAccountStatus(data),
 
-      email: _readOptionalString(
-        data,
-        'email',
-      ),
+      confirmationStatus: _readConfirmationStatus(data),
 
-      nidNumber: _readOptionalString(
-        data,
-        'nidNumber',
-      ),
+      createdAt: _readDateTime(data, 'createdAt'),
 
-      // --------------------------------------------------------
-      // TENANCY STATUS
-      // --------------------------------------------------------
-
-      status: TenantStatus.values.firstWhere(
-            (status) => status.name == data['status'],
-        orElse: () => TenantStatus.active,
-      ),
-
-      // --------------------------------------------------------
-      // ACCOUNT STATUS
-      //
-      // Old documents may not have this field.
-      // In that case we safely derive it from userId.
-      // --------------------------------------------------------
-
-      accountStatus: _readAccountStatus(
-        data,
-      ),
-
-      // --------------------------------------------------------
-      // CONFIRMATION STATUS
-      //
-      // Old tenant documents do not have this field.
-      // They will therefore default to pending.
-      // --------------------------------------------------------
-
-      confirmationStatus: TenantConfirmationStatus.values.firstWhere(
-            (status) => status.name == data['confirmationStatus'],
-        orElse: () => TenantConfirmationStatus.pending,
-      ),
-
-      // --------------------------------------------------------
-      // DATES
-      // --------------------------------------------------------
-
-      createdAt: _readDateTime(
-        data,
-        'createdAt',
-      ),
-
-      updatedAt: _readDateTime(
-        data,
-        'updatedAt',
-      ),
+      updatedAt: _readDateTime(data, 'updatedAt'),
     );
   }
 
-  // ============================================================
+  // ==========================================================================
   // TO FIRESTORE
-  // ============================================================
+  // ==========================================================================
 
   Map<String, dynamic> toFirestore() {
     return {
       'ownerId': ownerId,
-
-      // Tenant's Firebase Auth UID
       'userId': userId,
-
       'propertyId': propertyId,
       'unitId': unitId,
-
       'name': name,
       'phone': phone,
       'email': email,
       'nidNumber': nidNumber,
-
-      // Tenant active/inactive
       'status': status.name,
-
-      // Tenant account registration status
       'accountStatus': accountStatus.name,
-
-      // Tenant tenancy confirmation status
       'confirmationStatus': confirmationStatus.name,
-
-      'createdAt': Timestamp.fromDate(
-        createdAt,
-      ),
-
-      'updatedAt': Timestamp.fromDate(
-        updatedAt,
-      ),
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
-  // ============================================================
-  // READ ACCOUNT STATUS
-  // ============================================================
+  // ==========================================================================
+  // TENANT STATUS
+  // ==========================================================================
 
-  static TenantAccountStatus _readAccountStatus(
-      Map<String, dynamic> data,
-      ) {
-    final value = data['accountStatus'];
-
-    // ----------------------------------------------------------
-    // NEW DATA
-    // ----------------------------------------------------------
+  static TenantStatus _readTenantStatus(Map<String, dynamic> data) {
+    final value = data['status'];
 
     if (value is String) {
-      return TenantAccountStatus.values.firstWhere(
-            (status) => status.name == value,
-        orElse: () {
-          // If accountStatus is invalid, derive from userId.
-          return _accountStatusFromUserId(data);
-        },
+      return TenantStatus.values.firstWhere(
+        (status) => status.name == value,
+        orElse: () => TenantStatus.active,
       );
     }
 
-    // ----------------------------------------------------------
-    // OLD DATA
-    // ----------------------------------------------------------
+    return TenantStatus.active;
+  }
+
+  // ==========================================================================
+  // ACCOUNT STATUS
+  // ==========================================================================
+
+  static TenantAccountStatus _readAccountStatus(Map<String, dynamic> data) {
+    final value = data['accountStatus'];
+
+    if (value is String) {
+      final parsed = TenantAccountStatus.values.where(
+        (status) => status.name == value,
+      );
+
+      if (parsed.isNotEmpty) {
+        return parsed.first;
+      }
+    }
 
     return _accountStatusFromUserId(data);
   }
 
-  // ============================================================
+  // ==========================================================================
   // ACCOUNT STATUS FROM USER ID
-  // ============================================================
+  // ==========================================================================
 
   static TenantAccountStatus _accountStatusFromUserId(
-      Map<String, dynamic> data,
-      ) {
+    Map<String, dynamic> data,
+  ) {
     final userId = data['userId'];
 
     if (userId is String && userId.trim().isNotEmpty) {
@@ -249,33 +162,47 @@ class TenantModel extends Tenant {
     return TenantAccountStatus.notRegistered;
   }
 
-  // ============================================================
-  // REQUIRED STRING
-  // ============================================================
+  // ==========================================================================
+  // CONFIRMATION STATUS
+  // ==========================================================================
 
-  static String _readRequiredString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static TenantConfirmationStatus _readConfirmationStatus(
+    Map<String, dynamic> data,
+  ) {
+    final value = data['confirmationStatus'];
+
+    if (value is String) {
+      final parsed = TenantConfirmationStatus.values.where(
+        (status) => status.name == value,
+      );
+
+      if (parsed.isNotEmpty) {
+        return parsed.first;
+      }
+    }
+
+    return TenantConfirmationStatus.pending;
+  }
+
+  // ==========================================================================
+  // REQUIRED STRING
+  // ==========================================================================
+
+  static String _readRequiredString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! String || value.trim().isEmpty) {
-      throw StateError(
-        'Tenant field "$field" is missing or invalid.',
-      );
+      throw StateError('Tenant field "$field" is missing or invalid.');
     }
 
-    return value;
+    return value.trim();
   }
 
-  // ============================================================
+  // ==========================================================================
   // OPTIONAL STRING
-  // ============================================================
+  // ==========================================================================
 
-  static String? _readOptionalString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -283,32 +210,41 @@ class TenantModel extends Tenant {
     }
 
     if (value is! String) {
-      throw StateError(
-        'Tenant field "$field" is invalid.',
-      );
+      throw StateError('Tenant field "$field" is invalid.');
     }
 
     final trimmed = value.trim();
 
-    return trimmed.isEmpty ? null : trimmed;
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    return trimmed;
   }
 
-  // ============================================================
+  // ==========================================================================
   // DATE TIME
-  // ============================================================
+  // ==========================================================================
 
-  static DateTime _readDateTime(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime _readDateTime(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is Timestamp) {
       return value.toDate();
     }
 
-    throw StateError(
-      'Tenant field "$field" is missing or invalid.',
-    );
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      final parsed = DateTime.tryParse(value);
+
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+
+    throw StateError('Tenant field "$field" is missing or invalid.');
   }
 }

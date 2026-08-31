@@ -1,7 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../../../core/utils/phone_number_utils.dart';
+import '../../domain/entities/tenant.dart';
 import '../../domain/entities/tenant_invitation.dart';
 import '../models/tenant_invitation_model.dart';
 
@@ -30,6 +33,14 @@ class TenantInvitationDataSource {
   }
 
   // ============================================================
+  // PHONE
+  // ============================================================
+
+  String _normalizePhone(String phone) {
+    return PhoneNumberUtils.normalizeAndValidate(phone);
+  }
+
+  // ============================================================
   // CURRENT USER
   // ============================================================
 
@@ -45,13 +56,7 @@ class TenantInvitationDataSource {
 
   // ============================================================
   // CREATE INVITATION
-  //
   // OWNER ONLY
-  //
-  // Rules:
-  // 1. Phone cannot be empty.
-  // 2. Same tenant cannot have multiple pending invitations.
-  // 3. Invitation is valid for 7 days.
   // ============================================================
 
   Future<TenantInvitationModel> createInvitation({
@@ -61,11 +66,11 @@ class TenantInvitationDataSource {
     required String unitId,
     required String phone,
   }) async {
-    // ----------------------------------------------------------
-    // VERIFY CURRENT USER
-    // ----------------------------------------------------------
-
     final currentUserId = _currentUserId;
+
+    // ----------------------------------------------------------
+    // OWNER CHECK
+    // ----------------------------------------------------------
 
     if (currentUserId != ownerId) {
       throw StateError('You are not authorized to create this invitation.');
@@ -75,15 +80,72 @@ class TenantInvitationDataSource {
     // NORMALIZE PHONE
     // ----------------------------------------------------------
 
-    final normalizedPhone = phone.trim();
+    final normalizedPhone = _normalizePhone(phone);
 
-    if (normalizedPhone.isEmpty) {
-      throw ArgumentError('Tenant phone number cannot be empty.');
+    // ----------------------------------------------------------
+    // VERIFY TENANT
+    // ----------------------------------------------------------
+
+    final tenantReference = _tenants.doc(tenantId);
+
+    final tenantSnapshot = await tenantReference.get();
+
+    if (!tenantSnapshot.exists) {
+      throw StateError('Tenant record does not exist.');
+    }
+
+    final tenantData = tenantSnapshot.data();
+
+    if (tenantData == null) {
+      throw StateError('Tenant data is unavailable.');
+    }
+
+    // ----------------------------------------------------------
+    // TENANT OWNER CHECK
+    // ----------------------------------------------------------
+
+    if (tenantData['ownerId'] != currentUserId) {
+      throw StateError('You are not authorized to invite this tenant.');
+    }
+
+    // ----------------------------------------------------------
+    // PROPERTY CHECK
+    // ----------------------------------------------------------
+
+    if (tenantData['propertyId'] != propertyId) {
+      throw StateError('Tenant property does not match the invitation.');
+    }
+
+    // ----------------------------------------------------------
+    // UNIT CHECK
+    // ----------------------------------------------------------
+
+    if (tenantData['unitId'] != unitId) {
+      throw StateError('Tenant unit does not match the invitation.');
+    }
+
+    // ----------------------------------------------------------
+    // TENANT PHONE CHECK
+    // ----------------------------------------------------------
+
+    final tenantPhone = tenantData['phone']?.toString().trim();
+
+    if (tenantPhone == null || tenantPhone.isEmpty) {
+      throw StateError('Tenant phone number is not available.');
+    }
+
+    final normalizedTenantPhone = _normalizePhone(tenantPhone);
+
+    if (normalizedTenantPhone != normalizedPhone) {
+      throw StateError(
+        'Invitation phone number does not match the tenant phone number.',
+      );
     }
 
     // ----------------------------------------------------------
     // CHECK EXISTING PENDING INVITATION
     // ----------------------------------------------------------
+
     final existingSnapshot = await _invitations
         .where('tenantId', isEqualTo: tenantId)
         .where('ownerId', isEqualTo: currentUserId)
@@ -96,11 +158,6 @@ class TenantInvitationDataSource {
         existingSnapshot.docs.first,
       );
 
-      // --------------------------------------------------------
-      // IF EXISTING INVITATION IS ALREADY EXPIRED,
-      // DELETE IT AND ALLOW NEW INVITATION.
-      // --------------------------------------------------------
-
       if (existingInvitation.isExpired) {
         await _deleteInvitationDocument(existingInvitation.id);
       } else {
@@ -111,13 +168,15 @@ class TenantInvitationDataSource {
     }
 
     // ----------------------------------------------------------
-    // CREATE DOCUMENT ID
+    // CREATE DOCUMENT
     // ----------------------------------------------------------
 
-    final documentId = _invitations.doc().id;
+    final documentReference = _invitations.doc();
+
+    final invitationId = documentReference.id;
 
     // ----------------------------------------------------------
-    // CREATE SECURE TOKEN
+    // SECURE TOKEN
     // ----------------------------------------------------------
 
     final token = _generateToken();
@@ -128,10 +187,6 @@ class TenantInvitationDataSource {
 
     final now = DateTime.now();
 
-    // ----------------------------------------------------------
-    // INVITATION VALID FOR 7 DAYS
-    // ----------------------------------------------------------
-
     final expiresAt = now.add(const Duration(days: 7));
 
     // ----------------------------------------------------------
@@ -139,7 +194,7 @@ class TenantInvitationDataSource {
     // ----------------------------------------------------------
 
     final invitation = TenantInvitationModel(
-      id: documentId,
+      id: invitationId,
       ownerId: ownerId,
       tenantId: tenantId,
       phone: normalizedPhone,
@@ -156,35 +211,32 @@ class TenantInvitationDataSource {
     // SAVE
     // ----------------------------------------------------------
 
-    await _invitations.doc(documentId).set(invitation.toFirestore());
+    await documentReference.set(invitation.toFirestore());
 
     return invitation;
   }
 
   // ============================================================
   // GET INVITATION BY ID
-  //
-  // If expired:
-  // delete it immediately and return null.
   // ============================================================
 
   Future<TenantInvitationModel?> getInvitationById(String invitationId) async {
-    final document = await _invitations.doc(invitationId).get();
+    final normalizedId = invitationId.trim();
 
-    if (!document.exists) {
+    if (normalizedId.isEmpty) {
       return null;
     }
 
-    final invitation = TenantInvitationModel.fromFirestore(document);
+    final snapshot = await _invitations.doc(normalizedId).get();
 
-    // ----------------------------------------------------------
-    // EXPIRED
-    // ----------------------------------------------------------
+    if (!snapshot.exists) {
+      return null;
+    }
 
-    if (invitation.isExpired &&
-        invitation.status == TenantInvitationStatus.pending) {
-      await _deleteInvitationDocument(invitation.id);
+    final invitation = TenantInvitationModel.fromFirestore(snapshot);
 
+    if (invitation.status == TenantInvitationStatus.pending &&
+        invitation.isExpired) {
       return null;
     }
 
@@ -193,11 +245,6 @@ class TenantInvitationDataSource {
 
   // ============================================================
   // GET INVITATION BY TOKEN
-  //
-  // Used during tenant registration.
-  //
-  // Invalid / expired invitation:
-  // return null.
   // ============================================================
 
   Future<TenantInvitationModel?> getInvitationByToken(String token) async {
@@ -218,21 +265,11 @@ class TenantInvitationDataSource {
 
     final invitation = TenantInvitationModel.fromFirestore(snapshot.docs.first);
 
-    // ----------------------------------------------------------
-    // ONLY PENDING INVITATIONS CAN BE USED
-    // ----------------------------------------------------------
-
     if (invitation.status != TenantInvitationStatus.pending) {
       return null;
     }
 
-    // ----------------------------------------------------------
-    // EXPIRED
-    // ----------------------------------------------------------
-
     if (invitation.isExpired) {
-      await _deleteInvitationDocument(invitation.id);
-
       return null;
     }
 
@@ -241,16 +278,22 @@ class TenantInvitationDataSource {
 
   // ============================================================
   // GET PENDING INVITATION BY TENANT ID
-  //
-  // OWNER USE
+  // OWNER ONLY
   // ============================================================
+
   Future<TenantInvitationModel?> getPendingInvitationByTenantId(
     String tenantId,
   ) async {
     final currentUserId = _currentUserId;
 
+    final normalizedTenantId = tenantId.trim();
+
+    if (normalizedTenantId.isEmpty) {
+      return null;
+    }
+
     final snapshot = await _invitations
-        .where('tenantId', isEqualTo: tenantId)
+        .where('tenantId', isEqualTo: normalizedTenantId)
         .where('ownerId', isEqualTo: currentUserId)
         .where('status', isEqualTo: TenantInvitationStatus.pending.name)
         .limit(1)
@@ -263,8 +306,6 @@ class TenantInvitationDataSource {
     final invitation = TenantInvitationModel.fromFirestore(snapshot.docs.first);
 
     if (invitation.isExpired) {
-      await _deleteInvitationDocument(invitation.id);
-
       return null;
     }
 
@@ -273,31 +314,16 @@ class TenantInvitationDataSource {
 
   // ============================================================
   // GET PENDING INVITATION BY PHONE
-  //
-  // TENANT ACCOUNT LINKING
-  //
-  // Firebase Auth-এর phone number দিয়ে pending invitation খোঁজা হয়.
-  //
-  // Rules:
-  // 1. Phone empty হলে null.
-  // 2. শুধু pending invitation খোঁজা হবে.
-  // 3. Expired হলে permanently delete হবে.
-  // 4. Valid invitation return হবে.
   // ============================================================
 
   Future<TenantInvitationModel?> getPendingInvitationByPhone(
     String phone,
   ) async {
-    final normalizedPhone = phone.trim();
-
-    if (normalizedPhone.isEmpty) {
-      return null;
-    }
+    final normalizedPhone = _normalizePhone(phone);
 
     final snapshot = await _invitations
         .where('phone', isEqualTo: normalizedPhone)
         .where('status', isEqualTo: TenantInvitationStatus.pending.name)
-        .orderBy('createdAt', descending: true)
         .limit(1)
         .get();
 
@@ -307,13 +333,7 @@ class TenantInvitationDataSource {
 
     final invitation = TenantInvitationModel.fromFirestore(snapshot.docs.first);
 
-    // ----------------------------------------------------------
-    // EXPIRED
-    // ----------------------------------------------------------
-
     if (invitation.isExpired) {
-      await _deleteInvitationDocument(invitation.id);
-
       return null;
     }
 
@@ -323,21 +343,52 @@ class TenantInvitationDataSource {
   // ============================================================
   // ACCEPT INVITATION
   //
-  // TENANT ONLY
+  // 1. Tenant account linking
+  // 2. Invitation acceptance
   //
-  // Current Firebase user must match the tenant's userId.
-  //
-  // IMPORTANT:
-  // The invitation itself does not contain userId.
-  // We therefore read the related tenant document.
+  // Both are completed inside one Firestore transaction.
   // ============================================================
 
   Future<void> acceptInvitation(String invitationId) async {
-    final currentUserId = _currentUserId;
+    final currentUser = _auth.currentUser;
 
-    final invitationDocument = _invitations.doc(invitationId);
+    if (currentUser == null) {
+      throw StateError(
+        'You must be signed in before accepting this invitation.',
+      );
+    }
 
-    final invitationSnapshot = await invitationDocument.get();
+    final currentUserId = currentUser.uid;
+
+    // ----------------------------------------------------------
+    // FIREBASE PHONE
+    // ----------------------------------------------------------
+
+    final firebasePhone = currentUser.phoneNumber?.trim();
+
+    if (firebasePhone == null || firebasePhone.isEmpty) {
+      throw StateError('Your Firebase phone number is not available.');
+    }
+
+    final normalizedFirebasePhone = _normalizePhone(firebasePhone);
+
+    // ----------------------------------------------------------
+    // INVITATION ID
+    // ----------------------------------------------------------
+
+    final normalizedInvitationId = invitationId.trim();
+
+    if (normalizedInvitationId.isEmpty) {
+      throw ArgumentError('Invitation ID cannot be empty.');
+    }
+
+    final invitationReference = _invitations.doc(normalizedInvitationId);
+
+    // ----------------------------------------------------------
+    // INITIAL READ
+    // ----------------------------------------------------------
+
+    final invitationSnapshot = await invitationReference.get();
 
     if (!invitationSnapshot.exists) {
       throw StateError('Invitation does not exist.');
@@ -346,33 +397,41 @@ class TenantInvitationDataSource {
     final invitation = TenantInvitationModel.fromFirestore(invitationSnapshot);
 
     // ----------------------------------------------------------
-    // INVITATION MUST BE PENDING
+    // STATUS
     // ----------------------------------------------------------
 
     if (invitation.status != TenantInvitationStatus.pending) {
-      throw StateError('This invitation cannot be accepted.');
+      throw StateError('This invitation has already been used.');
     }
 
     // ----------------------------------------------------------
-    // EXPIRED
+    // EXPIRY
     // ----------------------------------------------------------
 
     if (invitation.isExpired) {
-      await _deleteInvitationDocument(invitation.id);
-
       throw StateError('This invitation has expired.');
     }
 
     // ----------------------------------------------------------
-    // READ TENANT
+    // INVITATION PHONE MATCH
     // ----------------------------------------------------------
 
-    final tenantDocument = _tenants.doc(invitation.tenantId);
+    final invitationPhone = _normalizePhone(invitation.phone);
 
-    final tenantSnapshot = await tenantDocument.get();
+    if (normalizedFirebasePhone != invitationPhone) {
+      throw StateError('This invitation belongs to a different phone number.');
+    }
+
+    // ----------------------------------------------------------
+    // TENANT
+    // ----------------------------------------------------------
+
+    final tenantReference = _tenants.doc(invitation.tenantId);
+
+    final tenantSnapshot = await tenantReference.get();
 
     if (!tenantSnapshot.exists) {
-      throw StateError('Tenant account record does not exist.');
+      throw StateError('Tenant record does not exist.');
     }
 
     final tenantData = tenantSnapshot.data();
@@ -382,125 +441,215 @@ class TenantInvitationDataSource {
     }
 
     // ----------------------------------------------------------
-    // CHECK TENANT USER ID
+    // OWNER MATCH
     // ----------------------------------------------------------
 
-    final tenantUserId = tenantData['userId'];
-
-    // ----------------------------------------------------------
-    // TENANT ACCOUNT MUST BE LINKED
-    // ----------------------------------------------------------
-
-    if (tenantUserId == null || tenantUserId.toString().trim().isEmpty) {
-      throw StateError('Tenant account is not linked yet.');
+    if (tenantData['ownerId'] != invitation.ownerId) {
+      throw StateError('Tenant owner does not match this invitation.');
     }
 
     // ----------------------------------------------------------
-    // ONLY THE LINKED TENANT CAN ACCEPT
+    // PROPERTY MATCH
     // ----------------------------------------------------------
 
-    if (tenantUserId != currentUserId) {
-      throw StateError('You are not authorized to accept this invitation.');
+    if (tenantData['propertyId'] != invitation.propertyId) {
+      throw StateError('Tenant property does not match this invitation.');
     }
 
     // ----------------------------------------------------------
-    // ACCEPT
+    // UNIT MATCH
     // ----------------------------------------------------------
 
-    await invitationDocument.update({
-      'status': TenantInvitationStatus.accepted.name,
-      'updatedAt': FieldValue.serverTimestamp(),
+    if (tenantData['unitId'] != invitation.unitId) {
+      throw StateError('Tenant unit does not match this invitation.');
+    }
+
+    // ----------------------------------------------------------
+    // TENANT PHONE MATCH
+    // ----------------------------------------------------------
+
+    final tenantPhone = tenantData['phone']?.toString().trim();
+
+    if (tenantPhone == null || tenantPhone.isEmpty) {
+      throw StateError('Tenant phone number is not available.');
+    }
+
+    final normalizedTenantPhone = _normalizePhone(tenantPhone);
+
+    if (normalizedTenantPhone != normalizedFirebasePhone) {
+      throw StateError('Your phone number does not match the tenant record.');
+    }
+
+    // ----------------------------------------------------------
+    // EXISTING LINK
+    // ----------------------------------------------------------
+
+    final existingUserId = tenantData['userId'];
+
+    if (existingUserId != null &&
+        existingUserId.toString().trim().isNotEmpty &&
+        existingUserId != currentUserId) {
+      throw StateError(
+        'This tenant account is already linked to another user.',
+      );
+    }
+
+    // ==========================================================
+    // ATOMIC TRANSACTION
+    // ==========================================================
+
+    await _firestore.runTransaction((transaction) async {
+      // ------------------------------------------------------
+      // FRESH INVITATION
+      // ------------------------------------------------------
+
+      final freshInvitation = await transaction.get(invitationReference);
+
+      // ------------------------------------------------------
+      // FRESH TENANT
+      // ------------------------------------------------------
+
+      final freshTenant = await transaction.get(tenantReference);
+
+      if (!freshInvitation.exists) {
+        throw StateError('Invitation no longer exists.');
+      }
+
+      if (!freshTenant.exists) {
+        throw StateError('Tenant record no longer exists.');
+      }
+
+      final freshInvitationData = freshInvitation.data();
+
+      final freshTenantData = freshTenant.data();
+
+      if (freshInvitationData == null || freshTenantData == null) {
+        throw StateError('Invitation or tenant data is unavailable.');
+      }
+
+      // ------------------------------------------------------
+      // STATUS
+      // ------------------------------------------------------
+
+      if (freshInvitationData['status'] !=
+          TenantInvitationStatus.pending.name) {
+        throw StateError('This invitation has already been used.');
+      }
+
+      // ------------------------------------------------------
+      // EXPIRY
+      // ------------------------------------------------------
+
+      final expiresAt = _readDateTime(freshInvitationData['expiresAt']);
+
+      if (expiresAt == null) {
+        throw StateError('Invitation expiry date is invalid.');
+      }
+
+      if (!expiresAt.isAfter(DateTime.now())) {
+        throw StateError('This invitation has expired.');
+      }
+
+      // ------------------------------------------------------
+      // INVITATION PHONE
+      // ------------------------------------------------------
+
+      final freshInvitationPhone = _normalizePhone(
+        freshInvitationData['phone']?.toString() ?? '',
+      );
+
+      if (freshInvitationPhone != normalizedFirebasePhone) {
+        throw StateError(
+          'This invitation belongs to a different phone number.',
+        );
+      }
+
+      // ------------------------------------------------------
+      // OWNER
+      // ------------------------------------------------------
+
+      if (freshTenantData['ownerId'] != freshInvitationData['ownerId']) {
+        throw StateError('Tenant owner does not match this invitation.');
+      }
+
+      // ------------------------------------------------------
+      // PROPERTY
+      // ------------------------------------------------------
+
+      if (freshTenantData['propertyId'] != freshInvitationData['propertyId']) {
+        throw StateError('Tenant property does not match this invitation.');
+      }
+
+      // ------------------------------------------------------
+      // UNIT
+      // ------------------------------------------------------
+
+      if (freshTenantData['unitId'] != freshInvitationData['unitId']) {
+        throw StateError('Tenant unit does not match this invitation.');
+      }
+
+      // ------------------------------------------------------
+      // TENANT PHONE
+      // ------------------------------------------------------
+
+      final freshTenantPhone = _normalizePhone(
+        freshTenantData['phone']?.toString() ?? '',
+      );
+
+      if (freshTenantPhone != normalizedFirebasePhone) {
+        throw StateError('Your phone number does not match the tenant record.');
+      }
+
+      // ------------------------------------------------------
+      // EXISTING USER
+      // ------------------------------------------------------
+
+      final linkedUserId = freshTenantData['userId'];
+
+      if (linkedUserId != null &&
+          linkedUserId.toString().trim().isNotEmpty &&
+          linkedUserId != currentUserId) {
+        throw StateError(
+          'This tenant account is already linked to another user.',
+        );
+      }
+
+      // ------------------------------------------------------
+      // LINK TENANT
+      // ------------------------------------------------------
+
+      transaction.update(tenantReference, {
+        'userId': currentUserId,
+        'accountStatus': TenantAccountStatus.registered.name,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // ------------------------------------------------------
+      // ACCEPT INVITATION
+      // ------------------------------------------------------
+
+      transaction.update(invitationReference, {
+        'status': TenantInvitationStatus.accepted.name,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
   }
 
   // ============================================================
   // CANCEL INVITATION
-  //
-  // OWNER OR TENANT
-  //
-  // OWNER:
-  // currentUser.uid == invitation.ownerId
-  //
-  // TENANT:
-  // currentUser.uid == tenant.userId
-  //
-  // After cancellation:
-  // invitation document is permanently deleted.
+  // OWNER ONLY
   // ============================================================
 
   Future<void> cancelInvitation(String invitationId) async {
     final currentUserId = _currentUserId;
 
-    final invitationDocument = _invitations.doc(invitationId);
+    final normalizedInvitationId = invitationId.trim();
 
-    final invitationSnapshot = await invitationDocument.get();
-
-    if (!invitationSnapshot.exists) {
+    if (normalizedInvitationId.isEmpty) {
       return;
     }
 
-    final invitation = TenantInvitationModel.fromFirestore(invitationSnapshot);
-
-    // ----------------------------------------------------------
-    // ONLY PENDING INVITATIONS CAN BE CANCELLED
-    // ----------------------------------------------------------
-
-    if (invitation.status != TenantInvitationStatus.pending) {
-      return;
-    }
-
-    // ----------------------------------------------------------
-    // OWNER CHECK
-    // ----------------------------------------------------------
-
-    final isOwner = invitation.ownerId == currentUserId;
-
-    // ----------------------------------------------------------
-    // TENANT CHECK
-    // ----------------------------------------------------------
-
-    bool isTenant = false;
-
-    final tenantDocument = _tenants.doc(invitation.tenantId);
-
-    final tenantSnapshot = await tenantDocument.get();
-
-    if (tenantSnapshot.exists) {
-      final tenantData = tenantSnapshot.data();
-
-      final tenantUserId = tenantData?['userId'];
-
-      isTenant = tenantUserId == currentUserId;
-    }
-
-    // ----------------------------------------------------------
-    // AUTHORIZATION
-    // ----------------------------------------------------------
-
-    if (!isOwner && !isTenant) {
-      throw StateError('You are not authorized to cancel this invitation.');
-    }
-
-    // ----------------------------------------------------------
-    // DELETE INVITATION
-    //
-    // We do NOT keep "cancelled" invitation documents.
-    // ==========================================================
-
-    await _deleteInvitationDocument(invitation.id);
-  }
-
-  // ============================================================
-  // EXPIRE INVITATION
-  //
-  // If still pending and expired:
-  // permanently delete it.
-  // ============================================================
-
-  Future<void> expireInvitation(String invitationId) async {
-    final currentUserId = _currentUserId;
-
-    final document = _invitations.doc(invitationId);
+    final document = _invitations.doc(normalizedInvitationId);
 
     final snapshot = await document.get();
 
@@ -510,47 +659,58 @@ class TenantInvitationDataSource {
 
     final invitation = TenantInvitationModel.fromFirestore(snapshot);
 
-    // ----------------------------------------------------------
-    // OWNER AUTHORIZATION
-    // ----------------------------------------------------------
-
     if (invitation.ownerId != currentUserId) {
-      throw StateError('You are not authorized to expire this invitation.');
+      throw StateError('You are not authorized to cancel this invitation.');
     }
-
-    // ----------------------------------------------------------
-    // ONLY PENDING INVITATION
-    // ----------------------------------------------------------
 
     if (invitation.status != TenantInvitationStatus.pending) {
       return;
     }
 
-    // ----------------------------------------------------------
-    // ONLY EXPIRED INVITATIONS
-    // ----------------------------------------------------------
+    await _deleteInvitationDocument(invitation.id);
+  }
+
+  // ============================================================
+  // EXPIRE INVITATION
+  // OWNER ONLY
+  // ============================================================
+
+  Future<void> expireInvitation(String invitationId) async {
+    final currentUserId = _currentUserId;
+
+    final normalizedInvitationId = invitationId.trim();
+
+    if (normalizedInvitationId.isEmpty) {
+      return;
+    }
+
+    final document = _invitations.doc(normalizedInvitationId);
+
+    final snapshot = await document.get();
+
+    if (!snapshot.exists) {
+      return;
+    }
+
+    final invitation = TenantInvitationModel.fromFirestore(snapshot);
+
+    if (invitation.ownerId != currentUserId) {
+      throw StateError('You are not authorized to expire this invitation.');
+    }
+
+    if (invitation.status != TenantInvitationStatus.pending) {
+      return;
+    }
 
     if (!invitation.isExpired) {
       throw StateError('This invitation has not expired yet.');
     }
 
-    // ----------------------------------------------------------
-    // DELETE
-    // ----------------------------------------------------------
-
     await _deleteInvitationDocument(invitation.id);
   }
 
   // ============================================================
-  // DELETE INVITATION DOCUMENT
-  //
-  // This deletes ONLY the invitation.
-  //
-  // It does NOT delete:
-  // - Firebase Auth account
-  // - Tenant document
-  // - Property
-  // - Unit
+  // DELETE
   // ============================================================
 
   Future<void> _deleteInvitationDocument(String invitationId) async {
@@ -558,7 +718,7 @@ class TenantInvitationDataSource {
   }
 
   // ============================================================
-  // GENERATE SECURE TOKEN
+  // TOKEN
   // ============================================================
 
   String _generateToken() {
@@ -569,9 +729,28 @@ class TenantInvitationDataSource {
 
     final random = Random.secure();
 
-    return List.generate(
-      32,
-      (_) => characters[random.nextInt(characters.length)],
-    ).join();
+    return List.generate(32, (_) {
+      return characters[random.nextInt(characters.length)];
+    }).join();
+  }
+
+  // ============================================================
+  // DATE PARSER
+  // ============================================================
+
+  DateTime? _readDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+
+    return null;
   }
 }

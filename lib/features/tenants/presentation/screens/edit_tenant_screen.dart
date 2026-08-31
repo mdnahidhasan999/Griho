@@ -1,32 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
+
+import '../../../../core/utils/phone_number_utils.dart';
 
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
+
 import '../../domain/entities/tenant.dart';
 import '../controllers/tenant_controller.dart';
 
 class EditTenantScreen extends ConsumerStatefulWidget {
   final Tenant tenant;
 
-  const EditTenantScreen({
-    super.key,
-    required this.tenant,
-  });
+  const EditTenantScreen({super.key, required this.tenant});
 
   @override
-  ConsumerState<EditTenantScreen> createState() =>
-      _EditTenantScreenState();
+  ConsumerState<EditTenantScreen> createState() => _EditTenantScreenState();
 }
 
 class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _nameController;
-  late final TextEditingController _phoneController;
+
   late final TextEditingController _emailController;
+
   late final TextEditingController _nidController;
 
   Property? _selectedProperty;
@@ -34,40 +36,51 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
 
   late TenantStatus _status;
 
+  late String _phoneNumber;
+
   @override
   void initState() {
     super.initState();
 
     final tenant = widget.tenant;
 
-    _nameController = TextEditingController(
-      text: tenant.name,
-    );
+    _nameController = TextEditingController(text: tenant.name);
 
-    _phoneController = TextEditingController(
-      text: tenant.phone,
-    );
+    _emailController = TextEditingController(text: tenant.email ?? '');
 
-    _emailController = TextEditingController(
-      text: tenant.email ?? '',
-    );
-
-    _nidController = TextEditingController(
-      text: tenant.nidNumber ?? '',
-    );
+    _nidController = TextEditingController(text: tenant.nidNumber ?? '');
 
     _status = tenant.status;
+
+    _phoneNumber = tenant.phone;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
     _emailController.dispose();
     _nidController.dispose();
 
     super.dispose();
   }
+
+  // ============================================================
+  // PHONE
+  // ============================================================
+
+  String? _getValidatedPhone() {
+    final value = _phoneNumber.trim();
+
+    if (!PhoneNumberUtils.isValid(value)) {
+      return null;
+    }
+
+    return PhoneNumberUtils.normalize(value);
+  }
+
+  // ============================================================
+  // UPDATE TENANT
+  // ============================================================
 
   Future<void> _updateTenant() async {
     if (!_formKey.currentState!.validate()) {
@@ -75,251 +88,143 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
     }
 
     final property = _selectedProperty;
+
     final unit = _selectedUnit;
 
-    // ============================================================
-    // PROPERTY CHECK
-    // ============================================================
+    // ------------------------------------------------------------
+    // PROPERTY
+    // ------------------------------------------------------------
 
     if (property == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please select a property.',
-          ),
-        ),
+        const SnackBar(content: Text('Please select a property.')),
       );
 
       return;
     }
 
-    // ============================================================
-    // UNIT CHECK
-    // ============================================================
+    // ------------------------------------------------------------
+    // UNIT
+    // ------------------------------------------------------------
 
     if (unit == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a unit.')));
+
+      return;
+    }
+
+    // ------------------------------------------------------------
+    // PHONE
+    // ------------------------------------------------------------
+
+    final phone = _getValidatedPhone();
+
+    if (phone == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Please select a unit.',
-          ),
+          content: Text('Please enter a valid international phone number.'),
         ),
       );
 
       return;
     }
 
-    // ============================================================
-    // CREATE UPDATED TENANT
-    // ============================================================
+    // ------------------------------------------------------------
+    // UPDATED TENANT
+    // ------------------------------------------------------------
 
     final updatedTenant = widget.tenant.copyWith(
       propertyId: property.id,
       unitId: unit.id,
-
       name: _nameController.text.trim(),
-
-      phone: _phoneController.text.trim(),
-
-      email: _emailController.text
-          .trim()
-          .isEmpty
+      phone: phone,
+      email: _emailController.text.trim().isEmpty
           ? null
           : _emailController.text.trim(),
-
-      nidNumber: _nidController.text
-          .trim()
-          .isEmpty
+      nidNumber: _nidController.text.trim().isEmpty
           ? null
           : _nidController.text.trim(),
-
       status: _status,
-
       updatedAt: DateTime.now(),
     );
 
-    // ============================================================
-    // DEBUG
-    // ============================================================
-
-    debugPrint(
-        '========== UPDATE TENANT =========='
-    );
-
-    debugPrint(
-      'Tenant ID: ${updatedTenant.id}',
-    );
-
-    debugPrint(
-      'Owner ID: ${updatedTenant.ownerId}',
-    );
-
-    debugPrint(
-      'Property ID: ${updatedTenant.propertyId}',
-    );
-
-    debugPrint(
-      'Unit ID: ${updatedTenant.unitId}',
-    );
-
-    debugPrint(
-      'Name: ${updatedTenant.name}',
-    );
-
-    debugPrint(
-      'Phone: ${updatedTenant.phone}',
-    );
-
-    debugPrint(
-      'Email: ${updatedTenant.email}',
-    );
-
-    debugPrint(
-      'NID: ${updatedTenant.nidNumber}',
-    );
-
-    debugPrint(
-      'Status: ${updatedTenant.status.name}',
-    );
-
-    debugPrint(
-      '==================================',
-    );
-
-    // ============================================================
+    // ------------------------------------------------------------
     // UPDATE
-    // ============================================================
+    // ------------------------------------------------------------
 
     final result = await ref
-        .read(
-      tenantControllerProvider.notifier,
-    )
-        .updateTenant(
-      updatedTenant,
-    );
+        .read(tenantControllerProvider.notifier)
+        .updateTenant(updatedTenant);
 
     if (!mounted) {
       return;
     }
 
-    // ============================================================
+    // ------------------------------------------------------------
     // FAILED
-    // ============================================================
+    // ------------------------------------------------------------
 
     if (result == null) {
-      final state = ref.read(
-        tenantControllerProvider,
-      );
-
-      debugPrint(
-          '========== UPDATE FAILED =========='
-      );
-
-      debugPrint(
-        'Error: ${state.error}',
-      );
-
-      debugPrint(
-        '===================================',
-      );
+      final state = ref.read(tenantControllerProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            state.error?.toString() ??
-                'Unable to update tenant.',
-          ),
-          duration: const Duration(
-            seconds: 6,
-          ),
+          content: Text(state.error?.toString() ?? 'Unable to update tenant.'),
+          duration: const Duration(seconds: 6),
         ),
       );
 
       return;
     }
 
-    // ============================================================
+    // ------------------------------------------------------------
     // SUCCESS
-    // ============================================================
+    // ------------------------------------------------------------
 
-    debugPrint(
-        '========== UPDATE SUCCESS =========='
-    );
-
-    debugPrint(
-      'Tenant ID: ${result.id}',
-    );
-
-    debugPrint(
-      'Updated Name: ${result.name}',
-    );
-
-    debugPrint(
-      '====================================',
-    );
-
-    Navigator.of(context).pop(
-      result,
-    );
+    Navigator.of(context).pop(result);
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    final propertiesAsync = ref.watch(
-      currentOwnerPropertiesProvider,
-    );
+    final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
 
-    final tenantState = ref.watch(
-      tenantControllerProvider,
-    );
+    final tenantState = ref.watch(tenantControllerProvider);
 
     final selectedPropertyId = _selectedProperty?.id;
 
     final unitsAsync = selectedPropertyId == null
         ? const AsyncValue<List<Unit>>.data([])
-        : ref.watch(
-      propertyUnitsProvider(
-        selectedPropertyId,
-      ),
-    );
+        : ref.watch(propertyUnitsProvider(selectedPropertyId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Edit Tenant',
-        ),
-      ),
+      appBar: AppBar(title: const Text('Edit Tenant')),
       body: SafeArea(
         child: propertiesAsync.when(
           loading: () {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+            return const Center(child: CircularProgressIndicator());
           },
           error: (error, stackTrace) {
             return _ErrorView(
-              message:
-              'Unable to load your properties.',
+              message: 'Unable to load your properties.',
               onRetry: () {
-                ref.invalidate(
-                  currentOwnerPropertiesProvider,
-                );
+                ref.invalidate(currentOwnerPropertiesProvider);
               },
             );
           },
           data: (properties) {
             if (properties.isEmpty) {
-              return const Center(
-                child: Text(
-                  'No properties available.',
-                ),
-              );
+              return const Center(child: Text('No properties available.'));
             }
 
             if (_selectedProperty == null) {
               for (final property in properties) {
-                if (property.id ==
-                    widget.tenant.propertyId) {
+                if (property.id == widget.tenant.propertyId) {
                   _selectedProperty = property;
                   break;
                 }
@@ -331,25 +236,18 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Tenant Information',
-                      style: Theme
-                          .of(context)
-                          .textTheme
-                          .headlineSmall,
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
 
                     const SizedBox(height: 8),
 
                     Text(
                       'Update the tenant information below.',
-                      style: Theme
-                          .of(context)
-                          .textTheme
-                          .bodyMedium,
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
 
                     const SizedBox(height: 32),
@@ -357,33 +255,24 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                     // ==================================================
                     // PROPERTY
                     // ==================================================
-
                     DropdownButtonFormField<Property>(
-                      initialValue:
-                      _selectedProperty,
-                      decoration:
-                      const InputDecoration(
+                      initialValue: _selectedProperty,
+                      decoration: const InputDecoration(
                         labelText: 'Property',
-                        border:
-                        OutlineInputBorder(),
+                        border: OutlineInputBorder(),
                       ),
-                      items: properties.map(
-                            (property) {
-                          return DropdownMenuItem<
-                              Property>(
-                            value: property,
-                            child: Text(
-                              property.name,
-                              overflow:
-                              TextOverflow.ellipsis,
-                            ),
-                          );
-                        },
-                      ).toList(),
+                      items: properties.map((property) {
+                        return DropdownMenuItem<Property>(
+                          value: property,
+                          child: Text(
+                            property.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
                       onChanged: (property) {
                         setState(() {
-                          _selectedProperty =
-                              property;
+                          _selectedProperty = property;
                           _selectedUnit = null;
                         });
                       },
@@ -396,75 +285,45 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                       },
                     ),
 
-                    const SizedBox(height: 8),
-
-                    if (_selectedProperty != null)
-                      Text(
-                        'Property ID: '
-                            '${_selectedProperty!.id}',
-                        style: Theme
-                            .of(context)
-                            .textTheme
-                            .bodySmall,
-                      ),
-
                     const SizedBox(height: 20),
 
                     // ==================================================
                     // UNIT
                     // ==================================================
-
                     unitsAsync.when(
                       loading: () {
                         return const Padding(
-                          padding:
-                          EdgeInsets.symmetric(
-                            vertical: 12,
-                          ),
-                          child: Center(
-                            child:
-                            CircularProgressIndicator(),
-                          ),
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Center(child: CircularProgressIndicator()),
                         );
                       },
                       error: (error, stackTrace) {
                         return Column(
-                          crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Unable to load units.',
-                            ),
+                            const Text('Unable to load units.'),
                             const SizedBox(height: 8),
                             OutlinedButton.icon(
                               onPressed: () {
-                                if (_selectedProperty ==
-                                    null) {
+                                final property = _selectedProperty;
+
+                                if (property == null) {
                                   return;
                                 }
 
                                 ref.invalidate(
-                                  propertyUnitsProvider(
-                                    _selectedProperty!
-                                        .id,
-                                  ),
+                                  propertyUnitsProvider(property.id),
                                 );
                               },
-                              icon: const Icon(
-                                Icons.refresh,
-                              ),
-                              label:
-                              const Text('Retry'),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
                             ),
                           ],
                         );
                       },
                       data: (units) {
-                        if (_selectedProperty ==
-                            null) {
-                          return const Text(
-                            'Select a property first.',
-                          );
+                        if (_selectedProperty == null) {
+                          return const Text('Select a property first.');
                         }
 
                         if (units.isEmpty) {
@@ -475,8 +334,7 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
 
                         if (_selectedUnit == null) {
                           for (final unit in units) {
-                            if (unit.id ==
-                                widget.tenant.unitId) {
+                            if (unit.id == widget.tenant.unitId) {
                               _selectedUnit = unit;
                               break;
                             }
@@ -484,28 +342,20 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                         }
 
                         return DropdownButtonFormField<Unit>(
-                          initialValue:
-                          _selectedUnit,
-                          decoration:
-                          const InputDecoration(
+                          initialValue: _selectedUnit,
+                          decoration: const InputDecoration(
                             labelText: 'Unit',
-                            border:
-                            OutlineInputBorder(),
+                            border: OutlineInputBorder(),
                           ),
-                          items: units.map(
-                                (unit) {
-                              return DropdownMenuItem<
-                                  Unit>(
-                                value: unit,
-                                child: Text(
-                                  '${unit.unitNumber} — '
-                                      'Floor ${unit.floorNumber}',
-                                  overflow:
-                                  TextOverflow.ellipsis,
-                                ),
-                              );
-                            },
-                          ).toList(),
+                          items: units.map((unit) {
+                            return DropdownMenuItem<Unit>(
+                              value: unit,
+                              child: Text(
+                                '${unit.unitNumber} — Floor ${unit.floorNumber}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
                           onChanged: (unit) {
                             setState(() {
                               _selectedUnit = unit;
@@ -527,24 +377,16 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                     // ==================================================
                     // NAME
                     // ==================================================
-
                     TextFormField(
                       controller: _nameController,
-                      textCapitalization:
-                      TextCapitalization.words,
-                      textInputAction:
-                      TextInputAction.next,
-                      decoration:
-                      const InputDecoration(
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
                         labelText: 'Tenant Name',
-                        border:
-                        OutlineInputBorder(),
+                        border: OutlineInputBorder(),
                       ),
                       validator: (value) {
-                        if (value
-                            ?.trim()
-                            .isEmpty ??
-                            true) {
+                        if (value?.trim().isEmpty ?? true) {
                           return 'Please enter tenant name.';
                         }
 
@@ -557,25 +399,24 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                     // ==================================================
                     // PHONE
                     // ==================================================
-
-                    TextFormField(
-                      controller: _phoneController,
-                      keyboardType:
-                      TextInputType.phone,
-                      textInputAction:
-                      TextInputAction.next,
-                      decoration:
-                      const InputDecoration(
-                        labelText: 'Phone',
-                        border:
-                        OutlineInputBorder(),
+                    IntlPhoneField(
+                      initialValue: widget.tenant.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Phone Number',
+                        border: OutlineInputBorder(),
                       ),
-                      validator: (value) {
-                        if (value
-                            ?.trim()
-                            .isEmpty ??
-                            true) {
+                      textInputAction: TextInputAction.next,
+                      onChanged: (phone) {
+                        _phoneNumber = phone.completeNumber;
+                      },
+                      validator: (phone) {
+                        if (phone == null ||
+                            phone.completeNumber.trim().isEmpty) {
                           return 'Please enter phone number.';
+                        }
+
+                        if (!PhoneNumberUtils.isValid(phone.completeNumber)) {
+                          return 'Please enter a valid international phone number.';
                         }
 
                         return null;
@@ -587,19 +428,14 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                     // ==================================================
                     // EMAIL
                     // ==================================================
-
                     TextFormField(
                       controller: _emailController,
-                      keyboardType:
-                      TextInputType.emailAddress,
-                      textInputAction:
-                      TextInputAction.next,
-                      decoration:
-                      const InputDecoration(
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
                         labelText: 'Email',
                         hintText: 'Optional',
-                        border:
-                        OutlineInputBorder(),
+                        border: OutlineInputBorder(),
                       ),
                     ),
 
@@ -608,19 +444,14 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                     // ==================================================
                     // NID
                     // ==================================================
-
                     TextFormField(
                       controller: _nidController,
-                      keyboardType:
-                      TextInputType.number,
-                      textInputAction:
-                      TextInputAction.next,
-                      decoration:
-                      const InputDecoration(
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
                         labelText: 'NID Number',
                         hintText: 'Optional',
-                        border:
-                        OutlineInputBorder(),
+                        border: OutlineInputBorder(),
                       ),
                     ),
 
@@ -629,24 +460,19 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                     // ==================================================
                     // STATUS
                     // ==================================================
-
                     DropdownButtonFormField<TenantStatus>(
                       initialValue: _status,
-                      decoration:
-                      const InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Status',
-                        border:
-                        OutlineInputBorder(),
+                        border: OutlineInputBorder(),
                       ),
                       items: const [
                         DropdownMenuItem(
-                          value:
-                          TenantStatus.active,
+                          value: TenantStatus.active,
                           child: Text('Active'),
                         ),
                         DropdownMenuItem(
-                          value:
-                          TenantStatus.inactive,
+                          value: TenantStatus.inactive,
                           child: Text('Inactive'),
                         ),
                       ],
@@ -663,30 +489,19 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
 
                     const SizedBox(height: 32),
 
-                    // ==================================================
-                    // UPDATE
-                    // ==================================================
-
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed:
-                        tenantState.isLoading
-                            ? null
-                            : _updateTenant,
-                        child:
-                        tenantState.isLoading
+                        onPressed: tenantState.isLoading ? null : _updateTenant,
+                        child: tenantState.isLoading
                             ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child:
-                          CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
-                            : const Text(
-                          'Update Tenant',
-                        ),
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Update Tenant'),
                       ),
                     ),
                   ],
@@ -704,10 +519,7 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -717,20 +529,11 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-            ),
+            const Icon(Icons.error_outline, size: 48),
             const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-            ),
+            Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

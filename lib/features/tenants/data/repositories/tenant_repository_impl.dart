@@ -16,24 +16,22 @@ class TenantRepositoryImpl implements TenantRepository {
     required this._currentUserService,
   });
 
-  // ============================================================
+  // ==========================================================================
   // GET TENANT BY ID
-  // ============================================================
+  // ==========================================================================
 
   @override
-  Future<Tenant?> getTenantById(String tenantId,) {
-    return _dataSource.getTenantById(
-      tenantId,
-    );
+  Future<Tenant?> getTenantById(String tenantId) {
+    return _dataSource.getTenantById(tenantId);
   }
 
-  // ============================================================
+  // ==========================================================================
   // GET TENANTS BY PROPERTY
   // CURRENT OWNER ONLY
-  // ============================================================
+  // ==========================================================================
 
   @override
-  Future<List<Tenant>> getTenantsByPropertyId(String propertyId,) {
+  Future<List<Tenant>> getTenantsByPropertyId(String propertyId) {
     final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.getTenantsByPropertyId(
@@ -42,26 +40,25 @@ class TenantRepositoryImpl implements TenantRepository {
     );
   }
 
-  // ============================================================
+  // ==========================================================================
   // GET TENANT BY UNIT
-  // ============================================================
+  // CURRENT OWNER ONLY
+  // ==========================================================================
 
   @override
-  Future<Tenant?> getTenantByUnitId(String unitId,) {
+  Future<Tenant?> getTenantByUnitId(String unitId) {
     final ownerId = _currentUserService.requiredUid;
 
-    return _dataSource.getTenantByUnitId(
-      unitId: unitId,
-      ownerId: ownerId,
-    );
+    return _dataSource.getTenantByUnitId(unitId: unitId, ownerId: ownerId);
   }
 
-  // ============================================================
+  // ==========================================================================
   // GET ACTIVE TENANTS BY UNIT
-  // ============================================================
+  // CURRENT OWNER ONLY
+  // ==========================================================================
 
   @override
-  Future<List<Tenant>> getActiveTenantsByUnitId(String unitId,) {
+  Future<List<Tenant>> getActiveTenantsByUnitId(String unitId) {
     final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.getActiveTenantsByUnitId(
@@ -70,181 +67,126 @@ class TenantRepositoryImpl implements TenantRepository {
     );
   }
 
-  // ============================================================
+  // ==========================================================================
   // SEARCH TENANTS
-  // ============================================================
+  // ==========================================================================
 
   @override
-  Future<List<Tenant>> searchTenants(String search,) {
-    return _dataSource.searchTenants(
-      search,
-    );
+  Future<List<Tenant>> searchTenants(String search) {
+    return _dataSource.searchTenants(search);
   }
 
-  // ============================================================
+  // ==========================================================================
   // FIND TENANT BY PHONE
-  // ============================================================
+  // ==========================================================================
 
   @override
   Future<Tenant?> findTenantByPhone({
     required String phone,
     required String ownerId,
   }) {
-    return _dataSource.findTenantByPhone(
-      phone: phone,
-      ownerId: ownerId,
-    );
+    return _dataSource.findTenantByPhone(phone: phone, ownerId: ownerId);
   }
 
-  // ============================================================
+  // ==========================================================================
   // CREATE TENANT
-  // ============================================================
+  // ==========================================================================
 
   @override
-  Future<Tenant> createTenant(CreateTenantRequest request,) async {
-    final now = DateTime.now();
-
-    final documentId = DateTime
-        .now()
-        .microsecondsSinceEpoch
-        .toString();
-
+  Future<Tenant> createTenant(CreateTenantRequest request) async {
     final ownerId = _currentUserService.requiredUid;
 
-    // ----------------------------------------------------------
-    // NORMALIZE PHONE
-    // ----------------------------------------------------------
+    final name = request.name.trim();
+    final phone = request.phone.trim();
 
-    final normalizedPhone = request.phone.trim();
-
-    if (normalizedPhone.isEmpty) {
-      throw ArgumentError(
-        'Tenant phone number cannot be empty.',
-      );
+    if (name.isEmpty) {
+      throw ArgumentError('Tenant name cannot be empty.');
     }
 
-    // ----------------------------------------------------------
-    // CREATE TENANT
-    // ----------------------------------------------------------
-    //
-    // At this stage:
-    //
-    // userId = null
-    // accountStatus = notRegistered
-    // confirmationStatus = pending
-    //
-    // Later, after tenant registration:
-    //
-    // userId = Firebase Auth UID
-    // accountStatus = registered
-    //
-    // After tenant confirms:
-    //
-    // confirmationStatus = confirmed
-    //
-    // ----------------------------------------------------------
+    if (phone.isEmpty) {
+      throw ArgumentError('Tenant phone number cannot be empty.');
+    }
+
+    final documentId = DateTime.now().microsecondsSinceEpoch.toString();
+
+    final now = DateTime.now();
+
+    final userId = request.userId?.trim();
+
+    final email = request.email?.trim();
+    final nidNumber = request.nidNumber?.trim();
 
     final tenant = TenantModel(
       id: documentId,
-
       ownerId: ownerId,
-
-      // Tenant has not created an account yet.
-      userId: request.userId,
-
-      propertyId: request.propertyId,
-
-      unitId: request.unitId,
-
-      name: request.name.trim(),
-
-      phone: normalizedPhone,
-
-      email: request.email?.trim(),
-
-      nidNumber: request.nidNumber?.trim(),
-
-      // --------------------------------------------------------
-      // TENANCY STATUS
-      // --------------------------------------------------------
-
+      userId: userId == null || userId.isEmpty ? null : userId,
+      propertyId: request.propertyId.trim(),
+      unitId: request.unitId.trim(),
+      name: name,
+      phone: phone,
+      email: email == null || email.isEmpty ? null : email,
+      nidNumber: nidNumber == null || nidNumber.isEmpty ? null : nidNumber,
       status: request.status,
-
-      // --------------------------------------------------------
-      // ACCOUNT STATUS
-      // --------------------------------------------------------
-      //
-      // If userId already exists, the account is registered.
-      // Otherwise the tenant has not registered yet.
-      //
-      // --------------------------------------------------------
-
-      accountStatus: request.userId != null &&
-          request.userId!.trim().isNotEmpty
+      accountStatus: userId != null && userId.isNotEmpty
           ? TenantAccountStatus.registered
           : TenantAccountStatus.notRegistered,
-
-      // --------------------------------------------------------
-      // CONFIRMATION STATUS
-      // --------------------------------------------------------
-      //
-      // Newly created tenant has not confirmed the tenancy yet.
-      //
-      // --------------------------------------------------------
-
-      confirmationStatus:
-      TenantConfirmationStatus.pending,
-
+      confirmationStatus: TenantConfirmationStatus.pending,
       createdAt: now,
-
       updatedAt: now,
     );
 
-    // ----------------------------------------------------------
-    // SAVE TENANT
-    // ----------------------------------------------------------
+    if (tenant.propertyId.isEmpty) {
+      throw ArgumentError('Property ID cannot be empty.');
+    }
 
-    return _dataSource.createTenant(
-      tenant: tenant,
-    );
+    if (tenant.unitId.isEmpty) {
+      throw ArgumentError('Unit ID cannot be empty.');
+    }
+
+    return _dataSource.createTenant(tenant: tenant);
   }
 
-  // ============================================================
+  // ==========================================================================
   // UPDATE TENANT
-  // ============================================================
+  // ==========================================================================
 
   @override
-  Future<Tenant> updateTenant(Tenant tenant,) async {
-    final model = TenantModel.fromEntity(
-      tenant,
-    );
+  Future<Tenant> updateTenant(Tenant tenant) async {
+    final ownerId = _currentUserService.requiredUid;
 
-    return _dataSource.updateTenant(
-      model,
-    );
+    if (tenant.ownerId != ownerId) {
+      throw StateError('You are not authorized to update this tenant.');
+    }
+
+    final model = TenantModel.fromEntity(tenant);
+
+    return _dataSource.updateTenant(model);
   }
 
-// ============================================================
-// LINK TENANT ACCOUNT
-// ============================================================
-//
-// Links the tenant's Firebase Auth UID to the tenant record.
-// ============================================================
+  // ==========================================================================
+  // LINK TENANT ACCOUNT
+  // ==========================================================================
 
   @override
   Future<Tenant> linkTenantAccount({
     required String tenantId,
     required String userId,
   }) {
+    final currentUserId = _currentUserService.requiredUid;
+
+    if (currentUserId != userId.trim()) {
+      throw StateError('You can only link your own account.');
+    }
+
     return _dataSource.linkTenantAccount(
       tenantId: tenantId,
-      userId: userId,
+      userId: currentUserId,
     );
   }
 
-  // ============================================================
+  // ==========================================================================
   // CLEANUP DUPLICATE ACTIVE TENANTS
-  // ============================================================
+  // ==========================================================================
 
   @override
   Future<void> cleanupDuplicateActiveTenants({
@@ -252,6 +194,12 @@ class TenantRepositoryImpl implements TenantRepository {
     required String ownerId,
     required String keepTenantId,
   }) {
+    final currentUserId = _currentUserService.requiredUid;
+
+    if (currentUserId != ownerId) {
+      throw StateError('You are not authorized to clean up these tenants.');
+    }
+
     return _dataSource.cleanupDuplicateActiveTenants(
       unitId: unitId,
       ownerId: ownerId,
@@ -259,14 +207,24 @@ class TenantRepositoryImpl implements TenantRepository {
     );
   }
 
-  // ============================================================
+  // ==========================================================================
   // DELETE TENANT
-  // ============================================================
+  // ==========================================================================
 
   @override
-  Future<void> deleteTenant(String tenantId,) {
-    return _dataSource.deleteTenant(
-      tenantId,
-    );
+  Future<void> deleteTenant(String tenantId) async {
+    final tenant = await _dataSource.getTenantById(tenantId);
+
+    if (tenant == null) {
+      return;
+    }
+
+    final currentUserId = _currentUserService.requiredUid;
+
+    if (tenant.ownerId != currentUserId) {
+      throw StateError('You are not authorized to delete this tenant.');
+    }
+
+    await _dataSource.deleteTenant(tenantId);
   }
 }

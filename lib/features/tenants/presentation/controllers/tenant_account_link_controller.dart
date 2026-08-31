@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/legacy.dart';
 
-import '../../domain/entities/tenant.dart';
 import '../../domain/usecases/link_and_accept_tenant_invitation.dart';
 import '../providers/link_and_accept_tenant_invitation_provider.dart';
 
@@ -10,28 +9,23 @@ import '../providers/link_and_accept_tenant_invitation_provider.dart';
 
 class TenantAccountLinkState {
   final bool isLoading;
-  final Tenant? tenant;
   final String? errorMessage;
   final bool completed;
 
   const TenantAccountLinkState({
     this.isLoading = false,
-    this.tenant,
     this.errorMessage,
     this.completed = false,
   });
 
   TenantAccountLinkState copyWith({
     bool? isLoading,
-    Tenant? tenant,
     String? errorMessage,
     bool? completed,
     bool clearError = false,
-    bool clearTenant = false,
   }) {
     return TenantAccountLinkState(
       isLoading: isLoading ?? this.isLoading,
-      tenant: clearTenant ? null : tenant ?? this.tenant,
       errorMessage:
       clearError ? null : errorMessage ?? this.errorMessage,
       completed: completed ?? this.completed,
@@ -55,11 +49,13 @@ class TenantAccountLinkController
   // LINK + ACCEPT
   // ==============================================================
 
-  Future<Tenant?> linkAndAccept({
-    required String tenantId,
-    required String userId,
+  Future<bool> linkAndAccept({
     required String invitationId,
   }) async {
+    if (state.isLoading) {
+      return false;
+    }
+
     state = state.copyWith(
       isLoading: true,
       clearError: true,
@@ -67,28 +63,25 @@ class TenantAccountLinkController
     );
 
     try {
-      final tenant = await _linkAndAcceptTenantInvitation(
-        tenantId: tenantId,
-        userId: userId,
+      await _linkAndAcceptTenantInvitation(
         invitationId: invitationId,
       );
 
       state = state.copyWith(
         isLoading: false,
-        tenant: tenant,
         completed: true,
         clearError: true,
       );
 
-      return tenant;
+      return true;
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: error.toString(),
+        errorMessage: _cleanError(error),
         completed: false,
       );
 
-      return null;
+      return false;
     }
   }
 
@@ -99,6 +92,20 @@ class TenantAccountLinkController
   void clear() {
     state = const TenantAccountLinkState();
   }
+
+  // ==============================================================
+  // ERROR
+  // ==============================================================
+
+  String _cleanError(Object error) {
+    final message = error.toString();
+
+    if (message.startsWith('Exception: ')) {
+      return message.substring('Exception: '.length);
+    }
+
+    return message;
+  }
 }
 
 // ================================================================
@@ -108,7 +115,8 @@ class TenantAccountLinkController
 final tenantAccountLinkControllerProvider =
 StateNotifierProvider<
     TenantAccountLinkController,
-    TenantAccountLinkState>(
+    TenantAccountLinkState
+>(
       (ref) {
     return TenantAccountLinkController(
       linkAndAcceptTenantInvitation: ref.read(

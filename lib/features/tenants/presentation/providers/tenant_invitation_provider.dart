@@ -16,7 +16,6 @@ import '../../domain/usecases/get_pending_invitation_by_phone.dart';
 import '../../domain/usecases/get_pending_tenant_invitation.dart';
 import '../../domain/usecases/get_tenant_invitation.dart';
 import '../../domain/usecases/link_and_accept_tenant_invitation.dart';
-import '../controllers/tenant_controller.dart';
 
 // ================================================================
 // TENANT INVITATION REPOSITORY
@@ -88,10 +87,7 @@ Provider<GetPendingTenantInvitation>((ref) {
 });
 
 // ================================================================
-// GET PENDING TENANT INVITATION
-// BY PHONE
-//
-// Used for tenant account linking.
+// GET PENDING INVITATION BY PHONE
 // ================================================================
 
 final getPendingInvitationByPhoneProvider =
@@ -149,9 +145,6 @@ Provider<ExpireTenantInvitation>((ref) {
 final linkAndAcceptTenantInvitationProvider =
 Provider<LinkAndAcceptTenantInvitation>((ref) {
   return LinkAndAcceptTenantInvitation(
-    tenantRepository: ref.read(
-      tenantRepositoryProvider,
-    ),
     invitationRepository: ref.read(
       tenantInvitationRepositoryProvider,
     ),

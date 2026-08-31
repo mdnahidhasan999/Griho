@@ -3,35 +3,50 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../tenants/data/datasources/tenant_invitation_data_source.dart';
 import '../../../tenants/presentation/providers/tenant_invitation_provider.dart';
+
 import '../../data/datasources/firebase_auth_datasource.dart';
 import '../../data/services/user_registration_service.dart';
+
 import '../../domain/entities/app_user.dart';
 import '../../domain/entities/auth_result.dart';
 import '../../domain/entities/registration_intent.dart';
+
 import 'auth_provider.dart';
 
-final firebaseAuthDataSourceProvider =
-Provider<FirebaseAuthDataSource>((ref) {
+// ================================================================
+// FIREBASE AUTH DATA SOURCE
+// ================================================================
+
+final firebaseAuthDataSourceProvider = Provider<FirebaseAuthDataSource>((ref) {
   return FirebaseAuthDataSource();
 });
 
-final userRegistrationServiceProvider =
-Provider<UserRegistrationService>((ref) {
+// ================================================================
+// USER REGISTRATION SERVICE
+// ================================================================
+
+final userRegistrationServiceProvider = Provider<UserRegistrationService>((
+  ref,
+) {
   return UserRegistrationService(
-    userProfileDataSource: ref.watch(
-      userProfileDataSourceProvider,
-    ),
-    tenantInvitationDataSource:
-    TenantInvitationDataSource(),
-    linkAndAcceptTenantInvitation:
-    ref.watch(
+    userProfileDataSource: ref.watch(userProfileDataSourceProvider),
+    tenantInvitationDataSource: TenantInvitationDataSource(),
+    linkAndAcceptTenantInvitation: ref.watch(
       linkAndAcceptTenantInvitationProvider,
     ),
   );
 });
 
+// ================================================================
+// AUTH CONTROLLER
+// ================================================================
+
 final authControllerProvider =
-NotifierProvider<AuthController, AuthControllerState>(AuthController.new);
+    NotifierProvider<AuthController, AuthControllerState>(AuthController.new);
+
+// ================================================================
+// AUTH STATE
+// ================================================================
 
 class AuthControllerState {
   final bool isLoading;
@@ -40,12 +55,16 @@ class AuthControllerState {
   final bool otpSent;
   final AppUser? user;
 
+  /// Pending tenant invitation found during registration.
+  final String? invitationId;
+
   const AuthControllerState({
     this.isLoading = false,
     this.verificationId,
     this.errorMessage,
     this.otpSent = false,
     this.user,
+    this.invitationId,
   });
 
   AuthControllerState copyWith({
@@ -54,7 +73,9 @@ class AuthControllerState {
     String? errorMessage,
     bool? otpSent,
     AppUser? user,
+    String? invitationId,
     bool clearError = false,
+    bool clearInvitation = false,
   }) {
     return AuthControllerState(
       isLoading: isLoading ?? this.isLoading,
@@ -62,9 +83,14 @@ class AuthControllerState {
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       otpSent: otpSent ?? this.otpSent,
       user: user ?? this.user,
+      invitationId: clearInvitation ? null : invitationId ?? this.invitationId,
     );
   }
 }
+
+// ================================================================
+// AUTH CONTROLLER
+// ================================================================
 
 class AuthController extends Notifier<AuthControllerState> {
   late final FirebaseAuthDataSource _authDataSource;
@@ -73,12 +99,15 @@ class AuthController extends Notifier<AuthControllerState> {
   @override
   AuthControllerState build() {
     _authDataSource = ref.watch(firebaseAuthDataSourceProvider);
-    _registrationService = ref.watch(userRegistrationServiceProvider);
 
-    ref.onDispose(() {});
+    _registrationService = ref.watch(userRegistrationServiceProvider);
 
     return const AuthControllerState();
   }
+
+  // ==============================================================
+  // SEND OTP
+  // ==============================================================
 
   Future<void> sendOtp(String phoneNumber) async {
     state = state.copyWith(isLoading: true, clearError: true);
@@ -86,6 +115,7 @@ class AuthController extends Notifier<AuthControllerState> {
     try {
       await _authDataSource.sendOtp(
         phoneNumber: phoneNumber,
+
         onCodeSent: (verificationId) {
           state = state.copyWith(
             isLoading: false,
@@ -93,9 +123,11 @@ class AuthController extends Notifier<AuthControllerState> {
             otpSent: true,
           );
         },
+
         onVerificationFailed: (message) {
           state = state.copyWith(isLoading: false, errorMessage: message);
         },
+
         onAutoVerified: () {
           state = state.copyWith(isLoading: false);
         },
@@ -105,14 +137,20 @@ class AuthController extends Notifier<AuthControllerState> {
     }
   }
 
+  // ==============================================================
+  // VERIFY OTP
+  // ==============================================================
+
   Future<AuthResult?> verifyOtp({required String smsCode}) async {
     final verificationId = state.verificationId;
 
     if (verificationId == null || verificationId.isEmpty) {
       state = state.copyWith(
         errorMessage:
-        'Verification session has expired. Please request a new OTP.',
+            'Verification session has expired. '
+            'Please request a new OTP.',
       );
+
       return null;
     }
 
@@ -128,11 +166,15 @@ class AuthController extends Notifier<AuthControllerState> {
 
       if (firebaseUser == null) {
         throw Exception(
-          'Authentication succeeded, but no Firebase user was returned.',
+          'Authentication succeeded, '
+          'but no Firebase user was returned.',
         );
       }
 
-      debugPrint('OTP verification successful. UID: ${firebaseUser.uid}');
+      debugPrint(
+        'OTP verification successful. '
+        'UID: ${firebaseUser.uid}',
+      );
 
       final profile = await ref
           .read(userProfileRepositoryProvider)
@@ -140,16 +182,28 @@ class AuthController extends Notifier<AuthControllerState> {
           .timeout(const Duration(seconds: 10));
 
       debugPrint(
-        'User profile lookup completed. Profile exists: ${profile != null}',
+        'User profile lookup completed. '
+        'Profile exists: ${profile != null}',
       );
+
+      // ----------------------------------------------------------
+      // NEW USER
+      // ----------------------------------------------------------
 
       if (profile == null) {
         state = state.copyWith(isLoading: false);
 
-        debugPrint('New user detected. Going to onboarding.');
+        debugPrint(
+          'New user detected. '
+          'Going to onboarding.',
+        );
 
         return const AuthResult.newUser();
       }
+
+      // ----------------------------------------------------------
+      // EXISTING USER
+      // ----------------------------------------------------------
 
       state = state.copyWith(isLoading: false, user: profile);
 
@@ -167,33 +221,58 @@ class AuthController extends Notifier<AuthControllerState> {
     }
   }
 
+  // ==============================================================
+  // REGISTER
+  // ==============================================================
+
   Future<AppUser?> register({
     required RegistrationIntent intent,
     required String name,
   }) async {
     debugPrint('REGISTER: started');
 
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      clearInvitation: true,
+    );
 
     try {
       debugPrint('REGISTER: calling UserRegistrationService');
 
-      final user = await _registrationService.register(
+      final result = await _registrationService.register(
         intent: intent,
         name: name,
       );
 
-      debugPrint('REGISTER: service completed. Griho ID = ${user.publicId}');
+      debugPrint(
+        'REGISTER: service completed. '
+        'Griho ID = ${result.user.publicId}',
+      );
 
-      state = state.copyWith(isLoading: false, user: user);
+      state = state.copyWith(
+        isLoading: false,
+        user: result.user,
+        invitationId: result.invitationId,
+      );
 
       ref.invalidate(currentUserProfileProvider);
 
+      if (result.invitationId != null) {
+        debugPrint(
+          'REGISTER: pending invitation found. '
+          'Invitation ID = ${result.invitationId}',
+        );
+      } else {
+        debugPrint('REGISTER: no pending invitation found.');
+      }
+
       debugPrint('REGISTER: completed successfully');
 
-      return user;
+      return result.user;
     } catch (error, stackTrace) {
       debugPrint('REGISTER ERROR: $error');
+
       debugPrint('REGISTER STACK: $stackTrace');
 
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
@@ -201,6 +280,18 @@ class AuthController extends Notifier<AuthControllerState> {
       return null;
     }
   }
+
+  // ==============================================================
+  // CLEAR INVITATION
+  // ==============================================================
+
+  void clearInvitation() {
+    state = state.copyWith(clearInvitation: true);
+  }
+
+  // ==============================================================
+  // SIGN OUT
+  // ==============================================================
 
   Future<void> signOut() async {
     state = state.copyWith(isLoading: true, clearError: true);

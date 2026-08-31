@@ -4,20 +4,21 @@ import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/utils/phone_number_utils.dart';
 import '../providers/auth_controller.dart';
 
 class PhoneLoginScreen extends ConsumerStatefulWidget {
-  const PhoneLoginScreen({
-    super.key,
-  });
+  final String? invitationId;
+
+  const PhoneLoginScreen({super.key, this.invitationId});
 
   @override
-  ConsumerState<PhoneLoginScreen> createState() =>
-      _PhoneLoginScreenState();
+  ConsumerState<PhoneLoginScreen> createState() => _PhoneLoginScreenState();
 }
 
 class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
   final _formKey = GlobalKey<FormState>();
+
   final _phoneController = TextEditingController();
 
   String _completePhoneNumber = '';
@@ -28,68 +29,85 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     super.dispose();
   }
 
+  // ============================================================
+  // SEND OTP
+  // ============================================================
+
   Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final phoneNumber = _completePhoneNumber;
+    final phoneNumber = _completePhoneNumber.trim();
 
     if (phoneNumber.isEmpty) {
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).sendOtp(
-      phoneNumber,
-    );
+    if (!PhoneNumberUtils.isValid(phoneNumber)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid international phone number.'),
+        ),
+      );
+
+      return;
+    }
+
+    await ref.read(authControllerProvider.notifier).sendOtp(phoneNumber);
   }
 
+  // ============================================================
+  // AUTH STATE
+  // ============================================================
+
   void _handleAuthState(
-      AuthControllerState? previous,
-      AuthControllerState next,
-      ) {
+    AuthControllerState? previous,
+    AuthControllerState next,
+  ) {
     if (!mounted) {
       return;
     }
 
     if (next.errorMessage != null &&
         next.errorMessage != previous?.errorMessage) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(next.errorMessage!),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(next.errorMessage!)));
     }
 
     if (next.otpSent &&
         next.verificationId != null &&
         previous?.otpSent != true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('OTP sent successfully.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('OTP sent successfully.')));
 
-      context.push(
-        RouteNames.otpVerification,
-        extra: _completePhoneNumber,
-      );
+      final encodedInvitationId = widget.invitationId == null
+          ? null
+          : Uri.encodeComponent(widget.invitationId!);
+
+      final location = encodedInvitationId == null
+          ? RouteNames.otpVerification
+          : '${RouteNames.otpVerification}'
+                '?invitationId=$encodedInvitationId';
+
+      context.push(location, extra: _completePhoneNumber);
     }
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
 
-    ref.listen<AuthControllerState>(
-      authControllerProvider,
-      _handleAuthState,
-    );
+    ref.listen<AuthControllerState>(authControllerProvider, _handleAuthState);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sign in'),
-      ),
+      appBar: AppBar(title: const Text('Sign in')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -108,7 +126,9 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                 const SizedBox(height: 8),
 
                 Text(
-                  'Enter your phone number to continue.',
+                  widget.invitationId != null
+                      ? 'Sign in with the phone number that received this invitation.'
+                      : 'Enter your phone number to continue.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
 
@@ -134,12 +154,10 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                     onPressed: authState.isLoading ? null : _sendOtp,
                     child: authState.isLoading
                         ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
-                    )
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('Continue'),
                   ),
                 ),

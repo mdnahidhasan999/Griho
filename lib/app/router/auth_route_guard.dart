@@ -1,8 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/controllers/auth_role_resolver.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
 import 'auth_destination_mapper.dart';
 import 'route_names.dart';
 
@@ -12,43 +12,138 @@ class AuthRouteGuard {
   const AuthRouteGuard(this.ref);
 
   Future<String?> redirect(String location) async {
-    final firebaseUser = FirebaseAuth.instance.currentUser;
+    final firebaseUser =
+        FirebaseAuth.instance.currentUser;
 
-    final isSplashRoute = location == RouteNames.splash;
-    final isLoginRoute = location == RouteNames.login;
-    final isOtpRoute = location == RouteNames.otpVerification;
-    final isOnboardingRoute = location == RouteNames.onboarding;
+    // ============================================================
+    // NORMALIZE LOCATION
+    // ============================================================
 
-    final isOwnerRoute = location == RouteNames.ownerHome;
-    final isManagerRoute = location == RouteNames.managerHome;
-    final isCaretakerRoute = location == RouteNames.caretakerHome;
-    final isTenantRoute = location == RouteNames.tenantHome;
+    final uri = Uri.tryParse(location);
+
+    final path = uri?.path ?? location;
+
+    // ============================================================
+    // ROUTE FLAGS
+    // ============================================================
+
+    final isSplashRoute =
+        path == RouteNames.splash;
+
+    final isLoginRoute =
+        path == RouteNames.login;
+
+    final isOtpRoute =
+        path == RouteNames.otpVerification;
+
+    final isOnboardingRoute =
+        path == RouteNames.onboarding;
+
+    final isTenantInvitationRoute =
+    path.startsWith('/i/');
+
+    final isTenantAccountLinkRoute =
+        path == RouteNames.tenantAccountLink;
+
+    final isOwnerRoute =
+        path == RouteNames.ownerHome;
+
+    final isManagerRoute =
+        path == RouteNames.managerHome;
+
+    final isCaretakerRoute =
+        path == RouteNames.caretakerHome;
+
+    final isTenantRoute =
+        path == RouteNames.tenantHome;
 
     final isProtectedRoute =
-        isOwnerRoute || isManagerRoute || isCaretakerRoute || isTenantRoute;
+        isOwnerRoute ||
+            isManagerRoute ||
+            isCaretakerRoute ||
+            isTenantRoute;
 
-    // ------------------------------------------------------------
-    // 1. Splash
-    // ------------------------------------------------------------
+    // ============================================================
+    // 1. SPLASH
+    // ============================================================
 
     if (isSplashRoute) {
       return null;
     }
 
-    // ------------------------------------------------------------
-    // 2. User is NOT authenticated
-    // ------------------------------------------------------------
+    // ============================================================
+    // 2. TENANT INVITATION
+    //
+    // IMPORTANT:
+    //
+    // Invitation link must remain accessible even when
+    // the user is NOT authenticated.
+    //
+    // Example:
+    //
+    // https://griho-crafttech.web.app/i/ABC123
+    //
+    // We MUST NOT redirect this to /login here.
+    // ============================================================
+
+    if (isTenantInvitationRoute) {
+      return null;
+    }
+
+    // ============================================================
+    // 3. USER NOT AUTHENTICATED
+    // ============================================================
 
     if (firebaseUser == null) {
-      if (isLoginRoute || isOtpRoute) {
+      // ----------------------------------------------------------
+      // LOGIN
+      // ----------------------------------------------------------
+
+      if (isLoginRoute) {
         return null;
       }
+
+      // ----------------------------------------------------------
+      // OTP
+      // ----------------------------------------------------------
+
+      if (isOtpRoute) {
+        return null;
+      }
+
+      // ----------------------------------------------------------
+      // ACCOUNT LINK
+      //
+      // Account link requires authentication.
+      // ----------------------------------------------------------
+
+      if (isTenantAccountLinkRoute) {
+        return RouteNames.login;
+      }
+
+      // ----------------------------------------------------------
+      // ONBOARDING
+      //
+      // New user onboarding requires Firebase authentication.
+      // ----------------------------------------------------------
+
+      if (isOnboardingRoute) {
+        return RouteNames.login;
+      }
+
+      // ----------------------------------------------------------
+      // ALL OTHER PROTECTED ROUTES
+      // ----------------------------------------------------------
 
       return RouteNames.login;
     }
 
+    // ============================================================
+    // 4. USER IS AUTHENTICATED
+    // ============================================================
+
     // ------------------------------------------------------------
-    // 3. User IS authenticated
+    // LOGIN
     // ------------------------------------------------------------
 
     if (isLoginRoute) {
@@ -56,61 +151,116 @@ class AuthRouteGuard {
     }
 
     // ------------------------------------------------------------
-    // 4. OTP
+    // OTP
     //
-    // Once Firebase authentication is completed,
-    // OTP screen should no longer be accessible.
+    // Once Firebase authentication is complete,
+    // OTP screen should not remain accessible.
     // ------------------------------------------------------------
 
     if (isOtpRoute) {
       return RouteNames.splash;
     }
 
-    // ------------------------------------------------------------
-    // 5. Onboarding
-    // ------------------------------------------------------------
+    // ============================================================
+    // 5. ONBOARDING
+    // ============================================================
 
     if (isOnboardingRoute) {
       final profile = await ref
           .read(userProfileRepositoryProvider)
-          .getUserByUid(firebaseUser.uid);
+          .getUserByUid(
+        firebaseUser.uid,
+      );
+
+      // ----------------------------------------------------------
+      // Profile already exists.
+      // ----------------------------------------------------------
 
       if (profile != null) {
+        final destination =
+        AuthRoleResolver.resolve(
+          profile.role,
+        );
+
         return AuthDestinationMapper.routeFor(
-          AuthRoleResolver.resolve(profile.role),
+          destination,
         );
       }
+
+      // ----------------------------------------------------------
+      // No profile.
+      //
+      // User can continue onboarding.
+      // ----------------------------------------------------------
 
       return null;
     }
 
-    // ------------------------------------------------------------
-    // 6. Protected routes
-    // ------------------------------------------------------------
+    // ============================================================
+    // 6. TENANT ACCOUNT LINK
+    //
+    // Authentication required.
+    //
+    // IMPORTANT:
+    // Invitation acceptance should normally happen through
+    // TenantInvitationReceiveScreen.
+    // ============================================================
+
+    if (isTenantAccountLinkRoute) {
+      return null;
+    }
+
+    // ============================================================
+    // 7. PROTECTED ROLE ROUTES
+    // ============================================================
 
     if (isProtectedRoute) {
       final profile = await ref
           .read(userProfileRepositoryProvider)
-          .getUserByUid(firebaseUser.uid);
+          .getUserByUid(
+        firebaseUser.uid,
+      );
 
+      // ----------------------------------------------------------
       // Authenticated but profile doesn't exist.
-      // User must complete onboarding.
+      // ----------------------------------------------------------
+
       if (profile == null) {
         return RouteNames.onboarding;
       }
 
-      final destination = AuthRoleResolver.resolve(profile.role);
+      // ----------------------------------------------------------
+      // Resolve actual role.
+      // ----------------------------------------------------------
 
-      final correctRoute = AuthDestinationMapper.routeFor(destination);
+      final destination =
+      AuthRoleResolver.resolve(
+        profile.role,
+      );
 
-      // User is already on the correct route.
-      if (location == correctRoute) {
+      final correctRoute =
+      AuthDestinationMapper.routeFor(
+        destination,
+      );
+
+      // ----------------------------------------------------------
+      // Already on correct dashboard.
+      // ----------------------------------------------------------
+
+      if (path == correctRoute) {
         return null;
       }
 
-      // User tried to access another role's dashboard.
+      // ----------------------------------------------------------
+      // Wrong dashboard.
+      // ----------------------------------------------------------
+
       return correctRoute;
     }
+
+    // ============================================================
+    // 8. OTHER PUBLIC / UNKNOWN ROUTES
+    // ============================================================
 
     return null;
   }
