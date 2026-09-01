@@ -25,7 +25,6 @@ import '../../features/tenants/domain/entities/tenant.dart';
 import '../../features/tenants/presentation/screens/add_tenant_screen.dart';
 import '../../features/tenants/presentation/screens/edit_tenant_screen.dart';
 import '../../features/tenants/presentation/screens/owner_tenant_list_screen.dart';
-import '../../features/tenants/presentation/screens/tenant_account_link_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_details_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_invitation_receive_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_list_screen.dart';
@@ -49,18 +48,14 @@ abstract final class AppRouter {
       // ==========================================================
       // GLOBAL REDIRECT
       // ==========================================================
-
       redirect: (context, state) {
-        return guard.redirect(
-          state.uri.path,
-        );
+        return guard.redirect(state.uri.path);
       },
 
       routes: [
         // ========================================================
         // SPLASH
         // ========================================================
-
         GoRoute(
           path: RouteNames.splash,
           builder: (context, state) {
@@ -71,46 +66,30 @@ abstract final class AppRouter {
         // ========================================================
         // LOGIN
         // ========================================================
-
         GoRoute(
           path: RouteNames.login,
           builder: (context, state) {
-            final invitationId =
-            state.uri.queryParameters[
-            'invitationId'];
+            final invitationId = state.uri.queryParameters['invitationId'];
 
-            return PhoneLoginScreen(
-              invitationId: invitationId,
-            );
+            return PhoneLoginScreen(invitationId: invitationId);
           },
         ),
 
         // ========================================================
         // OTP
         // ========================================================
-
         GoRoute(
           path: RouteNames.otpVerification,
           builder: (context, state) {
-            final phoneNumber =
-            state.extra as String?;
+            final phoneNumber = state.extra as String?;
 
-            if (phoneNumber == null ||
-                phoneNumber
-                    .trim()
-                    .isEmpty) {
+            if (phoneNumber == null || phoneNumber.trim().isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid phone number.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid phone number.')),
               );
             }
 
-            final invitationId =
-            state.uri.queryParameters[
-            'invitationId'];
+            final invitationId = state.uri.queryParameters['invitationId'];
 
             return OtpVerificationScreen(
               phoneNumber: phoneNumber,
@@ -122,7 +101,6 @@ abstract final class AppRouter {
         // ========================================================
         // ONBOARDING
         // ========================================================
-
         GoRoute(
           path: RouteNames.onboarding,
           builder: (context, state) {
@@ -133,7 +111,6 @@ abstract final class AppRouter {
         // ========================================================
         // OWNER HOME
         // ========================================================
-
         GoRoute(
           path: RouteNames.ownerHome,
           builder: (context, state) {
@@ -144,7 +121,6 @@ abstract final class AppRouter {
         // ========================================================
         // PROPERTY
         // ========================================================
-
         GoRoute(
           path: RouteNames.addProperty,
           builder: (context, state) {
@@ -162,91 +138,59 @@ abstract final class AppRouter {
         GoRoute(
           path: RouteNames.propertyDetails,
           builder: (context, state) {
-            final propertyId =
-            state.pathParameters[
-            'propertyId'];
+            final propertyId = state.pathParameters['propertyId'];
 
-            if (propertyId == null ||
-                propertyId.isEmpty) {
+            if (propertyId == null || propertyId.isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid property ID.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid property ID.')),
               );
             }
 
-            return PropertyDetailsScreen(
-              propertyId: propertyId,
-            );
+            return PropertyDetailsScreen(propertyId: propertyId);
           },
         ),
 
         GoRoute(
           path: RouteNames.editProperty,
           builder: (context, state) {
-            final property =
-            state.extra as Property?;
+            final property = state.extra as Property?;
 
             if (property == null) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid property information.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid property information.')),
               );
             }
 
-            return EditPropertyScreen(
-              property: property,
-            );
+            return EditPropertyScreen(property: property);
           },
         ),
 
         // ========================================================
         // UNITS
         // ========================================================
-
         GoRoute(
           path: RouteNames.propertyUnits,
           builder: (context, state) {
-            final propertyId =
-            state.pathParameters[
-            'propertyId'];
+            final propertyId = state.pathParameters['propertyId'];
 
-            if (propertyId == null ||
-                propertyId.isEmpty) {
+            if (propertyId == null || propertyId.isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid property ID.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid property ID.')),
               );
             }
 
-            final arguments =
-            state.extra
-            as PropertyUnitsRouteArguments?;
+            final arguments = state.extra as PropertyUnitsRouteArguments?;
 
             if (arguments == null) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid property information.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid property information.')),
               );
             }
 
             return UnitListScreen(
               propertyId: propertyId,
-              propertyName:
-              arguments.propertyName,
-              numberOfFloors:
-              arguments.numberOfFloors,
+              propertyName: arguments.propertyName,
+              numberOfFloors: arguments.numberOfFloors,
             );
           },
         ),
@@ -254,39 +198,27 @@ abstract final class AppRouter {
         GoRoute(
           path: RouteNames.addUnit,
           builder: (context, state) {
-            final propertyId =
-            state.pathParameters[
-            'propertyId'];
+            final propertyId = state.pathParameters['propertyId'];
 
-            if (propertyId == null ||
-                propertyId.isEmpty) {
+            if (propertyId == null || propertyId.isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid property ID.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid property ID.')),
               );
             }
 
-            final numberOfFloors =
-            state.extra as int?;
+            final numberOfFloors = state.extra as int?;
 
-            if (numberOfFloors == null ||
-                numberOfFloors < 1) {
+            if (numberOfFloors == null || numberOfFloors < 1) {
               return const Scaffold(
                 body: Center(
-                  child: Text(
-                    'Invalid property floor information.',
-                  ),
+                  child: Text('Invalid property floor information.'),
                 ),
               );
             }
 
             return AddUnitScreen(
               propertyId: propertyId,
-              numberOfFloors:
-              numberOfFloors,
+              numberOfFloors: numberOfFloors,
             );
           },
         ),
@@ -294,89 +226,58 @@ abstract final class AppRouter {
         GoRoute(
           path: RouteNames.unitDetails,
           builder: (context, state) {
-            final unitId =
-            state.pathParameters[
-            'unitId'];
+            final unitId = state.pathParameters['unitId'];
 
-            if (unitId == null ||
-                unitId.isEmpty) {
+            if (unitId == null || unitId.isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid unit ID.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid unit ID.')),
               );
             }
 
-            return UnitDetailsScreen(
-              unitId: unitId,
-            );
+            return UnitDetailsScreen(unitId: unitId);
           },
         ),
 
         GoRoute(
           path: RouteNames.editUnit,
           builder: (context, state) {
-            final unit =
-            state.extra as Unit?;
+            final unit = state.extra as Unit?;
 
             if (unit == null) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid unit information.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid unit information.')),
               );
             }
 
-            return EditUnitScreen(
-              unit: unit,
-            );
+            return EditUnitScreen(unit: unit);
           },
         ),
 
         // ========================================================
         // TENANTS
         // ========================================================
-
         GoRoute(
           path: RouteNames.propertyTenants,
           builder: (context, state) {
-            final propertyId =
-            state.pathParameters[
-            'propertyId'];
+            final propertyId = state.pathParameters['propertyId'];
 
-            if (propertyId == null ||
-                propertyId.isEmpty) {
+            if (propertyId == null || propertyId.isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid property ID.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid property ID.')),
               );
             }
 
-            final arguments =
-            state.extra
-            as PropertyTenantsRouteArguments?;
+            final arguments = state.extra as PropertyTenantsRouteArguments?;
 
             if (arguments == null) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid property information.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid property information.')),
               );
             }
 
             return TenantListScreen(
               propertyId: propertyId,
-              propertyName:
-              arguments.propertyName,
+              propertyName: arguments.propertyName,
             );
           },
         ),
@@ -391,61 +292,38 @@ abstract final class AppRouter {
         GoRoute(
           path: RouteNames.tenantDetails,
           builder: (context, state) {
-            final tenantId =
-            state.pathParameters[
-            'tenantId'];
+            final tenantId = state.pathParameters['tenantId'];
 
-            if (tenantId == null ||
-                tenantId.isEmpty) {
+            if (tenantId == null || tenantId.isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid tenant ID.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid tenant ID.')),
               );
             }
 
-            return TenantDetailsScreen(
-              tenantId: tenantId,
-            );
+            return TenantDetailsScreen(tenantId: tenantId);
           },
         ),
 
         GoRoute(
           path: RouteNames.editTenant,
           builder: (context, state) {
-            final tenantId =
-            state.pathParameters[
-            'tenantId'];
+            final tenantId = state.pathParameters['tenantId'];
 
-            if (tenantId == null ||
-                tenantId.isEmpty) {
+            if (tenantId == null || tenantId.isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid tenant ID.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid tenant ID.')),
               );
             }
 
-            final tenant =
-            state.extra as Tenant?;
+            final tenant = state.extra as Tenant?;
 
             if (tenant == null) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid tenant information.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid tenant information.')),
               );
             }
 
-            return EditTenantScreen(
-              tenant: tenant,
-            );
+            return EditTenantScreen(tenant: tenant);
           },
         ),
 
@@ -453,36 +331,6 @@ abstract final class AppRouter {
           path: RouteNames.ownerTenants,
           builder: (context, state) {
             return const OwnerTenantListScreen();
-          },
-        ),
-
-        // ========================================================
-        // TENANT ACCOUNT LINK
-        // ========================================================
-
-        GoRoute(
-          path: RouteNames.tenantAccountLink,
-          name: 'tenantAccountLink',
-          builder: (context, state) {
-            final invitationId =
-            state.uri.queryParameters['invitationId'];
-
-            if (invitationId == null ||
-                invitationId
-                    .trim()
-                    .isEmpty) {
-              return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid tenant invitation.',
-                  ),
-                ),
-              );
-            }
-
-            return TenantAccountLinkScreen(
-              invitationId: invitationId,
-            );
           },
         ),
 
@@ -495,38 +343,25 @@ abstract final class AppRouter {
         //
         // AuthRouteGuard MUST allow this route.
         // ========================================================
-
         GoRoute(
           path: RouteNames.tenantInvitation,
           name: 'tenantInvitation',
           builder: (context, state) {
-            final invitationId =
-            state.pathParameters[
-            'invitationId'];
+            final invitationId = state.pathParameters['invitationId'];
 
-            if (invitationId == null ||
-                invitationId
-                    .trim()
-                    .isEmpty) {
+            if (invitationId == null || invitationId.trim().isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text(
-                    'Invalid invitation link.',
-                  ),
-                ),
+                body: Center(child: Text('Invalid invitation link.')),
               );
             }
 
-            return TenantInvitationReceiveScreen(
-              invitationId: invitationId,
-            );
+            return TenantInvitationReceiveScreen(invitationId: invitationId);
           },
         ),
 
         // ========================================================
         // OTHER ROLES
         // ========================================================
-
         GoRoute(
           path: RouteNames.managerHome,
           builder: (context, state) {

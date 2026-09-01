@@ -14,62 +14,89 @@ import '../providers/auth_controller.dart';
 // ================================================================
 
 class OnboardingScreen extends ConsumerStatefulWidget {
-  const OnboardingScreen({super.key});
+  const OnboardingScreen({
+    super.key,
+  });
 
   @override
-  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen>
+  createState() =>
+      _OnboardingScreenState();
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _formKey =
+  GlobalKey<FormState>();
 
-  final _nameController = TextEditingController();
+  final _nameController =
+  TextEditingController();
 
-  RegistrationIntent? _selectedIntent;
+  RegistrationIntent?
+  _selectedIntent;
 
   @override
   void dispose() {
     _nameController.dispose();
-
     super.dispose();
   }
 
-  // ==============================================================
+  // ============================================================
   // CONTINUE
-  // ==============================================================
+  // ============================================================
 
   Future<void> _continue() async {
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!
+        .validate()) {
       return;
     }
 
-    final intent = _selectedIntent;
+    final intent =
+        _selectedIntent;
 
     if (intent == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an account type.')),
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select an account type.',
+          ),
+        ),
       );
 
       return;
     }
 
-    final controller = ref.read(authControllerProvider.notifier);
-
-    final user = await controller.register(
+    final result =
+    await ref
+        .read(
+      authControllerProvider
+          .notifier,
+    )
+        .register(
       intent: intent,
-      name: _nameController.text.trim(),
+      name:
+      _nameController.text
+          .trim(),
     );
 
-    if (!mounted || user == null) {
+    if (!mounted ||
+        result == null) {
       return;
     }
+
+    final user =
+        result.user;
 
     // ==========================================================
     // OWNER
     // ==========================================================
 
-    if (user.role == UserRole.owner) {
-      context.go(RouteNames.ownerHome);
+    if (user.role ==
+        UserRole.owner) {
+      context.go(
+        RouteNames.ownerHome,
+      );
 
       return;
     }
@@ -78,21 +105,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // TENANT
     // ==========================================================
 
-    if (user.role == UserRole.tenant) {
-      final invitationId = ref.read(authControllerProvider).invitationId;
+    if (user.role ==
+        UserRole.tenant) {
+      final invitationId =
+          result.invitationId;
 
       // --------------------------------------------------------
-      // PENDING INVITATION EXISTS
+      // PENDING INVITATION FOUND
       // --------------------------------------------------------
 
-      if (invitationId != null && invitationId.trim().isNotEmpty) {
-        debugPrint(
-          'ONBOARDING: '
-          'going to tenant invitation screen. '
-          'Invitation ID: $invitationId',
+      if (invitationId != null &&
+          invitationId
+              .trim()
+              .isNotEmpty) {
+        context.go(
+          RouteNames
+              .tenantInvitationPath(
+            invitationId,
+          ),
         );
-
-        context.go('${RouteNames.tenantAccountLink}/$invitationId');
 
         return;
       }
@@ -101,12 +132,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       // NO INVITATION
       // --------------------------------------------------------
 
-      debugPrint(
-        'ONBOARDING: '
-        'no tenant invitation found.',
+      context.go(
+        RouteNames.tenantHome,
       );
-
-      context.go(RouteNames.tenantHome);
 
       return;
     }
@@ -117,11 +145,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     switch (user.role) {
       case UserRole.manager:
-        context.go(RouteNames.managerHome);
+        context.go(
+          RouteNames.managerHome,
+        );
         return;
 
       case UserRole.caretaker:
-        context.go(RouteNames.caretakerHome);
+        context.go(
+          RouteNames.caretakerHome,
+        );
         return;
 
       case UserRole.owner:
@@ -130,75 +162,125 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
-  // ==============================================================
+  // ============================================================
   // BUILD
-  // ==============================================================
+  // ============================================================
 
   @override
-  Widget build(BuildContext context) {
-    final authState = ref.watch(authControllerProvider);
+  Widget build(BuildContext context,) {
+    final authState =
+    ref.watch(
+      authControllerProvider,
+    );
 
-    ref.listen(authControllerProvider, (previous, next) {
-      if (!mounted) {
-        return;
-      }
+    ref.listen(
+      authControllerProvider,
+          (previous, next) {
+        if (!mounted) {
+          return;
+        }
 
-      if (next.errorMessage != null &&
-          next.errorMessage != previous?.errorMessage) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(next.errorMessage!)));
-      }
-    });
+        if (next.errorMessage != null &&
+            next.errorMessage !=
+                previous?.errorMessage) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(
+            SnackBar(
+              content: Text(
+                next.errorMessage!,
+              ),
+            ),
+          );
+        }
+      },
+    );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create your Griho account')),
+      appBar: AppBar(
+        title: const Text(
+          'Create your Griho account',
+        ),
+      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+        child:
+        SingleChildScrollView(
+          padding:
+          const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 24),
+                const SizedBox(
+                  height: 24,
+                ),
 
                 // ==================================================
                 // TITLE
                 // ==================================================
+
                 Text(
                   'Welcome to Griho',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  style:
+                  Theme
+                      .of(
+                    context,
+                  )
+                      .textTheme
+                      .headlineMedium,
                 ),
 
-                const SizedBox(height: 8),
+                const SizedBox(
+                  height: 8,
+                ),
 
                 Text(
                   'Tell us a little about yourself to get started.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style:
+                  Theme
+                      .of(
+                    context,
+                  )
+                      .textTheme
+                      .bodyMedium,
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(
+                  height: 32,
+                ),
 
                 // ==================================================
                 // NAME
                 // ==================================================
+
                 TextFormField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Full Name',
-                    hintText: 'Enter your full name',
-                    border: OutlineInputBorder(),
+                  controller:
+                  _nameController,
+                  textCapitalization:
+                  TextCapitalization
+                      .words,
+                  decoration:
+                  const InputDecoration(
+                    labelText:
+                    'Full Name',
+                    hintText:
+                    'Enter your full name',
+                    border:
+                    OutlineInputBorder(),
                   ),
-                  validator: (value) {
-                    final name = value?.trim() ?? '';
+                  validator: (value,) {
+                    final name =
+                        value?.trim() ??
+                            '';
 
                     if (name.isEmpty) {
                       return 'Please enter your name.';
                     }
 
-                    if (name.length < 2) {
+                    if (name.length <
+                        2) {
                       return 'Name must be at least 2 characters.';
                     }
 
@@ -206,66 +288,118 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   },
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(
+                  height: 32,
+                ),
 
                 // ==================================================
                 // ACCOUNT TYPE
                 // ==================================================
+
                 Text(
                   'How will you use Griho?',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style:
+                  Theme
+                      .of(
+                    context,
+                  )
+                      .textTheme
+                      .titleMedium,
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
 
                 // ==================================================
                 // OWNER
                 // ==================================================
+
                 _AccountTypeCard(
-                  title: 'Property Owner',
-                  description: 'Manage your properties, tenants and bills.',
-                  icon: Icons.home_work_outlined,
-                  selected: _selectedIntent == RegistrationIntent.owner,
+                  title:
+                  'Property Owner',
+                  description:
+                  'Manage your properties, tenants and bills.',
+                  icon:
+                  Icons
+                      .home_work_outlined,
+                  selected:
+                  _selectedIntent ==
+                      RegistrationIntent
+                          .owner,
                   onTap: () {
                     setState(() {
-                      _selectedIntent = RegistrationIntent.owner;
+                      _selectedIntent =
+                          RegistrationIntent
+                              .owner;
                     });
                   },
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
 
                 // ==================================================
                 // TENANT
                 // ==================================================
+
                 _AccountTypeCard(
-                  title: 'Tenant',
-                  description: 'Manage your rent, bills and payments.',
-                  icon: Icons.person_outline,
-                  selected: _selectedIntent == RegistrationIntent.tenant,
+                  title:
+                  'Tenant',
+                  description:
+                  'Manage your rent, bills and payments.',
+                  icon:
+                  Icons
+                      .person_outline,
+                  selected:
+                  _selectedIntent ==
+                      RegistrationIntent
+                          .tenant,
                   onTap: () {
                     setState(() {
-                      _selectedIntent = RegistrationIntent.tenant;
+                      _selectedIntent =
+                          RegistrationIntent
+                              .tenant;
                     });
                   },
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(
+                  height: 32,
+                ),
 
                 // ==================================================
                 // CONTINUE
                 // ==================================================
+
                 SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: authState.isLoading ? null : _continue,
-                    child: authState.isLoading
+                  width:
+                  double.infinity,
+                  child:
+                  FilledButton(
+                    onPressed:
+                    authState
+                        .isLoading
+                        ? null
+                        : _continue,
+                    child:
+                    authState
+                        .isLoading
                         ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Continue'),
+                      height:
+                      20,
+                      width:
+                      20,
+                      child:
+                      CircularProgressIndicator(
+                        strokeWidth:
+                        2,
+                      ),
+                    )
+                        : const Text(
+                      'Continue',
+                    ),
                   ),
                 ),
               ],
@@ -297,41 +431,71 @@ class _AccountTypeCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context,) {
     return Card(
-      clipBehavior: Clip.antiAlias,
+      clipBehavior:
+      Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding:
+          const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(icon, size: 32),
+              Icon(
+                icon,
+                size: 32,
+              ),
 
-              const SizedBox(width: 16),
+              const SizedBox(
+                width: 16,
+              ),
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                  CrossAxisAlignment
+                      .start,
                   children: [
-                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      title,
+                      style:
+                      Theme
+                          .of(
+                        context,
+                      )
+                          .textTheme
+                          .titleMedium,
+                    ),
 
-                    const SizedBox(height: 4),
+                    const SizedBox(
+                      height: 4,
+                    ),
 
                     Text(
                       description,
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style:
+                      Theme
+                          .of(
+                        context,
+                      )
+                          .textTheme
+                          .bodySmall,
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(width: 12),
+              const SizedBox(
+                width: 12,
+              ),
 
               Icon(
                 selected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
+                    ? Icons
+                    .radio_button_checked
+                    : Icons
+                    .radio_button_unchecked,
               ),
             ],
           ),

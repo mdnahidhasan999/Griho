@@ -90,13 +90,17 @@ abstract final class RouteNames {
   // ============================================================
   // TENANT INVITATION
   // ============================================================
-  //
-  // Short user-facing invitation path:
-  //
-  // https://griho-crafttech.web.app/i/ABC123
-  //
-  // ============================================================
 
   static const tenantInvitation =
       '/i/:invitationId';
+
+  // ============================================================
+  // TENANT INVITATION URL
+  // ============================================================
+
+  static String tenantInvitationPath(String invitationId,) {
+    return '/i/${Uri.encodeComponent(
+      invitationId.trim(),
+    )}';
+  }
 }

@@ -621,6 +621,7 @@ class TenantInvitationDataSource {
       transaction.update(tenantReference, {
         'userId': currentUserId,
         'accountStatus': TenantAccountStatus.registered.name,
+        'confirmationStatus': TenantConfirmationStatus.confirmed.name,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 

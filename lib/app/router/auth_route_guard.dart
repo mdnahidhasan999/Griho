@@ -74,16 +74,18 @@ class AuthRouteGuard {
     // ============================================================
     // 2. TENANT INVITATION
     //
-    // IMPORTANT:
+    // PUBLIC ROUTE
     //
-    // Invitation link must remain accessible even when
-    // the user is NOT authenticated.
+    // Must be accessible:
+    //
+    // 1. Not authenticated
+    // 2. Authenticated
     //
     // Example:
     //
-    // https://griho-crafttech.web.app/i/ABC123
+    // /i/ABC123
     //
-    // We MUST NOT redirect this to /login here.
+    // Do NOT redirect this route to login or tenant home.
     // ============================================================
 
     if (isTenantInvitationRoute) {
@@ -113,8 +115,6 @@ class AuthRouteGuard {
 
       // ----------------------------------------------------------
       // ACCOUNT LINK
-      //
-      // Account link requires authentication.
       // ----------------------------------------------------------
 
       if (isTenantAccountLinkRoute) {
@@ -123,8 +123,6 @@ class AuthRouteGuard {
 
       // ----------------------------------------------------------
       // ONBOARDING
-      //
-      // New user onboarding requires Firebase authentication.
       // ----------------------------------------------------------
 
       if (isOnboardingRoute) {
@@ -132,7 +130,7 @@ class AuthRouteGuard {
       }
 
       // ----------------------------------------------------------
-      // ALL OTHER PROTECTED ROUTES
+      // ALL OTHER ROUTES
       // ----------------------------------------------------------
 
       return RouteNames.login;
@@ -152,9 +150,6 @@ class AuthRouteGuard {
 
     // ------------------------------------------------------------
     // OTP
-    //
-    // Once Firebase authentication is complete,
-    // OTP screen should not remain accessible.
     // ------------------------------------------------------------
 
     if (isOtpRoute) {
@@ -190,7 +185,7 @@ class AuthRouteGuard {
       // ----------------------------------------------------------
       // No profile.
       //
-      // User can continue onboarding.
+      // Allow onboarding.
       // ----------------------------------------------------------
 
       return null;
@@ -198,12 +193,6 @@ class AuthRouteGuard {
 
     // ============================================================
     // 6. TENANT ACCOUNT LINK
-    //
-    // Authentication required.
-    //
-    // IMPORTANT:
-    // Invitation acceptance should normally happen through
-    // TenantInvitationReceiveScreen.
     // ============================================================
 
     if (isTenantAccountLinkRoute) {
@@ -259,7 +248,7 @@ class AuthRouteGuard {
     }
 
     // ============================================================
-    // 8. OTHER PUBLIC / UNKNOWN ROUTES
+    // 8. PUBLIC / UNKNOWN ROUTES
     // ============================================================
 
     return null;
