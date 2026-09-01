@@ -139,43 +139,81 @@ class AuthController extends Notifier<AuthControllerState> {
   // SEND OTP
   // ============================================================
 
-  Future<void> sendOtp(String phoneNumber,) async {
+  Future<void> sendOtp(String phoneNumber) async {
     state = state.copyWith(
       isLoading: true,
       clearError: true,
+      otpSent: false,
+      verificationId: null,
     );
 
     try {
-      await _authDataSource.sendOtp(
+      await _authDataSource
+          .sendOtp(
         phoneNumber: phoneNumber,
 
-        onCodeSent: (verificationId,) {
+        // ------------------------------------------------------
+        // CODE SENT
+        // ------------------------------------------------------
+
+        onCodeSent: (verificationId) {
           state = state.copyWith(
             isLoading: false,
-            verificationId:
-            verificationId,
+            verificationId: verificationId,
             otpSent: true,
+          );
+
+          debugPrint(
+            'AUTH: OTP code sent successfully.',
           );
         },
 
-        onVerificationFailed: (message,) {
+        // ------------------------------------------------------
+        // VERIFICATION FAILED
+        // ------------------------------------------------------
+
+        onVerificationFailed: (message) {
           state = state.copyWith(
             isLoading: false,
             errorMessage: message,
           );
+
+          debugPrint(
+            'AUTH: Phone verification failed: $message',
+          );
         },
+
+        // ------------------------------------------------------
+        // AUTO VERIFIED
+        // ------------------------------------------------------
 
         onAutoVerified: () {
           state = state.copyWith(
             isLoading: false,
           );
+
+          debugPrint(
+            'AUTH: Phone automatically verified.',
+          );
+        },
+      )
+          .timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw StateError(
+            'Phone verification timed out. '
+                'Please check your internet connection and try again.',
+          );
         },
       );
     } catch (error) {
+      debugPrint(
+        'AUTH: sendOtp failed: $error',
+      );
+
       state = state.copyWith(
         isLoading: false,
-        errorMessage:
-        error.toString(),
+        errorMessage: error.toString(),
       );
     }
   }

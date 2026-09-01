@@ -147,15 +147,48 @@ service cloud.firestore {
 
       // ----------------------------------------------------------
       // READ
+      //
+      // OWNER:
+      // নিজের tenant record পড়তে পারবে.
+      //
+      // ALREADY LINKED TENANT:
+      // নিজের linked tenant record পড়তে পারবে.
+      //
+      // FIRST-TIME TENANT:
+      // Firebase Auth verified phone number যদি tenant record-এর
+      // phone-এর সাথে match করে এবং tenant এখনও linked না হয়,
+      // তাহলে tenant record পড়তে পারবে।
       // ----------------------------------------------------------
 
       allow read: if isAuthenticated()
                   && (
+                    // OWNER
                     resource.data.ownerId
                        == request.auth.uid
+
                     ||
+
+                    // ALREADY LINKED TENANT
                     resource.data.userId
                        == request.auth.uid
+
+                    ||
+
+                    // FIRST-TIME TENANT
+                    (
+                      (
+                        !resource.data.keys()
+                          .hasAny(['userId'])
+                        ||
+                        resource.data.userId == null
+                      )
+                      &&
+                      request.auth.token.phone_number
+                         != null
+                      &&
+                      resource.data.phone
+                         == request.auth.token.phone_number
+                    )
                   );
 
 
@@ -323,24 +356,28 @@ service cloud.firestore {
       // tenantInvitations.
       // ----------------------------------------------------------
 
-    allow read: if isAuthenticated()
-                && (
-                  resource.data.ownerId == request.auth.uid
-                  ||
-                  resource.data.userId == request.auth.uid
-                  ||
-                  (
+      allow read: if isAuthenticated()
+                  && (
+                    resource.data.ownerId
+                       == request.auth.uid
+                    ||
+                    resource.data.userId
+                       == request.auth.uid
+                    ||
                     (
-                      !resource.data.keys().hasAny(['userId'])
-                      ||
-                      resource.data.userId == null
+                      (
+                        !resource.data.keys()
+                          .hasAny(['userId'])
+                        ||
+                        resource.data.userId == null
+                      )
+                      &&
+                      request.auth.token.phone_number != null
+                      &&
+                      resource.data.phone
+                         == request.auth.token.phone_number
                     )
-                    &&
-                    request.auth.token.phone_number != null
-                    &&
-                    resource.data.phone == request.auth.token.phone_number
-                  )
-                );
+                  );
 
 
       // ----------------------------------------------------------
