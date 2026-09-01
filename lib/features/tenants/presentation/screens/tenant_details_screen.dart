@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../properties/domain/entities/property.dart';
+import '../../../properties/presentation/providers/property_provider.dart';
+import '../../../units/domain/entities/unit.dart';
+import '../../../units/presentation/providers/unit_provider.dart';
 import '../../domain/entities/tenant.dart';
 import '../controllers/tenant_controller.dart';
 import '../providers/property_tenants_provider.dart';
@@ -10,7 +14,10 @@ import '../providers/property_tenants_provider.dart';
 class TenantDetailsScreen extends ConsumerStatefulWidget {
   final String tenantId;
 
-  const TenantDetailsScreen({super.key, required this.tenantId});
+  const TenantDetailsScreen({
+    super.key,
+    required this.tenantId,
+  });
 
   @override
   ConsumerState<TenantDetailsScreen> createState() =>
@@ -72,8 +79,8 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
           title: const Text('Delete Tenant?'),
           content: Text(
             'Are you sure you want to delete '
-            '"${tenant.name}"?\n\n'
-            'This action cannot be undone.',
+                '"${tenant.name}"?\n\n'
+                'This action cannot be undone.',
           ),
           actions: [
             TextButton(
@@ -110,7 +117,10 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(state.error?.toString() ?? 'Unable to delete tenant.'),
+          content: Text(
+            state.error?.toString() ??
+                'Unable to delete tenant.',
+          ),
         ),
       );
 
@@ -124,15 +134,24 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Tenant Details')),
-        body: const Center(child: CircularProgressIndicator()),
+        appBar: AppBar(
+          title: const Text('Tenant Details'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
       );
     }
 
     if (_errorMessage != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Tenant Details')),
-        body: _ErrorView(message: _errorMessage!, onRetry: _loadTenant),
+        appBar: AppBar(
+          title: const Text('Tenant Details'),
+        ),
+        body: _ErrorView(
+          message: _errorMessage!,
+          onRetry: _loadTenant,
+        ),
       );
     }
 
@@ -140,12 +159,26 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
     if (tenant == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Tenant Details')),
-        body: const Center(child: Text('Tenant not found.')),
+        appBar: AppBar(
+          title: const Text('Tenant Details'),
+        ),
+        body: const Center(
+          child: Text('Tenant not found.'),
+        ),
       );
     }
 
-    final tenantState = ref.watch(tenantControllerProvider);
+    final tenantState = ref.watch(
+      tenantControllerProvider,
+    );
+
+    final propertyAsync = ref.watch(
+      propertyByIdProvider(tenant.propertyId),
+    );
+
+    final unitAsync = ref.watch(
+      unitByIdProvider(tenant.unitId),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -156,41 +189,63 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             onPressed: tenantState.isLoading
                 ? null
                 : () async {
-                    final result = await context.push<Tenant>(
-                      RouteNames.editTenant.replaceFirst(
-                        ':tenantId',
-                        tenant.id,
-                      ),
-                      extra: tenant,
-                    );
+              final result = await context.push<Tenant>(
+                RouteNames.editTenant.replaceFirst(
+                  ':tenantId',
+                  tenant.id,
+                ),
+                extra: tenant,
+              );
 
-                    if (!context.mounted) {
-                      return;
-                    }
+              if (!context.mounted) {
+                return;
+              }
 
-                    if (result != null) {
-                      setState(() {
-                        _tenant = result;
-                      });
+              if (result != null) {
+                setState(() {
+                  _tenant = result;
+                });
 
-                      ref.invalidate(
-                        propertyTenantsProvider(result.propertyId),
-                      );
-                    }
-                  },
-            icon: const Icon(Icons.edit_outlined),
+                ref.invalidate(
+                  propertyTenantsProvider(
+                    result.propertyId,
+                  ),
+                );
+
+                ref.invalidate(
+                  propertyByIdProvider(
+                    result.propertyId,
+                  ),
+                );
+
+                ref.invalidate(
+                  unitByIdProvider(
+                    result.unitId,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(
+              Icons.edit_outlined,
+            ),
           ),
           IconButton(
             tooltip: 'Delete Tenant',
-            onPressed: tenantState.isLoading ? null : _deleteTenant,
-            icon: const Icon(Icons.delete_outline),
+            onPressed:
+            tenantState.isLoading
+                ? null
+                : _deleteTenant,
+            icon: const Icon(
+              Icons.delete_outline,
+            ),
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _loadTenant,
         child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics:
+          const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
           children: [
             Card(
@@ -200,65 +255,144 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                   children: [
                     const CircleAvatar(
                       radius: 36,
-                      child: Icon(Icons.person_outline, size: 36),
+                      child: Icon(
+                        Icons.person_outline,
+                        size: 36,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Text(
                       tenant.name,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall,
+                      style: Theme
+                          .of(context)
+                          .textTheme
+                          .headlineSmall,
                     ),
                     const SizedBox(height: 8),
-                    _TenantStatusChip(status: tenant.status),
+                    _TenantStatusChip(
+                      status: tenant.status,
+                    ),
                   ],
                 ),
               ),
             ),
+
             const SizedBox(height: 20),
+
+            // ========================================================
+            // TENANT INFORMATION
+            // ========================================================
+
             _InfoCard(
               title: 'Tenant Information',
               children: [
-                _InfoRow(label: 'Phone', value: tenant.phone),
+                _InfoRow(
+                  label: 'Phone',
+                  value: tenant.phone,
+                ),
                 _InfoRow(
                   label: 'Email',
-                  value: tenant.email?.trim().isNotEmpty == true
+                  value: tenant.email
+                      ?.trim()
+                      .isNotEmpty ==
+                      true
                       ? tenant.email!
                       : 'Not provided',
                 ),
                 _InfoRow(
                   label: 'NID Number',
-                  value: tenant.nidNumber?.trim().isNotEmpty == true
+                  value: tenant.nidNumber
+                      ?.trim()
+                      .isNotEmpty ==
+                      true
                       ? tenant.nidNumber!
                       : 'Not provided',
                 ),
               ],
             ),
+
             const SizedBox(height: 20),
+
+            // ========================================================
+            // PROPERTY INFORMATION
+            // ========================================================
+
             _InfoCard(
               title: 'Property Information',
               children: [
-                _InfoRow(label: 'Property ID', value: tenant.propertyId),
-                _InfoRow(label: 'Unit ID', value: tenant.unitId),
+                propertyAsync.when(
+                  loading: () =>
+                  const _LoadingInfoRow(
+                    label: 'Property',
+                  ),
+                  error: (_, _) =>
+                  const _InfoRow(
+                    label: 'Property',
+                    value: 'Unable to load',
+                  ),
+                  data: (Property? property) {
+                    return _InfoRow(
+                      label: 'Property',
+                      value: property?.name ??
+                          'Property not found',
+                    );
+                  },
+                ),
+
+                unitAsync.when(
+                  loading: () =>
+                  const _LoadingInfoRow(
+                    label: 'Unit',
+                  ),
+                  error: (_, _) =>
+                  const _InfoRow(
+                    label: 'Unit',
+                    value: 'Unable to load',
+                  ),
+                  data: (Unit? unit) {
+                    return _InfoRow(
+                      label: 'Unit',
+                      value: _unitDisplayName(unit),
+                    );
+                  },
+                ),
               ],
             ),
+
             const SizedBox(height: 20),
+
+            // ========================================================
+            // ACCOUNT INFORMATION
+            // ========================================================
+
             _InfoCard(
               title: 'Account Information',
               children: [
-                _InfoRow(label: 'Tenant ID', value: tenant.id),
+                _InfoRow(
+                  label: 'Tenant ID',
+                  value: tenant.id,
+                ),
                 _InfoRow(
                   label: 'User ID',
-                  value: tenant.userId?.trim().isNotEmpty == true
+                  value: tenant.userId
+                      ?.trim()
+                      .isNotEmpty ==
+                      true
                       ? tenant.userId!
                       : 'Not linked',
                 ),
                 _InfoRow(
                   label: 'Created',
-                  value: _formatDate(tenant.createdAt),
+                  value: _formatDate(
+                    tenant.createdAt,
+                  ),
                 ),
                 _InfoRow(
                   label: 'Last Updated',
-                  value: _formatDate(tenant.updatedAt),
+                  value: _formatDate(
+                    tenant.updatedAt,
+                  ),
                 ),
               ],
             ),
@@ -266,6 +400,20 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
         ),
       ),
     );
+  }
+
+  String _unitDisplayName(Unit? unit) {
+    if (unit == null) {
+      return 'Unit not found';
+    }
+
+    final name = unit.name?.trim();
+
+    if (name != null && name.isNotEmpty) {
+      return name;
+    }
+
+    return unit.unitNumber;
   }
 
   String _formatDate(DateTime dateTime) {
@@ -279,32 +427,97 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
   }
 }
 
-class _TenantStatusChip extends StatelessWidget {
-  final TenantStatus status;
+// ============================================================================
+// LOADING INFO
+// ============================================================================
 
-  const _TenantStatusChip({required this.status});
+class _LoadingInfoRow extends StatelessWidget {
+  final String label;
+
+  const _LoadingInfoRow({
+    required this.label,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      ),
-      child: Text(
-        status == TenantStatus.active ? 'Active' : 'Inactive',
-        style: Theme.of(context).textTheme.labelMedium,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment:
+        CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme
+                .of(context)
+                .textTheme
+                .labelMedium,
+          ),
+          const SizedBox(height: 8),
+          const SizedBox(
+            height: 18,
+            width: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+// ============================================================================
+// STATUS
+// ============================================================================
+
+class _TenantStatusChip extends StatelessWidget {
+  final TenantStatus status;
+
+  const _TenantStatusChip({
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        borderRadius:
+        BorderRadius.circular(20),
+        color: Theme
+            .of(context)
+            .colorScheme
+            .surfaceContainerHighest,
+      ),
+      child: Text(
+        status == TenantStatus.active
+            ? 'Active'
+            : 'Inactive',
+        style: Theme
+            .of(context)
+            .textTheme
+            .labelMedium,
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// INFO CARD
+// ============================================================================
+
 class _InfoCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
-  const _InfoCard({required this.title, required this.children});
+  const _InfoCard({
+    required this.title,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -312,9 +525,16 @@ class _InfoCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              title,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .titleMedium,
+            ),
             const SizedBox(height: 16),
             ...children,
           ],
@@ -324,47 +544,88 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// INFO ROW
+// ============================================================================
+
 class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoRow({required this.label, required this.value});
+  const _InfoRow({
+    required this.label,
+    required this.value,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding:
+      const EdgeInsets.only(bottom: 14),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+        CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          Text(
+            label,
+            style: Theme
+                .of(context)
+                .textTheme
+                .labelMedium,
+          ),
           const SizedBox(height: 4),
-          SelectableText(value, style: Theme.of(context).textTheme.bodyMedium),
+          SelectableText(
+            value,
+            style: Theme
+                .of(context)
+                .textTheme
+                .bodyMedium,
+          ),
         ],
       ),
     );
   }
 }
 
+// ============================================================================
+// ERROR
+// ============================================================================
+
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({required this.message, required this.onRetry});
+  const _ErrorView({
+    required this.message,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding:
+        const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+          MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+            ),
             const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
+            Text(
+              message,
+              textAlign:
+              TextAlign.center,
+            ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            FilledButton(
+              onPressed: onRetry,
+              child:
+              const Text('Retry'),
+            ),
           ],
         ),
       ),
