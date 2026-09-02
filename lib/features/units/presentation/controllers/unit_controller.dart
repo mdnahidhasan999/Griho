@@ -2,10 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/create_unit_request.dart';
 import '../../domain/entities/unit.dart';
+import '../../domain/usecases/assign_tenant_user.dart';
 import '../../domain/usecases/create_unit.dart';
 import '../../domain/usecases/delete_unit.dart';
 import '../../domain/usecases/get_unit.dart';
 import '../../domain/usecases/get_units_by_property_id.dart';
+import '../../domain/usecases/remove_tenant_user.dart';
 import '../../domain/usecases/update_unit.dart';
 import '../providers/unit_usecase_provider.dart';
 
@@ -54,6 +56,8 @@ class UnitController extends Notifier<UnitControllerState> {
   late final GetUnitsByPropertyId _getUnitsByPropertyId;
   late final UpdateUnit _updateUnit;
   late final DeleteUnit _deleteUnit;
+  late final AssignTenantUser _assignTenantUser;
+  late final RemoveTenantUser _removeTenantUser;
 
   @override
   UnitControllerState build() {
@@ -63,6 +67,8 @@ class UnitController extends Notifier<UnitControllerState> {
         ref.read(getUnitsByPropertyIdProvider);
     _updateUnit = ref.read(updateUnitProvider);
     _deleteUnit = ref.read(deleteUnitProvider);
+    _assignTenantUser = ref.read(assignTenantUserProvider);
+    _removeTenantUser = ref.read(removeTenantUserProvider);
 
     return const UnitControllerState();
   }
@@ -214,6 +220,72 @@ class UnitController extends Notifier<UnitControllerState> {
         units: remainingUnits,
         clearSelectedUnit:
         selectedUnit?.id == unitId,
+      );
+
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error.toString(),
+      );
+
+      return false;
+    }
+  }
+
+  Future<bool> assignTenantUser({
+    required String unitId,
+    required String tenantUserId,
+  }) async {
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+    );
+
+    try {
+      await _assignTenantUser(
+        unitId: unitId,
+        tenantUserId: tenantUserId,
+      );
+
+      state = state.copyWith(
+        isLoading: false,
+      );
+
+      await loadUnit(
+        unitId: unitId,
+      );
+
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error.toString(),
+      );
+
+      return false;
+    }
+  }
+
+  Future<bool> removeTenantUser({
+    required String unitId,
+  }) async {
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+    );
+
+    try {
+      await _removeTenantUser(
+        unitId: unitId,
+      );
+
+      state = state.copyWith(
+        isLoading: false,
+      );
+
+      await loadUnit(
+        unitId: unitId,
       );
 
       return true;

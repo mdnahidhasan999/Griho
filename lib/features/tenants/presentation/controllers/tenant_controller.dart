@@ -75,8 +75,7 @@ final getTenantByUnitIdProvider = Provider<GetTenantByUnitId>((ref) {
 // ============================================================================
 
 final getActiveTenantsByUnitIdProvider = Provider<GetActiveTenantsByUnitId>((
-  ref,
-) {
+    ref,) {
   return GetActiveTenantsByUnitId(ref.read(tenantRepositoryProvider));
 });
 
@@ -85,9 +84,9 @@ final getActiveTenantsByUnitIdProvider = Provider<GetActiveTenantsByUnitId>((
 // ============================================================================
 
 final cleanupDuplicateActiveTenantsProvider =
-    Provider<CleanupDuplicateActiveTenants>((ref) {
-      return CleanupDuplicateActiveTenants(ref.read(tenantRepositoryProvider));
-    });
+Provider<CleanupDuplicateActiveTenants>((ref) {
+  return CleanupDuplicateActiveTenants(ref.read(tenantRepositoryProvider));
+});
 
 // ============================================================================
 // LINK TENANT ACCOUNT
@@ -113,15 +112,11 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   final LinkTenantAccount _linkTenantAccount;
 
   TenantController({
-    required CreateTenant createTenant,
-    required UpdateTenant updateTenant,
-    required DeleteTenant deleteTenant,
-    required LinkTenantAccount linkTenantAccount,
-  }) : _createTenant = createTenant,
-       _updateTenant = updateTenant,
-       _deleteTenant = deleteTenant,
-       _linkTenantAccount = linkTenantAccount,
-       super(const AsyncData(null));
+    required this._createTenant,
+    required this._updateTenant,
+    required this._deleteTenant,
+    required this._linkTenantAccount,
+  }) : super(const AsyncData(null));
 
   // ==========================================================================
   // CREATE
@@ -223,11 +218,11 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
 // ============================================================================
 
 final tenantControllerProvider =
-    StateNotifierProvider<TenantController, AsyncValue<Tenant?>>((ref) {
-      return TenantController(
-        createTenant: ref.read(createTenantProvider),
-        updateTenant: ref.read(updateTenantProvider),
-        deleteTenant: ref.read(deleteTenantProvider),
-        linkTenantAccount: ref.read(linkTenantAccountProvider),
-      );
-    });
+StateNotifierProvider<TenantController, AsyncValue<Tenant?>>((ref) {
+  return TenantController(
+    createTenant: ref.read(createTenantProvider),
+    updateTenant: ref.read(updateTenantProvider),
+    deleteTenant: ref.read(deleteTenantProvider),
+    linkTenantAccount: ref.read(linkTenantAccountProvider),
+  );
+});

@@ -11,6 +11,8 @@ enum PropertyStatus {
 
 class Property {
   /// Internal Firestore document ID.
+  ///
+  /// Never display this value directly in the UI.
   final String id;
 
   /// Human-readable property ID shown to users.
@@ -20,6 +22,8 @@ class Property {
   final String propertyCode;
 
   /// Internal owner reference.
+  ///
+  /// Never display Firebase UID directly in the UI.
   final String ownerId;
 
   final String name;
@@ -31,6 +35,12 @@ class Property {
 
   /// Total number of floors in this property.
   final int numberOfFloors;
+
+  /// Firebase UIDs of tenants currently assigned to this property.
+  ///
+  /// This field is used only for access control and relationship
+  /// management. It must never be displayed directly in the UI.
+  final List<String> tenantUserIds;
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -45,6 +55,7 @@ class Property {
     required this.type,
     required this.status,
     required this.numberOfFloors,
+    this.tenantUserIds = const [],
     required this.createdAt,
     required this.updatedAt,
   });
@@ -59,6 +70,7 @@ class Property {
     PropertyType? type,
     PropertyStatus? status,
     int? numberOfFloors,
+    List<String>? tenantUserIds,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -71,8 +83,8 @@ class Property {
       description: description ?? this.description,
       type: type ?? this.type,
       status: status ?? this.status,
-      numberOfFloors:
-      numberOfFloors ?? this.numberOfFloors,
+      numberOfFloors: numberOfFloors ?? this.numberOfFloors,
+      tenantUserIds: tenantUserIds ?? this.tenantUserIds,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

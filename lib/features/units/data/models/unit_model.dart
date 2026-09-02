@@ -11,6 +11,7 @@ class UnitModel extends Unit {
     super.name,
     required super.status,
     super.monthlyRent,
+    super.tenantUserId,
     required super.createdAt,
     required super.updatedAt,
   });
@@ -24,6 +25,7 @@ class UnitModel extends Unit {
       name: unit.name,
       status: unit.status,
       monthlyRent: unit.monthlyRent,
+      tenantUserId: unit.tenantUserId,
       createdAt: unit.createdAt,
       updatedAt: unit.updatedAt,
     );
@@ -68,6 +70,10 @@ class UnitModel extends Unit {
         data,
         'monthlyRent',
       ),
+      tenantUserId: _readOptionalString(
+        data,
+        'tenantUserId',
+      ),
       createdAt: _readDateTime(
         data,
         'createdAt',
@@ -87,6 +93,7 @@ class UnitModel extends Unit {
       'name': name,
       'status': status.name,
       'monthlyRent': monthlyRent,
+      'tenantUserId': tenantUserId,
       'createdAt': Timestamp.fromDate(
         createdAt,
       ),

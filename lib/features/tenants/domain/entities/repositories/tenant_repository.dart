@@ -3,6 +3,7 @@ import '../tenant.dart';
 
 abstract class TenantRepository {
   Future<Tenant?> getTenantById(String tenantId);
+  Future<Tenant?> getTenantByUserId(String userId);
 
   Future<List<Tenant>> getTenantsByPropertyId(String propertyId);
 

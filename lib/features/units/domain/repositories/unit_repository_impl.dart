@@ -7,7 +7,9 @@ import '../../domain/repositories/unit_repository.dart';
 class UnitRepositoryImpl implements UnitRepository {
   final UnitDataSource _dataSource;
 
-  const UnitRepositoryImpl({required this._dataSource});
+  const UnitRepositoryImpl({
+    required this._dataSource,
+  });
 
   @override
   Future<Unit?> getUnitById(String unitId) async {
@@ -20,8 +22,10 @@ class UnitRepositoryImpl implements UnitRepository {
   }
 
   @override
-  Future<Unit> createUnit(CreateUnitRequest request) async {
-    return _dataSource.createUnit(request: request);
+  Future<Unit> createUnit(CreateUnitRequest request,) async {
+    return _dataSource.createUnit(
+      request: request,
+    );
   }
 
   @override
@@ -34,5 +38,25 @@ class UnitRepositoryImpl implements UnitRepository {
   @override
   Future<void> deleteUnit(String unitId) async {
     await _dataSource.deleteUnit(unitId);
+  }
+
+  @override
+  Future<void> assignTenantUser({
+    required String unitId,
+    required String tenantUserId,
+  }) async {
+    await _dataSource.assignTenantUser(
+      unitId: unitId,
+      tenantUserId: tenantUserId,
+    );
+  }
+
+  @override
+  Future<void> removeTenantUser({
+    required String unitId,
+  }) async {
+    await _dataSource.removeTenantUser(
+      unitId: unitId,
+    );
   }
 }

@@ -24,7 +24,21 @@ class TenantRepositoryImpl implements TenantRepository {
   Future<Tenant?> getTenantById(String tenantId) {
     return _dataSource.getTenantById(tenantId);
   }
+// ==========================================================================
+// GET TENANT BY USER ID
+// CURRENT TENANT ONLY
+// ==========================================================================
 
+  @override
+  Future<Tenant?> getTenantByUserId(String userId) {
+    final normalizedUserId = userId.trim();
+
+    if (normalizedUserId.isEmpty) {
+      return Future.value(null);
+    }
+
+    return _dataSource.getTenantByUserId(normalizedUserId);
+  }
   // ==========================================================================
   // GET TENANTS BY PROPERTY
   // CURRENT OWNER ONLY
