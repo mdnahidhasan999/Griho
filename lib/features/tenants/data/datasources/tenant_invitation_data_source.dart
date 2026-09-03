@@ -451,32 +451,35 @@ class TenantInvitationDataSource {
 
     final unitReference = _units.doc(invitation.unitId);
 
-    // ----------------------------------------------------------
-    // TENANT ACCESS
-    //
-    // Document ID = Firebase Auth UID
-    // ----------------------------------------------------------
-
     final tenantAccessReference = _firestore
         .collection('tenantAccess')
         .doc(currentUserId);
 
     // ==========================================================
     // ATOMIC TRANSACTION
+    //
+    // IMPORTANT:
+    // We intentionally DO NOT transaction.get() the property
+    // or unit here.
+    //
+    // Before acceptance the tenant does not have read access
+    // to those documents.
+    //
+    // Their update operations are validated by Firestore
+    // Security Rules using request.resource and getAfter().
     // ==========================================================
 
     await _firestore.runTransaction((transaction) async {
       // --------------------------------------------------------
       // FRESH READS
+      //
+      // Only documents the tenant is allowed to read before
+      // acceptance are read here.
       // --------------------------------------------------------
 
       final freshInvitation = await transaction.get(invitationReference);
 
       final freshTenant = await transaction.get(tenantReference);
-
-      final freshProperty = await transaction.get(propertyReference);
-
-      final freshUnit = await transaction.get(unitReference);
 
       final freshTenantAccess = await transaction.get(tenantAccessReference);
 
@@ -492,14 +495,6 @@ class TenantInvitationDataSource {
         throw StateError('Tenant record no longer exists.');
       }
 
-      if (!freshProperty.exists) {
-        throw StateError('Property record no longer exists.');
-      }
-
-      if (!freshUnit.exists) {
-        throw StateError('Unit record no longer exists.');
-      }
-
       // --------------------------------------------------------
       // DATA
       // --------------------------------------------------------
@@ -508,17 +503,8 @@ class TenantInvitationDataSource {
 
       final freshTenantData = freshTenant.data();
 
-      final freshPropertyData = freshProperty.data();
-
-      final freshUnitData = freshUnit.data();
-
-      if (freshInvitationData == null ||
-          freshTenantData == null ||
-          freshPropertyData == null ||
-          freshUnitData == null) {
-        throw StateError(
-          'Invitation, tenant, property, or unit data is unavailable.',
-        );
+      if (freshInvitationData == null || freshTenantData == null) {
+        throw StateError('Invitation or tenant data is unavailable.');
       }
 
       // --------------------------------------------------------
@@ -567,11 +553,11 @@ class TenantInvitationDataSource {
       }
 
       if (freshTenantData['propertyId'] != freshInvitationData['propertyId']) {
-        throw StateError('Tenant property does not match this invitation.');
+        throw StateError('Tenant property does not match the invitation.');
       }
 
       if (freshTenantData['unitId'] != freshInvitationData['unitId']) {
-        throw StateError('Tenant unit does not match this invitation.');
+        throw StateError('Tenant unit does not match the invitation.');
       }
 
       // --------------------------------------------------------
@@ -587,22 +573,6 @@ class TenantInvitationDataSource {
       }
 
       // --------------------------------------------------------
-      // PROPERTY OWNER
-      // --------------------------------------------------------
-
-      if (freshPropertyData['ownerId'] != freshTenantData['ownerId']) {
-        throw StateError('Property owner does not match the tenant owner.');
-      }
-
-      // --------------------------------------------------------
-      // UNIT PROPERTY
-      // --------------------------------------------------------
-
-      if (freshUnitData['propertyId'] != freshTenantData['propertyId']) {
-        throw StateError('Unit does not belong to the tenant property.');
-      }
-
-      // --------------------------------------------------------
       // EXISTING TENANT LINK
       // --------------------------------------------------------
 
@@ -613,20 +583,6 @@ class TenantInvitationDataSource {
           linkedUserId != currentUserId) {
         throw StateError(
           'This tenant account is already linked to another user.',
-        );
-      }
-
-      // --------------------------------------------------------
-      // EXISTING UNIT LINK
-      // --------------------------------------------------------
-
-      final unitTenantUserId = freshUnitData['tenantUserId'];
-
-      if (unitTenantUserId != null &&
-          unitTenantUserId.toString().trim().isNotEmpty &&
-          unitTenantUserId != currentUserId) {
-        throw StateError(
-          'This unit is already linked to another tenant account.',
         );
       }
 
@@ -657,6 +613,7 @@ class TenantInvitationDataSource {
           throw StateError('This user already has access to another unit.');
         }
       }
+
       // ========================================================
       // TENANT ACCOUNT LINK
       // ========================================================
@@ -682,7 +639,7 @@ class TenantInvitationDataSource {
         'ownerId': invitation.ownerId,
         'propertyId': invitation.propertyId,
         'unitId': invitation.unitId,
-        'invitationId': invitationId,
+        'invitationId': normalizedInvitationId,
         'createdAt': existingCreatedAt is Timestamp ? existingCreatedAt : now,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -692,11 +649,27 @@ class TenantInvitationDataSource {
       // ========================================================
 
       if (freshTenantData['status'] == TenantStatus.active.name) {
+        // ------------------------------------------------------
+        // UNIT
+        //
+        // No client-side read.
+        // Security Rules validate the existing unit state
+        // and the final state of this update.
+        // ------------------------------------------------------
+
         transaction.update(unitReference, {
           'tenantUserId': currentUserId,
           'status': UnitStatus.occupied.name,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // ------------------------------------------------------
+        // PROPERTY
+        //
+        // No client-side read.
+        // Security Rules validate the existing property state
+        // and the final state of this update.
+        // ------------------------------------------------------
 
         transaction.update(propertyReference, {
           'tenantUserIds': FieldValue.arrayUnion([currentUserId]),

@@ -12,7 +12,8 @@ class GrihoIdGenerator {
     FirebaseFirestore? firestore,
     FirebaseAuth? firebaseAuth,
     Random? random,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+  })
+      : _firestore = firestore ?? FirebaseFirestore.instance,
         _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
         _random = random ?? Random.secure();
 
@@ -21,6 +22,10 @@ class GrihoIdGenerator {
 
   static const int _idLength = 8;
   static const int _maxAttempts = 10;
+
+  // ==========================================================================
+  // GENERATE AND RESERVE
+  // ==========================================================================
 
   Future<String> generateAndReserve() async {
     final currentUser = _firebaseAuth.currentUser;
@@ -38,25 +43,49 @@ class GrihoIdGenerator {
           .collection('public_ids')
           .doc(publicId);
 
-      final snapshot = await reservationRef.get();
+      final reserved = await _firestore.runTransaction<bool>(
+            (transaction) async {
+          final snapshot = await transaction.get(reservationRef);
 
-      if (snapshot.exists) {
-        continue;
+          // ---------------------------------------------------------------
+          // ID ALREADY EXISTS
+          // ---------------------------------------------------------------
+
+          if (snapshot.exists) {
+            return false;
+          }
+
+          // ---------------------------------------------------------------
+          // RESERVE NEW ID
+          // ---------------------------------------------------------------
+
+          transaction.set(
+            reservationRef,
+            {
+              'publicId': publicId,
+              'uid': currentUser.uid,
+              'createdBy': currentUser.uid,
+              'createdAt': FieldValue.serverTimestamp(),
+            },
+          );
+
+          return true;
+        },
+      );
+
+      if (reserved) {
+        return publicId;
       }
-
-      await reservationRef.set({
-        'publicId': publicId,
-        'createdBy': currentUser.uid,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      return publicId;
     }
 
     throw StateError(
       'Unable to generate a unique Griho ID after $_maxAttempts attempts.',
     );
   }
+
+  // ==========================================================================
+  // RELEASE RESERVATION
+  // ==========================================================================
 
   Future<void> releaseReservation(String publicId) async {
     final currentUser = _firebaseAuth.currentUser;
@@ -65,9 +94,15 @@ class GrihoIdGenerator {
       return;
     }
 
+    final normalizedPublicId = publicId.trim();
+
+    if (normalizedPublicId.isEmpty) {
+      return;
+    }
+
     final reservationRef = _firestore
         .collection('public_ids')
-        .doc(publicId);
+        .doc(normalizedPublicId);
 
     final snapshot = await reservationRef.get();
 
@@ -77,12 +112,22 @@ class GrihoIdGenerator {
 
     final data = snapshot.data();
 
-    if (data?['createdBy'] != currentUser.uid) {
+    if (data == null) {
+      return;
+    }
+
+    final createdBy = data['createdBy'];
+
+    if (createdBy != currentUser.uid) {
       return;
     }
 
     await reservationRef.delete();
   }
+
+  // ==========================================================================
+  // GENERATE ID
+  // ==========================================================================
 
   String _generateId() {
     final buffer = StringBuffer();

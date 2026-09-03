@@ -1,21 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../../auth/data/datasources/user_profile_datasource.dart';
-import '../../../auth/data/models/app_user_model.dart';
 import '../../domain/entities/tenant.dart';
 import '../../domain/entities/tenant_search_result.dart';
 import '../models/tenant_model.dart';
 
 class TenantDataSource {
   final FirebaseFirestore _firestore;
-  final UserProfileDataSource _userProfileDataSource;
 
   TenantDataSource({
     FirebaseFirestore? firestore,
-    UserProfileDataSource? userProfileDataSource,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _userProfileDataSource =
-           userProfileDataSource ?? UserProfileDataSource();
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
 
   // ==========================================================================
   // COLLECTIONS
@@ -24,6 +18,8 @@ class TenantDataSource {
   static const String _tenantCollectionName = 'tenants';
   static const String _unitCollectionName = 'units';
   static const String _propertyCollectionName = 'properties';
+  static const String _publicIdCollectionName = 'public_ids';
+  static const String _phoneLookupCollectionName = 'phone_lookups';
 
   CollectionReference<Map<String, dynamic>> get _tenants {
     return _firestore.collection(_tenantCollectionName);
@@ -35,6 +31,14 @@ class TenantDataSource {
 
   CollectionReference<Map<String, dynamic>> get _properties {
     return _firestore.collection(_propertyCollectionName);
+  }
+
+  CollectionReference<Map<String, dynamic>> get _publicIds {
+    return _firestore.collection(_publicIdCollectionName);
+  }
+
+  CollectionReference<Map<String, dynamic>> get _phoneLookups {
+    return _firestore.collection(_phoneLookupCollectionName);
   }
 
   // ==========================================================================
@@ -205,7 +209,7 @@ class TenantDataSource {
 
       throw StateError(
         'A tenant with this phone number already exists: '
-        '${existingTenant.name} (${existingTenant.phone}).',
+            '${existingTenant.name} (${existingTenant.phone}).',
       );
     }
 
@@ -228,7 +232,7 @@ class TenantDataSource {
 
         throw StateError(
           'This unit already has an active tenant: '
-          '${existingTenant.name} (${existingTenant.phone}).',
+              '${existingTenant.name} (${existingTenant.phone}).',
         );
       }
     }
@@ -408,7 +412,10 @@ class TenantDataSource {
 
       final updatedModel = TenantModel.fromEntity(updatedTenant);
 
-      transaction.update(tenantDocument, updatedModel.toFirestore());
+      transaction.update(
+        tenantDocument,
+        updatedModel.toFirestore(),
+      );
 
       // Only an active tenant gets unit/property access.
       if (currentTenant.status == TenantStatus.active) {
@@ -494,7 +501,7 @@ class TenantDataSource {
 
       throw StateError(
         'A tenant with this phone number already exists: '
-        '${duplicate.name} (${duplicate.phone}).',
+            '${duplicate.name} (${duplicate.phone}).',
       );
     }
 
@@ -519,7 +526,7 @@ class TenantDataSource {
 
         throw StateError(
           'This unit already has an active tenant: '
-          '${duplicate.name} (${duplicate.phone}).',
+              '${duplicate.name} (${duplicate.phone}).',
         );
       }
     }
@@ -577,7 +584,8 @@ class TenantDataSource {
         throw StateError('New unit $newUnitId contains no data.');
       }
 
-      final newUnitPropertyId = (newUnitData['propertyId'] as String?)?.trim();
+      final newUnitPropertyId =
+      (newUnitData['propertyId'] as String?)?.trim();
 
       if (newUnitPropertyId != newPropertyId) {
         throw StateError(
@@ -585,13 +593,17 @@ class TenantDataSource {
         );
       }
 
-      final currentTenant = TenantModel.fromFirestore(currentTenantSnapshot);
+      final currentTenant =
+      TenantModel.fromFirestore(currentTenantSnapshot);
 
       // ----------------------------------------------------------------------
       // UPDATE TENANT
       // ----------------------------------------------------------------------
 
-      transaction.update(tenantDocument, tenant.toFirestore());
+      transaction.update(
+        tenantDocument,
+        tenant.toFirestore(),
+      );
 
       // ----------------------------------------------------------------------
       // REMOVE OLD ACCESS
@@ -767,11 +779,13 @@ class TenantDataSource {
   // ==========================================================================
   // SEARCH REGISTERED TENANT
   //
-  // Owner can search a registered Griho user by:
+  // Search by:
   // - Griho ID
   // - Phone number
   //
-  // A registered Griho user may or may not already have a Tenant document.
+  // Search does NOT query the users collection.
+  //
+  // Registered Griho users may exist without a Tenant document.
   //
   // Firebase UID is internal only and is never shown in UI.
   // ==========================================================================
@@ -783,45 +797,101 @@ class TenantDataSource {
       return null;
     }
 
-    final user = await _findRegisteredUser(normalizedSearch);
+    Map<String, dynamic>? userData;
 
-    if (user == null) {
+    // ------------------------------------------------------------------------
+    // GRIHO ID SEARCH
+    // ------------------------------------------------------------------------
+
+    if (normalizedSearch.toUpperCase().startsWith('GRI-')) {
+      final publicIdSnapshot =
+      await _publicIds.doc(normalizedSearch.toUpperCase()).get();
+
+      if (!publicIdSnapshot.exists) {
+        return null;
+      }
+
+      userData = publicIdSnapshot.data();
+    } else {
+      // ----------------------------------------------------------------------
+      // PHONE SEARCH
+      // ----------------------------------------------------------------------
+
+      final phoneLookupSnapshot =
+      await _phoneLookups.doc(normalizedSearch).get();
+
+      if (!phoneLookupSnapshot.exists) {
+        return null;
+      }
+
+      userData = phoneLookupSnapshot.data();
+    }
+
+    if (userData == null) {
       return null;
     }
 
-    final tenant = await getTenantByUserId(user.uid);
+    final userId = userData['uid'];
+
+    final publicId = userData['publicId'];
+
+    final name = userData['name'];
+
+    final phoneNumber = userData['phoneNumber'];
+
+    final email = userData['email'];
+
+    if (userId is! String || userId
+        .trim()
+        .isEmpty) {
+      return null;
+    }
+
+    if (publicId is! String || publicId
+        .trim()
+        .isEmpty) {
+      return null;
+    }
+
+    if (name is! String || name
+        .trim()
+        .isEmpty) {
+      return null;
+    }
+
+    final normalizedUserId = userId.trim();
+    final normalizedPublicId = publicId.trim();
+    final normalizedName = name.trim();
+
+    final normalizedPhone =
+    phoneNumber is String ? phoneNumber.trim() : '';
+
+    final normalizedEmail =
+    email is String && email
+        .trim()
+        .isNotEmpty
+        ? email.trim()
+        : null;
+
+    // ------------------------------------------------------------------------
+    // CHECK WHETHER USER ALREADY HAS A TENANT
+    // ------------------------------------------------------------------------
+
+    final tenant = await getTenantByUserId(normalizedUserId);
+
+    // ------------------------------------------------------------------------
+    // RETURN SEARCH RESULT
+    // ------------------------------------------------------------------------
 
     return TenantSearchResult(
-      userId: user.uid,
-      publicId: user.publicId,
-      name: user.name,
-      phone: user.phoneNumber ?? '',
-      email: user.email,
+      userId: normalizedUserId,
+      publicId: normalizedPublicId,
+      name: normalizedName,
+      phone: normalizedPhone,
+      email: normalizedEmail,
       tenantId: tenant?.id,
       isExistingTenant: tenant != null,
     );
-  }
-
-  // ==========================================================================
-  // FIND REGISTERED USER
-  // ==========================================================================
-
-  Future<AppUserModel?> _findRegisteredUser(String search) async {
-    final userByPublicId = await _userProfileDataSource.getUserByPublicId(
-      search,
-    );
-
-    if (userByPublicId != null) {
-      return userByPublicId;
-    }
-
-    final userByPhone = await _userProfileDataSource.getUserByPhone(search);
-
-    if (userByPhone != null) {
-      return userByPhone;
-    }
-
-    return null;
   }
 
   // ==========================================================================
