@@ -87,6 +87,10 @@ class TenantInvitationDataSource {
 
     final normalizedPhone = _normalizePhone(phone);
 
+    // ==========================================================
+    // TENANT
+    // ==========================================================
+
     final tenantReference = _tenants.doc(tenantId);
 
     final tenantSnapshot = await tenantReference.get();
@@ -113,6 +117,10 @@ class TenantInvitationDataSource {
       throw StateError('Tenant unit does not match the invitation.');
     }
 
+    // ==========================================================
+    // TENANT PHONE
+    // ==========================================================
+
     final tenantPhone = tenantData['phone']?.toString().trim();
 
     if (tenantPhone == null || tenantPhone.isEmpty) {
@@ -126,6 +134,106 @@ class TenantInvitationDataSource {
         'Invitation phone number does not match the tenant phone number.',
       );
     }
+
+    // ==========================================================
+    // PROPERTY
+    //
+    // Owner is creating the invitation, so owner already has
+    // permission to read the property.
+    // ==========================================================
+
+    final propertyReference = _properties.doc(propertyId);
+
+    final propertySnapshot = await propertyReference.get();
+
+    if (!propertySnapshot.exists) {
+      throw StateError('Property does not exist.');
+    }
+
+    final propertyData = propertySnapshot.data();
+
+    if (propertyData == null) {
+      throw StateError('Property data is unavailable.');
+    }
+
+    if (propertyData['ownerId'] != currentUserId) {
+      throw StateError('You are not authorized to use this property.');
+    }
+
+    // ----------------------------------------------------------
+    // PROPERTY NAME
+    // ----------------------------------------------------------
+
+    final propertyName = propertyData['name'];
+
+    if (propertyName is! String || propertyName.trim().isEmpty) {
+      throw StateError('Property name is missing or invalid.');
+    }
+
+    final normalizedPropertyName = propertyName.trim();
+
+    // ----------------------------------------------------------
+    // PROPERTY CODE
+    // ----------------------------------------------------------
+
+    final propertyCode = propertyData['propertyCode'];
+
+    if (propertyCode is! String || propertyCode.trim().isEmpty) {
+      throw StateError('Property code is missing or invalid.');
+    }
+
+    final normalizedPropertyCode = propertyCode.trim();
+
+    // ==========================================================
+    // UNIT
+    //
+    // Owner already has permission to read this unit.
+    // ==========================================================
+
+    final unitReference = _units.doc(unitId);
+
+    final unitSnapshot = await unitReference.get();
+
+    if (!unitSnapshot.exists) {
+      throw StateError('Unit does not exist.');
+    }
+
+    final unitData = unitSnapshot.data();
+
+    if (unitData == null) {
+      throw StateError('Unit data is unavailable.');
+    }
+
+    if (unitData['propertyId'] != propertyId) {
+      throw StateError('Unit property does not match the invitation.');
+    }
+
+    // ----------------------------------------------------------
+    // UNIT NUMBER
+    // ----------------------------------------------------------
+
+    final unitNumber = unitData['unitNumber'];
+
+    if (unitNumber is! String || unitNumber.trim().isEmpty) {
+      throw StateError('Unit number is missing or invalid.');
+    }
+
+    final normalizedUnitNumber = unitNumber.trim();
+
+    // ----------------------------------------------------------
+    // UNIT NAME
+    // ----------------------------------------------------------
+
+    final rawUnitName = unitData['name'];
+
+    final normalizedUnitName =
+        rawUnitName is String && rawUnitName.trim().isNotEmpty
+        ? rawUnitName.trim()
+        : null;
+
+    // ==========================================================
+    // EXISTING PENDING INVITATION
+    // ==========================================================
 
     final existingSnapshot = await _invitations
         .where('tenantId', isEqualTo: tenantId)
@@ -148,6 +256,10 @@ class TenantInvitationDataSource {
       }
     }
 
+    // ==========================================================
+    // CREATE INVITATION
+    // ==========================================================
+
     final documentReference = _invitations.doc();
 
     final invitationId = documentReference.id;
@@ -163,10 +275,27 @@ class TenantInvitationDataSource {
       ownerId: ownerId,
       tenantId: tenantId,
       phone: normalizedPhone,
+
+      // --------------------------------------------------------
+      // INTERNAL IDs
+      // --------------------------------------------------------
       propertyId: propertyId,
       unitId: unitId,
+
+      // --------------------------------------------------------
+      // HUMAN-READABLE SNAPSHOTS
+      // --------------------------------------------------------
+      propertyName: normalizedPropertyName,
+      propertyCode: normalizedPropertyCode,
+      unitNumber: normalizedUnitNumber,
+      unitName: normalizedUnitName,
+
+      // --------------------------------------------------------
+      // INVITATION
+      // --------------------------------------------------------
       status: TenantInvitationStatus.pending,
       token: token,
+
       createdAt: now,
       updatedAt: now,
       expiresAt: expiresAt,

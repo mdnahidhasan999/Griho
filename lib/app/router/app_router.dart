@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'auth_state_refresh_notifier.dart';
 import 'route_arguments.dart';
 
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
@@ -41,13 +42,13 @@ import 'route_names.dart';
 abstract final class AppRouter {
   static GoRouter create(Ref ref) {
     final guard = AuthRouteGuard(ref);
+    final authRefreshNotifier = AuthStateRefreshNotifier();
 
     return GoRouter(
       initialLocation: RouteNames.splash,
 
-      // ==========================================================
-      // GLOBAL REDIRECT
-      // ==========================================================
+      refreshListenable: authRefreshNotifier,
+
       redirect: (context, state) {
         return guard.redirect(state.uri.path);
       },

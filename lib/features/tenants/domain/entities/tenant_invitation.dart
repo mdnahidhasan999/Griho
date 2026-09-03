@@ -1,9 +1,4 @@
-enum TenantInvitationStatus {
-  pending,
-  accepted,
-  expired,
-  cancelled,
-}
+enum TenantInvitationStatus { pending, accepted, expired, cancelled }
 
 class TenantInvitation {
   final String id;
@@ -23,10 +18,24 @@ class TenantInvitation {
 
   // ============================================================
   // PROPERTY / UNIT
+  //
+  // propertyId / unitId are internal Firestore IDs.
+  //
+  // propertyName / propertyCode / unitNumber / unitName
+  // are human-readable snapshots for UI.
+  //
+  // These snapshot fields are nullable for backward compatibility
+  // with older invitation documents that were created before
+  // snapshot fields were added.
   // ============================================================
 
   final String propertyId;
+  final String? propertyName;
+  final String? propertyCode;
+
   final String unitId;
+  final String? unitNumber;
+  final String? unitName;
 
   // ============================================================
   // INVITATION
@@ -50,7 +59,11 @@ class TenantInvitation {
     required this.tenantId,
     required this.phone,
     required this.propertyId,
+    this.propertyName,
+    this.propertyCode,
     required this.unitId,
+    this.unitNumber,
+    this.unitName,
     required this.status,
     required this.token,
     required this.createdAt,
@@ -68,7 +81,11 @@ class TenantInvitation {
     String? tenantId,
     String? phone,
     String? propertyId,
+    String? propertyName,
+    String? propertyCode,
     String? unitId,
+    String? unitNumber,
+    String? unitName,
     TenantInvitationStatus? status,
     String? token,
     DateTime? createdAt,
@@ -81,7 +98,11 @@ class TenantInvitation {
       tenantId: tenantId ?? this.tenantId,
       phone: phone ?? this.phone,
       propertyId: propertyId ?? this.propertyId,
+      propertyName: propertyName ?? this.propertyName,
+      propertyCode: propertyCode ?? this.propertyCode,
       unitId: unitId ?? this.unitId,
+      unitNumber: unitNumber ?? this.unitNumber,
+      unitName: unitName ?? this.unitName,
       status: status ?? this.status,
       token: token ?? this.token,
       createdAt: createdAt ?? this.createdAt,
@@ -103,7 +124,6 @@ class TenantInvitation {
   // ============================================================
 
   bool get isValid {
-    return status == TenantInvitationStatus.pending &&
-        !isExpired;
+    return status == TenantInvitationStatus.pending && !isExpired;
   }
 }

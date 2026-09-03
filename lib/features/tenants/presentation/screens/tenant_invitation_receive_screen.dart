@@ -206,6 +206,10 @@ class _TenantInvitationReceiveScreenState
 
       if (!mounted) return;
 
+      // --------------------------------------------------------
+      // SUCCESS
+      // --------------------------------------------------------
+
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -319,7 +323,7 @@ class _TenantInvitationReceiveScreenState
     }
 
     // ----------------------------------------------------------
-    // EXPIRED
+    // EXPIRED / INVALID
     // ----------------------------------------------------------
 
     if (!invitation.isValid) {
@@ -395,24 +399,44 @@ class _TenantInvitationReceiveScreenState
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
+                  // ------------------------------------------------
+                  // PROPERTY
+                  // ------------------------------------------------
                   _DetailRow(
                     icon: Icons.home_outlined,
                     title: 'Property',
-                    value: invitation.propertyId,
+                    value:
+                        invitation.propertyName ??
+                        'Property information unavailable',
                   ),
+
                   const Divider(height: 28),
+
+                  // ------------------------------------------------
+                  // UNIT
+                  // ------------------------------------------------
                   _DetailRow(
                     icon: Icons.door_front_door_outlined,
                     title: 'Unit',
-                    value: invitation.unitId,
+                    value: _formatUnit(invitation),
                   ),
+
                   const Divider(height: 28),
+
+                  // ------------------------------------------------
+                  // PHONE
+                  // ------------------------------------------------
                   _DetailRow(
                     icon: Icons.phone_outlined,
                     title: 'Phone',
                     value: invitation.phone,
                   ),
+
                   const Divider(height: 28),
+
+                  // ------------------------------------------------
+                  // EXPIRES
+                  // ------------------------------------------------
                   _DetailRow(
                     icon: Icons.calendar_today_outlined,
                     title: 'Expires',
@@ -488,6 +512,32 @@ class _TenantInvitationReceiveScreenState
         ],
       ),
     );
+  }
+
+  // ============================================================
+  // UNIT DISPLAY
+  // ============================================================
+
+  String _formatUnit(TenantInvitation invitation) {
+    final unitName = invitation.unitName;
+    final unitNumber = invitation.unitNumber;
+
+    if (unitName != null &&
+        unitName.isNotEmpty &&
+        unitNumber != null &&
+        unitNumber.isNotEmpty) {
+      return '$unitName ($unitNumber)';
+    }
+
+    if (unitName != null && unitName.isNotEmpty) {
+      return unitName;
+    }
+
+    if (unitNumber != null && unitNumber.isNotEmpty) {
+      return unitNumber;
+    }
+
+    return 'Unit information unavailable';
   }
 
   // ============================================================

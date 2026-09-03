@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
@@ -15,11 +16,18 @@ class TenantHomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Griho'),
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              _showLogoutDialog(context, ref);
+            },
+          ),
+        ],
       ),
       body: tenantAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => _ErrorView(
           onRetry: () {
             ref.invalidate(currentTenantProvider);
@@ -30,11 +38,11 @@ class TenantHomeScreen extends ConsumerWidget {
             return const _NoTenancyView();
           }
 
-          final propertyAsync =
-          ref.watch(propertyByIdProvider(tenant.propertyId));
+          final propertyAsync = ref.watch(
+            propertyByIdProvider(tenant.propertyId),
+          );
 
-          final unitAsync =
-          ref.watch(unitByIdProvider(tenant.unitId));
+          final unitAsync = ref.watch(unitByIdProvider(tenant.unitId));
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -45,9 +53,7 @@ class TenantHomeScreen extends ConsumerWidget {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               children: [
-                _WelcomeCard(
-                  tenantName: tenant.name,
-                ),
+                _WelcomeCard(tenantName: tenant.name),
 
                 const SizedBox(height: 16),
 
@@ -61,17 +67,11 @@ class TenantHomeScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
 
                 propertyAsync.when(
-                  loading: () => const _LoadingCard(
-                    title: 'Property',
-                  ),
-                  error: (_, _) => const _DataErrorCard(
-                    title: 'Property',
-                  ),
+                  loading: () => const _LoadingCard(title: 'Property'),
+                  error: (_, _) => const _DataErrorCard(title: 'Property'),
                   data: (property) {
                     if (property == null) {
-                      return const _DataErrorCard(
-                        title: 'Property',
-                      );
+                      return const _DataErrorCard(title: 'Property');
                     }
 
                     return _PropertyCard(
@@ -85,17 +85,11 @@ class TenantHomeScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
 
                 unitAsync.when(
-                  loading: () => const _LoadingCard(
-                    title: 'Unit',
-                  ),
-                  error: (_, _) => const _DataErrorCard(
-                    title: 'Unit',
-                  ),
+                  loading: () => const _LoadingCard(title: 'Unit'),
+                  error: (_, _) => const _DataErrorCard(title: 'Unit'),
                   data: (unit) {
                     if (unit == null) {
-                      return const _DataErrorCard(
-                        title: 'Unit',
-                      );
+                      return const _DataErrorCard(title: 'Unit');
                     }
 
                     return _UnitCard(
@@ -113,8 +107,7 @@ class TenantHomeScreen extends ConsumerWidget {
                 const _ComingSoonCard(
                   icon: Icons.payments_outlined,
                   title: 'Rent & Payments',
-                  message:
-                  'Rent and payment information will appear here.',
+                  message: 'Rent and payment information will appear here.',
                 ),
 
                 const SizedBox(height: 12),
@@ -122,8 +115,7 @@ class TenantHomeScreen extends ConsumerWidget {
                 const _ComingSoonCard(
                   icon: Icons.receipt_long_outlined,
                   title: 'Bills',
-                  message:
-                  'Utility and other bills will appear here.',
+                  message: 'Utility and other bills will appear here.',
                 ),
               ],
             ),
@@ -141,9 +133,7 @@ class TenantHomeScreen extends ConsumerWidget {
 class _WelcomeCard extends StatelessWidget {
   final String tenantName;
 
-  const _WelcomeCard({
-    required this.tenantName,
-  });
+  const _WelcomeCard({required this.tenantName});
 
   @override
   Widget build(BuildContext context) {
@@ -167,10 +157,7 @@ class _WelcomeCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Welcome back',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+                  Text('Welcome back', style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 4),
                   Text(
                     tenantName,
@@ -222,17 +209,9 @@ class _TenantAccountCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _InfoRow(
-              icon: Icons.person_outline,
-              label: 'Name',
-              value: name,
-            ),
+            _InfoRow(icon: Icons.person_outline, label: 'Name', value: name),
             const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.phone_outlined,
-              label: 'Phone',
-              value: phone,
-            ),
+            _InfoRow(icon: Icons.phone_outlined, label: 'Phone', value: phone),
             const SizedBox(height: 12),
             _InfoRow(
               icon: Icons.verified_user_outlined,
@@ -406,25 +385,18 @@ class _InfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 20,
-          color: Theme.of(context).colorScheme.primary,
-        ),
+        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
         const SizedBox(width: 12),
         SizedBox(
           width: 90,
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
+          child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
         ),
         Expanded(
           child: Text(
             value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
       ],
@@ -439,9 +411,7 @@ class _InfoRow extends StatelessWidget {
 class _LoadingCard extends StatelessWidget {
   final String title;
 
-  const _LoadingCard({
-    required this.title,
-  });
+  const _LoadingCard({required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -453,9 +423,7 @@ class _LoadingCard extends StatelessWidget {
             const SizedBox(
               width: 20,
               height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
             const SizedBox(width: 16),
             Text('Loading $title...'),
@@ -473,9 +441,7 @@ class _LoadingCard extends StatelessWidget {
 class _DataErrorCard extends StatelessWidget {
   final String title;
 
-  const _DataErrorCard({
-    required this.title,
-  });
+  const _DataErrorCard({required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -483,9 +449,7 @@ class _DataErrorCard extends StatelessWidget {
       child: ListTile(
         leading: const Icon(Icons.error_outline),
         title: Text('$title unavailable'),
-        subtitle: const Text(
-          'The requested information could not be loaded.',
-        ),
+        subtitle: const Text('The requested information could not be loaded.'),
       ),
     );
   }
@@ -520,7 +484,7 @@ class _NoTenancyView extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'Your account is ready, but no active tenancy '
-                  'is connected to your account yet.',
+              'is connected to your account yet.',
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -538,9 +502,7 @@ class _NoTenancyView extends StatelessWidget {
 class _ErrorView extends StatelessWidget {
   final VoidCallback onRetry;
 
-  const _ErrorView({
-    required this.onRetry,
-  });
+  const _ErrorView({required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -550,10 +512,7 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 64,
-            ),
+            const Icon(Icons.error_outline, size: 64),
             const SizedBox(height: 16),
             Text(
               'Unable to load your account',
@@ -592,16 +551,8 @@ class _ComingSoonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        leading: Icon(
-          icon,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(message),
       ),
     );
@@ -619,8 +570,43 @@ String _formatStatus(String value) {
 
   final formatted = value.replaceAllMapped(
     RegExp(r'([A-Z])'),
-        (match) => ' ${match.group(1)}',
+    (match) => ' ${match.group(1)}',
   );
 
   return formatted[0].toUpperCase() + formatted.substring(1);
+}
+
+Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
+  final shouldLogout = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(false);
+            },
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(true);
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      );
+    },
+  );
+
+  if (shouldLogout != true) {
+    return;
+  }
+  await ref
+
+      .read(authControllerProvider.notifier)
+
+      .signOut();
 }

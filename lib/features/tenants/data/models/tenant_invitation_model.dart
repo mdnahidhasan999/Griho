@@ -9,7 +9,11 @@ class TenantInvitationModel extends TenantInvitation {
     required super.tenantId,
     required super.phone,
     required super.propertyId,
+    super.propertyName,
+    super.propertyCode,
     required super.unitId,
+    super.unitNumber,
+    super.unitName,
     required super.status,
     required super.token,
     required super.createdAt,
@@ -21,16 +25,18 @@ class TenantInvitationModel extends TenantInvitation {
   // FROM ENTITY
   // ============================================================
 
-  factory TenantInvitationModel.fromEntity(
-      TenantInvitation invitation,
-      ) {
+  factory TenantInvitationModel.fromEntity(TenantInvitation invitation) {
     return TenantInvitationModel(
       id: invitation.id,
       ownerId: invitation.ownerId,
       tenantId: invitation.tenantId,
       phone: invitation.phone,
       propertyId: invitation.propertyId,
+      propertyName: invitation.propertyName,
+      propertyCode: invitation.propertyCode,
       unitId: invitation.unitId,
+      unitNumber: invitation.unitNumber,
+      unitName: invitation.unitName,
       status: invitation.status,
       token: invitation.token,
       createdAt: invitation.createdAt,
@@ -57,55 +63,66 @@ class TenantInvitationModel extends TenantInvitation {
     return TenantInvitationModel(
       id: document.id,
 
-      ownerId: _readRequiredString(
-        data,
-        'ownerId',
-      ),
+      // --------------------------------------------------------
+      // OWNER
+      // --------------------------------------------------------
 
-      tenantId: _readRequiredString(
-        data,
-        'tenantId',
-      ),
+      ownerId: _readRequiredString(data, 'ownerId'),
 
-      phone: _readRequiredString(
-        data,
-        'phone',
-      ),
+      // --------------------------------------------------------
+      // TENANT
+      // --------------------------------------------------------
 
-      propertyId: _readRequiredString(
-        data,
-        'propertyId',
-      ),
+      tenantId: _readRequiredString(data, 'tenantId'),
 
-      unitId: _readRequiredString(
-        data,
-        'unitId',
-      ),
+      phone: _readRequiredString(data, 'phone'),
+
+      // --------------------------------------------------------
+      // PROPERTY
+      //
+      // propertyId remains required because it is part of the
+      // invitation relationship.
+      //
+      // propertyName/propertyCode are nullable because older
+      // invitation documents may not contain these snapshots.
+      // --------------------------------------------------------
+
+      propertyId: _readRequiredString(data, 'propertyId'),
+
+      propertyName: _readOptionalString(data, 'propertyName'),
+
+      propertyCode: _readOptionalString(data, 'propertyCode'),
+
+      // --------------------------------------------------------
+      // UNIT
+      // --------------------------------------------------------
+
+      unitId: _readRequiredString(data, 'unitId'),
+
+      unitNumber: _readOptionalString(data, 'unitNumber'),
+
+      unitName: _readOptionalString(data, 'unitName'),
+
+      // --------------------------------------------------------
+      // INVITATION
+      // --------------------------------------------------------
 
       status: TenantInvitationStatus.values.firstWhere(
             (status) => status.name == data['status'],
         orElse: () => TenantInvitationStatus.pending,
       ),
 
-      token: _readRequiredString(
-        data,
-        'token',
-      ),
+      token: _readRequiredString(data, 'token'),
 
-      createdAt: _readDateTime(
-        data,
-        'createdAt',
-      ),
+      // --------------------------------------------------------
+      // DATES
+      // --------------------------------------------------------
 
-      updatedAt: _readDateTime(
-        data,
-        'updatedAt',
-      ),
+      createdAt: _readDateTime(data, 'createdAt'),
 
-      expiresAt: _readDateTime(
-        data,
-        'expiresAt',
-      ),
+      updatedAt: _readDateTime(data, 'updatedAt'),
+
+      expiresAt: _readDateTime(data, 'expiresAt'),
     );
   }
 
@@ -118,22 +135,37 @@ class TenantInvitationModel extends TenantInvitation {
       'ownerId': ownerId,
       'tenantId': tenantId,
       'phone': phone,
+
+      // --------------------------------------------------------
+      // INTERNAL IDs
+      // --------------------------------------------------------
+
       'propertyId': propertyId,
       'unitId': unitId,
+
+      // --------------------------------------------------------
+      // HUMAN-READABLE SNAPSHOTS
+      //
+      // New invitations will save these fields.
+      // --------------------------------------------------------
+
+      'propertyName': propertyName,
+      'propertyCode': propertyCode,
+      'unitNumber': unitNumber,
+      'unitName': unitName,
+
+      // --------------------------------------------------------
+      // INVITATION
+      // --------------------------------------------------------
+
       'status': status.name,
       'token': token,
 
-      'createdAt': Timestamp.fromDate(
-        createdAt,
-      ),
+      'createdAt': Timestamp.fromDate(createdAt),
 
-      'updatedAt': Timestamp.fromDate(
-        updatedAt,
-      ),
+      'updatedAt': Timestamp.fromDate(updatedAt),
 
-      'expiresAt': Timestamp.fromDate(
-        expiresAt,
-      ),
+      'expiresAt': Timestamp.fromDate(expiresAt),
     };
   }
 
@@ -154,6 +186,35 @@ class TenantInvitationModel extends TenantInvitation {
     }
 
     return value.trim();
+  }
+
+  // ============================================================
+  // OPTIONAL STRING
+  // ============================================================
+
+  static String? _readOptionalString(
+      Map<String, dynamic> data,
+      String field,
+      ) {
+    final value = data[field];
+
+    if (value == null) {
+      return null;
+    }
+
+    if (value is! String) {
+      throw StateError(
+        'Tenant invitation field "$field" is invalid.',
+      );
+    }
+
+    final normalizedValue = value.trim();
+
+    if (normalizedValue.isEmpty) {
+      return null;
+    }
+
+    return normalizedValue;
   }
 
   // ============================================================
