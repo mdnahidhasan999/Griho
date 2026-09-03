@@ -1,8 +1,10 @@
 import '../create_tenant_request.dart';
 import '../tenant.dart';
+import '../tenant_search_result.dart';
 
 abstract class TenantRepository {
   Future<Tenant?> getTenantById(String tenantId);
+
   Future<Tenant?> getTenantByUserId(String userId);
 
   Future<List<Tenant>> getTenantsByPropertyId(String propertyId);
@@ -11,7 +13,7 @@ abstract class TenantRepository {
 
   Future<List<Tenant>> getActiveTenantsByUnitId(String unitId);
 
-  Future<List<Tenant>> searchTenants(String search);
+  Future<TenantSearchResult?> searchRegisteredTenant(String search);
 
   Future<Tenant?> findTenantByPhone({
     required String phone,

@@ -5,7 +5,7 @@ import '../controllers/tenant_controller.dart';
 
 final searchRegisteredTenantProvider =
 Provider<SearchRegisteredTenant>((ref) {
-  return SearchRegisteredTenant(
-    ref.read(tenantRepositoryProvider),
-  );
+  final repository = ref.read(tenantRepositoryProvider);
+
+  return SearchRegisteredTenant(repository);
 });

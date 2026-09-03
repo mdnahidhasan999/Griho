@@ -4,6 +4,8 @@ import '../../domain/entities/create_tenant_request.dart';
 import '../../domain/entities/repositories/tenant_repository.dart';
 import '../../domain/entities/tenant.dart';
 
+import '../../domain/entities/tenant_search_result.dart'
+    show TenantSearchResult;
 import '../datasources/tenant_data_source.dart';
 import '../models/tenant_model.dart';
 
@@ -24,10 +26,11 @@ class TenantRepositoryImpl implements TenantRepository {
   Future<Tenant?> getTenantById(String tenantId) {
     return _dataSource.getTenantById(tenantId);
   }
-// ==========================================================================
-// GET TENANT BY USER ID
-// CURRENT TENANT ONLY
-// ==========================================================================
+
+  // ==========================================================================
+  // GET TENANT BY USER ID
+  // CURRENT TENANT ONLY
+  // ==========================================================================
 
   @override
   Future<Tenant?> getTenantByUserId(String userId) {
@@ -39,6 +42,7 @@ class TenantRepositoryImpl implements TenantRepository {
 
     return _dataSource.getTenantByUserId(normalizedUserId);
   }
+
   // ==========================================================================
   // GET TENANTS BY PROPERTY
   // CURRENT OWNER ONLY
@@ -82,12 +86,11 @@ class TenantRepositoryImpl implements TenantRepository {
   }
 
   // ==========================================================================
-  // SEARCH TENANTS
+  // SEARCH REGISTERED TENANT
   // ==========================================================================
-
   @override
-  Future<List<Tenant>> searchTenants(String search) {
-    return _dataSource.searchTenants(search);
+  Future<TenantSearchResult?> searchRegisteredTenant(String search) {
+    return _dataSource.searchRegisteredTenant(search);
   }
 
   // ==========================================================================
