@@ -13,6 +13,7 @@ import '../../domain/entities/tenant.dart';
 import '../../domain/usecases/cleanup_duplicate_active_tenants.dart';
 import '../../domain/usecases/create_tenant.dart';
 import '../../domain/usecases/delete_tenant.dart';
+import '../../domain/usecases/end_tenancy.dart';
 import '../../domain/usecases/get_active_tenants_by_unit_id.dart';
 import '../../domain/usecases/get_tenant.dart';
 import '../../domain/usecases/get_tenant_by_unit_id.dart';
@@ -35,7 +36,9 @@ final tenantRepositoryProvider = Provider<TenantRepository>((ref) {
 // ============================================================================
 
 final createTenantProvider = Provider<CreateTenant>((ref) {
-  return CreateTenant(repository: ref.read(tenantRepositoryProvider));
+  return CreateTenant(
+    repository: ref.read(tenantRepositoryProvider),
+  );
 });
 
 // ============================================================================
@@ -43,7 +46,9 @@ final createTenantProvider = Provider<CreateTenant>((ref) {
 // ============================================================================
 
 final updateTenantProvider = Provider<UpdateTenant>((ref) {
-  return UpdateTenant(repository: ref.read(tenantRepositoryProvider));
+  return UpdateTenant(
+    repository: ref.read(tenantRepositoryProvider),
+  );
 });
 
 // ============================================================================
@@ -51,7 +56,19 @@ final updateTenantProvider = Provider<UpdateTenant>((ref) {
 // ============================================================================
 
 final deleteTenantProvider = Provider<DeleteTenant>((ref) {
-  return DeleteTenant(repository: ref.read(tenantRepositoryProvider));
+  return DeleteTenant(
+    repository: ref.read(tenantRepositoryProvider),
+  );
+});
+
+// ============================================================================
+// END TENANCY
+// ============================================================================
+
+final endTenancyProvider = Provider<EndTenancy>((ref) {
+  return EndTenancy(
+    repository: ref.read(tenantRepositoryProvider),
+  );
 });
 
 // ============================================================================
@@ -59,7 +76,9 @@ final deleteTenantProvider = Provider<DeleteTenant>((ref) {
 // ============================================================================
 
 final getTenantProvider = Provider<GetTenant>((ref) {
-  return GetTenant(repository: ref.read(tenantRepositoryProvider));
+  return GetTenant(
+    repository: ref.read(tenantRepositoryProvider),
+  );
 });
 
 // ============================================================================
@@ -67,16 +86,20 @@ final getTenantProvider = Provider<GetTenant>((ref) {
 // ============================================================================
 
 final getTenantByUnitIdProvider = Provider<GetTenantByUnitId>((ref) {
-  return GetTenantByUnitId(ref.read(tenantRepositoryProvider));
+  return GetTenantByUnitId(
+    ref.read(tenantRepositoryProvider),
+  );
 });
 
 // ============================================================================
 // GET ACTIVE TENANTS BY UNIT
 // ============================================================================
 
-final getActiveTenantsByUnitIdProvider = Provider<GetActiveTenantsByUnitId>((
-    ref,) {
-  return GetActiveTenantsByUnitId(ref.read(tenantRepositoryProvider));
+final getActiveTenantsByUnitIdProvider =
+Provider<GetActiveTenantsByUnitId>((ref) {
+  return GetActiveTenantsByUnitId(
+    ref.read(tenantRepositoryProvider),
+  );
 });
 
 // ============================================================================
@@ -85,7 +108,9 @@ final getActiveTenantsByUnitIdProvider = Provider<GetActiveTenantsByUnitId>((
 
 final cleanupDuplicateActiveTenantsProvider =
 Provider<CleanupDuplicateActiveTenants>((ref) {
-  return CleanupDuplicateActiveTenants(ref.read(tenantRepositoryProvider));
+  return CleanupDuplicateActiveTenants(
+    ref.read(tenantRepositoryProvider),
+  );
 });
 
 // ============================================================================
@@ -98,7 +123,9 @@ Provider<CleanupDuplicateActiveTenants>((ref) {
 // ============================================================================
 
 final linkTenantAccountProvider = Provider<LinkTenantAccount>((ref) {
-  return LinkTenantAccount(repository: ref.read(tenantRepositoryProvider));
+  return LinkTenantAccount(
+    repository: ref.read(tenantRepositoryProvider),
+  );
 });
 
 // ============================================================================
@@ -109,12 +136,14 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   final CreateTenant _createTenant;
   final UpdateTenant _updateTenant;
   final DeleteTenant _deleteTenant;
+  final EndTenancy _endTenancy;
   final LinkTenantAccount _linkTenantAccount;
 
   TenantController({
     required this._createTenant,
     required this._updateTenant,
     required this._deleteTenant,
+    required this._endTenancy,
     required this._linkTenantAccount,
   }) : super(const AsyncData(null));
 
@@ -185,6 +214,26 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   }
 
   // ==========================================================================
+  // END TENANCY
+  // ==========================================================================
+
+  Future<Tenant?> endTenancy(String tenantId) async {
+    state = const AsyncLoading();
+
+    try {
+      final endedTenant = await _endTenancy(tenantId);
+
+      state = AsyncData(endedTenant);
+
+      return endedTenant;
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+
+      return null;
+    }
+  }
+
+  // ==========================================================================
   // DELETE
   // ==========================================================================
 
@@ -223,6 +272,7 @@ StateNotifierProvider<TenantController, AsyncValue<Tenant?>>((ref) {
     createTenant: ref.read(createTenantProvider),
     updateTenant: ref.read(updateTenantProvider),
     deleteTenant: ref.read(deleteTenantProvider),
+    endTenancy: ref.read(endTenancyProvider),
     linkTenantAccount: ref.read(linkTenantAccountProvider),
   );
 });

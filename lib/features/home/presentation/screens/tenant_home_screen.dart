@@ -53,10 +53,16 @@ class TenantHomeScreen extends ConsumerWidget {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               children: [
+                // ==========================================================
+                // WELCOME
+                // ==========================================================
                 _WelcomeCard(tenantName: tenant.name),
 
                 const SizedBox(height: 16),
 
+                // ==========================================================
+                // TENANT PROFILE
+                // ==========================================================
                 _TenantAccountCard(
                   name: tenant.name,
                   phone: tenant.phone,
@@ -66,6 +72,9 @@ class TenantHomeScreen extends ConsumerWidget {
 
                 const SizedBox(height: 16),
 
+                // ==========================================================
+                // CURRENT PROPERTY
+                // ==========================================================
                 propertyAsync.when(
                   loading: () => const _LoadingCard(title: 'Property'),
                   error: (_, _) => const _DataErrorCard(title: 'Property'),
@@ -76,6 +85,7 @@ class TenantHomeScreen extends ConsumerWidget {
 
                     return _PropertyCard(
                       propertyName: property.name,
+                      propertyCode: property.propertyCode,
                       address: property.address,
                       propertyType: property.type.name,
                     );
@@ -84,6 +94,9 @@ class TenantHomeScreen extends ConsumerWidget {
 
                 const SizedBox(height: 16),
 
+                // ==========================================================
+                // CURRENT UNIT
+                // ==========================================================
                 unitAsync.when(
                   loading: () => const _LoadingCard(title: 'Unit'),
                   error: (_, _) => const _DataErrorCard(title: 'Unit'),
@@ -104,19 +117,40 @@ class TenantHomeScreen extends ConsumerWidget {
 
                 const SizedBox(height: 16),
 
-                const _ComingSoonCard(
-                  icon: Icons.payments_outlined,
-                  title: 'Rent & Payments',
-                  message: 'Rent and payment information will appear here.',
+                // ==========================================================
+                // RENT SUMMARY
+                // ==========================================================
+                const _RentSummaryCard(),
+
+                const SizedBox(height: 16),
+
+                // ==========================================================
+                // QUICK ACTIONS
+                // ==========================================================
+                propertyAsync.when(
+                  loading: () =>
+                      const _QuickActionsCard(propertyAvailable: false),
+                  error: (_, _) =>
+                      const _QuickActionsCard(propertyAvailable: false),
+                  data: (property) {
+                    return _QuickActionsCard(
+                      propertyAvailable: property != null,
+                      propertyName: property?.name,
+                      propertyCode: property?.propertyCode,
+                      address: property?.address,
+                      propertyType: property?.type.name,
+                    );
+                  },
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
 
-                const _ComingSoonCard(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Bills',
-                  message: 'Utility and other bills will appear here.',
-                ),
+                // ==========================================================
+                // RECENT ACTIVITY
+                // ==========================================================
+                const _RecentActivityCard(),
+
+                const SizedBox(height: 24),
               ],
             ),
           );
@@ -203,25 +237,32 @@ class _TenantAccountCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'My Account',
+              'Tenant Profile',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 16),
+
             _InfoRow(icon: Icons.person_outline, label: 'Name', value: name),
+
             const SizedBox(height: 12),
+
             _InfoRow(icon: Icons.phone_outlined, label: 'Phone', value: phone),
+
             const SizedBox(height: 12),
+
             _InfoRow(
               icon: Icons.verified_user_outlined,
               label: 'Account',
               value: _formatStatus(accountStatus),
             ),
+
             const SizedBox(height: 12),
+
             _InfoRow(
               icon: Icons.badge_outlined,
-              label: 'Tenant Status ',
+              label: 'Tenant Status',
               value: _formatStatus(tenantStatus),
             ),
           ],
@@ -237,11 +278,13 @@ class _TenantAccountCard extends StatelessWidget {
 
 class _PropertyCard extends StatelessWidget {
   final String propertyName;
+  final String propertyCode;
   final String? address;
   final String propertyType;
 
   const _PropertyCard({
     required this.propertyName,
+    required this.propertyCode,
     required this.address,
     required this.propertyType,
   });
@@ -257,17 +300,28 @@ class _PropertyCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'My Property',
+              'Current Property',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
+
             const SizedBox(height: 16),
+
             _InfoRow(
               icon: Icons.home_work_outlined,
               label: 'Property',
               value: propertyName,
             ),
+
+            const SizedBox(height: 12),
+
+            _InfoRow(
+              icon: Icons.tag_outlined,
+              label: 'Code',
+              value: propertyCode,
+            ),
+
             if (address != null && address!.trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               _InfoRow(
@@ -276,7 +330,9 @@ class _PropertyCard extends StatelessWidget {
                 value: address!,
               ),
             ],
+
             const SizedBox(height: 12),
+
             _InfoRow(
               icon: Icons.category_outlined,
               label: 'Type',
@@ -319,17 +375,20 @@ class _UnitCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'My Unit',
+              'Current Unit',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
+
             const SizedBox(height: 16),
+
             _InfoRow(
               icon: Icons.meeting_room_outlined,
               label: 'Unit',
               value: unitNumber,
             ),
+
             if (unitName != null && unitName!.trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               _InfoRow(
@@ -338,26 +397,358 @@ class _UnitCard extends StatelessWidget {
                 value: unitName!,
               ),
             ],
+
             const SizedBox(height: 12),
+
             _InfoRow(
               icon: Icons.layers_outlined,
               label: 'Floor',
               value: floorNumber.toString(),
             ),
+
             const SizedBox(height: 12),
+
             _InfoRow(
               icon: Icons.home_outlined,
               label: 'Status',
               value: _formatStatus(status),
             ),
+
             if (monthlyRent != null) ...[
               const SizedBox(height: 12),
               _InfoRow(
                 icon: Icons.payments_outlined,
                 label: 'Monthly Rent',
-                value: '৳${monthlyRent!.toStringAsFixed(2)}',
+                value: _formatCurrency(monthlyRent!),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// RENT SUMMARY CARD
+// ============================================================================
+
+class _RentSummaryCard extends StatelessWidget {
+  const _RentSummaryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.account_balance_wallet_outlined,
+              size: 28,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Rent Summary',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Rent, payment and due information will appear here once the billing system is available.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// QUICK ACTIONS CARD
+// ============================================================================
+
+class _QuickActionsCard extends StatelessWidget {
+  final bool propertyAvailable;
+  final String? propertyName;
+  final String? propertyCode;
+  final String? address;
+  final String? propertyType;
+
+  const _QuickActionsCard({
+    required this.propertyAvailable,
+    this.propertyName,
+    this.propertyCode,
+    this.address,
+    this.propertyType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Quick Actions',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _QuickActionButton(
+                    icon: Icons.payments_outlined,
+                    label: 'Rent',
+                    enabled: false,
+                    onPressed: null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _QuickActionButton(
+                    icon: Icons.receipt_long_outlined,
+                    label: 'Bills',
+                    enabled: false,
+                    onPressed: null,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _QuickActionButton(
+                    icon: Icons.history_outlined,
+                    label: 'Payments',
+                    enabled: false,
+                    onPressed: null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _QuickActionButton(
+                    icon: Icons.home_work_outlined,
+                    label: 'Property',
+                    enabled: propertyAvailable,
+                    onPressed: propertyAvailable
+                        ? () {
+                            _showPropertyDetails(
+                              context,
+                              propertyName: propertyName!,
+                              propertyCode: propertyCode!,
+                              address: address,
+                              propertyType: propertyType!,
+                            );
+                          }
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// QUICK ACTION BUTTON
+// ============================================================================
+
+class _QuickActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool enabled;
+  final VoidCallback? onPressed;
+
+  const _QuickActionButton({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+    );
+  }
+}
+
+// ============================================================================
+// PROPERTY DETAILS DIALOG
+// ============================================================================
+
+Future<void> _showPropertyDetails(
+  BuildContext context, {
+  required String propertyName,
+  required String propertyCode,
+  required String? address,
+  required String propertyType,
+}) async {
+  await showDialog<void>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Property Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DialogInfoRow(
+                icon: Icons.home_work_outlined,
+                label: 'Property',
+                value: propertyName,
+              ),
+              const SizedBox(height: 16),
+              _DialogInfoRow(
+                icon: Icons.tag_outlined,
+                label: 'Code',
+                value: propertyCode,
+              ),
+              if (address != null && address.trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _DialogInfoRow(
+                  icon: Icons.location_on_outlined,
+                  label: 'Address',
+                  value: address,
+                ),
+              ],
+              const SizedBox(height: 16),
+              _DialogInfoRow(
+                icon: Icons.category_outlined,
+                label: 'Type',
+                value: _formatStatus(propertyType),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+// ============================================================================
+// DIALOG INFO ROW
+// ============================================================================
+
+class _DialogInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _DialogInfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// RECENT ACTIVITY CARD
+// ============================================================================
+
+class _RecentActivityCard extends StatelessWidget {
+  const _RecentActivityCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.history_outlined,
+              size: 28,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Recent Activity',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Recent rent, bill and payment activity will appear here once those systems are available.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -388,7 +779,7 @@ class _InfoRow extends StatelessWidget {
         Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
         const SizedBox(width: 12),
         SizedBox(
-          width: 90,
+          width: 95,
           child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
         ),
         Expanded(
@@ -464,6 +855,8 @@ class _NoTenancyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -473,19 +866,35 @@ class _NoTenancyView extends StatelessWidget {
             Icon(
               Icons.home_work_outlined,
               size: 72,
-              color: Theme.of(context).colorScheme.primary,
+              color: theme.colorScheme.primary,
             ),
+
             const SizedBox(height: 24),
+
             Text(
-              'Welcome to Griho',
-              style: Theme.of(context).textTheme.headlineSmall,
+              'No Active Tenancy',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
             ),
+
             const SizedBox(height: 12),
+
             Text(
-              'Your account is ready, but no active tenancy '
-              'is connected to your account yet.',
-              style: Theme.of(context).textTheme.bodyMedium,
+              'Your account is active, but you currently do not have '
+                  'an active tenancy connected to your account.',
+              style: theme.textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+
+            const SizedBox(height: 12),
+
+            Text(
+              'When a property owner sends you a new invitation, '
+                  'you can review and accept it to connect a tenancy '
+                  'to your account.',
+              style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
           ],
@@ -533,33 +942,6 @@ class _ErrorView extends StatelessWidget {
 }
 
 // ============================================================================
-// COMING SOON CARD
-// ============================================================================
-
-class _ComingSoonCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-
-  const _ComingSoonCard({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(message),
-      ),
-    );
-  }
-}
-
-// ============================================================================
 // HELPERS
 // ============================================================================
 
@@ -575,6 +957,14 @@ String _formatStatus(String value) {
 
   return formatted[0].toUpperCase() + formatted.substring(1);
 }
+
+String _formatCurrency(double amount) {
+  return '৳${amount.toStringAsFixed(2)}';
+}
+
+// ============================================================================
+// LOGOUT
+// ============================================================================
 
 Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
   final shouldLogout = await showDialog<bool>(
@@ -604,9 +994,6 @@ Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
   if (shouldLogout != true) {
     return;
   }
-  await ref
 
-      .read(authControllerProvider.notifier)
-
-      .signOut();
+  await ref.read(authControllerProvider.notifier).signOut();
 }

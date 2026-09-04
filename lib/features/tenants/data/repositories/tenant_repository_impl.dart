@@ -3,9 +3,8 @@ import '../../../../core/services/current_user_service.dart';
 import '../../domain/entities/create_tenant_request.dart';
 import '../../domain/entities/repositories/tenant_repository.dart';
 import '../../domain/entities/tenant.dart';
+import '../../domain/entities/tenant_search_result.dart';
 
-import '../../domain/entities/tenant_search_result.dart'
-    show TenantSearchResult;
 import '../datasources/tenant_data_source.dart';
 import '../models/tenant_model.dart';
 
@@ -86,11 +85,33 @@ class TenantRepositoryImpl implements TenantRepository {
   }
 
   // ==========================================================================
-  // SEARCH REGISTERED TENANT
+  // SEARCH REGISTERED TENANT BY GRIHO ID
   // ==========================================================================
+
   @override
-  Future<TenantSearchResult?> searchRegisteredTenant(String search) {
-    return _dataSource.searchRegisteredTenant(search);
+  Future<TenantSearchResult?> searchRegisteredTenantByPublicId(
+    String publicId,
+  ) {
+    final ownerId = _currentUserService.requiredUid;
+
+    return _dataSource.searchRegisteredTenantByPublicId(
+      publicId: publicId,
+      ownerId: ownerId,
+    );
+  }
+
+  // ==========================================================================
+  // SEARCH REGISTERED TENANT BY PHONE
+  // ==========================================================================
+
+  @override
+  Future<TenantSearchResult?> searchRegisteredTenantByPhone(String phone) {
+    final ownerId = _currentUserService.requiredUid;
+
+    return _dataSource.searchRegisteredTenantByPhone(
+      phone: phone,
+      ownerId: ownerId,
+    );
   }
 
   // ==========================================================================
@@ -131,6 +152,7 @@ class TenantRepositoryImpl implements TenantRepository {
     final userId = request.userId?.trim();
 
     final email = request.email?.trim();
+
     final nidNumber = request.nidNumber?.trim();
 
     final tenant = TenantModel(
@@ -222,6 +244,17 @@ class TenantRepositoryImpl implements TenantRepository {
       ownerId: ownerId,
       keepTenantId: keepTenantId,
     );
+  }
+
+  // ==========================================================================
+  // END TENANCY
+  // ==========================================================================
+
+  @override
+  Future<Tenant> endTenancy(String tenantId) async {
+    final ownerId = _currentUserService.requiredUid;
+
+    return _dataSource.endTenancy(tenantId: tenantId, ownerId: ownerId);
   }
 
   // ==========================================================================

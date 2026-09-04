@@ -13,27 +13,63 @@ abstract class TenantRepository {
 
   Future<List<Tenant>> getActiveTenantsByUnitId(String unitId);
 
-  Future<TenantSearchResult?> searchRegisteredTenant(String search);
+  // ============================================================
+  // SEARCH REGISTERED TENANT
+  // ============================================================
+
+  Future<TenantSearchResult?> searchRegisteredTenantByPublicId(String publicId);
+
+  Future<TenantSearchResult?> searchRegisteredTenantByPhone(String phone);
+
+  // ============================================================
+  // FIND TENANT BY PHONE
+  // ============================================================
 
   Future<Tenant?> findTenantByPhone({
     required String phone,
     required String ownerId,
   });
 
+  // ============================================================
+  // CREATE TENANT
+  // ============================================================
+
   Future<Tenant> createTenant(CreateTenantRequest request);
 
+  // ============================================================
+  // UPDATE TENANT
+  // ============================================================
+
   Future<Tenant> updateTenant(Tenant tenant);
+
+  // ============================================================
+  // LINK TENANT ACCOUNT
+  // ============================================================
 
   Future<Tenant> linkTenantAccount({
     required String tenantId,
     required String userId,
   });
 
+  // ============================================================
+  // CLEANUP DUPLICATE ACTIVE TENANTS
+  // ============================================================
+
   Future<void> cleanupDuplicateActiveTenants({
     required String unitId,
     required String ownerId,
     required String keepTenantId,
   });
+
+  // ============================================================
+  // END TENANCY
+  // ============================================================
+
+  Future<Tenant> endTenancy(String tenantId);
+
+  // ============================================================
+  // DELETE TENANT
+  // ============================================================
 
   Future<void> deleteTenant(String tenantId);
 }

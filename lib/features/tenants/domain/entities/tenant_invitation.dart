@@ -1,4 +1,10 @@
-enum TenantInvitationStatus { pending, accepted, expired, cancelled }
+enum TenantInvitationStatus {
+  pending,
+  accepted,
+  expired,
+  cancelled,
+  rejected,
+}
 
 class TenantInvitation {
   final String id;
@@ -18,15 +24,6 @@ class TenantInvitation {
 
   // ============================================================
   // PROPERTY / UNIT
-  //
-  // propertyId / unitId are internal Firestore IDs.
-  //
-  // propertyName / propertyCode / unitNumber / unitName
-  // are human-readable snapshots for UI.
-  //
-  // These snapshot fields are nullable for backward compatibility
-  // with older invitation documents that were created before
-  // snapshot fields were added.
   // ============================================================
 
   final String propertyId;

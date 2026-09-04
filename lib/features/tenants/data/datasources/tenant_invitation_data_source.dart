@@ -818,8 +818,13 @@ class TenantInvitationDataSource {
   }
 
   // ============================================================
-  // CANCEL INVITATION
-  // OWNER ONLY
+  // CANCEL / REJECT INVITATION
+  //
+  // OWNER:
+  // pending → cancelled
+  //
+  // TENANT:
+  // pending → rejected
   // ============================================================
 
   Future<void> cancelInvitation(String invitationId) async {
@@ -828,28 +833,68 @@ class TenantInvitationDataSource {
     final normalizedInvitationId = invitationId.trim();
 
     if (normalizedInvitationId.isEmpty) {
-      return;
+      throw ArgumentError('Invitation ID cannot be empty.');
     }
 
-    final document = _invitations.doc(normalizedInvitationId);
+    final invitationReference = _invitations.doc(normalizedInvitationId);
 
-    final snapshot = await document.get();
+    final snapshot = await invitationReference.get();
 
     if (!snapshot.exists) {
-      return;
+      throw StateError('Invitation does not exist.');
     }
 
     final invitation = TenantInvitationModel.fromFirestore(snapshot);
 
-    if (invitation.ownerId != currentUserId) {
-      throw StateError('You are not authorized to cancel this invitation.');
+    if (invitation.status != TenantInvitationStatus.pending) {
+      throw StateError('This invitation is no longer pending.');
     }
 
-    if (invitation.status != TenantInvitationStatus.pending) {
+    // ==========================================================
+    // OWNER CANCEL
+    // ==========================================================
+
+    if (invitation.ownerId == currentUserId) {
+      await invitationReference.update({
+        'status': TenantInvitationStatus.cancelled.name,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
       return;
     }
 
-    await _deleteInvitationDocument(invitation.id);
+    // ==========================================================
+    // TENANT REJECT
+    // ==========================================================
+
+    final firebaseUser = _auth.currentUser;
+
+    if (firebaseUser == null) {
+      throw StateError('You must be signed in.');
+    }
+
+    final firebasePhone = firebaseUser.phoneNumber?.trim();
+
+    if (firebasePhone == null || firebasePhone.isEmpty) {
+      throw StateError('Your Firebase phone number is not available.');
+    }
+
+    final normalizedFirebasePhone = PhoneNumberUtils.normalizeAndValidate(
+      firebasePhone,
+    );
+
+    final normalizedInvitationPhone = PhoneNumberUtils.normalizeAndValidate(
+      invitation.phone,
+    );
+
+    if (normalizedFirebasePhone != normalizedInvitationPhone) {
+      throw StateError('You are not authorized to reject this invitation.');
+    }
+
+    await invitationReference.update({
+      'status': TenantInvitationStatus.rejected.name,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // ============================================================

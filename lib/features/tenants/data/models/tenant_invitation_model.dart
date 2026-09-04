@@ -50,8 +50,8 @@ class TenantInvitationModel extends TenantInvitation {
   // ============================================================
 
   factory TenantInvitationModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> document,
-      ) {
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
     final data = document.data();
 
     if (data == null) {
@@ -63,29 +63,11 @@ class TenantInvitationModel extends TenantInvitation {
     return TenantInvitationModel(
       id: document.id,
 
-      // --------------------------------------------------------
-      // OWNER
-      // --------------------------------------------------------
-
       ownerId: _readRequiredString(data, 'ownerId'),
-
-      // --------------------------------------------------------
-      // TENANT
-      // --------------------------------------------------------
 
       tenantId: _readRequiredString(data, 'tenantId'),
 
       phone: _readRequiredString(data, 'phone'),
-
-      // --------------------------------------------------------
-      // PROPERTY
-      //
-      // propertyId remains required because it is part of the
-      // invitation relationship.
-      //
-      // propertyName/propertyCode are nullable because older
-      // invitation documents may not contain these snapshots.
-      // --------------------------------------------------------
 
       propertyId: _readRequiredString(data, 'propertyId'),
 
@@ -93,30 +75,18 @@ class TenantInvitationModel extends TenantInvitation {
 
       propertyCode: _readOptionalString(data, 'propertyCode'),
 
-      // --------------------------------------------------------
-      // UNIT
-      // --------------------------------------------------------
-
       unitId: _readRequiredString(data, 'unitId'),
 
       unitNumber: _readOptionalString(data, 'unitNumber'),
 
       unitName: _readOptionalString(data, 'unitName'),
 
-      // --------------------------------------------------------
-      // INVITATION
-      // --------------------------------------------------------
-
       status: TenantInvitationStatus.values.firstWhere(
-            (status) => status.name == data['status'],
+        (status) => status.name == data['status'],
         orElse: () => TenantInvitationStatus.pending,
       ),
 
       token: _readRequiredString(data, 'token'),
-
-      // --------------------------------------------------------
-      // DATES
-      // --------------------------------------------------------
 
       createdAt: _readDateTime(data, 'createdAt'),
 
@@ -136,27 +106,13 @@ class TenantInvitationModel extends TenantInvitation {
       'tenantId': tenantId,
       'phone': phone,
 
-      // --------------------------------------------------------
-      // INTERNAL IDs
-      // --------------------------------------------------------
-
       'propertyId': propertyId,
       'unitId': unitId,
-
-      // --------------------------------------------------------
-      // HUMAN-READABLE SNAPSHOTS
-      //
-      // New invitations will save these fields.
-      // --------------------------------------------------------
 
       'propertyName': propertyName,
       'propertyCode': propertyCode,
       'unitNumber': unitNumber,
       'unitName': unitName,
-
-      // --------------------------------------------------------
-      // INVITATION
-      // --------------------------------------------------------
 
       'status': status.name,
       'token': token,
@@ -173,10 +129,7 @@ class TenantInvitationModel extends TenantInvitation {
   // REQUIRED STRING
   // ============================================================
 
-  static String _readRequiredString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String _readRequiredString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! String || value.trim().isEmpty) {
@@ -192,10 +145,7 @@ class TenantInvitationModel extends TenantInvitation {
   // OPTIONAL STRING
   // ============================================================
 
-  static String? _readOptionalString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -203,9 +153,7 @@ class TenantInvitationModel extends TenantInvitation {
     }
 
     if (value is! String) {
-      throw StateError(
-        'Tenant invitation field "$field" is invalid.',
-      );
+      throw StateError('Tenant invitation field "$field" is invalid.');
     }
 
     final normalizedValue = value.trim();
@@ -221,18 +169,13 @@ class TenantInvitationModel extends TenantInvitation {
   // DATE TIME
   // ============================================================
 
-  static DateTime _readDateTime(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime _readDateTime(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is Timestamp) {
       return value.toDate();
     }
 
-    throw StateError(
-      'Tenant invitation field "$field" is missing or invalid.',
-    );
+    throw StateError('Tenant invitation field "$field" is missing or invalid.');
   }
 }

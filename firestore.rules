@@ -36,64 +36,64 @@ service cloud.firestore {
     // PHONE LOOKUPS
     // ============================================================
 
-  match /phone_lookups/{phoneNumber} {
+    match /phone_lookups/{phoneNumber} {
 
-    allow get: if isAuthenticated();
+      allow get: if isAuthenticated();
 
-    allow create: if isAuthenticated()
-                  && request.resource.data.uid
-                     == request.auth.uid
-                  && request.resource.data.phoneNumber
-                     == phoneNumber;
+      allow create: if isAuthenticated()
+                    && request.resource.data.uid
+                       == request.auth.uid
+                    && request.resource.data.phoneNumber
+                       == phoneNumber;
 
-    allow update: if isAuthenticated()
-                  && resource.data.uid
-                     == request.auth.uid
-                  && request.resource.data.uid
-                     == resource.data.uid
-                  && request.resource.data.phoneNumber
-                     == resource.data.phoneNumber
-                  && request.resource.data.publicId
-                     == resource.data.publicId;
+      allow update: if isAuthenticated()
+                    && resource.data.uid
+                       == request.auth.uid
+                    && request.resource.data.uid
+                       == resource.data.uid
+                    && request.resource.data.phoneNumber
+                       == resource.data.phoneNumber
+                    && request.resource.data.publicId
+                       == resource.data.publicId;
 
-    allow delete: if isAuthenticated()
-                  && resource.data.uid
-                     == request.auth.uid;
-  }
+      allow delete: if isAuthenticated()
+                    && resource.data.uid
+                       == request.auth.uid;
+    }
 
 
     // ============================================================
     // PUBLIC IDS
     // ============================================================
 
- match /public_ids/{publicId} {
+    match /public_ids/{publicId} {
 
-   allow get: if isAuthenticated();
+      allow get: if isAuthenticated();
 
-   allow create: if isAuthenticated()
-                 && request.resource.data.publicId
-                    == publicId
-                 && request.resource.data.uid
-                    == request.auth.uid
-                 && request.resource.data.createdBy
-                    == request.auth.uid;
+      allow create: if isAuthenticated()
+                    && request.resource.data.publicId
+                       == publicId
+                    && request.resource.data.uid
+                       == request.auth.uid
+                    && request.resource.data.createdBy
+                       == request.auth.uid;
 
-   allow update: if isAuthenticated()
-                 && resource.data.uid
-                    == request.auth.uid
-                 && resource.data.createdBy
-                    == request.auth.uid
-                 && request.resource.data.publicId
-                    == resource.data.publicId
-                 && request.resource.data.uid
-                    == resource.data.uid
-                 && request.resource.data.createdBy
-                    == resource.data.createdBy;
+      allow update: if isAuthenticated()
+                    && resource.data.uid
+                       == request.auth.uid
+                    && resource.data.createdBy
+                       == request.auth.uid
+                    && request.resource.data.publicId
+                       == resource.data.publicId
+                    && request.resource.data.uid
+                       == resource.data.uid
+                    && request.resource.data.createdBy
+                       == resource.data.createdBy;
 
-   allow delete: if isAuthenticated()
-                 && resource.data.createdBy
-                    == request.auth.uid;
- }
+      allow delete: if isAuthenticated()
+                    && resource.data.createdBy
+                       == request.auth.uid;
+    }
 
 
     // ============================================================
@@ -156,9 +156,6 @@ service cloud.firestore {
 
                       // ==========================================
                       // TENANT ACCEPTANCE
-                      //
-                      // Only the acceptance transaction may add
-                      // the authenticated tenant to tenantUserIds.
                       // ==========================================
 
                       (
@@ -374,9 +371,6 @@ service cloud.firestore {
 
                       // ==========================================
                       // TENANT ACCEPTANCE
-                      //
-                      // The unit must be unassigned before the
-                      // acceptance transaction.
                       // ==========================================
 
                       (
@@ -457,9 +451,6 @@ service cloud.firestore {
 
       // ----------------------------------------------------------
       // CREATE
-      //
-      // Must happen as part of the invitation acceptance
-      // transaction.
       // ----------------------------------------------------------
 
       allow create: if isAuthenticated()
@@ -478,61 +469,47 @@ service cloud.firestore {
 
                     && request.resource.data.invitationId is string
 
-                    // Tenant must be linked to this Firebase user
-                    // in the post-transaction state.
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
                     ).data.userId
                        == request.auth.uid
 
-                    // Tenant/property/unit relationship must match.
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
                     ).data.ownerId
                        == request.resource.data.ownerId
 
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
                     ).data.propertyId
                        == request.resource.data.propertyId
 
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
                     ).data.unitId
                        == request.resource.data.unitId
 
-                    // Invitation must be accepted in the same
-                    // transaction.
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
                     ).data.status
                        == 'accepted'
 
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
                     ).data.tenantId
                        == request.resource.data.tenantId
 
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
                     ).data.propertyId
                        == request.resource.data.propertyId
 
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
                     ).data.unitId
                        == request.resource.data.unitId
 
-                    &&
-                    getAfter(
+                    && getAfter(
                       /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
                     ).data.ownerId
                        == request.resource.data.ownerId;
@@ -540,9 +517,6 @@ service cloud.firestore {
 
       // ----------------------------------------------------------
       // UPDATE
-      //
-      // Existing access relationship cannot be moved to another
-      // tenant/property/unit by the tenant.
       // ----------------------------------------------------------
 
       allow update: if isAuthenticated()
@@ -573,9 +547,72 @@ service cloud.firestore {
       // ----------------------------------------------------------
       // DELETE
       // ----------------------------------------------------------
+      //
+      // Tenant can delete their own access.
+      //
+      // Owner can delete tenant access ONLY as part of a valid
+      // End Tenancy transaction.
+      //
+      // ----------------------------------------------------------
 
       allow delete: if isAuthenticated()
-                    && request.auth.uid == userId;
+                    && (
+
+                      // ==========================================================
+                      // TENANT
+                      // ==========================================================
+
+                      (
+                        request.auth.uid
+                           == resource.data.userId
+                      )
+
+                      ||
+
+                      // ==========================================================
+                      // OWNER — END TENANCY
+                      // ==========================================================
+
+                      (
+                        resource.data.ownerId
+                           == request.auth.uid
+
+                        &&
+
+                        getAfter(
+                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
+                        ).data.ownerId
+                           == request.auth.uid
+
+                        &&
+
+                        getAfter(
+                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
+                        ).data.userId
+                           == resource.data.userId
+
+                        &&
+
+                        getAfter(
+                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
+                        ).data.propertyId
+                           == resource.data.propertyId
+
+                        &&
+
+                        getAfter(
+                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
+                        ).data.unitId
+                           == resource.data.unitId
+
+                        &&
+
+                        getAfter(
+                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
+                        ).data.status
+                           == 'inactive'
+                      )
+                    );
     }
 
 
@@ -670,9 +707,6 @@ service cloud.firestore {
 
                       // ==========================================
                       // ALREADY LINKED TENANT
-                      //
-                      // Tenant cannot change ownership,
-                      // property, unit or phone.
                       // ==========================================
 
                       (
@@ -720,11 +754,6 @@ service cloud.firestore {
 
                       // ==========================================
                       // FIRST-TIME TENANT LINK
-                      //
-                      // This is allowed ONLY when tenantAccess is
-                      // also created in the same transaction.
-                      // tenantAccess itself is bound to a valid
-                      // invitation.
                       // ==========================================
 
                       (
@@ -863,11 +892,6 @@ service cloud.firestore {
 
       // ----------------------------------------------------------
       // UPDATE
-      //
-      // Owner can manage invitation.
-      //
-      // Tenant can update ONLY the status to accepted as part of
-      // the atomic invitation acceptance transaction.
       // ----------------------------------------------------------
 
       allow update: if isAuthenticated()
@@ -1007,6 +1031,66 @@ service cloud.firestore {
                         ).data.invitationId
                            == invitationId
                       )
+
+                      ||
+
+                      // ==========================================
+                      // TENANT REJECTION
+                      //
+                      // Tenant can reject ONLY their own pending
+                      // invitation.
+                      //
+                      // No other invitation fields may be changed.
+                      // ==========================================
+
+                      (
+                        request.auth.token.phone_number
+                           != null
+
+                        &&
+                        resource.data.phone
+                           == request.auth.token.phone_number
+
+                        &&
+                        resource.data.status
+                           == 'pending'
+
+                        &&
+                        request.resource.data.status
+                           == 'rejected'
+
+                        &&
+                        request.resource.data.ownerId
+                           == resource.data.ownerId
+
+                        &&
+                        request.resource.data.tenantId
+                           == resource.data.tenantId
+
+                        &&
+                        request.resource.data.propertyId
+                           == resource.data.propertyId
+
+                        &&
+                        request.resource.data.unitId
+                           == resource.data.unitId
+
+                        &&
+                        request.resource.data.phone
+                           == resource.data.phone
+
+                        &&
+                        request.resource.data.token
+                           == resource.data.token
+
+                        &&
+                        request.resource.data.createdAt
+                           == resource.data.createdAt
+
+                        &&
+                        request.resource.data.expiresAt
+                           == resource.data.expiresAt
+                      )
                     );
 
 
@@ -1054,14 +1138,14 @@ service cloud.firestore {
 
 
     // ------------------------------------------------------------
-    // Validate that the current transaction is creating a valid
-    // tenant relationship.
-    //
-    // propertyId and unitId may be null depending on whether the
-    // helper is being used from Property or Unit rules.
+    // VALIDATE TENANT ACCEPTANCE
     // ------------------------------------------------------------
 
-    function isValidTenantAcceptance(ownerId, propertyId, unitId) {
+    function isValidTenantAcceptance(
+      ownerId,
+      propertyId,
+      unitId
+    ) {
 
       let access =
         getAfter(
@@ -1093,10 +1177,13 @@ service cloud.firestore {
 
 
     // ------------------------------------------------------------
-    // Tenant unit/property access for normal reads.
+    // TENANT UNIT/PROPERTY ACCESS
     // ------------------------------------------------------------
 
-    function isActiveTenantAccessForUnit(propertyId, unitId) {
+    function isActiveTenantAccessForUnit(
+      propertyId,
+      unitId
+    ) {
 
       let access =
         get(

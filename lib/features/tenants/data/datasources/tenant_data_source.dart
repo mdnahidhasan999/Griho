@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../../core/utils/phone_number_utils.dart';
 import '../../domain/entities/tenant.dart';
 import '../../domain/entities/tenant_search_result.dart';
 import '../models/tenant_model.dart';
@@ -7,9 +8,8 @@ import '../models/tenant_model.dart';
 class TenantDataSource {
   final FirebaseFirestore _firestore;
 
-  TenantDataSource({
-    FirebaseFirestore? firestore,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance;
+  TenantDataSource({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   // ==========================================================================
   // COLLECTIONS
@@ -20,6 +20,7 @@ class TenantDataSource {
   static const String _propertyCollectionName = 'properties';
   static const String _publicIdCollectionName = 'public_ids';
   static const String _phoneLookupCollectionName = 'phone_lookups';
+  static const String _tenantAccessCollectionName = 'tenantAccess';
 
   CollectionReference<Map<String, dynamic>> get _tenants {
     return _firestore.collection(_tenantCollectionName);
@@ -39,6 +40,10 @@ class TenantDataSource {
 
   CollectionReference<Map<String, dynamic>> get _phoneLookups {
     return _firestore.collection(_phoneLookupCollectionName);
+  }
+
+  CollectionReference<Map<String, dynamic>> get _tenantAccess {
+    return _firestore.collection(_tenantAccessCollectionName);
   }
 
   // ==========================================================================
@@ -63,6 +68,14 @@ class TenantDataSource {
 
   // ==========================================================================
   // GET TENANT BY USER ID
+  // ==========================================================================
+  //
+  // NOTE:
+  // This method is retained for tenant-side usage.
+  //
+  // Owner-side searches must NOT use this method because it performs
+  // a global query by userId and Firestore Security Rules are not filters.
+  //
   // ==========================================================================
 
   Future<TenantModel?> getTenantByUserId(String userId) async {
@@ -209,7 +222,7 @@ class TenantDataSource {
 
       throw StateError(
         'A tenant with this phone number already exists: '
-            '${existingTenant.name} (${existingTenant.phone}).',
+        '${existingTenant.name} (${existingTenant.phone}).',
       );
     }
 
@@ -232,7 +245,7 @@ class TenantDataSource {
 
         throw StateError(
           'This unit already has an active tenant: '
-              '${existingTenant.name} (${existingTenant.phone}).',
+          '${existingTenant.name} (${existingTenant.phone}).',
         );
       }
     }
@@ -412,10 +425,7 @@ class TenantDataSource {
 
       final updatedModel = TenantModel.fromEntity(updatedTenant);
 
-      transaction.update(
-        tenantDocument,
-        updatedModel.toFirestore(),
-      );
+      transaction.update(tenantDocument, updatedModel.toFirestore());
 
       // Only an active tenant gets unit/property access.
       if (currentTenant.status == TenantStatus.active) {
@@ -501,7 +511,7 @@ class TenantDataSource {
 
       throw StateError(
         'A tenant with this phone number already exists: '
-            '${duplicate.name} (${duplicate.phone}).',
+        '${duplicate.name} (${duplicate.phone}).',
       );
     }
 
@@ -526,7 +536,7 @@ class TenantDataSource {
 
         throw StateError(
           'This unit already has an active tenant: '
-              '${duplicate.name} (${duplicate.phone}).',
+          '${duplicate.name} (${duplicate.phone}).',
         );
       }
     }
@@ -584,8 +594,7 @@ class TenantDataSource {
         throw StateError('New unit $newUnitId contains no data.');
       }
 
-      final newUnitPropertyId =
-      (newUnitData['propertyId'] as String?)?.trim();
+      final newUnitPropertyId = (newUnitData['propertyId'] as String?)?.trim();
 
       if (newUnitPropertyId != newPropertyId) {
         throw StateError(
@@ -593,17 +602,13 @@ class TenantDataSource {
         );
       }
 
-      final currentTenant =
-      TenantModel.fromFirestore(currentTenantSnapshot);
+      final currentTenant = TenantModel.fromFirestore(currentTenantSnapshot);
 
       // ----------------------------------------------------------------------
       // UPDATE TENANT
       // ----------------------------------------------------------------------
 
-      transaction.update(
-        tenantDocument,
-        tenant.toFirestore(),
-      );
+      transaction.update(tenantDocument, tenant.toFirestore());
 
       // ----------------------------------------------------------------------
       // REMOVE OLD ACCESS
@@ -712,6 +717,141 @@ class TenantDataSource {
   }
 
   // ==========================================================================
+  // END TENANCY
+  // ==========================================================================
+
+  Future<TenantModel> endTenancy({
+    required String tenantId,
+    required String ownerId,
+  }) async {
+    final normalizedTenantId = tenantId.trim();
+    final normalizedOwnerId = ownerId.trim();
+
+    if (normalizedTenantId.isEmpty) {
+      throw ArgumentError('Tenant ID cannot be empty.');
+    }
+
+    if (normalizedOwnerId.isEmpty) {
+      throw ArgumentError('Owner ID cannot be empty.');
+    }
+
+    final tenantDocument = _tenants.doc(normalizedTenantId);
+
+    await _firestore.runTransaction((transaction) async {
+      // ----------------------------------------------------------------------
+      // READ TENANT
+      // ----------------------------------------------------------------------
+
+      final tenantSnapshot = await transaction.get(tenantDocument);
+
+      if (!tenantSnapshot.exists) {
+        throw StateError('Tenant $normalizedTenantId does not exist.');
+      }
+
+      final tenant = TenantModel.fromFirestore(tenantSnapshot);
+
+      if (tenant.ownerId != normalizedOwnerId) {
+        throw StateError('This tenant does not belong to the current owner.');
+      }
+
+      // ----------------------------------------------------------------------
+      // ALREADY INACTIVE
+      // ----------------------------------------------------------------------
+
+      if (tenant.status == TenantStatus.inactive) {
+        return;
+      }
+
+      final propertyDocument = _properties.doc(tenant.propertyId);
+
+      final unitDocument = _units.doc(tenant.unitId);
+
+      // ----------------------------------------------------------------------
+      // READ PROPERTY + UNIT
+      // ----------------------------------------------------------------------
+
+      final propertySnapshot = await transaction.get(propertyDocument);
+
+      final unitSnapshot = await transaction.get(unitDocument);
+
+      if (!propertySnapshot.exists) {
+        throw StateError('Tenant property no longer exists.');
+      }
+
+      if (!unitSnapshot.exists) {
+        throw StateError('Tenant unit no longer exists.');
+      }
+
+      final unitData = unitSnapshot.data();
+
+      if (unitData == null) {
+        throw StateError('Tenant unit contains no data.');
+      }
+
+      final unitPropertyId = (unitData['propertyId'] as String?)?.trim();
+
+      if (unitPropertyId != tenant.propertyId.trim()) {
+        throw StateError('Tenant unit does not belong to the tenant property.');
+      }
+
+      // ----------------------------------------------------------------------
+      // UPDATE TENANT
+      // ----------------------------------------------------------------------
+
+      final updatedTenant = tenant.copyWith(
+        status: TenantStatus.inactive,
+        updatedAt: DateTime.now(),
+      );
+
+      transaction.update(
+        tenantDocument,
+        TenantModel.fromEntity(updatedTenant).toFirestore(),
+      );
+
+      // ----------------------------------------------------------------------
+      // RELEASE UNIT
+      // ----------------------------------------------------------------------
+
+      transaction.update(unitDocument, {
+        'status': 'available',
+        'tenantUserId': null,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // ----------------------------------------------------------------------
+      // REMOVE PROPERTY TENANT ACCESS
+      // ----------------------------------------------------------------------
+
+      final tenantUserId = tenant.userId?.trim();
+
+      if (tenantUserId != null && tenantUserId.isNotEmpty) {
+        transaction.update(propertyDocument, {
+          'tenantUserIds': FieldValue.arrayRemove([tenantUserId]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        // --------------------------------------------------------------------
+        // REMOVE TENANT ACCOUNT ACCESS
+        // --------------------------------------------------------------------
+
+        transaction.delete(_tenantAccess.doc(tenantUserId));
+      }
+    });
+
+    // ------------------------------------------------------------------------
+    // RETURN UPDATED TENANT
+    // ------------------------------------------------------------------------
+
+    final updatedSnapshot = await tenantDocument.get();
+
+    if (!updatedSnapshot.exists) {
+      throw StateError('Tenancy was ended but tenant could not be retrieved.');
+    }
+
+    return TenantModel.fromFirestore(updatedSnapshot);
+  }
+
+  // ==========================================================================
   // DELETE TENANT
   // ==========================================================================
 
@@ -750,15 +890,11 @@ class TenantDataSource {
       // ----------------------------------------------------------------------
 
       if (unitSnapshot.exists) {
-        final unitData = unitSnapshot.data();
-
-        if (unitData != null) {
-          transaction.update(unitDocument, {
-            'status': 'available',
-            'tenantUserId': null,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
+        transaction.update(unitDocument, {
+          'status': 'available',
+          'tenantUserId': null,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       }
 
       // ----------------------------------------------------------------------
@@ -777,85 +913,89 @@ class TenantDataSource {
   }
 
   // ==========================================================================
-  // SEARCH REGISTERED TENANT
-  //
-  // Search by:
-  // - Griho ID
-  // - Phone number
-  //
-  // Search does NOT query the users collection.
-  //
-  // Registered Griho users may exist without a Tenant document.
-  //
-  // Firebase UID is internal only and is never shown in UI.
+  // SEARCH REGISTERED TENANT BY GRIHO ID
+  // CURRENT OWNER SCOPE
   // ==========================================================================
 
-  Future<TenantSearchResult?> searchRegisteredTenant(String search) async {
-    final normalizedSearch = search.trim();
+  Future<TenantSearchResult?> searchRegisteredTenantByPublicId({
+    required String publicId,
+    required String ownerId,
+  }) async {
+    final normalizedPublicId = publicId.trim().toUpperCase();
+    final normalizedOwnerId = ownerId.trim();
 
-    if (normalizedSearch.isEmpty) {
+    if (normalizedPublicId.isEmpty || normalizedOwnerId.isEmpty) {
       return null;
     }
 
-    Map<String, dynamic>? userData;
+    final publicIdSnapshot = await _publicIds.doc(normalizedPublicId).get();
 
-    // ------------------------------------------------------------------------
-    // GRIHO ID SEARCH
-    // ------------------------------------------------------------------------
-
-    if (normalizedSearch.toUpperCase().startsWith('GRI-')) {
-      final publicIdSnapshot =
-      await _publicIds.doc(normalizedSearch.toUpperCase()).get();
-
-      if (!publicIdSnapshot.exists) {
-        return null;
-      }
-
-      userData = publicIdSnapshot.data();
-    } else {
-      // ----------------------------------------------------------------------
-      // PHONE SEARCH
-      // ----------------------------------------------------------------------
-
-      final phoneLookupSnapshot =
-      await _phoneLookups.doc(normalizedSearch).get();
-
-      if (!phoneLookupSnapshot.exists) {
-        return null;
-      }
-
-      userData = phoneLookupSnapshot.data();
+    if (!publicIdSnapshot.exists) {
+      return null;
     }
 
+    return _buildTenantSearchResult(
+      userData: publicIdSnapshot.data(),
+      ownerId: normalizedOwnerId,
+    );
+  }
+
+  // ==========================================================================
+  // SEARCH REGISTERED TENANT BY PHONE
+  // CURRENT OWNER SCOPE
+  // ==========================================================================
+
+  Future<TenantSearchResult?> searchRegisteredTenantByPhone({
+    required String phone,
+    required String ownerId,
+  }) async {
+    final normalizedOwnerId = ownerId.trim();
+
+    if (normalizedOwnerId.isEmpty) {
+      return null;
+    }
+
+    final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(phone);
+
+    final phoneLookupSnapshot = await _phoneLookups.doc(normalizedPhone).get();
+
+    if (!phoneLookupSnapshot.exists) {
+      return null;
+    }
+
+    return _buildTenantSearchResult(
+      userData: phoneLookupSnapshot.data(),
+      ownerId: normalizedOwnerId,
+    );
+  }
+
+  // ==========================================================================
+  // BUILD SEARCH RESULT
+  // ==========================================================================
+
+  Future<TenantSearchResult?> _buildTenantSearchResult({
+    required Map<String, dynamic>? userData,
+    required String ownerId,
+  }) async {
     if (userData == null) {
       return null;
     }
 
     final userId = userData['uid'];
-
     final publicId = userData['publicId'];
-
     final name = userData['name'];
-
     final phoneNumber = userData['phoneNumber'];
-
     final email = userData['email'];
 
-    if (userId is! String || userId
-        .trim()
-        .isEmpty) {
+    if (userId is! String || userId.trim().isEmpty) {
       return null;
     }
 
-    if (publicId is! String || publicId
-        .trim()
-        .isEmpty) {
+    if (publicId is! String || publicId.trim().isEmpty) {
       return null;
     }
 
-    if (name is! String || name
-        .trim()
-        .isEmpty) {
+    if (name is! String || name.trim().isEmpty) {
       return null;
     }
 
@@ -863,25 +1003,25 @@ class TenantDataSource {
     final normalizedPublicId = publicId.trim();
     final normalizedName = name.trim();
 
-    final normalizedPhone =
-    phoneNumber is String ? phoneNumber.trim() : '';
+    final normalizedPhone = phoneNumber is String ? phoneNumber.trim() : '';
 
-    final normalizedEmail =
-    email is String && email
-        .trim()
-        .isNotEmpty
+    final normalizedEmail = email is String && email.trim().isNotEmpty
         ? email.trim()
         : null;
 
-    // ------------------------------------------------------------------------
-    // CHECK WHETHER USER ALREADY HAS A TENANT
-    // ------------------------------------------------------------------------
+    final existingTenantSnapshot = await _tenants
+        .where('ownerId', isEqualTo: ownerId)
+        .where('userId', isEqualTo: normalizedUserId)
+        .limit(1)
+        .get();
 
-    final tenant = await getTenantByUserId(normalizedUserId);
+    TenantModel? existingTenant;
 
-    // ------------------------------------------------------------------------
-    // RETURN SEARCH RESULT
-    // ------------------------------------------------------------------------
+    if (existingTenantSnapshot.docs.isNotEmpty) {
+      existingTenant = TenantModel.fromFirestore(
+        existingTenantSnapshot.docs.first,
+      );
+    }
 
     return TenantSearchResult(
       userId: normalizedUserId,
@@ -889,8 +1029,8 @@ class TenantDataSource {
       name: normalizedName,
       phone: normalizedPhone,
       email: normalizedEmail,
-      tenantId: tenant?.id,
-      isExistingTenant: tenant != null,
+      tenantId: existingTenant?.id,
+      isExistingTenant: existingTenant != null,
     );
   }
 
