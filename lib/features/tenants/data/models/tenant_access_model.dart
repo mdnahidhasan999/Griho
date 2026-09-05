@@ -15,7 +15,9 @@ class TenantAccessModel extends TenantAccess {
     required super.updatedAt,
   });
 
-  factory TenantAccessModel.fromEntity(TenantAccess access) {
+  factory TenantAccessModel.fromEntity(
+      TenantAccess access,
+      ) {
     return TenantAccessModel(
       id: access.id,
       userId: access.userId,
@@ -30,8 +32,8 @@ class TenantAccessModel extends TenantAccess {
   }
 
   factory TenantAccessModel.fromFirestore(
-    DocumentSnapshot<Map<String, dynamic>> document,
-  ) {
+      DocumentSnapshot<Map<String, dynamic>> document,
+      ) {
     final data = document.data();
 
     if (data == null) {
@@ -47,7 +49,10 @@ class TenantAccessModel extends TenantAccess {
       ownerId: _readRequiredString(data, 'ownerId'),
       propertyId: _readRequiredString(data, 'propertyId'),
       unitId: _readRequiredString(data, 'unitId'),
-      invitationId: _readRequiredString(data, 'invitationId'),
+      invitationId: _readOptionalString(
+        data,
+        'invitationId',
+      ),
       createdAt: _readDateTime(data, 'createdAt'),
       updatedAt: _readDateTime(data, 'updatedAt'),
     );
@@ -66,23 +71,56 @@ class TenantAccessModel extends TenantAccess {
     };
   }
 
-  static String _readRequiredString(Map<String, dynamic> data, String field) {
+  static String _readRequiredString(
+      Map<String, dynamic> data,
+      String field,
+      ) {
     final value = data[field];
 
     if (value is! String || value.trim().isEmpty) {
-      throw StateError('Tenant access field "$field" is missing or invalid.');
+      throw StateError(
+        'Tenant access field "$field" is missing or invalid.',
+      );
     }
 
     return value.trim();
   }
 
-  static DateTime _readDateTime(Map<String, dynamic> data, String field) {
+  static String? _readOptionalString(
+      Map<String, dynamic> data,
+      String field,
+      ) {
+    final value = data[field];
+
+    if (value == null) {
+      return null;
+    }
+
+    if (value is! String) {
+      throw StateError(
+        'Tenant access field "$field" is invalid.',
+      );
+    }
+
+    final normalizedValue = value.trim();
+
+    return normalizedValue.isEmpty
+        ? null
+        : normalizedValue;
+  }
+
+  static DateTime _readDateTime(
+      Map<String, dynamic> data,
+      String field,
+      ) {
     final value = data[field];
 
     if (value is Timestamp) {
       return value.toDate();
     }
 
-    throw StateError('Tenant access field "$field" is missing or invalid.');
+    throw StateError(
+      'Tenant access field "$field" is missing or invalid.',
+    );
   }
 }

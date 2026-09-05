@@ -90,8 +90,7 @@ class TenantRepositoryImpl implements TenantRepository {
 
   @override
   Future<TenantSearchResult?> searchRegisteredTenantByPublicId(
-    String publicId,
-  ) {
+      String publicId,) {
     final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.searchRegisteredTenantByPublicId(
@@ -145,7 +144,10 @@ class TenantRepositoryImpl implements TenantRepository {
       throw ArgumentError('Tenant phone number cannot be empty.');
     }
 
-    final documentId = DateTime.now().microsecondsSinceEpoch.toString();
+    final documentId = DateTime
+        .now()
+        .microsecondsSinceEpoch
+        .toString();
 
     final now = DateTime.now();
 
@@ -255,6 +257,22 @@ class TenantRepositoryImpl implements TenantRepository {
     final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.endTenancy(tenantId: tenantId, ownerId: ownerId);
+  }
+
+  @override
+  Future<Tenant> startNewTenancy({
+    required String tenantId,
+    required String propertyId,
+    required String unitId,
+  }) async {
+    final ownerId = _currentUserService.requiredUid;
+
+    return _dataSource.startNewTenancy(
+      tenantId: tenantId,
+      propertyId: propertyId,
+      unitId: unitId,
+      ownerId: ownerId,
+    );
   }
 
   // ==========================================================================

@@ -18,6 +18,7 @@ import '../../domain/usecases/get_active_tenants_by_unit_id.dart';
 import '../../domain/usecases/get_tenant.dart';
 import '../../domain/usecases/get_tenant_by_unit_id.dart';
 import '../../domain/usecases/link_tenant_account.dart';
+import '../../domain/usecases/start_new_tenancy.dart';
 import '../../domain/usecases/update_tenant.dart';
 
 // ============================================================================
@@ -67,6 +68,16 @@ final deleteTenantProvider = Provider<DeleteTenant>((ref) {
 
 final endTenancyProvider = Provider<EndTenancy>((ref) {
   return EndTenancy(
+    repository: ref.read(tenantRepositoryProvider),
+  );
+});
+
+// ============================================================================
+// START NEW TENANCY
+// ============================================================================
+
+final startNewTenancyProvider = Provider<StartNewTenancy>((ref) {
+  return StartNewTenancy(
     repository: ref.read(tenantRepositoryProvider),
   );
 });
@@ -138,6 +149,7 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   final DeleteTenant _deleteTenant;
   final EndTenancy _endTenancy;
   final LinkTenantAccount _linkTenantAccount;
+  final StartNewTenancy _startNewTenancy;
 
   TenantController({
     required this._createTenant,
@@ -145,6 +157,7 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
     required this._deleteTenant,
     required this._endTenancy,
     required this._linkTenantAccount,
+    required this._startNewTenancy,
   }) : super(const AsyncData(null));
 
   // ==========================================================================
@@ -234,6 +247,34 @@ class TenantController extends StateNotifier<AsyncValue<Tenant?>> {
   }
 
   // ==========================================================================
+  // START NEW TENANCY
+  // ==========================================================================
+
+  Future<Tenant?> startNewTenancy({
+    required String tenantId,
+    required String propertyId,
+    required String unitId,
+  }) async {
+    state = const AsyncLoading();
+
+    try {
+      final startedTenant = await _startNewTenancy(
+        tenantId: tenantId,
+        propertyId: propertyId,
+        unitId: unitId,
+      );
+
+      state = AsyncData(startedTenant);
+
+      return startedTenant;
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+
+      return null;
+    }
+  }
+
+  // ==========================================================================
   // DELETE
   // ==========================================================================
 
@@ -274,5 +315,6 @@ StateNotifierProvider<TenantController, AsyncValue<Tenant?>>((ref) {
     deleteTenant: ref.read(deleteTenantProvider),
     endTenancy: ref.read(endTenancyProvider),
     linkTenantAccount: ref.read(linkTenantAccountProvider),
+    startNewTenancy: ref.read(startNewTenancyProvider),
   );
 });

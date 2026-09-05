@@ -31,7 +31,9 @@ class CreateOrUpdateTenantAccess {
       throw ArgumentError('Unit ID cannot be empty.');
     }
 
-    if (access.invitationId.trim().isEmpty) {
+    final invitationId = access.invitationId?.trim();
+
+    if (invitationId != null && invitationId.isEmpty) {
       throw ArgumentError('Invitation ID cannot be empty.');
     }
 

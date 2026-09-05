@@ -5,7 +5,7 @@ class TenantAccess {
   final String ownerId;
   final String propertyId;
   final String unitId;
-  final String invitationId;
+  final String? invitationId;
   final DateTime createdAt;
   final DateTime updatedAt;
 

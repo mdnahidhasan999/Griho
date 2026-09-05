@@ -155,7 +155,7 @@ service cloud.firestore {
                       ||
 
                       // ==========================================
-                      // TENANT ACCEPTANCE
+                      // TENANT ACCEPTANCE — FIRST ACCESS
                       // ==========================================
 
                       (
@@ -219,6 +219,10 @@ service cloud.firestore {
                       )
 
                       ||
+
+                      // ==========================================
+                      // TENANT ACCEPTANCE — ADD ACCESS
+                      // ==========================================
 
                       (
                         resource.data.keys()
@@ -454,10 +458,9 @@ service cloud.firestore {
       // ----------------------------------------------------------
 
       allow create: if isAuthenticated()
-                    && request.auth.uid == userId
 
                     && request.resource.data.userId
-                       == request.auth.uid
+                       == userId
 
                     && request.resource.data.tenantId is string
 
@@ -467,52 +470,47 @@ service cloud.firestore {
 
                     && request.resource.data.unitId is string
 
-                    && request.resource.data.invitationId is string
+                    && (
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-                    ).data.userId
-                       == request.auth.uid
+                      // ==========================================
+                      // TENANT — INVITATION ACCEPTANCE
+                      // ==========================================
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-                    ).data.ownerId
-                       == request.resource.data.ownerId
+                      (
+                        request.auth.uid == userId
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-                    ).data.propertyId
-                       == request.resource.data.propertyId
+                        &&
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-                    ).data.unitId
-                       == request.resource.data.unitId
+                        request.resource.data.userId
+                           == request.auth.uid
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
-                    ).data.status
-                       == 'accepted'
+                        &&
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
-                    ).data.tenantId
-                       == request.resource.data.tenantId
+                        request.resource.data.invitationId is string
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
-                    ).data.propertyId
-                       == request.resource.data.propertyId
+                        &&
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
-                    ).data.unitId
-                       == request.resource.data.unitId
+                        request.resource.data.invitationId != ''
 
-                    && getAfter(
-                      /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
-                    ).data.ownerId
-                       == request.resource.data.ownerId;
+                        &&
+
+                        isValidInvitationTenantAccess()
+                      )
+
+                      ||
+
+                      // ==========================================
+                      // OWNER — START NEW TENANCY
+                      // ==========================================
+
+                      (
+                        request.resource.data.invitationId == null
+
+                        &&
+
+                        isValidOwnerStartNewTenancyAccess()
+                      )
+                    );
 
 
       // ----------------------------------------------------------
@@ -547,20 +545,13 @@ service cloud.firestore {
       // ----------------------------------------------------------
       // DELETE
       // ----------------------------------------------------------
-      //
-      // Tenant can delete their own access.
-      //
-      // Owner can delete tenant access ONLY as part of a valid
-      // End Tenancy transaction.
-      //
-      // ----------------------------------------------------------
 
       allow delete: if isAuthenticated()
                     && (
 
-                      // ==========================================================
+                      // ==========================================
                       // TENANT
-                      // ==========================================================
+                      // ==========================================
 
                       (
                         request.auth.uid
@@ -569,9 +560,9 @@ service cloud.firestore {
 
                       ||
 
-                      // ==========================================================
+                      // ==========================================
                       // OWNER — END TENANCY
-                      // ==========================================================
+                      // ==========================================
 
                       (
                         resource.data.ownerId
@@ -579,38 +570,7 @@ service cloud.firestore {
 
                         &&
 
-                        getAfter(
-                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
-                        ).data.ownerId
-                           == request.auth.uid
-
-                        &&
-
-                        getAfter(
-                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
-                        ).data.userId
-                           == resource.data.userId
-
-                        &&
-
-                        getAfter(
-                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
-                        ).data.propertyId
-                           == resource.data.propertyId
-
-                        &&
-
-                        getAfter(
-                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
-                        ).data.unitId
-                           == resource.data.unitId
-
-                        &&
-
-                        getAfter(
-                          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
-                        ).data.status
-                           == 'inactive'
+                        isValidOwnerEndTenancyAccessDelete()
                       )
                     );
     }
@@ -648,10 +608,14 @@ service cloud.firestore {
                         ||
                         resource.data.userId == null
                       )
+
                       &&
+
                       request.auth.token.phone_number
                          != null
+
                       &&
+
                       resource.data.phone
                          == request.auth.token.phone_number
                     )
@@ -665,6 +629,7 @@ service cloud.firestore {
       allow create: if isAuthenticated()
                     && request.resource.data.ownerId
                        == request.auth.uid
+
                     && isPropertyOwner(
                       request.resource.data.propertyId
                     );
@@ -678,7 +643,7 @@ service cloud.firestore {
                     && (
 
                       // ==========================================
-                      // OWNER UPDATE
+                      // OWNER — NORMAL UPDATE
                       // ==========================================
 
                       (
@@ -686,20 +651,136 @@ service cloud.firestore {
                            == request.auth.uid
 
                         &&
+
                         request.resource.data.ownerId
                            == resource.data.ownerId
 
                         &&
+
                         request.resource.data.propertyId
                            == resource.data.propertyId
 
                         &&
+
                         request.resource.data.unitId
                            == resource.data.unitId
 
                         &&
+
+                        request.resource.data.status
+                           == resource.data.status
+
+                        &&
+
                         isPropertyOwner(
                           request.resource.data.propertyId
+                        )
+                      )
+
+                      ||
+
+                      // ==========================================
+                      // OWNER — START NEW TENANCY
+                      // ==========================================
+
+                      (
+                        resource.data.ownerId
+                           == request.auth.uid
+
+                        &&
+
+                        resource.data.status
+                           == 'inactive'
+
+                        &&
+
+                        request.resource.data.ownerId
+                           == resource.data.ownerId
+
+                        &&
+
+                        request.resource.data.status
+                           == 'active'
+
+                        &&
+
+                        request.resource.data.userId is string
+
+                        &&
+
+                        request.resource.data.userId
+                           == resource.data.userId
+
+                        &&
+
+                        request.resource.data.accountStatus
+                           == resource.data.accountStatus
+
+                        &&
+
+                        request.resource.data.confirmationStatus
+                           == resource.data.confirmationStatus
+
+                        &&
+
+                        isValidOwnerStartNewTenancyTenant(
+                          tenantId
+                        )
+                      )
+
+                      ||
+
+                      // ==========================================
+                      // OWNER — END TENANCY
+                      // ==========================================
+
+                      (
+                        resource.data.ownerId
+                           == request.auth.uid
+
+                        &&
+
+                        resource.data.status
+                           == 'active'
+
+                        &&
+
+                        request.resource.data.ownerId
+                           == resource.data.ownerId
+
+                        &&
+
+                        request.resource.data.status
+                           == 'inactive'
+
+                        &&
+
+                        request.resource.data.userId
+                           == resource.data.userId
+
+                        &&
+
+                        request.resource.data.propertyId
+                           == resource.data.propertyId
+
+                        &&
+
+                        request.resource.data.unitId
+                           == resource.data.unitId
+
+                        &&
+
+                        request.resource.data.accountStatus
+                           == resource.data.accountStatus
+
+                        &&
+
+                        request.resource.data.confirmationStatus
+                           == resource.data.confirmationStatus
+
+                        &&
+
+                        isValidOwnerEndTenancy(
                         )
                       )
 
@@ -714,38 +795,47 @@ service cloud.firestore {
                            == request.auth.uid
 
                         &&
+
                         request.resource.data.userId
                            == resource.data.userId
 
                         &&
+
                         request.resource.data.ownerId
                            == resource.data.ownerId
 
                         &&
+
                         request.resource.data.propertyId
                            == resource.data.propertyId
 
                         &&
+
                         request.resource.data.unitId
                            == resource.data.unitId
 
                         &&
+
                         request.resource.data.phone
                            == resource.data.phone
 
                         &&
+
                         request.resource.data.status
                            == resource.data.status
 
                         &&
+
                         request.resource.data.accountStatus
                            == resource.data.accountStatus
 
                         &&
+
                         request.resource.data.confirmationStatus
                            == resource.data.confirmationStatus
 
                         &&
+
                         request.resource.data.createdAt
                            == resource.data.createdAt
                       )
@@ -765,30 +855,37 @@ service cloud.firestore {
                         )
 
                         &&
+
                         request.auth.token.phone_number
                            != null
 
                         &&
+
                         resource.data.phone
                            == request.auth.token.phone_number
 
                         &&
+
                         request.resource.data.userId
                            == request.auth.uid
 
                         &&
+
                         request.resource.data.ownerId
                            == resource.data.ownerId
 
                         &&
+
                         request.resource.data.propertyId
                            == resource.data.propertyId
 
                         &&
+
                         request.resource.data.unitId
                            == resource.data.unitId
 
                         &&
+
                         request.resource.data.phone
                            == resource.data.phone
 
@@ -880,10 +977,14 @@ service cloud.firestore {
 
                     (
                       request.auth.token.phone_number != null
+
                       &&
+
                       resource.data.phone
                          == request.auth.token.phone_number
+
                       &&
+
                       resource.data.status
                          == 'pending'
                     )
@@ -906,34 +1007,42 @@ service cloud.firestore {
                            == request.auth.uid
 
                         &&
+
                         request.resource.data.ownerId
                            == resource.data.ownerId
 
                         &&
+
                         request.resource.data.tenantId
                            == resource.data.tenantId
 
                         &&
+
                         request.resource.data.propertyId
                            == resource.data.propertyId
 
                         &&
+
                         request.resource.data.unitId
                            == resource.data.unitId
 
                         &&
+
                         request.resource.data.phone
                            == resource.data.phone
 
                         &&
+
                         request.resource.data.token
                            == resource.data.token
 
                         &&
+
                         request.resource.data.createdAt
                            == resource.data.createdAt
 
                         &&
+
                         request.resource.data.expiresAt
                            == resource.data.expiresAt
                       )
@@ -949,51 +1058,60 @@ service cloud.firestore {
                            != null
 
                         &&
+
                         resource.data.phone
                            == request.auth.token.phone_number
 
                         &&
+
                         resource.data.status
                            == 'pending'
 
                         &&
+
                         request.resource.data.status
                            == 'accepted'
 
                         &&
+
                         request.resource.data.ownerId
                            == resource.data.ownerId
 
                         &&
+
                         request.resource.data.tenantId
                            == resource.data.tenantId
 
                         &&
+
                         request.resource.data.propertyId
                            == resource.data.propertyId
 
                         &&
+
                         request.resource.data.unitId
                            == resource.data.unitId
 
                         &&
+
                         request.resource.data.phone
                            == resource.data.phone
 
                         &&
+
                         request.resource.data.token
                            == resource.data.token
 
                         &&
+
                         request.resource.data.createdAt
                            == resource.data.createdAt
 
                         &&
+
                         request.resource.data.expiresAt
                            == resource.data.expiresAt
 
-                        // Tenant must be linked in the same
-                        // transaction.
                         &&
 
                         getAfter(
@@ -1001,8 +1119,6 @@ service cloud.firestore {
                         ).data.userId
                            == request.auth.uid
 
-                        // tenantAccess must also exist in the
-                        // same transaction.
                         &&
 
                         getAfter(
@@ -1036,11 +1152,6 @@ service cloud.firestore {
 
                       // ==========================================
                       // TENANT REJECTION
-                      //
-                      // Tenant can reject ONLY their own pending
-                      // invitation.
-                      //
-                      // No other invitation fields may be changed.
                       // ==========================================
 
                       (
@@ -1048,46 +1159,57 @@ service cloud.firestore {
                            != null
 
                         &&
+
                         resource.data.phone
                            == request.auth.token.phone_number
 
                         &&
+
                         resource.data.status
                            == 'pending'
 
                         &&
+
                         request.resource.data.status
                            == 'rejected'
 
                         &&
+
                         request.resource.data.ownerId
                            == resource.data.ownerId
 
                         &&
+
                         request.resource.data.tenantId
                            == resource.data.tenantId
 
                         &&
+
                         request.resource.data.propertyId
                            == resource.data.propertyId
 
                         &&
+
                         request.resource.data.unitId
                            == resource.data.unitId
 
                         &&
+
                         request.resource.data.phone
                            == resource.data.phone
 
                         &&
+
                         request.resource.data.token
                            == resource.data.token
 
                         &&
+
                         request.resource.data.createdAt
                            == resource.data.createdAt
 
                         &&
+
                         request.resource.data.expiresAt
                            == resource.data.expiresAt
                       )
@@ -1110,6 +1232,7 @@ service cloud.firestore {
                            != null
 
                         &&
+
                         resource.data.phone
                            == request.auth.token.phone_number
                       )
@@ -1126,6 +1249,10 @@ service cloud.firestore {
     }
 
 
+    // ============================================================
+    // PROPERTY OWNER
+    // ============================================================
+
     function isPropertyOwner(propertyId) {
       return exists(
         /databases/$(database)/documents/properties/$(propertyId)
@@ -1137,9 +1264,9 @@ service cloud.firestore {
     }
 
 
-    // ------------------------------------------------------------
+    // ============================================================
     // VALIDATE TENANT ACCEPTANCE
-    // ------------------------------------------------------------
+    // ============================================================
 
     function isValidTenantAcceptance(
       ownerId,
@@ -1176,9 +1303,9 @@ service cloud.firestore {
     }
 
 
-    // ------------------------------------------------------------
+    // ============================================================
     // TENANT UNIT/PROPERTY ACCESS
-    // ------------------------------------------------------------
+    // ============================================================
 
     function isActiveTenantAccessForUnit(
       propertyId,
@@ -1198,6 +1325,353 @@ service cloud.firestore {
 
              && access.unitId
                 == unitId;
+    }
+
+
+    // ============================================================
+    // INVITATION TENANT ACCESS
+    // ============================================================
+
+    function isValidInvitationTenantAccess() {
+
+      let tenantAfter =
+        getAfter(
+          /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+        ).data;
+
+      let invitationAfter =
+        getAfter(
+          /databases/$(database)/documents/tenantInvitations/$(request.resource.data.invitationId)
+        ).data;
+
+      return tenantAfter.userId
+                == request.auth.uid
+
+             && tenantAfter.ownerId
+                == request.resource.data.ownerId
+
+             && tenantAfter.propertyId
+                == request.resource.data.propertyId
+
+             && tenantAfter.unitId
+                == request.resource.data.unitId
+
+             && invitationAfter.status
+                == 'accepted'
+
+             && invitationAfter.tenantId
+                == request.resource.data.tenantId
+
+             && invitationAfter.propertyId
+                == request.resource.data.propertyId
+
+             && invitationAfter.unitId
+                == request.resource.data.unitId
+
+             && invitationAfter.ownerId
+                == request.resource.data.ownerId;
+    }
+
+
+    // ============================================================
+    // UNIT ASSIGNMENT STATE
+    // ============================================================
+
+    function isUnitUnassigned(unitData) {
+
+      return !unitData.keys()
+                .hasAny(['tenantUserId'])
+
+             ||
+
+             unitData.tenantUserId == null
+
+             ||
+
+             (
+               unitData.tenantUserId is string
+               &&
+               unitData.tenantUserId == ''
+             );
+    }
+
+
+    // ============================================================
+    // OWNER — START NEW TENANCY
+    // TENANT ACCESS VALIDATION
+    // ============================================================
+
+    function isValidOwnerStartNewTenancyAccess() {
+
+      let tenantBefore =
+        get(
+          /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+        ).data;
+
+      let tenantAfter =
+        getAfter(
+          /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+        ).data;
+
+      let propertyAfter =
+        getAfter(
+          /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+        ).data;
+
+      let unitBefore =
+        get(
+          /databases/$(database)/documents/units/$(request.resource.data.unitId)
+        ).data;
+
+      let unitAfter =
+        getAfter(
+          /databases/$(database)/documents/units/$(request.resource.data.unitId)
+        ).data;
+
+      return request.resource.data.invitationId == null
+
+             // --------------------------------------------------
+             // Tenant identity
+             // --------------------------------------------------
+
+             && request.resource.data.userId is string
+
+             && request.resource.data.userId != ''
+
+             // --------------------------------------------------
+             // Tenant belongs to current owner
+             // --------------------------------------------------
+
+             && tenantBefore.ownerId
+                == request.auth.uid
+
+             // --------------------------------------------------
+             // Tenant was inactive
+             // --------------------------------------------------
+
+             && tenantBefore.status
+                == 'inactive'
+
+             // --------------------------------------------------
+             // Tenant account is registered
+             // --------------------------------------------------
+
+             && tenantBefore.accountStatus
+                == 'registered'
+
+             // --------------------------------------------------
+             // Existing tenant account is linked
+             // --------------------------------------------------
+
+             && tenantBefore.userId is string
+
+             && tenantBefore.userId
+                == request.resource.data.userId
+
+             // --------------------------------------------------
+             // Tenant final state
+             // --------------------------------------------------
+
+             && tenantAfter.userId
+                == request.resource.data.userId
+
+             && tenantAfter.ownerId
+                == request.auth.uid
+
+             && tenantAfter.status
+                == 'active'
+
+             && tenantAfter.accountStatus
+                == 'registered'
+
+             && tenantAfter.propertyId
+                == request.resource.data.propertyId
+
+             && tenantAfter.unitId
+                == request.resource.data.unitId
+
+             // --------------------------------------------------
+             // Unit BEFORE transaction
+             // --------------------------------------------------
+
+             && unitBefore.propertyId
+                == request.resource.data.propertyId
+
+             && unitBefore.status
+                == 'available'
+
+             && isUnitUnassigned(unitBefore)
+
+             // --------------------------------------------------
+             // Property AFTER transaction
+             // --------------------------------------------------
+
+             && propertyAfter.ownerId
+                == request.auth.uid
+
+             && propertyAfter.tenantUserIds is list
+
+             && request.resource.data.userId
+                in propertyAfter.tenantUserIds
+
+             // --------------------------------------------------
+             // Unit AFTER transaction
+             // --------------------------------------------------
+
+             && unitAfter.propertyId
+                == request.resource.data.propertyId
+
+             && unitAfter.status
+                == 'occupied'
+
+             && unitAfter.tenantUserId
+                == request.resource.data.userId;
+    }
+
+
+    // ============================================================
+    // OWNER — START NEW TENANCY
+    // TENANT DOCUMENT VALIDATION
+    // ============================================================
+
+    function isValidOwnerStartNewTenancyTenant(tenantId) {
+
+      let tenantBefore =
+        get(
+          /databases/$(database)/documents/tenants/$(tenantId)
+        ).data;
+
+      let propertyAfter =
+        getAfter(
+          /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+        ).data;
+
+      let unitAfter =
+        getAfter(
+          /databases/$(database)/documents/units/$(request.resource.data.unitId)
+        ).data;
+
+      let accessAfter =
+        getAfter(
+          /databases/$(database)/documents/tenantAccess/$(request.resource.data.userId)
+        ).data;
+
+      return tenantBefore.ownerId
+                == request.auth.uid
+
+             && tenantBefore.status
+                == 'inactive'
+
+             && tenantBefore.accountStatus
+                == 'registered'
+
+             && tenantBefore.userId is string
+
+             && tenantBefore.userId
+                == request.resource.data.userId
+
+             && propertyAfter.ownerId
+                == request.auth.uid
+
+             && propertyAfter.tenantUserIds is list
+
+             && request.resource.data.userId
+                in propertyAfter.tenantUserIds
+
+             && unitAfter.propertyId
+                == request.resource.data.propertyId
+
+             && unitAfter.status
+                == 'occupied'
+
+             && unitAfter.tenantUserId
+                == request.resource.data.userId
+
+             && accessAfter.userId
+                == request.resource.data.userId
+
+             && accessAfter.tenantId
+                == tenantId
+
+             && accessAfter.ownerId
+                == request.auth.uid
+
+             && accessAfter.propertyId
+                == request.resource.data.propertyId
+
+             && accessAfter.unitId
+                == request.resource.data.unitId
+
+             && accessAfter.invitationId
+                == null;
+    }
+
+
+    // ============================================================
+    // OWNER — END TENANCY
+    // TENANT DOCUMENT VALIDATION
+    // ============================================================
+
+   function isValidOwnerEndTenancy() {
+
+      let propertyAfter =
+        getAfter(
+          /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+        ).data;
+
+      let unitAfter =
+        getAfter(
+          /databases/$(database)/documents/units/$(request.resource.data.unitId)
+        ).data;
+
+      return propertyAfter.ownerId
+                == request.auth.uid
+
+             && propertyAfter.tenantUserIds is list
+
+             && !(request.resource.data.userId
+                  in propertyAfter.tenantUserIds)
+
+             && unitAfter.propertyId
+                == request.resource.data.propertyId
+
+             && unitAfter.status
+                == 'available'
+
+             && isUnitUnassigned(unitAfter)
+
+             && !existsAfter(
+                  /databases/$(database)/documents/tenantAccess/$(request.resource.data.userId)
+                );
+    }
+
+
+    // ============================================================
+    // OWNER — END TENANCY
+    // TENANT ACCESS DELETE VALIDATION
+    // ============================================================
+
+    function isValidOwnerEndTenancyAccessDelete() {
+
+      let tenantAfter =
+        getAfter(
+          /databases/$(database)/documents/tenants/$(resource.data.tenantId)
+        ).data;
+
+      return tenantAfter.ownerId
+                == request.auth.uid
+
+             && tenantAfter.userId
+                == resource.data.userId
+
+             && tenantAfter.propertyId
+                == resource.data.propertyId
+
+             && tenantAfter.unitId
+                == resource.data.unitId
+
+             && tenantAfter.status
+                == 'inactive';
     }
   }
 }

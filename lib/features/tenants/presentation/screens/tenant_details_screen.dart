@@ -10,6 +10,7 @@ import '../../../units/presentation/providers/unit_provider.dart';
 import '../../domain/entities/tenant.dart';
 import '../controllers/tenant_controller.dart';
 import '../providers/property_tenants_provider.dart';
+import 'start_new_tenancy_screen.dart';
 
 class TenantDetailsScreen extends ConsumerStatefulWidget {
   final String tenantId;
@@ -64,6 +65,145 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
       });
     }
   }
+
+  // ========================================================================
+  // END TENANCY
+  // ========================================================================
+
+  Future<void> _endTenancy() async {
+    final tenant = _tenant;
+
+    if (tenant == null) {
+      return;
+    }
+
+    if (tenant.status != TenantStatus.active) {
+      return;
+    }
+
+    final shouldEndTenancy = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('End Tenancy?'),
+          content: Text(
+            'Are you sure you want to end the tenancy of '
+                '"${tenant.name}"?\n\n'
+                'The tenant will become inactive and the unit '
+                'will become available.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('End Tenancy'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldEndTenancy != true || !mounted) {
+      return;
+    }
+
+    final endedTenant = await ref
+        .read(tenantControllerProvider.notifier)
+        .endTenancy(tenant.id);
+
+    if (!mounted) {
+      return;
+    }
+
+    if (endedTenant == null) {
+      final state = ref.read(tenantControllerProvider);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            state.error?.toString() ??
+                'Unable to end tenancy.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    setState(() {
+      _tenant = endedTenant;
+    });
+
+    ref.invalidate(
+      propertyTenantsProvider(tenant.propertyId),
+    );
+
+    ref.invalidate(
+      propertyByIdProvider(tenant.propertyId),
+    );
+
+    ref.invalidate(
+      unitByIdProvider(tenant.unitId),
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Tenancy ended successfully.',
+        ),
+      ),
+    );
+  }
+
+  // ========================================================================
+  // START NEW TENANCY
+  // ========================================================================
+
+  Future<void> _startNewTenancy() async {
+    final tenant = _tenant;
+
+    if (tenant == null) {
+      return;
+    }
+
+    if (tenant.status != TenantStatus.inactive) {
+      return;
+    }
+
+    if (tenant.accountStatus != TenantAccountStatus.registered) {
+      return;
+    }
+
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) =>
+            StartNewTenancyScreen(
+              tenant: tenant,
+            ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (result != true) {
+      return;
+    }
+
+    await _loadTenant();
+  }
+
+  // ========================================================================
+  // DELETE TENANT
+  // ========================================================================
 
   Future<void> _deleteTenant() async {
     final tenant = _tenant;
@@ -180,6 +320,12 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
       unitByIdProvider(tenant.unitId),
     );
 
+    final isActive = tenant.status == TenantStatus.active;
+
+    final canStartNewTenancy =
+        tenant.status == TenantStatus.inactive &&
+            tenant.accountStatus == TenantAccountStatus.registered;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tenant Details'),
@@ -231,8 +377,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
           ),
           IconButton(
             tooltip: 'Delete Tenant',
-            onPressed:
-            tenantState.isLoading
+            onPressed: tenantState.isLoading
                 ? null
                 : _deleteTenant,
             icon: const Icon(
@@ -244,8 +389,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
       body: RefreshIndicator(
         onRefresh: _loadTenant,
         child: ListView(
-          physics:
-          const AlwaysScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
           children: [
             Card(
@@ -281,6 +425,106 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             const SizedBox(height: 20),
 
             // ========================================================
+            // ACTIVE TENANCY
+            // ========================================================
+
+            if (isActive) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tenancy',
+                        style: Theme
+                            .of(context)
+                            .textTheme
+                            .titleMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'End the current tenancy to make '
+                            'the unit available for another tenant.',
+                        style: Theme
+                            .of(context)
+                            .textTheme
+                            .bodyMedium,
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: tenantState.isLoading
+                              ? null
+                              : _endTenancy,
+                          icon: const Icon(
+                            Icons.assignment_return_outlined,
+                          ),
+                          label: const Text(
+                            'End Tenancy',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+
+            // ========================================================
+            // START NEW TENANCY
+            // ========================================================
+
+            if (canStartNewTenancy) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'New Tenancy',
+                        style: Theme
+                            .of(context)
+                            .textTheme
+                            .titleMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Start a new tenancy for this registered '
+                            'tenant in an available unit.',
+                        style: Theme
+                            .of(context)
+                            .textTheme
+                            .bodyMedium,
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: tenantState.isLoading
+                              ? null
+                              : _startNewTenancy,
+                          icon: const Icon(
+                            Icons.add_home_work_outlined,
+                          ),
+                          label: const Text(
+                            'Start New Tenancy',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+
+            // ========================================================
             // TENANT INFORMATION
             // ========================================================
 
@@ -295,17 +539,16 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                   label: 'Email',
                   value: tenant.email
                       ?.trim()
-                      .isNotEmpty ==
-                      true
+                      .isNotEmpty == true
                       ? tenant.email!
                       : 'Not provided',
                 ),
                 _InfoRow(
                   label: 'NID Number',
-                  value: tenant.nidNumber
+                  value:
+                  tenant.nidNumber
                       ?.trim()
-                      .isNotEmpty ==
-                      true
+                      .isNotEmpty == true
                       ? tenant.nidNumber!
                       : 'Not provided',
                 ),
@@ -334,12 +577,12 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                   data: (Property? property) {
                     return _InfoRow(
                       label: 'Property',
-                      value: property?.name ??
+                      value:
+                      property?.name ??
                           'Property not found',
                     );
                   },
                 ),
-
                 unitAsync.when(
                   loading: () =>
                   const _LoadingInfoRow(
@@ -370,17 +613,24 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
               title: 'Account Information',
               children: [
                 _InfoRow(
-                  label: 'Tenant ID',
-                  value: tenant.id,
+                  label: 'Account Status',
+                  value:
+                  tenant.accountStatus ==
+                      TenantAccountStatus.registered
+                      ? 'Registered'
+                      : 'Not registered',
                 ),
                 _InfoRow(
-                  label: 'User ID',
-                  value: tenant.userId
-                      ?.trim()
-                      .isNotEmpty ==
-                      true
-                      ? tenant.userId!
-                      : 'Not linked',
+                  label: 'Confirmation',
+                  value:
+                  tenant.confirmationStatus ==
+                      TenantConfirmationStatus.confirmed
+                      ? 'Confirmed'
+                      : tenant.confirmationStatus.name.replaceFirst(
+                    tenant.confirmationStatus.name[0],
+                    tenant.confirmationStatus.name[0]
+                        .toUpperCase(),
+                  ),
                 ),
                 _InfoRow(
                   label: 'Created',
@@ -486,8 +736,7 @@ class _TenantStatusChip extends StatelessWidget {
         vertical: 6,
       ),
       decoration: BoxDecoration(
-        borderRadius:
-        BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(20),
         color: Theme
             .of(context)
             .colorScheme
@@ -560,8 +809,7 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding:
-      const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         crossAxisAlignment:
         CrossAxisAlignment.start,
@@ -604,11 +852,9 @@ class _ErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding:
-        const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize:
-          MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
               Icons.error_outline,
@@ -617,14 +863,12 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               message,
-              textAlign:
-              TextAlign.center,
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: onRetry,
-              child:
-              const Text('Retry'),
+              child: const Text('Retry'),
             ),
           ],
         ),

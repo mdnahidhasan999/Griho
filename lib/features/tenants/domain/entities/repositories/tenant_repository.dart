@@ -67,6 +67,12 @@ abstract class TenantRepository {
 
   Future<Tenant> endTenancy(String tenantId);
 
+  Future<Tenant> startNewTenancy({
+    required String tenantId,
+    required String propertyId,
+    required String unitId,
+  });
+
   // ============================================================
   // DELETE TENANT
   // ============================================================

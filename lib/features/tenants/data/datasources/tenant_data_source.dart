@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../../core/utils/phone_number_utils.dart';
+import '../../../units/domain/entities/unit.dart';
 import '../../domain/entities/tenant.dart';
 import '../../domain/entities/tenant_search_result.dart';
 import '../models/tenant_model.dart';
@@ -850,6 +851,298 @@ class TenantDataSource {
 
     return TenantModel.fromFirestore(updatedSnapshot);
   }
+
+
+
+
+
+
+// ==========================================================================
+// START NEW TENANCY
+// ==========================================================================
+
+  Future<TenantModel> startNewTenancy({
+    required String tenantId,
+    required String propertyId,
+    required String unitId,
+    required String ownerId,
+  }) async {
+    final normalizedTenantId = tenantId.trim();
+    final normalizedPropertyId = propertyId.trim();
+    final normalizedUnitId = unitId.trim();
+    final normalizedOwnerId = ownerId.trim();
+
+    if (normalizedTenantId.isEmpty) {
+      throw ArgumentError('Tenant ID cannot be empty.');
+    }
+
+    if (normalizedPropertyId.isEmpty) {
+      throw ArgumentError('Property ID cannot be empty.');
+    }
+
+    if (normalizedUnitId.isEmpty) {
+      throw ArgumentError('Unit ID cannot be empty.');
+    }
+
+    if (normalizedOwnerId.isEmpty) {
+      throw ArgumentError('Owner ID cannot be empty.');
+    }
+
+    final tenantDocument =
+    _tenants.doc(normalizedTenantId);
+
+    final propertyDocument =
+    _properties.doc(normalizedPropertyId);
+
+    final unitDocument =
+    _units.doc(normalizedUnitId);
+
+    await _firestore.runTransaction((transaction) async {
+      // ------------------------------------------------------------------------
+      // READ TENANT
+      // ------------------------------------------------------------------------
+
+      final tenantSnapshot =
+      await transaction.get(tenantDocument);
+
+      if (!tenantSnapshot.exists) {
+        throw StateError(
+          'Tenant $normalizedTenantId does not exist.',
+        );
+      }
+
+      final tenant =
+      TenantModel.fromFirestore(tenantSnapshot);
+
+      // ------------------------------------------------------------------------
+      // OWNER VALIDATION
+      // ------------------------------------------------------------------------
+
+      if (tenant.ownerId != normalizedOwnerId) {
+        throw StateError(
+          'This tenant does not belong to the current owner.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // TENANT MUST BE INACTIVE
+      // ------------------------------------------------------------------------
+
+      if (tenant.status != TenantStatus.inactive) {
+        throw StateError(
+          'Only an inactive tenant can start a new tenancy.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // TENANT ACCOUNT MUST BE REGISTERED
+      // ------------------------------------------------------------------------
+
+      if (tenant.accountStatus !=
+          TenantAccountStatus.registered) {
+        throw StateError(
+          'Tenant account must be registered before starting a new tenancy.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // TENANT USER ID REQUIRED
+      // ------------------------------------------------------------------------
+
+      final tenantUserId =
+      tenant.userId?.trim();
+
+      if (tenantUserId == null ||
+          tenantUserId.isEmpty) {
+        throw StateError(
+          'Tenant account is not linked.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // READ PROPERTY + UNIT
+      // ------------------------------------------------------------------------
+
+      final propertySnapshot =
+      await transaction.get(propertyDocument);
+
+      final unitSnapshot =
+      await transaction.get(unitDocument);
+
+      if (!propertySnapshot.exists) {
+        throw StateError(
+          'Property $normalizedPropertyId does not exist.',
+        );
+      }
+
+      if (!unitSnapshot.exists) {
+        throw StateError(
+          'Unit $normalizedUnitId does not exist.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // PROPERTY OWNER VALIDATION
+      // ------------------------------------------------------------------------
+
+      final propertyData =
+      propertySnapshot.data();
+
+      if (propertyData == null) {
+        throw StateError(
+          'Property $normalizedPropertyId contains no data.',
+        );
+      }
+
+      final propertyOwnerId =
+      (propertyData['ownerId'] as String?)?.trim();
+
+      if (propertyOwnerId != normalizedOwnerId) {
+        throw StateError(
+          'The selected property does not belong to the current owner.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // UNIT VALIDATION
+      // ------------------------------------------------------------------------
+
+      final unitData =
+      unitSnapshot.data();
+
+      if (unitData == null) {
+        throw StateError(
+          'Unit $normalizedUnitId contains no data.',
+        );
+      }
+
+      final unitPropertyId =
+      (unitData['propertyId'] as String?)?.trim();
+
+      if (unitPropertyId != normalizedPropertyId) {
+        throw StateError(
+          'The selected unit does not belong to the selected property.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // UNIT MUST BE AVAILABLE
+      // ------------------------------------------------------------------------
+
+      final unitStatus =
+      unitData['status'];
+
+      if (unitStatus != UnitStatus.available.name) {
+        throw StateError(
+          'The selected unit is not available.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // UNIT MUST NOT ALREADY HAVE A TENANT
+      // ------------------------------------------------------------------------
+
+      final existingTenantUserId =
+      unitData['tenantUserId'];
+
+      if (existingTenantUserId is String &&
+          existingTenantUserId.trim().isNotEmpty) {
+        throw StateError(
+          'The selected unit already has a tenant.',
+        );
+      }
+
+      // ------------------------------------------------------------------------
+      // BUILD UPDATED TENANT
+      // ------------------------------------------------------------------------
+
+      final updatedTenant =
+      tenant.copyWith(
+        propertyId: normalizedPropertyId,
+        unitId: normalizedUnitId,
+        status: TenantStatus.active,
+        updatedAt: DateTime.now(),
+      );
+
+      final updatedTenantModel =
+      TenantModel.fromEntity(updatedTenant);
+
+      // ------------------------------------------------------------------------
+      // UPDATE TENANT
+      // ------------------------------------------------------------------------
+
+      transaction.update(
+        tenantDocument,
+        updatedTenantModel.toFirestore(),
+      );
+
+      // ------------------------------------------------------------------------
+      // OCCUPY UNIT
+      // ------------------------------------------------------------------------
+
+      transaction.update(
+        unitDocument,
+        {
+          'status': UnitStatus.occupied.name,
+          'tenantUserId': tenantUserId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+
+      // ------------------------------------------------------------------------
+      // ADD TENANT TO PROPERTY
+      // ------------------------------------------------------------------------
+
+      transaction.update(
+        propertyDocument,
+        {
+          'tenantUserIds':
+          FieldValue.arrayUnion([tenantUserId]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+
+      // ------------------------------------------------------------------------
+      // CREATE TENANT ACCESS
+      // ------------------------------------------------------------------------
+
+      final tenantAccessDocument =
+      _tenantAccess.doc(tenantUserId);
+
+      transaction.set(
+        tenantAccessDocument,
+        {
+          'userId': tenantUserId,
+          'tenantId': normalizedTenantId,
+          'ownerId': normalizedOwnerId,
+          'propertyId': normalizedPropertyId,
+          'unitId': normalizedUnitId,
+          'invitationId': null,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+    });
+
+    // --------------------------------------------------------------------------
+    // RETURN UPDATED TENANT
+    // --------------------------------------------------------------------------
+
+    final updatedSnapshot =
+    await tenantDocument.get();
+
+    if (!updatedSnapshot.exists) {
+      throw StateError(
+        'New tenancy was started but tenant could not be retrieved.',
+      );
+    }
+
+    return TenantModel.fromFirestore(
+      updatedSnapshot,
+    );
+  }
+
+
 
   // ==========================================================================
   // DELETE TENANT
