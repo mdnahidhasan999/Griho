@@ -4,8 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 
+import '../../../properties/domain/entities/property.dart';
+import '../../../properties/presentation/providers/property_provider.dart';
+
+import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/controllers/tenant_controller.dart';
+import '../../../tenants/presentation/providers/tenancy_history_provider.dart';
 
 import '../../domain/entities/unit.dart';
 import '../controllers/unit_controller.dart';
@@ -25,8 +30,7 @@ class UnitDetailsScreen extends ConsumerStatefulWidget {
       _UnitDetailsScreenState();
 }
 
-class _UnitDetailsScreenState
-    extends ConsumerState<UnitDetailsScreen> {
+class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
   Unit? _unit;
 
   List<Tenant> _activeTenants = [];
@@ -67,8 +71,7 @@ class _UnitDetailsScreenState
       List<Tenant> activeTenants = [];
 
       if (unit != null) {
-        activeTenants =
-        await getActiveTenantsByUnitId(
+        activeTenants = await getActiveTenantsByUnitId(
           unit.id,
         );
       }
@@ -291,6 +294,16 @@ class _UnitDetailsScreenState
     }
 
     // ==========================================================
+    // PROPERTY
+    // ==========================================================
+
+    final propertyAsync = ref.watch(
+      propertyByIdProvider(
+        unit.propertyId,
+      ),
+    );
+
+    // ==========================================================
     // DETAILS
     // ==========================================================
 
@@ -320,9 +333,51 @@ class _UnitDetailsScreenState
       ),
       body: Stack(
         children: [
-          _UnitDetails(
-            unit: unit,
-            activeTenants: _activeTenants,
+          propertyAsync.when(
+            loading: () {
+              return _UnitDetails(
+                unit: unit,
+                activeTenants: _activeTenants,
+                property: null,
+                historyAsync: null,
+              );
+            },
+            error: (_, _) {
+              return _UnitDetails(
+                unit: unit,
+                activeTenants: _activeTenants,
+                property: null,
+                historyAsync: null,
+                propertyLoadError: true,
+              );
+            },
+            data: (Property? property) {
+              if (property == null) {
+                return _UnitDetails(
+                  unit: unit,
+                  activeTenants: _activeTenants,
+                  property: null,
+                  historyAsync: null,
+                  propertyLoadError: true,
+                );
+              }
+
+              final historyAsync = ref.watch(
+                unitHistoryProvider(
+                  (
+                  unitId: unit.id,
+                  ownerId: property.ownerId,
+                  ),
+                ),
+              );
+
+              return _UnitDetails(
+                unit: unit,
+                activeTenants: _activeTenants,
+                property: property,
+                historyAsync: historyAsync,
+              );
+            },
           ),
 
           if (_isDeleting)
@@ -362,10 +417,16 @@ class _UnitDetailsScreenState
 class _UnitDetails extends StatelessWidget {
   final Unit unit;
   final List<Tenant> activeTenants;
+  final Property? property;
+  final AsyncValue<List<TenancyHistory>>? historyAsync;
+  final bool propertyLoadError;
 
   const _UnitDetails({
     required this.unit,
     required this.activeTenants,
+    required this.property,
+    required this.historyAsync,
+    this.propertyLoadError = false,
   });
 
   @override
@@ -388,26 +449,36 @@ class _UnitDetails extends StatelessWidget {
                   Icons.apartment_outlined,
                   size: 52,
                 ),
-
                 const SizedBox(height: 16),
-
                 Text(
                   unit.unitNumber,
-                  style: Theme.of(context)
+                  style: Theme
+                      .of(context)
                       .textTheme
                       .headlineSmall,
                 ),
-
                 const SizedBox(height: 8),
-
                 Text(
-                  unit.name?.trim().isNotEmpty == true
+                  unit.name
+                      ?.trim()
+                      .isNotEmpty == true
                       ? unit.name!
                       : 'Unit',
-                  style: Theme.of(context)
+                  style: Theme
+                      .of(context)
                       .textTheme
                       .bodyMedium,
                 ),
+                if (property != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    property!.name,
+                    style: Theme
+                        .of(context)
+                        .textTheme
+                        .bodyMedium,
+                  ),
+                ],
               ],
             ),
           ),
@@ -426,29 +497,27 @@ class _UnitDetails extends StatelessWidget {
               label: 'Floor',
               value: unit.floorNumber.toString(),
             ),
-
             _InfoRow(
               label: 'Unit Number',
               value: unit.unitNumber,
             ),
-
             _InfoRow(
               label: 'Status',
               value: _statusLabel(
                 unit.status,
               ),
             ),
-
             _InfoRow(
               label: 'Monthly Rent',
               value: unit.monthlyRent != null
                   ? '৳ ${unit.monthlyRent!.toStringAsFixed(0)}'
                   : 'Not provided',
             ),
-
             _InfoRow(
               label: 'Unit Name',
-              value: unit.name?.trim().isNotEmpty == true
+              value: unit.name
+                  ?.trim()
+                  .isNotEmpty == true
                   ? unit.name!
                   : 'Not provided',
             ),
@@ -464,6 +533,17 @@ class _UnitDetails extends StatelessWidget {
         _TenantSection(
           tenants: activeTenants,
         ),
+
+        const SizedBox(height: 20),
+
+        // ==========================================================
+        // TENANCY HISTORY
+        // ==========================================================
+
+        _UnitHistorySection(
+          historyAsync: historyAsync,
+          propertyLoadError: propertyLoadError,
+        ),
       ],
     );
   }
@@ -472,9 +552,7 @@ class _UnitDetails extends StatelessWidget {
   // UNIT STATUS LABEL
   // ============================================================
 
-  String _statusLabel(
-      UnitStatus status,
-      ) {
+  String _statusLabel(UnitStatus status,) {
     switch (status) {
       case UnitStatus.available:
         return 'Available';
@@ -488,6 +566,325 @@ class _UnitDetails extends StatelessWidget {
       case UnitStatus.inactive:
         return 'Inactive';
     }
+  }
+}
+
+// ============================================================================
+// UNIT HISTORY SECTION
+// ============================================================================
+
+class _UnitHistorySection extends StatelessWidget {
+  final AsyncValue<List<TenancyHistory>>? historyAsync;
+  final bool propertyLoadError;
+
+  const _UnitHistorySection({
+    required this.historyAsync,
+    required this.propertyLoadError,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (propertyLoadError) {
+      return const _InfoCard(
+        title: 'Tenancy History',
+        children: [
+          _InfoRow(
+            label: 'History',
+            value: 'Unable to load property information.',
+          ),
+        ],
+      );
+    }
+
+    if (historyAsync == null) {
+      return const _InfoCard(
+        title: 'Tenancy History',
+        children: [
+          _LoadingInfoRow(
+            label: 'Previous tenants',
+          ),
+        ],
+      );
+    }
+
+    return historyAsync!.when(
+      loading: () {
+        return const _InfoCard(
+          title: 'Tenancy History',
+          children: [
+            _LoadingInfoRow(
+              label: 'Previous tenants',
+            ),
+          ],
+        );
+      },
+      error: (_, _) {
+        return const _InfoCard(
+          title: 'Tenancy History',
+          children: [
+            _InfoRow(
+              label: 'History',
+              value: 'Unable to load.',
+            ),
+          ],
+        );
+      },
+      data: (histories) {
+        if (histories.isEmpty) {
+          return const _InfoCard(
+            title: 'Tenancy History',
+            children: [
+              _InfoRow(
+                label: 'History',
+                value: 'No previous tenant.',
+              ),
+            ],
+          );
+        }
+
+        return _UnitHistoryCard(
+          histories: histories,
+        );
+      },
+    );
+  }
+}
+
+// ============================================================================
+// UNIT HISTORY CARD
+// ============================================================================
+
+class _UnitHistoryCard extends StatelessWidget {
+  final List<TenancyHistory> histories;
+
+  const _UnitHistoryCard({
+    required this.histories,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tenancy History',
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${histories.length} previous '
+                  '${histories.length == 1 ? 'tenancy' : 'tenancies'}',
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .bodySmall,
+            ),
+            const SizedBox(height: 16),
+            ...List.generate(
+              histories.length,
+                  (index) {
+                final history = histories[index];
+
+                return Column(
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
+                  children: [
+                    if (index > 0)
+                      const Divider(
+                        height: 28,
+                      ),
+                    _UnitHistoryItem(
+                      history: history,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// UNIT HISTORY ITEM
+// ============================================================================
+
+class _UnitHistoryItem extends StatelessWidget {
+  final TenancyHistory history;
+
+  const _UnitHistoryItem({
+    required this.history,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment:
+      CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 22,
+              child: Text(
+                _initial(history.tenantName),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    history.tenantName,
+                    style: Theme
+                        .of(context)
+                        .textTheme
+                        .titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    history.propertyName,
+                    style: Theme
+                        .of(context)
+                        .textTheme
+                        .bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 14),
+
+        _HistoryDetailRow(
+          label: 'Property Code',
+          value: history.propertyCode,
+        ),
+
+        _HistoryDetailRow(
+          label: 'Unit',
+          value: history.unitName
+              ?.trim()
+              .isNotEmpty == true
+              ? history.unitName!
+              : history.unitNumber,
+        ),
+
+        _HistoryDetailRow(
+          label: 'Floor',
+          value: history.floorNumber.toString(),
+        ),
+
+        _HistoryDetailRow(
+          label: 'Monthly Rent',
+          value: history.monthlyRent == null
+              ? 'Not provided'
+              : '৳ ${_formatRent(history.monthlyRent!)}',
+        ),
+
+        _HistoryDetailRow(
+          label: 'Started',
+          value: _formatDate(
+            history.startedAt,
+          ),
+        ),
+
+        _HistoryDetailRow(
+          label: 'Ended',
+          value: _formatDate(
+            history.endedAt,
+          ),
+        ),
+
+        _HistoryDetailRow(
+          label: 'Duration',
+          value: _formatDuration(
+            history.startedAt,
+            history.endedAt,
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 5,
+          ),
+          decoration: BoxDecoration(
+            borderRadius:
+            BorderRadius.circular(16),
+            color: Theme
+                .of(context)
+                .colorScheme
+                .surfaceContainerHighest,
+          ),
+          child: Text(
+            'Ended',
+            style: Theme
+                .of(context)
+                .textTheme
+                .labelMedium,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _initial(String name) {
+    final value = name.trim();
+
+    if (value.isEmpty) {
+      return '?';
+    }
+
+    return value.characters
+        .first
+        .toUpperCase();
+  }
+
+  String _formatDate(DateTime dateTime) {
+    final local = dateTime.toLocal();
+
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')}/'
+        '${local.year}';
+  }
+
+  String _formatDuration(DateTime startedAt,
+      DateTime endedAt,) {
+    final difference =
+    endedAt.difference(startedAt);
+
+    final days = difference.inDays;
+
+    if (days <= 0) {
+      return 'Less than 1 day';
+    }
+
+    return '$days ${days == 1 ? 'day' : 'days'}';
+  }
+
+  String _formatRent(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+
+    return value.toStringAsFixed(2);
   }
 }
 
@@ -515,13 +912,12 @@ class _InfoCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context)
+              style: Theme
+                  .of(context)
                   .textTheme
                   .titleMedium,
             ),
-
             const SizedBox(height: 16),
-
             ...children,
           ],
         ),
@@ -557,28 +953,27 @@ class _TenantSection extends StatelessWidget {
             children: [
               Text(
                 'Current Tenants',
-                style: Theme.of(context)
+                style: Theme
+                    .of(context)
                     .textTheme
                     .titleMedium,
               ),
-
               const SizedBox(height: 16),
-
               Row(
                 children: [
                   Icon(
                     Icons.person_off_outlined,
-                    color: Theme.of(context)
+                    color: Theme
+                        .of(context)
                         .colorScheme
                         .onSurfaceVariant,
                   ),
-
                   const SizedBox(width: 12),
-
                   Expanded(
                     child: Text(
                       'No active tenant assigned to this unit.',
-                      style: Theme.of(context)
+                      style: Theme
+                          .of(context)
                           .textTheme
                           .bodyMedium,
                     ),
@@ -607,32 +1002,32 @@ class _TenantSection extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Current Tenants',
-                    style: Theme.of(context)
+                    style: Theme
+                        .of(context)
                         .textTheme
                         .titleMedium,
                   ),
                 ),
-
                 Text(
                   tenants.length.toString(),
-                  style: Theme.of(context)
+                  style: Theme
+                      .of(context)
                       .textTheme
                       .labelLarge,
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
-
             ...tenants.map(
-                  (tenant) => Padding(
-                padding: const EdgeInsets.only(
-                  bottom: 12,
-                ),
-                child: _TenantTile(
-                  tenant: tenant,
-                ),
-              ),
+                  (tenant) =>
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      bottom: 12,
+                    ),
+                    child: _TenantTile(
+                      tenant: tenant,
+                    ),
+                  ),
             ),
           ],
         ),
@@ -675,14 +1070,13 @@ class _TenantTile extends StatelessWidget {
                   _initial(
                     tenant.name,
                   ),
-                  style: Theme.of(context)
+                  style: Theme
+                      .of(context)
                       .textTheme
                       .titleMedium,
                 ),
               ),
-
               const SizedBox(width: 16),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment:
@@ -693,30 +1087,26 @@ class _TenantTile extends StatelessWidget {
                       maxLines: 1,
                       overflow:
                       TextOverflow.ellipsis,
-                      style: Theme.of(context)
+                      style: Theme
+                          .of(context)
                           .textTheme
                           .titleMedium,
                     ),
-
                     const SizedBox(height: 5),
-
                     Text(
                       tenant.phone,
-                      style: Theme.of(context)
+                      style: Theme
+                          .of(context)
                           .textTheme
                           .bodyMedium,
                     ),
-
                     const SizedBox(height: 6),
-
                     Row(
                       children: [
                         _TenantStatusChip(
                           status: tenant.status,
                         ),
-
                         const SizedBox(width: 8),
-
                         if (tenant.userId == null)
                           const _AccountStatusChip(
                             label: 'Not registered',
@@ -730,9 +1120,7 @@ class _TenantTile extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(width: 8),
-
               const Icon(
                 Icons.chevron_right,
               ),
@@ -770,7 +1158,9 @@ class _TenantStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme =
-        Theme.of(context).colorScheme;
+        Theme
+            .of(context)
+            .colorScheme;
 
     final isActive =
         status == TenantStatus.active;
@@ -790,7 +1180,8 @@ class _TenantStatusChip extends StatelessWidget {
       ),
       child: Text(
         isActive ? 'Active' : 'Inactive',
-        style: Theme.of(context)
+        style: Theme
+            .of(context)
             .textTheme
             .labelSmall
             ?.copyWith(
@@ -821,7 +1212,9 @@ class _AccountStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme =
-        Theme.of(context).colorScheme;
+        Theme
+            .of(context)
+            .colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -836,7 +1229,8 @@ class _AccountStatusChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(context)
+        style: Theme
+            .of(context)
             .textTheme
             .labelSmall
             ?.copyWith(
@@ -875,18 +1269,108 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: Theme.of(context)
+            style: Theme
+                .of(context)
                 .textTheme
                 .labelMedium,
           ),
-
           const SizedBox(height: 4),
-
           Text(
             value,
-            style: Theme.of(context)
+            style: Theme
+                .of(context)
                 .textTheme
                 .bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// HISTORY DETAIL ROW
+// ============================================================================
+
+class _HistoryDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _HistoryDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        bottom: 8,
+      ),
+      child: Row(
+        crossAxisAlignment:
+        CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .labelMedium,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// LOADING INFO
+// ============================================================================
+
+class _LoadingInfoRow extends StatelessWidget {
+  final String label;
+
+  const _LoadingInfoRow({
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        bottom: 14,
+      ),
+      child: Column(
+        crossAxisAlignment:
+        CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme
+                .of(context)
+                .textTheme
+                .labelMedium,
+          ),
+          const SizedBox(height: 8),
+          const SizedBox(
+            height: 18,
+            width: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+            ),
           ),
         ],
       ),
@@ -920,17 +1404,13 @@ class _ErrorView extends StatelessWidget {
               Icons.error_outline,
               size: 48,
             ),
-
             const SizedBox(height: 16),
-
             Text(
               message,
               textAlign:
               TextAlign.center,
             ),
-
             const SizedBox(height: 16),
-
             FilledButton(
               onPressed: onRetry,
               child: const Text(

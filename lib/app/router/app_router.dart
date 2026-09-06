@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/home/presentation/screens/tenant_home_screen.dart';
 import 'auth_state_refresh_notifier.dart';
 import 'route_arguments.dart';
 
@@ -12,7 +13,6 @@ import '../../features/auth/presentation/screens/phone_login_screen.dart';
 import '../../features/home/presentation/screens/caretaker_home_screen.dart';
 import '../../features/home/presentation/screens/manager_home_screen.dart';
 import '../../features/home/presentation/screens/owner_home_screen.dart';
-import '../../features/home/presentation/screens/tenant_home_screen.dart';
 
 import '../../features/properties/domain/entities/property.dart';
 import '../../features/properties/presentation/screens/add_property_screen.dart';
@@ -84,7 +84,9 @@ abstract final class AppRouter {
           builder: (context, state) {
             final phoneNumber = state.extra as String?;
 
-            if (phoneNumber == null || phoneNumber.trim().isEmpty) {
+            if (phoneNumber == null || phoneNumber
+                .trim()
+                .isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid phone number.')),
               );
@@ -350,7 +352,9 @@ abstract final class AppRouter {
           builder: (context, state) {
             final invitationId = state.pathParameters['invitationId'];
 
-            if (invitationId == null || invitationId.trim().isEmpty) {
+            if (invitationId == null || invitationId
+                .trim()
+                .isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid invitation link.')),
               );

@@ -16,6 +16,7 @@ class TenantModel extends Tenant {
     required super.status,
     required super.accountStatus,
     required super.confirmationStatus,
+    super.tenancyStartedAt,
     required super.createdAt,
     required super.updatedAt,
   });
@@ -38,6 +39,7 @@ class TenantModel extends Tenant {
       status: tenant.status,
       accountStatus: tenant.accountStatus,
       confirmationStatus: tenant.confirmationStatus,
+      tenancyStartedAt: tenant.tenancyStartedAt,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
     );
@@ -48,8 +50,7 @@ class TenantModel extends Tenant {
   // ==========================================================================
 
   factory TenantModel.fromFirestore(
-    DocumentSnapshot<Map<String, dynamic>> document,
-  ) {
+      DocumentSnapshot<Map<String, dynamic>> document,) {
     final data = document.data();
 
     if (data == null) {
@@ -81,6 +82,11 @@ class TenantModel extends Tenant {
 
       confirmationStatus: _readConfirmationStatus(data),
 
+      tenancyStartedAt: _readOptionalDateTime(
+        data,
+        'tenancyStartedAt',
+      ),
+
       createdAt: _readDateTime(data, 'createdAt'),
 
       updatedAt: _readDateTime(data, 'updatedAt'),
@@ -104,6 +110,9 @@ class TenantModel extends Tenant {
       'status': status.name,
       'accountStatus': accountStatus.name,
       'confirmationStatus': confirmationStatus.name,
+      'tenancyStartedAt': tenancyStartedAt == null
+          ? null
+          : Timestamp.fromDate(tenancyStartedAt!),
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -118,7 +127,7 @@ class TenantModel extends Tenant {
 
     if (value is String) {
       return TenantStatus.values.firstWhere(
-        (status) => status.name == value,
+            (status) => status.name == value,
         orElse: () => TenantStatus.active,
       );
     }
@@ -130,12 +139,12 @@ class TenantModel extends Tenant {
   // ACCOUNT STATUS
   // ==========================================================================
 
-  static TenantAccountStatus _readAccountStatus(Map<String, dynamic> data) {
+  static TenantAccountStatus _readAccountStatus(Map<String, dynamic> data,) {
     final value = data['accountStatus'];
 
     if (value is String) {
       final parsed = TenantAccountStatus.values.where(
-        (status) => status.name == value,
+            (status) => status.name == value,
       );
 
       if (parsed.isNotEmpty) {
@@ -151,11 +160,12 @@ class TenantModel extends Tenant {
   // ==========================================================================
 
   static TenantAccountStatus _accountStatusFromUserId(
-    Map<String, dynamic> data,
-  ) {
+      Map<String, dynamic> data,) {
     final userId = data['userId'];
 
-    if (userId is String && userId.trim().isNotEmpty) {
+    if (userId is String && userId
+        .trim()
+        .isNotEmpty) {
       return TenantAccountStatus.registered;
     }
 
@@ -167,13 +177,12 @@ class TenantModel extends Tenant {
   // ==========================================================================
 
   static TenantConfirmationStatus _readConfirmationStatus(
-    Map<String, dynamic> data,
-  ) {
+      Map<String, dynamic> data,) {
     final value = data['confirmationStatus'];
 
     if (value is String) {
       final parsed = TenantConfirmationStatus.values.where(
-        (status) => status.name == value,
+            (status) => status.name == value,
       );
 
       if (parsed.isNotEmpty) {
@@ -188,11 +197,16 @@ class TenantModel extends Tenant {
   // REQUIRED STRING
   // ==========================================================================
 
-  static String _readRequiredString(Map<String, dynamic> data, String field) {
+  static String _readRequiredString(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
-    if (value is! String || value.trim().isEmpty) {
-      throw StateError('Tenant field "$field" is missing or invalid.');
+    if (value is! String || value
+        .trim()
+        .isEmpty) {
+      throw StateError(
+        'Tenant field "$field" is missing or invalid.',
+      );
     }
 
     return value.trim();
@@ -202,7 +216,8 @@ class TenantModel extends Tenant {
   // OPTIONAL STRING
   // ==========================================================================
 
-  static String? _readOptionalString(Map<String, dynamic> data, String field) {
+  static String? _readOptionalString(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value == null) {
@@ -210,7 +225,9 @@ class TenantModel extends Tenant {
     }
 
     if (value is! String) {
-      throw StateError('Tenant field "$field" is invalid.');
+      throw StateError(
+        'Tenant field "$field" is invalid.',
+      );
     }
 
     final trimmed = value.trim();
@@ -223,10 +240,44 @@ class TenantModel extends Tenant {
   }
 
   // ==========================================================================
+  // OPTIONAL DATE TIME
+  // ==========================================================================
+
+  static DateTime? _readOptionalDateTime(Map<String, dynamic> data,
+      String field,) {
+    final value = data[field];
+
+    if (value == null) {
+      return null;
+    }
+
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      final parsed = DateTime.tryParse(value);
+
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+
+    throw StateError(
+      'Tenant field "$field" is invalid.',
+    );
+  }
+
+  // ==========================================================================
   // DATE TIME
   // ==========================================================================
 
-  static DateTime _readDateTime(Map<String, dynamic> data, String field) {
+  static DateTime _readDateTime(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value is Timestamp) {
@@ -245,6 +296,8 @@ class TenantModel extends Tenant {
       }
     }
 
-    throw StateError('Tenant field "$field" is missing or invalid.');
+    throw StateError(
+      'Tenant field "$field" is missing or invalid.',
+    );
   }
 }

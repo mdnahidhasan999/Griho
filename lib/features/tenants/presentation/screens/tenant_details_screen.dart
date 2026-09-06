@@ -7,9 +7,11 @@ import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
+import '../../domain/entities/tenancy_history.dart';
 import '../../domain/entities/tenant.dart';
 import '../controllers/tenant_controller.dart';
 import '../providers/property_tenants_provider.dart';
+import '../providers/tenancy_history_provider.dart';
 import 'start_new_tenancy_screen.dart';
 
 class TenantDetailsScreen extends ConsumerStatefulWidget {
@@ -151,6 +153,15 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
     ref.invalidate(
       unitByIdProvider(tenant.unitId),
+    );
+
+    ref.invalidate(
+      tenantHistoryProvider(
+        (
+        tenantId: tenant.id,
+        ownerId: tenant.ownerId,
+        ),
+      ),
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -320,6 +331,15 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
       unitByIdProvider(tenant.unitId),
     );
 
+    final historyAsync = ref.watch(
+      tenantHistoryProvider(
+        (
+        tenantId: tenant.id,
+        ownerId: tenant.ownerId,
+        ),
+      ),
+    );
+
     final isActive = tenant.status == TenantStatus.active;
 
     final canStartNewTenancy =
@@ -369,6 +389,15 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                     result.unitId,
                   ),
                 );
+
+                ref.invalidate(
+                  tenantHistoryProvider(
+                    (
+                    tenantId: result.id,
+                    ownerId: result.ownerId,
+                    ),
+                  ),
+                );
               }
             },
             icon: const Icon(
@@ -387,7 +416,24 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadTenant,
+        onRefresh: () async {
+          await _loadTenant();
+
+          if (mounted) {
+            final currentTenant = _tenant;
+
+            if (currentTenant != null) {
+              ref.invalidate(
+                tenantHistoryProvider(
+                  (
+                  tenantId: currentTenant.id,
+                  ownerId: currentTenant.ownerId,
+                  ),
+                ),
+              );
+            }
+          }
+        },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
@@ -545,8 +591,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                 ),
                 _InfoRow(
                   label: 'NID Number',
-                  value:
-                  tenant.nidNumber
+                  value: tenant.nidNumber
                       ?.trim()
                       .isNotEmpty == true
                       ? tenant.nidNumber!
@@ -577,8 +622,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                   data: (Property? property) {
                     return _InfoRow(
                       label: 'Property',
-                      value:
-                      property?.name ??
+                      value: property?.name ??
                           'Property not found',
                     );
                   },
@@ -606,6 +650,52 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             const SizedBox(height: 20),
 
             // ========================================================
+            // TENANCY HISTORY
+            // ========================================================
+
+            historyAsync.when(
+              loading: () =>
+              const _InfoCard(
+                title: 'Tenancy History',
+                children: [
+                  _LoadingInfoRow(
+                    label: 'Previous tenancies',
+                  ),
+                ],
+              ),
+              error: (_, _) =>
+              const _InfoCard(
+                title: 'Tenancy History',
+                children: [
+                  _InfoRow(
+                    label: 'History',
+                    value: 'Unable to load',
+                  ),
+                ],
+              ),
+              data: (histories) {
+                if (histories.isEmpty) {
+                  return const _InfoCard(
+                    title: 'Tenancy History',
+                    children: [
+                      _InfoRow(
+                        label: 'History',
+                        value: 'No previous tenancy.',
+                      ),
+                    ],
+                  );
+                }
+
+                return _TenancyHistoryCard(
+                  histories: histories,
+                  formatDate: _formatDate,
+                );
+              },
+            ),
+
+            const SizedBox(height: 20),
+
+            // ========================================================
             // ACCOUNT INFORMATION
             // ========================================================
 
@@ -614,22 +704,15 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
               children: [
                 _InfoRow(
                   label: 'Account Status',
-                  value:
-                  tenant.accountStatus ==
+                  value: tenant.accountStatus ==
                       TenantAccountStatus.registered
                       ? 'Registered'
                       : 'Not registered',
                 ),
                 _InfoRow(
                   label: 'Confirmation',
-                  value:
-                  tenant.confirmationStatus ==
-                      TenantConfirmationStatus.confirmed
-                      ? 'Confirmed'
-                      : tenant.confirmationStatus.name.replaceFirst(
-                    tenant.confirmationStatus.name[0],
-                    tenant.confirmationStatus.name[0]
-                        .toUpperCase(),
+                  value: _confirmationStatusLabel(
+                    tenant.confirmationStatus,
                   ),
                 ),
                 _InfoRow(
@@ -650,6 +733,17 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
         ),
       ),
     );
+  }
+
+  String _confirmationStatusLabel(TenantConfirmationStatus status,) {
+    switch (status) {
+      case TenantConfirmationStatus.pending:
+        return 'Pending';
+      case TenantConfirmationStatus.confirmed:
+        return 'Confirmed';
+      case TenantConfirmationStatus.rejected:
+        return 'Rejected';
+    }
   }
 
   String _unitDisplayName(Unit? unit) {
@@ -674,6 +768,212 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
         '${local.year} '
         '${local.hour.toString().padLeft(2, '0')}:'
         '${local.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+// ============================================================================
+// TENANCY HISTORY CARD
+// ============================================================================
+
+class _TenancyHistoryCard extends StatelessWidget {
+  final List<TenancyHistory> histories;
+  final String Function(DateTime) formatDate;
+
+  const _TenancyHistoryCard({
+    required this.histories,
+    required this.formatDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tenancy History',
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .titleMedium,
+            ),
+            const SizedBox(height: 16),
+            ...List.generate(
+              histories.length,
+                  (index) {
+                final history = histories[index];
+
+                return Column(
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
+                  children: [
+                    if (index > 0)
+                      const Divider(
+                        height: 28,
+                      ),
+                    _TenancyHistoryItem(
+                      history: history,
+                      formatDate: formatDate,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// TENANCY HISTORY ITEM
+// ============================================================================
+
+class _TenancyHistoryItem extends StatelessWidget {
+  final TenancyHistory history;
+  final String Function(DateTime) formatDate;
+
+  const _TenancyHistoryItem({
+    required this.history,
+    required this.formatDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment:
+      CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.history,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                history.propertyName,
+                style: Theme
+                    .of(context)
+                    .textTheme
+                    .titleSmall,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _HistoryDetailRow(
+          label: 'Property Code',
+          value: history.propertyCode,
+        ),
+        _HistoryDetailRow(
+          label: 'Unit',
+          value: history.unitName
+              ?.trim()
+              .isNotEmpty == true
+              ? history.unitName!
+              : history.unitNumber,
+        ),
+        _HistoryDetailRow(
+          label: 'Floor',
+          value: history.floorNumber.toString(),
+        ),
+        _HistoryDetailRow(
+          label: 'Monthly Rent',
+          value: history.monthlyRent == null
+              ? 'Not provided'
+              : _formatRent(history.monthlyRent!),
+        ),
+        _HistoryDetailRow(
+          label: 'Started',
+          value: formatDate(history.startedAt),
+        ),
+        _HistoryDetailRow(
+          label: 'Ended',
+          value: formatDate(history.endedAt),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 5,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Theme
+                .of(context)
+                .colorScheme
+                .surfaceContainerHighest,
+          ),
+          child: Text(
+            'Ended',
+            style: Theme
+                .of(context)
+                .textTheme
+                .labelMedium,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatRent(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+
+    return value.toStringAsFixed(2);
+  }
+}
+
+// ============================================================================
+// HISTORY DETAIL ROW
+// ============================================================================
+
+class _HistoryDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _HistoryDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment:
+        CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .labelMedium,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
+import '../../../tenants/presentation/screens/tenant_tenancy_history_screen.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
 
 class TenantHomeScreen extends ConsumerWidget {
@@ -17,6 +18,24 @@ class TenantHomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Griho'),
         actions: [
+          // ==========================================================
+          // TENANCY HISTORY
+          // ==========================================================
+          IconButton(
+            tooltip: 'Tenancy History',
+            icon: const Icon(Icons.history_outlined),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const TenantTenancyHistoryScreen(),
+                ),
+              );
+            },
+          ),
+
+          // ==========================================================
+          // LOGOUT
+          // ==========================================================
           IconButton(
             tooltip: 'Logout',
             icon: const Icon(Icons.logout),
@@ -47,6 +66,7 @@ class TenantHomeScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(currentTenantProvider);
+
               await ref.read(currentTenantProvider.future);
             },
             child: ListView(
@@ -139,6 +159,21 @@ class TenantHomeScreen extends ConsumerWidget {
                       propertyCode: property?.propertyCode,
                       address: property?.address,
                       propertyType: property?.type.name,
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ==========================================================
+                // TENANCY HISTORY
+                // ==========================================================
+                _TenancyHistoryCard(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const TenantTenancyHistoryScreen(),
+                      ),
                     );
                   },
                 ),
@@ -578,6 +613,62 @@ class _QuickActionsCard extends StatelessWidget {
 }
 
 // ============================================================================
+// TENANCY HISTORY CARD
+// ============================================================================
+
+class _TenancyHistoryCard extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _TenancyHistoryCard({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                child: Icon(
+                  Icons.history_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tenancy History',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'View your previous tenancies and rental history.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
 // QUICK ACTION BUTTON
 // ============================================================================
 
@@ -883,7 +974,7 @@ class _NoTenancyView extends StatelessWidget {
 
             Text(
               'Your account is active, but you currently do not have '
-                  'an active tenancy connected to your account.',
+              'an active tenancy connected to your account.',
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -892,8 +983,8 @@ class _NoTenancyView extends StatelessWidget {
 
             Text(
               'When a property owner sends you a new invitation, '
-                  'you can review and accept it to connect a tenancy '
-                  'to your account.',
+              'you can review and accept it to connect a tenancy '
+              'to your account.',
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),

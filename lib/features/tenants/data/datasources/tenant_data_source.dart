@@ -10,7 +10,7 @@ class TenantDataSource {
   final FirebaseFirestore _firestore;
 
   TenantDataSource({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
   // ==========================================================================
   // COLLECTIONS
@@ -22,6 +22,7 @@ class TenantDataSource {
   static const String _publicIdCollectionName = 'public_ids';
   static const String _phoneLookupCollectionName = 'phone_lookups';
   static const String _tenantAccessCollectionName = 'tenantAccess';
+  static const String _tenancyHistoryCollectionName = 'tenancyHistories';
 
   CollectionReference<Map<String, dynamic>> get _tenants {
     return _firestore.collection(_tenantCollectionName);
@@ -45,6 +46,10 @@ class TenantDataSource {
 
   CollectionReference<Map<String, dynamic>> get _tenantAccess {
     return _firestore.collection(_tenantAccessCollectionName);
+  }
+
+  CollectionReference<Map<String, dynamic>> get _tenancyHistories {
+    return _firestore.collection(_tenancyHistoryCollectionName);
   }
 
   // ==========================================================================
@@ -223,7 +228,7 @@ class TenantDataSource {
 
       throw StateError(
         'A tenant with this phone number already exists: '
-        '${existingTenant.name} (${existingTenant.phone}).',
+            '${existingTenant.name} (${existingTenant.phone}).',
       );
     }
 
@@ -246,7 +251,7 @@ class TenantDataSource {
 
         throw StateError(
           'This unit already has an active tenant: '
-          '${existingTenant.name} (${existingTenant.phone}).',
+              '${existingTenant.name} (${existingTenant.phone}).',
         );
       }
     }
@@ -512,7 +517,7 @@ class TenantDataSource {
 
       throw StateError(
         'A tenant with this phone number already exists: '
-        '${duplicate.name} (${duplicate.phone}).',
+            '${duplicate.name} (${duplicate.phone}).',
       );
     }
 
@@ -537,7 +542,7 @@ class TenantDataSource {
 
         throw StateError(
           'This unit already has an active tenant: '
-          '${duplicate.name} (${duplicate.phone}).',
+              '${duplicate.name} (${duplicate.phone}).',
         );
       }
     }
@@ -720,6 +725,17 @@ class TenantDataSource {
   // ==========================================================================
   // END TENANCY
   // ==========================================================================
+  //
+  // Atomically:
+  //
+  // 1. Reads current tenant/property/unit.
+  // 2. Creates a historical tenancy snapshot.
+  // 3. Marks tenant inactive.
+  // 4. Releases the unit.
+  // 5. Removes tenant access from property.
+  // 6. Deletes tenantAccess.
+  //
+  // ==========================================================================
 
   Future<TenantModel> endTenancy({
     required String tenantId,
@@ -751,6 +767,10 @@ class TenantDataSource {
 
       final tenant = TenantModel.fromFirestore(tenantSnapshot);
 
+      // ----------------------------------------------------------------------
+      // OWNER VALIDATION
+      // ----------------------------------------------------------------------
+
       if (tenant.ownerId != normalizedOwnerId) {
         throw StateError('This tenant does not belong to the current owner.');
       }
@@ -761,6 +781,27 @@ class TenantDataSource {
 
       if (tenant.status == TenantStatus.inactive) {
         return;
+      }
+
+      // ----------------------------------------------------------------------
+      // TENANCY START DATE REQUIRED
+      // ----------------------------------------------------------------------
+
+      final tenancyStartedAt = tenant.tenancyStartedAt;
+
+      if (tenancyStartedAt == null) {
+        throw StateError(
+          'Tenancy start date is missing. '
+              'This tenancy cannot be ended until its start date is available.',
+        );
+      }
+
+      final endedAt = DateTime.now();
+
+      if (endedAt.isBefore(tenancyStartedAt)) {
+        throw StateError(
+          'Tenancy end date cannot be before its start date.',
+        );
       }
 
       final propertyDocument = _properties.doc(tenant.propertyId);
@@ -783,17 +824,198 @@ class TenantDataSource {
         throw StateError('Tenant unit no longer exists.');
       }
 
+      final propertyData = propertySnapshot.data();
+
+      if (propertyData == null) {
+        throw StateError('Tenant property contains no data.');
+      }
+
       final unitData = unitSnapshot.data();
 
       if (unitData == null) {
         throw StateError('Tenant unit contains no data.');
       }
 
-      final unitPropertyId = (unitData['propertyId'] as String?)?.trim();
+      // ----------------------------------------------------------------------
+      // VALIDATE PROPERTY
+      // ----------------------------------------------------------------------
+
+      final propertyOwnerId =
+      (propertyData['ownerId'] as String?)?.trim();
+
+      if (propertyOwnerId != normalizedOwnerId) {
+        throw StateError(
+          'Tenant property does not belong to the current owner.',
+        );
+      }
+
+      // ----------------------------------------------------------------------
+      // VALIDATE UNIT
+      // ----------------------------------------------------------------------
+
+      final unitPropertyId =
+      (unitData['propertyId'] as String?)?.trim();
 
       if (unitPropertyId != tenant.propertyId.trim()) {
-        throw StateError('Tenant unit does not belong to the tenant property.');
+        throw StateError(
+          'Tenant unit does not belong to the tenant property.',
+        );
       }
+
+      // ----------------------------------------------------------------------
+      // READ PROPERTY SNAPSHOT DATA
+      // ----------------------------------------------------------------------
+
+      final propertyName = propertyData['name'];
+
+      if (propertyName is! String || propertyName
+          .trim()
+          .isEmpty) {
+        throw StateError(
+          'Tenant property name is missing or invalid.',
+        );
+      }
+
+      final propertyCode = propertyData['propertyCode'];
+
+      if (propertyCode is! String || propertyCode
+          .trim()
+          .isEmpty) {
+        throw StateError(
+          'Tenant property code is missing or invalid.',
+        );
+      }
+
+      final propertyAddressValue = propertyData['address'];
+
+      String? propertyAddress;
+
+      if (propertyAddressValue != null) {
+        if (propertyAddressValue is! String) {
+          throw StateError(
+            'Tenant property address is invalid.',
+          );
+        }
+
+        final trimmedAddress = propertyAddressValue.trim();
+
+        if (trimmedAddress.isNotEmpty) {
+          propertyAddress = trimmedAddress;
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // READ UNIT SNAPSHOT DATA
+      // ----------------------------------------------------------------------
+
+      final unitNumber = unitData['unitNumber'];
+
+      if (unitNumber is! String || unitNumber
+          .trim()
+          .isEmpty) {
+        throw StateError(
+          'Tenant unit number is missing or invalid.',
+        );
+      }
+
+      final unitNameValue = unitData['name'];
+
+      String? unitName;
+
+      if (unitNameValue != null) {
+        if (unitNameValue is! String) {
+          throw StateError(
+            'Tenant unit name is invalid.',
+          );
+        }
+
+        final trimmedUnitName = unitNameValue.trim();
+
+        if (trimmedUnitName.isNotEmpty) {
+          unitName = trimmedUnitName;
+        }
+      }
+
+      final floorNumberValue = unitData['floorNumber'];
+
+      if (floorNumberValue is! num) {
+        throw StateError(
+          'Tenant unit floor number is missing or invalid.',
+        );
+      }
+
+      final floorNumber = floorNumberValue.toInt();
+
+      if (floorNumber < 1) {
+        throw StateError(
+          'Tenant unit floor number is invalid.',
+        );
+      }
+
+      // ----------------------------------------------------------------------
+      // READ MONTHLY RENT
+      // ----------------------------------------------------------------------
+
+      final monthlyRentValue = unitData['monthlyRent'];
+
+      double? monthlyRent;
+
+      if (monthlyRentValue != null) {
+        if (monthlyRentValue is! num) {
+          throw StateError(
+            'Tenant unit monthly rent is invalid.',
+          );
+        }
+
+        monthlyRent = monthlyRentValue.toDouble();
+
+        if (monthlyRent < 0) {
+          throw StateError(
+            'Tenant unit monthly rent cannot be negative.',
+          );
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // CREATE TENANCY HISTORY
+      // ----------------------------------------------------------------------
+      //
+      // Auto-generated Firestore document ID.
+      // This ID is internal and is never displayed in the UI.
+      //
+      // ----------------------------------------------------------------------
+
+      final historyDocument = _tenancyHistories.doc();
+
+      transaction.set(
+        historyDocument,
+        {
+          'tenantId': normalizedTenantId,
+          'tenantUserId': tenant.userId?.trim(),
+          'ownerId': normalizedOwnerId,
+
+          'tenantName': tenant.name.trim(),
+
+          'propertyId': tenant.propertyId.trim(),
+          'propertyName': propertyName.trim(),
+          'propertyCode': propertyCode.trim(),
+          'propertyAddress': propertyAddress,
+
+          'unitId': tenant.unitId.trim(),
+          'unitNumber': unitNumber.trim(),
+          'unitName': unitName,
+          'floorNumber': floorNumber,
+
+          'monthlyRent': monthlyRent,
+
+          'startedAt': Timestamp.fromDate(tenancyStartedAt),
+          'endedAt': Timestamp.fromDate(endedAt),
+
+          'status': 'ended',
+
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+      );
 
       // ----------------------------------------------------------------------
       // UPDATE TENANT
@@ -801,7 +1023,7 @@ class TenantDataSource {
 
       final updatedTenant = tenant.copyWith(
         status: TenantStatus.inactive,
-        updatedAt: DateTime.now(),
+        updatedAt: endedAt,
       );
 
       transaction.update(
@@ -814,7 +1036,7 @@ class TenantDataSource {
       // ----------------------------------------------------------------------
 
       transaction.update(unitDocument, {
-        'status': 'available',
+        'status': UnitStatus.available.name,
         'tenantUserId': null,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -846,20 +1068,17 @@ class TenantDataSource {
     final updatedSnapshot = await tenantDocument.get();
 
     if (!updatedSnapshot.exists) {
-      throw StateError('Tenancy was ended but tenant could not be retrieved.');
+      throw StateError(
+        'Tenancy was ended but tenant could not be retrieved.',
+      );
     }
 
     return TenantModel.fromFirestore(updatedSnapshot);
   }
 
-
-
-
-
-
-// ==========================================================================
-// START NEW TENANCY
-// ==========================================================================
+  // ==========================================================================
+  // START NEW TENANCY
+  // ==========================================================================
 
   Future<TenantModel> startNewTenancy({
     required String tenantId,
@@ -888,22 +1107,18 @@ class TenantDataSource {
       throw ArgumentError('Owner ID cannot be empty.');
     }
 
-    final tenantDocument =
-    _tenants.doc(normalizedTenantId);
+    final tenantDocument = _tenants.doc(normalizedTenantId);
 
-    final propertyDocument =
-    _properties.doc(normalizedPropertyId);
+    final propertyDocument = _properties.doc(normalizedPropertyId);
 
-    final unitDocument =
-    _units.doc(normalizedUnitId);
+    final unitDocument = _units.doc(normalizedUnitId);
 
     await _firestore.runTransaction((transaction) async {
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // READ TENANT
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      final tenantSnapshot =
-      await transaction.get(tenantDocument);
+      final tenantSnapshot = await transaction.get(tenantDocument);
 
       if (!tenantSnapshot.exists) {
         throw StateError(
@@ -911,12 +1126,11 @@ class TenantDataSource {
         );
       }
 
-      final tenant =
-      TenantModel.fromFirestore(tenantSnapshot);
+      final tenant = TenantModel.fromFirestore(tenantSnapshot);
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // OWNER VALIDATION
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
       if (tenant.ownerId != normalizedOwnerId) {
         throw StateError(
@@ -924,9 +1138,9 @@ class TenantDataSource {
         );
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // TENANT MUST BE INACTIVE
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
       if (tenant.status != TenantStatus.inactive) {
         throw StateError(
@@ -934,40 +1148,35 @@ class TenantDataSource {
         );
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // TENANT ACCOUNT MUST BE REGISTERED
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      if (tenant.accountStatus !=
-          TenantAccountStatus.registered) {
+      if (tenant.accountStatus != TenantAccountStatus.registered) {
         throw StateError(
           'Tenant account must be registered before starting a new tenancy.',
         );
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // TENANT USER ID REQUIRED
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      final tenantUserId =
-      tenant.userId?.trim();
+      final tenantUserId = tenant.userId?.trim();
 
-      if (tenantUserId == null ||
-          tenantUserId.isEmpty) {
+      if (tenantUserId == null || tenantUserId.isEmpty) {
         throw StateError(
           'Tenant account is not linked.',
         );
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // READ PROPERTY + UNIT
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      final propertySnapshot =
-      await transaction.get(propertyDocument);
+      final propertySnapshot = await transaction.get(propertyDocument);
 
-      final unitSnapshot =
-      await transaction.get(unitDocument);
+      final unitSnapshot = await transaction.get(unitDocument);
 
       if (!propertySnapshot.exists) {
         throw StateError(
@@ -981,12 +1190,11 @@ class TenantDataSource {
         );
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // PROPERTY OWNER VALIDATION
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      final propertyData =
-      propertySnapshot.data();
+      final propertyData = propertySnapshot.data();
 
       if (propertyData == null) {
         throw StateError(
@@ -1003,12 +1211,11 @@ class TenantDataSource {
         );
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // UNIT VALIDATION
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      final unitData =
-      unitSnapshot.data();
+      final unitData = unitSnapshot.data();
 
       if (unitData == null) {
         throw StateError(
@@ -1025,12 +1232,11 @@ class TenantDataSource {
         );
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // UNIT MUST BE AVAILABLE
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      final unitStatus =
-      unitData['status'];
+      final unitStatus = unitData['status'];
 
       if (unitStatus != UnitStatus.available.name) {
         throw StateError(
@@ -1038,47 +1244,50 @@ class TenantDataSource {
         );
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // UNIT MUST NOT ALREADY HAVE A TENANT
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      final existingTenantUserId =
-      unitData['tenantUserId'];
+      final existingTenantUserId = unitData['tenantUserId'];
 
-      if (existingTenantUserId is String &&
-          existingTenantUserId.trim().isNotEmpty) {
-        throw StateError(
-          'The selected unit already has a tenant.',
-        );
+      if (existingTenantUserId != null) {
+        if (existingTenantUserId is! String ||
+            existingTenantUserId
+                .trim()
+                .isNotEmpty) {
+          throw StateError(
+            'The selected unit already has a tenant.',
+          );
+        }
       }
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // BUILD UPDATED TENANT
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
-      final updatedTenant =
-      tenant.copyWith(
+      final updatedTenant = tenant.copyWith(
         propertyId: normalizedPropertyId,
         unitId: normalizedUnitId,
         status: TenantStatus.active,
+        tenancyStartedAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
       final updatedTenantModel =
       TenantModel.fromEntity(updatedTenant);
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // UPDATE TENANT
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
       transaction.update(
         tenantDocument,
         updatedTenantModel.toFirestore(),
       );
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // OCCUPY UNIT
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
       transaction.update(
         unitDocument,
@@ -1089,9 +1298,9 @@ class TenantDataSource {
         },
       );
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // ADD TENANT TO PROPERTY
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
       transaction.update(
         propertyDocument,
@@ -1102,9 +1311,9 @@ class TenantDataSource {
         },
       );
 
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
       // CREATE TENANT ACCESS
-      // ------------------------------------------------------------------------
+      // ----------------------------------------------------------------------
 
       final tenantAccessDocument =
       _tenantAccess.doc(tenantUserId);
@@ -1124,12 +1333,11 @@ class TenantDataSource {
       );
     });
 
-    // --------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
     // RETURN UPDATED TENANT
-    // --------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
-    final updatedSnapshot =
-    await tenantDocument.get();
+    final updatedSnapshot = await tenantDocument.get();
 
     if (!updatedSnapshot.exists) {
       throw StateError(
@@ -1141,8 +1349,6 @@ class TenantDataSource {
       updatedSnapshot,
     );
   }
-
-
 
   // ==========================================================================
   // DELETE TENANT
@@ -1221,7 +1427,8 @@ class TenantDataSource {
       return null;
     }
 
-    final publicIdSnapshot = await _publicIds.doc(normalizedPublicId).get();
+    final publicIdSnapshot =
+    await _publicIds.doc(normalizedPublicId).get();
 
     if (!publicIdSnapshot.exists) {
       return null;
@@ -1248,9 +1455,11 @@ class TenantDataSource {
       return null;
     }
 
-    final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(phone);
+    final normalizedPhone =
+    PhoneNumberUtils.normalizeAndValidate(phone);
 
-    final phoneLookupSnapshot = await _phoneLookups.doc(normalizedPhone).get();
+    final phoneLookupSnapshot =
+    await _phoneLookups.doc(normalizedPhone).get();
 
     if (!phoneLookupSnapshot.exists) {
       return null;
@@ -1280,15 +1489,21 @@ class TenantDataSource {
     final phoneNumber = userData['phoneNumber'];
     final email = userData['email'];
 
-    if (userId is! String || userId.trim().isEmpty) {
+    if (userId is! String || userId
+        .trim()
+        .isEmpty) {
       return null;
     }
 
-    if (publicId is! String || publicId.trim().isEmpty) {
+    if (publicId is! String || publicId
+        .trim()
+        .isEmpty) {
       return null;
     }
 
-    if (name is! String || name.trim().isEmpty) {
+    if (name is! String || name
+        .trim()
+        .isEmpty) {
       return null;
     }
 
@@ -1296,9 +1511,13 @@ class TenantDataSource {
     final normalizedPublicId = publicId.trim();
     final normalizedName = name.trim();
 
-    final normalizedPhone = phoneNumber is String ? phoneNumber.trim() : '';
+    final normalizedPhone =
+    phoneNumber is String ? phoneNumber.trim() : '';
 
-    final normalizedEmail = email is String && email.trim().isNotEmpty
+    final normalizedEmail =
+    email is String && email
+        .trim()
+        .isNotEmpty
         ? email.trim()
         : null;
 

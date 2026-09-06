@@ -780,8 +780,7 @@ service cloud.firestore {
 
                         &&
 
-                        isValidOwnerEndTenancy(
-                        )
+                        isValidOwnerEndTenancy()
                       )
 
                       ||
@@ -927,6 +926,69 @@ service cloud.firestore {
       allow delete: if isAuthenticated()
                     && resource.data.ownerId
                        == request.auth.uid;
+    }
+
+
+    // ============================================================
+    // TENANCY HISTORIES
+    // ============================================================
+
+    match /tenancyHistories/{historyId} {
+
+      // ----------------------------------------------------------
+      // READ
+      //
+      // Owner can read histories belonging to their tenants.
+      //
+      // Registered tenant can read histories containing their
+      // Firebase Auth UID as tenantUserId.
+      // ----------------------------------------------------------
+
+      allow read: if isAuthenticated()
+                  && (
+                    resource.data.ownerId
+                       == request.auth.uid
+
+                    ||
+
+                    (
+                      resource.data.tenantUserId is string
+
+                      &&
+
+                      resource.data.tenantUserId
+                         == request.auth.uid
+                    )
+                  );
+
+
+      // ----------------------------------------------------------
+      // CREATE
+      //
+      // History creation is allowed only as part of a valid
+      // OWNER END TENANCY transaction.
+      // ----------------------------------------------------------
+
+      allow create: if isAuthenticated()
+                    && isValidOwnerEndTenancyHistory();
+
+
+      // ----------------------------------------------------------
+      // UPDATE
+      //
+      // History is immutable.
+      // ----------------------------------------------------------
+
+      allow update: if false;
+
+
+      // ----------------------------------------------------------
+      // DELETE
+      //
+      // History is immutable.
+      // ----------------------------------------------------------
+
+      allow delete: if false;
     }
 
 
@@ -1612,7 +1674,7 @@ service cloud.firestore {
     // TENANT DOCUMENT VALIDATION
     // ============================================================
 
-   function isValidOwnerEndTenancy() {
+    function isValidOwnerEndTenancy() {
 
       let propertyAfter =
         getAfter(
@@ -1672,6 +1734,308 @@ service cloud.firestore {
 
              && tenantAfter.status
                 == 'inactive';
+    }
+
+
+    // ============================================================
+    // OWNER — END TENANCY
+    // TENANCY HISTORY VALIDATION
+    // ============================================================
+
+    function isValidOwnerEndTenancyHistory() {
+
+      // ----------------------------------------------------------
+      // Tenant AFTER End Tenancy
+      //
+      // Tenant identity and historical fields must remain
+      // unchanged by the End Tenancy transaction.
+      // ----------------------------------------------------------
+
+      let tenantAfter =
+        getAfter(
+          /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+        ).data;
+
+
+      // ----------------------------------------------------------
+      // Property AFTER End Tenancy
+      //
+      // Property name/code/address are preserved while
+      // tenantUserIds is changed by End Tenancy.
+      // ----------------------------------------------------------
+
+      let propertyAfter =
+        getAfter(
+          /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+        ).data;
+
+
+      // ----------------------------------------------------------
+      // Unit AFTER End Tenancy
+      //
+      // Unit number/name/floor/rent are preserved while
+      // status and tenantUserId are changed.
+      // ----------------------------------------------------------
+
+      let unitAfter =
+        getAfter(
+          /databases/$(database)/documents/units/$(request.resource.data.unitId)
+        ).data;
+
+
+      return
+
+        // ========================================================
+        // AUTHENTICATION
+        // ========================================================
+
+        isAuthenticated()
+
+
+        // ========================================================
+        // HISTORY IDENTITY
+        // ========================================================
+
+        && request.resource.data.tenantId is string
+
+        && request.resource.data.tenantId != ''
+
+        && request.resource.data.ownerId
+           == request.auth.uid
+
+
+        // ========================================================
+        // TENANT FINAL STATE
+        // ========================================================
+
+        && tenantAfter.ownerId
+           == request.auth.uid
+
+        && tenantAfter.status
+           == 'inactive'
+
+        && tenantAfter.propertyId
+           == request.resource.data.propertyId
+
+        && tenantAfter.unitId
+           == request.resource.data.unitId
+
+
+        // ========================================================
+        // TENANT SNAPSHOT
+        // ========================================================
+
+        && request.resource.data.tenantName
+           == tenantAfter.name
+
+        && (
+          (
+            (
+              !tenantAfter.keys().hasAny(['userId'])
+              ||
+              tenantAfter.userId == null
+            )
+            &&
+            request.resource.data.tenantUserId == null
+          )
+
+          ||
+
+          (
+            tenantAfter.userId is string
+            &&
+            tenantAfter.userId != ''
+            &&
+            request.resource.data.tenantUserId
+               == tenantAfter.userId
+          )
+        )
+
+
+        // ========================================================
+        // TENANCY START DATE
+        // ========================================================
+
+        && tenantAfter.tenancyStartedAt
+           != null
+
+        && request.resource.data.startedAt
+           == tenantAfter.tenancyStartedAt
+
+
+        // ========================================================
+        // TENANCY END DATE
+        // ========================================================
+
+        && request.resource.data.endedAt
+           is timestamp
+
+        && request.resource.data.startedAt
+           is timestamp
+
+        && request.resource.data.endedAt
+           >= request.resource.data.startedAt
+
+        && request.resource.data.endedAt
+           <= request.time
+
+
+        // ========================================================
+        // HISTORY STATUS
+        // ========================================================
+
+        && request.resource.data.status
+           == 'ended'
+
+
+        // ========================================================
+        // PROPERTY SNAPSHOT
+        // ========================================================
+
+        && propertyAfter.ownerId
+           == request.auth.uid
+
+        && request.resource.data.propertyName
+           == propertyAfter.name
+
+        && request.resource.data.propertyCode
+           == propertyAfter.propertyCode
+
+        && (
+          (
+            !propertyAfter.keys().hasAny(['address'])
+            &&
+            request.resource.data.propertyAddress == null
+          )
+
+          ||
+
+          (
+            propertyAfter.address == null
+            &&
+            request.resource.data.propertyAddress == null
+          )
+
+          ||
+
+          (
+            propertyAfter.address is string
+            &&
+            request.resource.data.propertyAddress
+               == propertyAfter.address
+          )
+        )
+
+
+        // ========================================================
+        // PROPERTY FINAL ACCESS STATE
+        // ========================================================
+
+        && propertyAfter.tenantUserIds is list
+
+        && (
+          request.resource.data.tenantUserId == null
+
+          ||
+
+          !(request.resource.data.tenantUserId
+             in propertyAfter.tenantUserIds)
+        )
+
+
+        // ========================================================
+        // UNIT SNAPSHOT
+        // ========================================================
+
+        && unitAfter.propertyId
+           == request.resource.data.propertyId
+
+        && request.resource.data.unitNumber
+           == unitAfter.unitNumber
+
+        && (
+          (
+            !unitAfter.keys().hasAny(['name'])
+            &&
+            request.resource.data.unitName == null
+          )
+
+          ||
+
+          (
+            unitAfter.name == null
+            &&
+            request.resource.data.unitName == null
+          )
+
+          ||
+
+          (
+            unitAfter.name is string
+            &&
+            request.resource.data.unitName
+               == unitAfter.name
+          )
+        )
+
+        && request.resource.data.floorNumber
+           == unitAfter.floorNumber
+
+        && (
+          (
+            !unitAfter.keys().hasAny(['monthlyRent'])
+            &&
+            request.resource.data.monthlyRent == null
+          )
+
+          ||
+
+          (
+            unitAfter.monthlyRent == null
+            &&
+            request.resource.data.monthlyRent == null
+          )
+
+          ||
+
+          (
+            unitAfter.monthlyRent
+               == request.resource.data.monthlyRent
+          )
+        )
+
+
+        // ========================================================
+        // UNIT FINAL STATE
+        // ========================================================
+
+        && unitAfter.status
+           == 'available'
+
+        && isUnitUnassigned(unitAfter)
+
+
+        // ========================================================
+        // TENANT ACCESS FINAL STATE
+        // ========================================================
+
+        && (
+          request.resource.data.tenantUserId == null
+
+          ||
+
+          !existsAfter(
+            /databases/$(database)/documents/tenantAccess/$(request.resource.data.tenantUserId)
+          )
+        )
+
+
+        // ========================================================
+        // HISTORY CREATED AT
+        // ========================================================
+
+        && request.resource.data.createdAt
+           == request.time;
     }
   }
 }

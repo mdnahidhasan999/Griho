@@ -61,6 +61,11 @@ class Tenant {
   // Tenant tenancy confirm করেছে কি না
   final TenantConfirmationStatus confirmationStatus;
 
+  // বর্তমান tenancy কবে শুরু হয়েছে
+  //
+  // Existing tenant records-এ এই field না থাকলে null হবে।
+  final DateTime? tenancyStartedAt;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -77,6 +82,7 @@ class Tenant {
     required this.status,
     required this.accountStatus,
     required this.confirmationStatus,
+    this.tenancyStartedAt,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -97,6 +103,7 @@ class Tenant {
     // Nullable fields
     Object? email = _keep,
     Object? nidNumber = _keep,
+    Object? tenancyStartedAt = _keep,
 
     TenantStatus? status,
     TenantAccountStatus? accountStatus,
@@ -131,6 +138,10 @@ class Tenant {
 
       confirmationStatus:
       confirmationStatus ?? this.confirmationStatus,
+
+      tenancyStartedAt: tenancyStartedAt == _keep
+          ? this.tenancyStartedAt
+          : tenancyStartedAt as DateTime?,
 
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
