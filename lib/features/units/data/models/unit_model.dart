@@ -10,7 +10,6 @@ class UnitModel extends Unit {
     required super.unitNumber,
     super.name,
     required super.status,
-    super.monthlyRent,
     super.tenantUserId,
     required super.createdAt,
     required super.updatedAt,
@@ -24,7 +23,6 @@ class UnitModel extends Unit {
       unitNumber: unit.unitNumber,
       name: unit.name,
       status: unit.status,
-      monthlyRent: unit.monthlyRent,
       tenantUserId: unit.tenantUserId,
       createdAt: unit.createdAt,
       updatedAt: unit.updatedAt,
@@ -32,56 +30,24 @@ class UnitModel extends Unit {
   }
 
   factory UnitModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> document,
-      ) {
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
     final data = document.data();
 
     if (data == null) {
-      throw StateError(
-        'Unit document ${document.id} contains no data.',
-      );
+      throw StateError('Unit document ${document.id} contains no data.');
     }
 
     return UnitModel(
       id: document.id,
-      propertyId: _readRequiredString(
-        data,
-        'propertyId',
-      ),
-      floorNumber: _readRequiredInt(
-        data,
-        'floorNumber',
-      ),
-      unitNumber: _readRequiredString(
-        data,
-        'unitNumber',
-      ),
-      name: _readOptionalString(
-        data,
-        'name',
-      ),
-      status: _unitStatusFromString(
-        _readRequiredString(
-          data,
-          'status',
-        ),
-      ),
-      monthlyRent: _readOptionalDouble(
-        data,
-        'monthlyRent',
-      ),
-      tenantUserId: _readOptionalString(
-        data,
-        'tenantUserId',
-      ),
-      createdAt: _readDateTime(
-        data,
-        'createdAt',
-      ),
-      updatedAt: _readDateTime(
-        data,
-        'updatedAt',
-      ),
+      propertyId: _readRequiredString(data, 'propertyId'),
+      floorNumber: _readRequiredInt(data, 'floorNumber'),
+      unitNumber: _readRequiredString(data, 'unitNumber'),
+      name: _readOptionalString(data, 'name'),
+      status: _unitStatusFromString(_readRequiredString(data, 'status')),
+      tenantUserId: _readOptionalString(data, 'tenantUserId'),
+      createdAt: _readDateTime(data, 'createdAt'),
+      updatedAt: _readDateTime(data, 'updatedAt'),
     );
   }
 
@@ -92,36 +58,23 @@ class UnitModel extends Unit {
       'unitNumber': unitNumber,
       'name': name,
       'status': status.name,
-      'monthlyRent': monthlyRent,
       'tenantUserId': tenantUserId,
-      'createdAt': Timestamp.fromDate(
-        createdAt,
-      ),
-      'updatedAt': Timestamp.fromDate(
-        updatedAt,
-      ),
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
-  static String _readRequiredString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String _readRequiredString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! String || value.trim().isEmpty) {
-      throw StateError(
-        'Unit field "$field" is missing or invalid.',
-      );
+      throw StateError('Unit field "$field" is missing or invalid.');
     }
 
     return value.trim();
   }
 
-  static String? _readOptionalString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -129,9 +82,7 @@ class UnitModel extends Unit {
     }
 
     if (value is! String) {
-      throw StateError(
-        'Unit field "$field" is invalid.',
-      );
+      throw StateError('Unit field "$field" is invalid.');
     }
 
     final trimmed = value.trim();
@@ -139,10 +90,7 @@ class UnitModel extends Unit {
     return trimmed.isEmpty ? null : trimmed;
   }
 
-  static int _readRequiredInt(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static int _readRequiredInt(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is int) {
@@ -153,34 +101,10 @@ class UnitModel extends Unit {
       return value.toInt();
     }
 
-    throw StateError(
-      'Unit field "$field" is missing or invalid.',
-    );
+    throw StateError('Unit field "$field" is missing or invalid.');
   }
 
-  static double? _readOptionalDouble(
-      Map<String, dynamic> data,
-      String field,
-      ) {
-    final value = data[field];
-
-    if (value == null) {
-      return null;
-    }
-
-    if (value is num) {
-      return value.toDouble();
-    }
-
-    throw StateError(
-      'Unit field "$field" is invalid.',
-    );
-  }
-
-  static DateTime _readDateTime(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime _readDateTime(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is Timestamp) {
@@ -191,20 +115,14 @@ class UnitModel extends Unit {
       return value;
     }
 
-    throw StateError(
-      'Unit field "$field" is missing or invalid.',
-    );
+    throw StateError('Unit field "$field" is missing or invalid.');
   }
 
-  static UnitStatus _unitStatusFromString(
-      String value,
-      ) {
+  static UnitStatus _unitStatusFromString(String value) {
     return UnitStatus.values.firstWhere(
-          (status) => status.name == value,
+      (status) => status.name == value,
       orElse: () {
-        throw StateError(
-          'Unknown unit status: $value',
-        );
+        throw StateError('Unknown unit status: $value');
       },
     );
   }

@@ -2,30 +2,57 @@ import '../entities/create_unit_request.dart';
 import '../entities/unit.dart';
 
 abstract interface class UnitRepository {
+  // ============================================================
+  // GET UNIT BY ID
+  // ============================================================
+
   Future<Unit?> getUnitById(String unitId);
 
-  Future<List<Unit>> getUnitsByPropertyId(
-      String propertyId,
-      );
+  // ============================================================
+  // GET UNITS BY PROPERTY
+  // ============================================================
 
-  Future<Unit> createUnit(
-      CreateUnitRequest request,
-      );
+  Future<List<Unit>> getUnitsByPropertyId(String propertyId);
 
-  Future<Unit> updateUnit(
-      Unit unit,
-      );
+  // ============================================================
+  // GET OCCUPIED UNITS BY FLOOR
+  // ============================================================
 
-  Future<void> deleteUnit(
-      String unitId,
-      );
+  Future<List<Unit>> getOccupiedUnitsByFloor({
+    required String propertyId,
+    required int floorNumber,
+  });
+
+  // ============================================================
+  // CREATE UNIT
+  // ============================================================
+
+  Future<Unit> createUnit(CreateUnitRequest request);
+
+  // ============================================================
+  // UPDATE UNIT
+  // ============================================================
+
+  Future<Unit> updateUnit(Unit unit);
+
+  // ============================================================
+  // DELETE UNIT
+  // ============================================================
+
+  Future<void> deleteUnit(String unitId);
+
+  // ============================================================
+  // ASSIGN TENANT USER
+  // ============================================================
 
   Future<void> assignTenantUser({
     required String unitId,
     required String tenantUserId,
   });
 
-  Future<void> removeTenantUser({
-    required String unitId,
-  });
+  // ============================================================
+  // REMOVE TENANT USER
+  // ============================================================
+
+  Future<void> removeTenantUser({required String unitId});
 }

@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/home/presentation/screens/tenant_home_screen.dart';
-import 'auth_state_refresh_notifier.dart';
-import 'route_arguments.dart';
 
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/otp_verification_screen.dart';
@@ -19,6 +17,11 @@ import '../../features/properties/presentation/screens/add_property_screen.dart'
 import '../../features/properties/presentation/screens/edit_property_screen.dart';
 import '../../features/properties/presentation/screens/property_details_screen.dart';
 import '../../features/properties/presentation/screens/property_list_screen.dart';
+
+import '../../features/rents/presentation/screens/change_unit_rent_screen.dart';
+import '../../features/rents/presentation/screens/monthly_rent_screen.dart';
+import '../../features/rents/presentation/screens/rent_management_screen.dart';
+import '../../features/rents/presentation/screens/rent_rate_history_screen.dart';
 
 import '../../features/splash/presentation/screens/splash_screen.dart';
 
@@ -37,6 +40,8 @@ import '../../features/units/presentation/screens/unit_details_screen.dart';
 import '../../features/units/presentation/screens/unit_list_screen.dart';
 
 import 'auth_route_guard.dart';
+import 'auth_state_refresh_notifier.dart';
+import 'route_arguments.dart';
 import 'route_names.dart';
 
 abstract final class AppRouter {
@@ -84,9 +89,7 @@ abstract final class AppRouter {
           builder: (context, state) {
             final phoneNumber = state.extra as String?;
 
-            if (phoneNumber == null || phoneNumber
-                .trim()
-                .isEmpty) {
+            if (phoneNumber == null || phoneNumber.trim().isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid phone number.')),
               );
@@ -257,6 +260,67 @@ abstract final class AppRouter {
         ),
 
         // ========================================================
+        // RENT MANAGEMENT
+        // ========================================================
+        GoRoute(
+          path: RouteNames.unitRentManagement,
+          builder: (context, state) {
+            final unitId = state.pathParameters['unitId'];
+
+            if (unitId == null || unitId.trim().isEmpty) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid unit ID.')),
+              );
+            }
+
+            return RentManagementScreen(unitId: unitId);
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.changeUnitRent,
+          builder: (context, state) {
+            final unitId = state.pathParameters['unitId'];
+
+            if (unitId == null || unitId.trim().isEmpty) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid unit ID.')),
+              );
+            }
+
+            return ChangeUnitRentScreen(unitId: unitId);
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.unitRentRateHistory,
+          builder: (context, state) {
+            final unitId = state.pathParameters['unitId'];
+
+            if (unitId == null || unitId.trim().isEmpty) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid unit ID.')),
+              );
+            }
+
+            return RentRateHistoryScreen(unitId: unitId);
+          },
+        ),
+        GoRoute(
+          path: RouteNames.unitMonthlyRent,
+          builder: (context, state) {
+            final unitId = state.pathParameters['unitId'];
+
+            if (unitId == null || unitId.trim().isEmpty) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid unit ID.')),
+              );
+            }
+
+            return MonthlyRentScreen(unitId: unitId);
+          },
+        ),
+        // ========================================================
         // TENANTS
         // ========================================================
         GoRoute(
@@ -339,12 +403,6 @@ abstract final class AppRouter {
 
         // ========================================================
         // TENANT INVITATION
-        //
-        // PUBLIC ROUTE
-        //
-        // /i/ABC123
-        //
-        // AuthRouteGuard MUST allow this route.
         // ========================================================
         GoRoute(
           path: RouteNames.tenantInvitation,
@@ -352,9 +410,7 @@ abstract final class AppRouter {
           builder: (context, state) {
             final invitationId = state.pathParameters['invitationId'];
 
-            if (invitationId == null || invitationId
-                .trim()
-                .isEmpty) {
+            if (invitationId == null || invitationId.trim().isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid invitation link.')),
               );

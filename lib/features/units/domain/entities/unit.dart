@@ -14,7 +14,6 @@ class Unit {
   final String? name;
 
   final UnitStatus status;
-  final double? monthlyRent;
 
   // Firebase UID of the currently assigned tenant.
   //
@@ -32,7 +31,6 @@ class Unit {
     required this.unitNumber,
     this.name,
     required this.status,
-    this.monthlyRent,
     this.tenantUserId,
     required this.createdAt,
     required this.updatedAt,
@@ -45,7 +43,6 @@ class Unit {
     String? unitNumber,
     String? name,
     UnitStatus? status,
-    double? monthlyRent,
     String? tenantUserId,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -57,7 +54,6 @@ class Unit {
       unitNumber: unitNumber ?? this.unitNumber,
       name: name ?? this.name,
       status: status ?? this.status,
-      monthlyRent: monthlyRent ?? this.monthlyRent,
       tenantUserId: tenantUserId ?? this.tenantUserId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

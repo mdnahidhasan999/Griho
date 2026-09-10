@@ -17,9 +17,13 @@ abstract class TenantRepository {
   // SEARCH REGISTERED TENANT
   // ============================================================
 
-  Future<TenantSearchResult?> searchRegisteredTenantByPublicId(String publicId);
+  Future<TenantSearchResult?> searchRegisteredTenantByPublicId(
+      String publicId,
+      );
 
-  Future<TenantSearchResult?> searchRegisteredTenantByPhone(String phone);
+  Future<TenantSearchResult?> searchRegisteredTenantByPhone(
+      String phone,
+      );
 
   // ============================================================
   // FIND TENANT BY PHONE
@@ -67,10 +71,15 @@ abstract class TenantRepository {
 
   Future<Tenant> endTenancy(String tenantId);
 
+  // ============================================================
+  // START NEW TENANCY
+  // ============================================================
+
   Future<Tenant> startNewTenancy({
     required String tenantId,
     required String propertyId,
     required String unitId,
+    required double amount,
   });
 
   // ============================================================

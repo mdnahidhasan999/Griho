@@ -20,14 +20,10 @@ import '../providers/unit_usecase_provider.dart';
 class UnitDetailsScreen extends ConsumerStatefulWidget {
   final String unitId;
 
-  const UnitDetailsScreen({
-    super.key,
-    required this.unitId,
-  });
+  const UnitDetailsScreen({super.key, required this.unitId});
 
   @override
-  ConsumerState<UnitDetailsScreen> createState() =>
-      _UnitDetailsScreenState();
+  ConsumerState<UnitDetailsScreen> createState() => _UnitDetailsScreenState();
 }
 
 class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
@@ -52,17 +48,13 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
   Future<void> _loadUnit() async {
     try {
-      final getUnit = ref.read(
-        getUnitProvider,
-      );
+      final getUnit = ref.read(getUnitProvider);
 
       final getActiveTenantsByUnitId = ref.read(
         getActiveTenantsByUnitIdProvider,
       );
 
-      final unit = await getUnit(
-        widget.unitId,
-      );
+      final unit = await getUnit(widget.unitId);
 
       if (!mounted) {
         return;
@@ -71,9 +63,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       List<Tenant> activeTenants = [];
 
       if (unit != null) {
-        activeTenants = await getActiveTenantsByUnitId(
-          unit.id,
-        );
+        activeTenants = await getActiveTenantsByUnitId(unit.id);
       }
 
       if (!mounted) {
@@ -110,10 +100,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     }
 
     final updatedUnit = await context.push<Unit>(
-      RouteNames.editUnit.replaceFirst(
-        ':unitId',
-        unit.id,
-      ),
+      RouteNames.editUnit.replaceFirst(':unitId', unit.id),
       extra: unit,
     );
 
@@ -125,11 +112,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       _unit = updatedUnit;
     });
 
-    ref.invalidate(
-      propertyUnitsProvider(
-        updatedUnit.propertyId,
-      ),
-    );
+    ref.invalidate(propertyUnitsProvider(updatedUnit.propertyId));
 
     await _loadUnit();
   }
@@ -149,34 +132,24 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Delete Unit?',
-          ),
+          title: const Text('Delete Unit?'),
           content: Text(
             'Are you sure you want to delete '
-                '"${unit.unitNumber}"?\n\n'
-                'This action cannot be undone.',
+            '"${unit.unitNumber}"?\n\n'
+            'This action cannot be undone.',
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(
-                  dialogContext,
-                ).pop(false);
+                Navigator.of(dialogContext).pop(false);
               },
-              child: const Text(
-                'Cancel',
-              ),
+              child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.of(
-                  dialogContext,
-                ).pop(true);
+                Navigator.of(dialogContext).pop(true);
               },
-              child: const Text(
-                'Delete',
-              ),
+              child: const Text('Delete'),
             ),
           ],
         );
@@ -191,24 +164,16 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       _isDeleting = true;
     });
 
-    final controller = ref.read(
-      unitControllerProvider.notifier,
-    );
+    final controller = ref.read(unitControllerProvider.notifier);
 
-    final success = await controller.deleteUnit(
-      unitId: unit.id,
-    );
+    final success = await controller.deleteUnit(unitId: unit.id);
 
     if (!mounted) {
       return;
     }
 
     if (success) {
-      ref.invalidate(
-        propertyUnitsProvider(
-          unit.propertyId,
-        ),
-      );
+      ref.invalidate(propertyUnitsProvider(unit.propertyId));
 
       context.pop();
 
@@ -219,19 +184,10 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       _isDeleting = false;
     });
 
-    final errorMessage = ref
-        .read(
-      unitControllerProvider,
-    )
-        .errorMessage;
+    final errorMessage = ref.read(unitControllerProvider).errorMessage;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          errorMessage ??
-              'Unable to delete unit.',
-        ),
-      ),
+      SnackBar(content: Text(errorMessage ?? 'Unable to delete unit.')),
     );
   }
 
@@ -247,14 +203,8 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Unit Details',
-          ),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        appBar: AppBar(title: const Text('Unit Details')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -264,15 +214,8 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
     if (_errorMessage != null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Unit Details',
-          ),
-        ),
-        body: _ErrorView(
-          message: _errorMessage!,
-          onRetry: _loadUnit,
-        ),
+        appBar: AppBar(title: const Text('Unit Details')),
+        body: _ErrorView(message: _errorMessage!, onRetry: _loadUnit),
       );
     }
 
@@ -284,11 +227,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
     if (unit == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Unit Details',
-          ),
-        ),
+        appBar: AppBar(title: const Text('Unit Details')),
         body: const _NotFoundView(),
       );
     }
@@ -297,11 +236,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     // PROPERTY
     // ==========================================================
 
-    final propertyAsync = ref.watch(
-      propertyByIdProvider(
-        unit.propertyId,
-      ),
-    );
+    final propertyAsync = ref.watch(propertyByIdProvider(unit.propertyId));
 
     // ==========================================================
     // DETAILS
@@ -309,25 +244,17 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Unit Details',
-        ),
+        title: const Text('Unit Details'),
         actions: [
           IconButton(
             tooltip: 'Edit Unit',
-            icon: const Icon(
-              Icons.edit_outlined,
-            ),
-            onPressed:
-            _isDeleting ? null : _editUnit,
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: _isDeleting ? null : _editUnit,
           ),
           IconButton(
             tooltip: 'Delete Unit',
-            icon: const Icon(
-              Icons.delete_outline,
-            ),
-            onPressed:
-            _isDeleting ? null : _deleteUnit,
+            icon: const Icon(Icons.delete_outline),
+            onPressed: _isDeleting ? null : _deleteUnit,
           ),
         ],
       ),
@@ -363,12 +290,10 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
               }
 
               final historyAsync = ref.watch(
-                unitHistoryProvider(
-                  (
+                unitHistoryProvider((
                   unitId: unit.id,
                   ownerId: property.ownerId,
-                  ),
-                ),
+                )),
               );
 
               return _UnitDetails(
@@ -389,14 +314,11 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: Column(
-                        mainAxisSize:
-                        MainAxisSize.min,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           CircularProgressIndicator(),
                           SizedBox(height: 16),
-                          Text(
-                            'Deleting unit...',
-                          ),
+                          Text('Deleting unit...'),
                         ],
                       ),
                     ),
@@ -437,46 +359,28 @@ class _UnitDetails extends StatelessWidget {
         // ==========================================================
         // UNIT HEADER
         // ==========================================================
-
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
-              crossAxisAlignment:
-              CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.apartment_outlined,
-                  size: 52,
-                ),
+                const Icon(Icons.apartment_outlined, size: 52),
                 const SizedBox(height: 16),
                 Text(
                   unit.unitNumber,
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .headlineSmall,
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  unit.name
-                      ?.trim()
-                      .isNotEmpty == true
-                      ? unit.name!
-                      : 'Unit',
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .bodyMedium,
+                  unit.name?.trim().isNotEmpty == true ? unit.name! : 'Unit',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 if (property != null) ...[
                   const SizedBox(height: 8),
                   Text(
                     property!.name,
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .bodyMedium,
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],
               ],
@@ -490,34 +394,18 @@ class _UnitDetails extends StatelessWidget {
         // UNIT INFORMATION
         // ==========================================================
 
+        // আপনার বর্তমান UnitDetailsScreen-এর বাকি code অপরিবর্তিত থাকবে।
+
+        // শুধু _UnitDetails-এর Unit Information section-এ:
         _InfoCard(
           title: 'Unit Information',
           children: [
-            _InfoRow(
-              label: 'Floor',
-              value: unit.floorNumber.toString(),
-            ),
-            _InfoRow(
-              label: 'Unit Number',
-              value: unit.unitNumber,
-            ),
-            _InfoRow(
-              label: 'Status',
-              value: _statusLabel(
-                unit.status,
-              ),
-            ),
-            _InfoRow(
-              label: 'Monthly Rent',
-              value: unit.monthlyRent != null
-                  ? '৳ ${unit.monthlyRent!.toStringAsFixed(0)}'
-                  : 'Not provided',
-            ),
+            _InfoRow(label: 'Floor', value: unit.floorNumber.toString()),
+            _InfoRow(label: 'Unit Number', value: unit.unitNumber),
+            _InfoRow(label: 'Status', value: _statusLabel(unit.status)),
             _InfoRow(
               label: 'Unit Name',
-              value: unit.name
-                  ?.trim()
-                  .isNotEmpty == true
+              value: unit.name?.trim().isNotEmpty == true
                   ? unit.name!
                   : 'Not provided',
             ),
@@ -529,16 +417,13 @@ class _UnitDetails extends StatelessWidget {
         // ==========================================================
         // CURRENT TENANTS
         // ==========================================================
-
-        _TenantSection(
-          tenants: activeTenants,
-        ),
+        _TenantSection(tenants: activeTenants),
 
         const SizedBox(height: 20),
 
-        // ==========================================================
-        // TENANCY HISTORY
-        // ==========================================================
+        _ManageRentCard(unit: unit),
+
+        const SizedBox(height: 20),
 
         _UnitHistorySection(
           historyAsync: historyAsync,
@@ -552,7 +437,7 @@ class _UnitDetails extends StatelessWidget {
   // UNIT STATUS LABEL
   // ============================================================
 
-  String _statusLabel(UnitStatus status,) {
+  String _statusLabel(UnitStatus status) {
     switch (status) {
       case UnitStatus.available:
         return 'Available';
@@ -599,11 +484,7 @@ class _UnitHistorySection extends StatelessWidget {
     if (historyAsync == null) {
       return const _InfoCard(
         title: 'Tenancy History',
-        children: [
-          _LoadingInfoRow(
-            label: 'Previous tenants',
-          ),
-        ],
+        children: [_LoadingInfoRow(label: 'Previous tenants')],
       );
     }
 
@@ -611,22 +492,13 @@ class _UnitHistorySection extends StatelessWidget {
       loading: () {
         return const _InfoCard(
           title: 'Tenancy History',
-          children: [
-            _LoadingInfoRow(
-              label: 'Previous tenants',
-            ),
-          ],
+          children: [_LoadingInfoRow(label: 'Previous tenants')],
         );
       },
       error: (_, _) {
         return const _InfoCard(
           title: 'Tenancy History',
-          children: [
-            _InfoRow(
-              label: 'History',
-              value: 'Unable to load.',
-            ),
-          ],
+          children: [_InfoRow(label: 'History', value: 'Unable to load.')],
         );
       },
       data: (histories) {
@@ -634,17 +506,12 @@ class _UnitHistorySection extends StatelessWidget {
           return const _InfoCard(
             title: 'Tenancy History',
             children: [
-              _InfoRow(
-                label: 'History',
-                value: 'No previous tenant.',
-              ),
+              _InfoRow(label: 'History', value: 'No previous tenant.'),
             ],
           );
         }
 
-        return _UnitHistoryCard(
-          histories: histories,
-        );
+        return _UnitHistoryCard(histories: histories);
       },
     );
   }
@@ -657,9 +524,7 @@ class _UnitHistorySection extends StatelessWidget {
 class _UnitHistoryCard extends StatelessWidget {
   final List<TenancyHistory> histories;
 
-  const _UnitHistoryCard({
-    required this.histories,
-  });
+  const _UnitHistoryCard({required this.histories});
 
   @override
   Widget build(BuildContext context) {
@@ -667,46 +532,30 @@ class _UnitHistoryCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Tenancy History',
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleMedium,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
             Text(
               '${histories.length} previous '
-                  '${histories.length == 1 ? 'tenancy' : 'tenancies'}',
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .bodySmall,
+              '${histories.length == 1 ? 'tenancy' : 'tenancies'}',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
-            ...List.generate(
-              histories.length,
-                  (index) {
-                final history = histories[index];
+            ...List.generate(histories.length, (index) {
+              final history = histories[index];
 
-                return Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
-                  children: [
-                    if (index > 0)
-                      const Divider(
-                        height: 28,
-                      ),
-                    _UnitHistoryItem(
-                      history: history,
-                    ),
-                  ],
-                );
-              },
-            ),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (index > 0) const Divider(height: 28),
+                  _UnitHistoryItem(history: history),
+                ],
+              );
+            }),
           ],
         ),
       ),
@@ -721,46 +570,30 @@ class _UnitHistoryCard extends StatelessWidget {
 class _UnitHistoryItem extends StatelessWidget {
   final TenancyHistory history;
 
-  const _UnitHistoryItem({
-    required this.history,
-  });
+  const _UnitHistoryItem({required this.history});
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 22,
-              child: Text(
-                _initial(history.tenantName),
-              ),
-            ),
+            CircleAvatar(radius: 22, child: Text(_initial(history.tenantName))),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     history.tenantName,
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .titleSmall,
+                    style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     history.propertyName,
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .bodySmall,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
@@ -770,16 +603,11 @@ class _UnitHistoryItem extends StatelessWidget {
 
         const SizedBox(height: 14),
 
-        _HistoryDetailRow(
-          label: 'Property Code',
-          value: history.propertyCode,
-        ),
+        _HistoryDetailRow(label: 'Property Code', value: history.propertyCode),
 
         _HistoryDetailRow(
           label: 'Unit',
-          value: history.unitName
-              ?.trim()
-              .isNotEmpty == true
+          value: history.unitName?.trim().isNotEmpty == true
               ? history.unitName!
               : history.unitNumber,
         ),
@@ -798,48 +626,25 @@ class _UnitHistoryItem extends StatelessWidget {
 
         _HistoryDetailRow(
           label: 'Started',
-          value: _formatDate(
-            history.startedAt,
-          ),
+          value: _formatDate(history.startedAt),
         ),
 
-        _HistoryDetailRow(
-          label: 'Ended',
-          value: _formatDate(
-            history.endedAt,
-          ),
-        ),
+        _HistoryDetailRow(label: 'Ended', value: _formatDate(history.endedAt)),
 
         _HistoryDetailRow(
           label: 'Duration',
-          value: _formatDuration(
-            history.startedAt,
-            history.endedAt,
-          ),
+          value: _formatDuration(history.startedAt, history.endedAt),
         ),
 
         const SizedBox(height: 8),
 
         Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 5,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            borderRadius:
-            BorderRadius.circular(16),
-            color: Theme
-                .of(context)
-                .colorScheme
-                .surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
-          child: Text(
-            'Ended',
-            style: Theme
-                .of(context)
-                .textTheme
-                .labelMedium,
-          ),
+          child: Text('Ended', style: Theme.of(context).textTheme.labelMedium),
         ),
       ],
     );
@@ -852,9 +657,7 @@ class _UnitHistoryItem extends StatelessWidget {
       return '?';
     }
 
-    return value.characters
-        .first
-        .toUpperCase();
+    return value.characters.first.toUpperCase();
   }
 
   String _formatDate(DateTime dateTime) {
@@ -865,10 +668,8 @@ class _UnitHistoryItem extends StatelessWidget {
         '${local.year}';
   }
 
-  String _formatDuration(DateTime startedAt,
-      DateTime endedAt,) {
-    final difference =
-    endedAt.difference(startedAt);
+  String _formatDuration(DateTime startedAt, DateTime endedAt) {
+    final difference = endedAt.difference(startedAt);
 
     final days = difference.inDays;
 
@@ -896,10 +697,7 @@ class _InfoCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
-  const _InfoCard({
-    required this.title,
-    required this.children,
-  });
+  const _InfoCard({required this.title, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -907,16 +705,9 @@ class _InfoCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleMedium,
-            ),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
             ...children,
           ],
@@ -933,9 +724,7 @@ class _InfoCard extends StatelessWidget {
 class _TenantSection extends StatelessWidget {
   final List<Tenant> tenants;
 
-  const _TenantSection({
-    required this.tenants,
-  });
+  const _TenantSection({required this.tenants});
 
   @override
   Widget build(BuildContext context) {
@@ -948,34 +737,24 @@ class _TenantSection extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Current Tenants',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleMedium,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 16),
               Row(
                 children: [
                   Icon(
                     Icons.person_off_outlined,
-                    color: Theme
-                        .of(context)
-                        .colorScheme
-                        .onSurfaceVariant,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'No active tenant assigned to this unit.',
-                      style: Theme
-                          .of(context)
-                          .textTheme
-                          .bodyMedium,
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                 ],
@@ -994,40 +773,28 @@ class _TenantSection extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'Current Tenants',
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
                 Text(
                   tenants.length.toString(),
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .labelLarge,
+                  style: Theme.of(context).textTheme.labelLarge,
                 ),
               ],
             ),
             const SizedBox(height: 16),
             ...tenants.map(
-                  (tenant) =>
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      bottom: 12,
-                    ),
-                    child: _TenantTile(
-                      tenant: tenant,
-                    ),
-                  ),
+              (tenant) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _TenantTile(tenant: tenant),
+              ),
             ),
           ],
         ),
@@ -1043,9 +810,7 @@ class _TenantSection extends StatelessWidget {
 class _TenantTile extends StatelessWidget {
   final Tenant tenant;
 
-  const _TenantTile({
-    required this.tenant,
-  });
+  const _TenantTile({required this.tenant});
 
   @override
   Widget build(BuildContext context) {
@@ -1054,10 +819,7 @@ class _TenantTile extends StatelessWidget {
       child: InkWell(
         onTap: () {
           context.push(
-            RouteNames.tenantDetails.replaceFirst(
-              ':tenantId',
-              tenant.id,
-            ),
+            RouteNames.tenantDetails.replaceFirst(':tenantId', tenant.id),
           );
         },
         child: Padding(
@@ -1067,63 +829,42 @@ class _TenantTile extends StatelessWidget {
               CircleAvatar(
                 radius: 26,
                 child: Text(
-                  _initial(
-                    tenant.name,
-                  ),
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .titleMedium,
+                  _initial(tenant.name),
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       tenant.name,
                       maxLines: 1,
-                      overflow:
-                      TextOverflow.ellipsis,
-                      style: Theme
-                          .of(context)
-                          .textTheme
-                          .titleMedium,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 5),
                     Text(
                       tenant.phone,
-                      style: Theme
-                          .of(context)
-                          .textTheme
-                          .bodyMedium,
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        _TenantStatusChip(
-                          status: tenant.status,
-                        ),
+                        _TenantStatusChip(status: tenant.status),
                         const SizedBox(width: 8),
                         if (tenant.userId == null)
-                          const _AccountStatusChip(
-                            label: 'Not registered',
-                          )
+                          const _AccountStatusChip(label: 'Not registered')
                         else
-                          const _AccountStatusChip(
-                            label: 'Registered',
-                          ),
+                          const _AccountStatusChip(label: 'Registered'),
                       ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right,
-              ),
+              const Icon(Icons.chevron_right),
             ],
           ),
         ),
@@ -1138,9 +879,7 @@ class _TenantTile extends StatelessWidget {
       return '?';
     }
 
-    return value.characters
-        .first
-        .toUpperCase();
+    return value.characters.first.toUpperCase();
   }
 }
 
@@ -1151,47 +890,29 @@ class _TenantTile extends StatelessWidget {
 class _TenantStatusChip extends StatelessWidget {
   final TenantStatus status;
 
-  const _TenantStatusChip({
-    required this.status,
-  });
+  const _TenantStatusChip({required this.status});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme
-            .of(context)
-            .colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
-    final isActive =
-        status == TenantStatus.active;
+    final isActive = status == TenantStatus.active;
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        borderRadius:
-        BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(20),
         color: isActive
             ? colorScheme.primaryContainer
-            : colorScheme
-            .surfaceContainerHighest,
+            : colorScheme.surfaceContainerHighest,
       ),
       child: Text(
         isActive ? 'Active' : 'Inactive',
-        style: Theme
-            .of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: isActive
-              ? colorScheme
-              .onPrimaryContainer
-              : colorScheme
-              .onSurfaceVariant,
-          fontWeight:
-          FontWeight.w600,
+              ? colorScheme.onPrimaryContainer
+              : colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -1205,39 +926,23 @@ class _TenantStatusChip extends StatelessWidget {
 class _AccountStatusChip extends StatelessWidget {
   final String label;
 
-  const _AccountStatusChip({
-    required this.label,
-  });
+  const _AccountStatusChip({required this.label});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme
-            .of(context)
-            .colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        borderRadius:
-        BorderRadius.circular(20),
-        color: colorScheme
-            .surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+        color: colorScheme.surfaceContainerHighest,
       ),
       child: Text(
         label,
-        style: Theme
-            .of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(
-          color:
-          colorScheme.onSurfaceVariant,
-          fontWeight:
-          FontWeight.w600,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -1252,36 +957,18 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 14,
-      ),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: Theme
-                .of(context)
-                .textTheme
-                .labelMedium,
-          ),
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme
-                .of(context)
-                .textTheme
-                .bodyMedium,
-          ),
+          Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );
@@ -1296,39 +983,21 @@ class _HistoryDetailRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _HistoryDetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _HistoryDetailRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 8,
-      ),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: 120,
-            child: Text(
-              label,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .labelMedium,
-            ),
+            child: Text(label, style: Theme.of(context).textTheme.labelMedium),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .bodyMedium,
-            ),
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
           ),
         ],
       ),
@@ -1343,34 +1012,21 @@ class _HistoryDetailRow extends StatelessWidget {
 class _LoadingInfoRow extends StatelessWidget {
   final String label;
 
-  const _LoadingInfoRow({
-    required this.label,
-  });
+  const _LoadingInfoRow({required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 14,
-      ),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: Theme
-                .of(context)
-                .textTheme
-                .labelMedium,
-          ),
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 8),
           const SizedBox(
             height: 18,
             width: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2),
           ),
         ],
       ),
@@ -1386,10 +1042,7 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1397,24 +1050,68 @@ class _ErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize:
-          MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-            ),
+            const Icon(Icons.error_outline, size: 48),
             const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign:
-              TextAlign.center,
-            ),
+            Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text(
-                'Retry',
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManageRentCard extends StatelessWidget {
+  final Unit unit;
+
+  const _ManageRentCard({required this.unit});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.payments_outlined),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Rent',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            const Text(
+              'View the current rent, change the rent, '
+              'and see the complete rent rate history.',
+            ),
+
+            const SizedBox(height: 16),
+
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  context.push(
+                    RouteNames.unitRentManagement.replaceFirst(
+                      ':unitId',
+                      unit.id,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.payments_outlined),
+                label: const Text('Manage Rent'),
               ),
             ),
           ],
@@ -1423,7 +1120,6 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
-
 // ============================================================================
 // NOT FOUND VIEW
 // ============================================================================
@@ -1436,11 +1132,7 @@ class _NotFoundView extends StatelessWidget {
     return const Center(
       child: Padding(
         padding: EdgeInsets.all(24),
-        child: Text(
-          'Unit not found.',
-          textAlign:
-          TextAlign.center,
-        ),
+        child: Text('Unit not found.', textAlign: TextAlign.center),
       ),
     );
   }

@@ -24,7 +24,6 @@ class UnitListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text('$propertyName Units')),
-
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final result = await context.push<Unit>(
@@ -36,17 +35,13 @@ class UnitListScreen extends ConsumerWidget {
             ref.invalidate(propertyUnitsProvider(propertyId));
           }
         },
-
         icon: const Icon(Icons.add),
-
         label: const Text('Add Unit'),
       ),
-
       body: unitsAsync.when(
         loading: () {
           return const Center(child: CircularProgressIndicator());
         },
-
         error: (error, stackTrace) {
           return _UnitErrorView(
             onRetry: () {
@@ -54,7 +49,6 @@ class UnitListScreen extends ConsumerWidget {
             },
           );
         },
-
         data: (units) {
           if (units.isEmpty) {
             return _EmptyUnitsView(
@@ -77,18 +71,13 @@ class UnitListScreen extends ConsumerWidget {
 
               await ref.read(propertyUnitsProvider(propertyId).future);
             },
-
             child: ListView.separated(
               physics: const AlwaysScrollableScrollPhysics(),
-
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-
               itemCount: units.length,
-
               separatorBuilder: (context, index) {
                 return const SizedBox(height: 12);
               },
-
               itemBuilder: (context, index) {
                 return _UnitCard(unit: units[index]);
               },
@@ -113,15 +102,12 @@ class _UnitCard extends StatelessWidget {
         onTap: () {
           context.push(RouteNames.unitDetails.replaceFirst(':unitId', unit.id));
         },
-
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Row(
             children: [
               const CircleAvatar(child: Icon(Icons.apartment_outlined)),
-
               const SizedBox(width: 16),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,17 +116,13 @@ class _UnitCard extends StatelessWidget {
                       unit.unitNumber,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-
                     const SizedBox(height: 4),
-
                     Text(
                       'Floor ${unit.floorNumber}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-
                     if (unit.name != null && unit.name!.trim().isNotEmpty) ...[
                       const SizedBox(height: 4),
-
                       Text(
                         unit.name!,
                         maxLines: 1,
@@ -148,25 +130,12 @@ class _UnitCard extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
-
-                    if (unit.monthlyRent != null) ...[
-                      const SizedBox(height: 4),
-
-                      Text(
-                        '৳ ${unit.monthlyRent!.toStringAsFixed(0)} / month',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-
                     const SizedBox(height: 8),
-
                     _UnitStatusChip(status: unit.status),
                   ],
                 ),
               ),
-
               const SizedBox(width: 12),
-
               const Icon(Icons.chevron_right),
             ],
           ),
@@ -185,12 +154,10 @@ class _UnitStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
-
       child: Text(
         _statusLabel(status),
         style: Theme.of(context).textTheme.labelSmall,
@@ -229,20 +196,14 @@ class _EmptyUnitsView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.apartment_outlined, size: 56),
-
             const SizedBox(height: 16),
-
             Text('No units yet', style: Theme.of(context).textTheme.titleLarge),
-
             const SizedBox(height: 8),
-
             const Text(
               'Add your first unit to this property.',
               textAlign: TextAlign.center,
             ),
-
             const SizedBox(height: 20),
-
             FilledButton.icon(
               onPressed: onAddUnit,
               icon: const Icon(Icons.add),
@@ -269,13 +230,9 @@ class _UnitErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, size: 48),
-
             const SizedBox(height: 16),
-
             const Text('Unable to load units.', textAlign: TextAlign.center),
-
             const SizedBox(height: 16),
-
             FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),

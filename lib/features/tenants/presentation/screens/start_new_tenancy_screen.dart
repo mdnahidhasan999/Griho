@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../properties/domain/entities/property.dart';
@@ -11,10 +12,7 @@ import '../controllers/tenant_controller.dart';
 class StartNewTenancyScreen extends ConsumerStatefulWidget {
   final Tenant tenant;
 
-  const StartNewTenancyScreen({
-    super.key,
-    required this.tenant,
-  });
+  const StartNewTenancyScreen({super.key, required this.tenant});
 
   @override
   ConsumerState<StartNewTenancyScreen> createState() =>
@@ -25,7 +23,15 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
   String? _selectedPropertyId;
   Unit? _selectedUnit;
 
+  final TextEditingController _rentController = TextEditingController();
+
   bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _rentController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +39,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
 
     if (tenant.status != TenantStatus.inactive) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Start New Tenancy'),
-        ),
+        appBar: AppBar(title: const Text('Start New Tenancy')),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
@@ -50,9 +54,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
 
     if (tenant.accountStatus != TenantAccountStatus.registered) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Start New Tenancy'),
-        ),
+        appBar: AppBar(title: const Text('Start New Tenancy')),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
@@ -65,41 +67,26 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
       );
     }
 
-    final propertiesAsync = ref.watch(
-      currentOwnerPropertiesProvider,
-    );
+    final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Start New Tenancy'),
-      ),
+      appBar: AppBar(title: const Text('Start New Tenancy')),
       body: propertiesAsync.when(
-        loading: () =>
-        const Center(
-          child: CircularProgressIndicator(),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => _ErrorView(
+          message: error.toString(),
+          onRetry: () {
+            ref.invalidate(currentOwnerPropertiesProvider);
+          },
         ),
-        error: (error, stackTrace) =>
-            _ErrorView(
-              message: error.toString(),
-              onRetry: () {
-                ref.invalidate(
-                  currentOwnerPropertiesProvider,
-                );
-              },
-            ),
         data: (properties) {
           final activeProperties = properties
-              .where(
-                (property) =>
-            property.status == PropertyStatus.active,
-          )
+              .where((property) => property.status == PropertyStatus.active)
               .toList();
 
-          // If the currently selected property no longer exists
-          // in the latest property list, clear the selection.
           if (_selectedPropertyId != null &&
               !activeProperties.any(
-                    (property) => property.id == _selectedPropertyId,
+                (property) => property.id == _selectedPropertyId,
               )) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) {
@@ -109,6 +96,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               setState(() {
                 _selectedPropertyId = null;
                 _selectedUnit = null;
+                _rentController.clear();
               });
             });
           }
@@ -137,15 +125,16 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildTenantCard(tenant),
+
             const SizedBox(height: 24),
+
             Text(
               'Select Property',
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleMedium,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
+
             const SizedBox(height: 8),
+
             if (properties.isEmpty)
               const _EmptyState(
                 icon: Icons.apartment_outlined,
@@ -153,36 +142,36 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               )
             else
               _buildPropertyDropdown(properties),
+
             const SizedBox(height: 24),
+
             if (selectedProperty != null) ...[
               Text(
                 'Select Available Unit',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleMedium,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
+
               const SizedBox(height: 8),
+
               _buildUnitSection(selectedProperty),
+
+              const SizedBox(height: 24),
+
+              _buildRentInput(),
             ],
+
             const SizedBox(height: 32),
+
             FilledButton(
-              onPressed: _canSubmit(
-                selectedProperty: selectedProperty,
-              )
-                  ? () =>
-                  _confirmStartNewTenancy(
-                    property: selectedProperty!,
-                  )
+              onPressed: _canSubmit(selectedProperty: selectedProperty)
+                  ? () => _confirmStartNewTenancy(property: selectedProperty!)
                   : null,
               child: _isSubmitting
                   ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                ),
-              )
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Text('Start New Tenancy'),
             ),
           ],
@@ -198,13 +187,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              tenant.name,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleLarge,
-            ),
+            Text(tenant.name, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 6),
             Text(tenant.phone),
             if (tenant.email != null) ...[
@@ -213,10 +196,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
             ],
             const SizedBox(height: 12),
             const Chip(
-              avatar: Icon(
-                Icons.person_outline,
-                size: 18,
-              ),
+              avatar: Icon(Icons.person_outline, size: 18),
               label: Text('Registered Account'),
             ),
           ],
@@ -232,9 +212,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
       decoration: const InputDecoration(
         labelText: 'Property',
         border: OutlineInputBorder(),
-        prefixIcon: Icon(
-          Icons.apartment_outlined,
-        ),
+        prefixIcon: Icon(Icons.apartment_outlined),
       ),
       hint: const Text('Select a property'),
       items: properties.map((property) {
@@ -252,10 +230,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               const SizedBox(width: 8),
               Text(
                 property.propertyCode,
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .bodySmall,
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
@@ -264,11 +239,12 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
       onChanged: _isSubmitting
           ? null
           : (propertyId) {
-        setState(() {
-          _selectedPropertyId = propertyId;
-          _selectedUnit = null;
-        });
-      },
+              setState(() {
+                _selectedPropertyId = propertyId;
+                _selectedUnit = null;
+                _rentController.clear();
+              });
+            },
     );
   }
 
@@ -291,32 +267,22 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
   Widget _buildUnitSection(Property property) {
     final propertyId = property.id;
 
-    final unitsAsync = ref.watch(
-      propertyUnitsProvider(propertyId),
-    );
+    final unitsAsync = ref.watch(propertyUnitsProvider(propertyId));
 
     return unitsAsync.when(
-      loading: () =>
-      const Padding(
+      loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
+        child: Center(child: CircularProgressIndicator()),
       ),
-      error: (error, stackTrace) =>
-          _ErrorView(
-            message: error.toString(),
-            onRetry: () {
-              ref.invalidate(
-                propertyUnitsProvider(propertyId),
-              );
-            },
-          ),
+      error: (error, stackTrace) => _ErrorView(
+        message: error.toString(),
+        onRetry: () {
+          ref.invalidate(propertyUnitsProvider(propertyId));
+        },
+      ),
       data: (units) {
         final availableUnits = units
-            .where(
-              (unit) => unit.status == UnitStatus.available,
-        )
+            .where((unit) => unit.status == UnitStatus.available)
             .toList();
 
         if (availableUnits.isEmpty) {
@@ -339,9 +305,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
           return;
         }
 
-        final selectedUnit = units.firstWhere(
-              (unit) => unit.id == unitId,
-        );
+        final selectedUnit = units.firstWhere((unit) => unit.id == unitId);
 
         setState(() {
           _selectedUnit = selectedUnit;
@@ -358,21 +322,14 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               child: RadioListTile<String>(
                 value: unit.id,
                 title: Text(
-                  unit.name
-                      ?.trim()
-                      .isNotEmpty == true
+                  unit.name?.trim().isNotEmpty == true
                       ? unit.name!
                       : 'Unit ${unit.unitNumber}',
                 ),
                 subtitle: Text(
-                  'Unit ${unit.unitNumber} • Floor ${unit.floorNumber}',
+                  'Unit ${unit.unitNumber} • '
+                  'Floor ${unit.floorNumber}',
                 ),
-                secondary: unit.monthlyRent != null
-                    ? Text(
-                  _formatRent(unit.monthlyRent!),
-                  textAlign: TextAlign.end,
-                )
-                    : null,
                 selected: isSelected,
               ),
             ),
@@ -382,24 +339,59 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     );
   }
 
-  String _formatRent(double rent) {
-    return '৳${rent.toStringAsFixed(0)}/month';
+  Widget _buildRentInput() {
+    return TextFormField(
+      controller: _rentController,
+      enabled: !_isSubmitting,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+      ],
+      decoration: const InputDecoration(
+        labelText: 'Initial Monthly Rent',
+        hintText: 'Enter monthly rent',
+        prefixText: '৳ ',
+        suffixText: '/month',
+        border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.payments_outlined),
+      ),
+    );
   }
 
-  bool _canSubmit({
-    required Property? selectedProperty,
-  }) {
+  double? _getRentAmount() {
+    final value = _rentController.text.trim();
+
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final amount = double.tryParse(value);
+
+    if (amount == null || amount <= 0) {
+      return null;
+    }
+
+    return amount;
+  }
+
+  bool _canSubmit({required Property? selectedProperty}) {
     return !_isSubmitting &&
         selectedProperty != null &&
-        _selectedUnit != null;
+        _selectedUnit != null &&
+        _getRentAmount() != null;
   }
 
-  Future<void> _confirmStartNewTenancy({
-    required Property property,
-  }) async {
+  Future<void> _confirmStartNewTenancy({required Property property}) async {
     final unit = _selectedUnit;
 
     if (unit == null) {
+      return;
+    }
+
+    final amount = _getRentAmount();
+
+    if (amount == null) {
+      _showMessage('Please enter a valid monthly rent amount.');
       return;
     }
 
@@ -407,12 +399,28 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Start New Tenancy?',
-          ),
-          content: Text(
-            'Start a new tenancy for ${widget.tenant.name} '
-                'in ${property.name}, Unit ${unit.unitNumber}?',
+          title: const Text('Start New Tenancy?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Start a new tenancy for '
+                '${widget.tenant.name} '
+                'in ${property.name}, '
+                'Unit ${unit.unitNumber}?',
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Initial Monthly Rent',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatRent(amount),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -436,15 +444,13 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
       return;
     }
 
-    await _startNewTenancy(
-      property: property,
-      unit: unit,
-    );
+    await _startNewTenancy(property: property, unit: unit, amount: amount);
   }
 
   Future<void> _startNewTenancy({
     required Property property,
     required Unit unit,
+    required double amount,
   }) async {
     setState(() {
       _isSubmitting = true;
@@ -453,10 +459,11 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     final startedTenant = await ref
         .read(tenantControllerProvider.notifier)
         .startNewTenancy(
-      tenantId: widget.tenant.id,
-      propertyId: property.id,
-      unitId: unit.id,
-    );
+          tenantId: widget.tenant.id,
+          propertyId: property.id,
+          unitId: unit.id,
+          amount: amount,
+        );
 
     if (!mounted) {
       return;
@@ -467,39 +474,30 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     });
 
     if (startedTenant == null) {
-      final state = ref.read(
-        tenantControllerProvider,
-      );
+      final state = ref.read(tenantControllerProvider);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            state.error?.toString() ??
-                'Unable to start new tenancy.',
-          ),
-        ),
-      );
+      _showMessage(state.error?.toString() ?? 'Unable to start new tenancy.');
 
       return;
     }
 
-    ref.invalidate(
-      currentOwnerPropertiesProvider,
-    );
+    ref.invalidate(currentOwnerPropertiesProvider);
 
-    ref.invalidate(
-      propertyUnitsProvider(property.id),
-    );
+    ref.invalidate(propertyUnitsProvider(property.id));
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'New tenancy started successfully.',
-        ),
-      ),
-    );
+    _showMessage('New tenancy started successfully.');
 
     Navigator.of(context).pop(true);
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _formatRent(double rent) {
+    return '৳${rent.toStringAsFixed(0)}/month';
   }
 }
 
@@ -507,10 +505,7 @@ class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
 
-  const _EmptyState({
-    required this.icon,
-    required this.message,
-  });
+  const _EmptyState({required this.icon, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -519,15 +514,9 @@ class _EmptyState extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Icon(
-              icon,
-              size: 42,
-            ),
+            Icon(icon, size: 42),
             const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-            ),
+            Text(message, textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -539,10 +528,7 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -551,20 +537,11 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.error_outline,
-            size: 42,
-          ),
+          const Icon(Icons.error_outline, size: 42),
           const SizedBox(height: 12),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-          ),
+          Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 16),
-          OutlinedButton(
-            onPressed: onRetry,
-            child: const Text('Retry'),
-          ),
+          OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),
     );

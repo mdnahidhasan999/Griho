@@ -7,55 +7,114 @@ import '../../domain/repositories/unit_repository.dart';
 class UnitRepositoryImpl implements UnitRepository {
   final UnitDataSource _dataSource;
 
-  const UnitRepositoryImpl({
+  UnitRepositoryImpl({
     required this._dataSource,
   });
 
+  // ============================================================
+  // GET UNIT BY ID
+  // ============================================================
+
   @override
-  Future<Unit?> getUnitById(String unitId) async {
+  Future<Unit?> getUnitById(String unitId) {
     return _dataSource.getUnitById(unitId);
   }
 
+  // ============================================================
+  // GET UNITS BY PROPERTY
+  // ============================================================
+
   @override
-  Future<List<Unit>> getUnitsByPropertyId(String propertyId) async {
+  Future<List<Unit>> getUnitsByPropertyId(String propertyId) {
     return _dataSource.getUnitsByPropertyId(propertyId);
   }
 
+  // ============================================================
+  // GET OCCUPIED UNITS BY FLOOR
+  // ============================================================
+
   @override
-  Future<Unit> createUnit(CreateUnitRequest request,) async {
+  Future<List<Unit>> getOccupiedUnitsByFloor({
+    required String propertyId,
+    required int floorNumber,
+  }) {
+    return _dataSource.getOccupiedUnitsByFloor(
+      propertyId: propertyId,
+      floorNumber: floorNumber,
+    );
+  }
+
+  // ============================================================
+  // CREATE UNIT
+  // ============================================================
+
+  @override
+  Future<Unit> createUnit(
+      CreateUnitRequest request,
+      ) {
     return _dataSource.createUnit(
       request: request,
     );
   }
 
+  // ============================================================
+  // UPDATE UNIT
+  // ============================================================
+
   @override
-  Future<Unit> updateUnit(Unit unit) async {
-    final model = UnitModel.fromEntity(unit);
+  Future<Unit> updateUnit(
+      Unit unit,
+      ) {
+    final model = UnitModel(
+      id: unit.id,
+      propertyId: unit.propertyId,
+      floorNumber: unit.floorNumber,
+      unitNumber: unit.unitNumber,
+      name: unit.name,
+      status: unit.status,
+      tenantUserId: unit.tenantUserId,
+      createdAt: unit.createdAt,
+      updatedAt: unit.updatedAt,
+    );
 
     return _dataSource.updateUnit(model);
   }
 
+  // ============================================================
+  // DELETE UNIT
+  // ============================================================
+
   @override
-  Future<void> deleteUnit(String unitId) async {
-    await _dataSource.deleteUnit(unitId);
+  Future<void> deleteUnit(
+      String unitId,
+      ) {
+    return _dataSource.deleteUnit(unitId);
   }
+
+  // ============================================================
+  // ASSIGN TENANT USER
+  // ============================================================
 
   @override
   Future<void> assignTenantUser({
     required String unitId,
     required String tenantUserId,
-  }) async {
-    await _dataSource.assignTenantUser(
+  }) {
+    return _dataSource.assignTenantUser(
       unitId: unitId,
       tenantUserId: tenantUserId,
     );
   }
 
+  // ============================================================
+  // REMOVE TENANT USER
+  // ============================================================
+
   @override
   Future<void> removeTenantUser({
     required String unitId,
-  }) async {
-    await _dataSource.removeTenantUser(
+  }) {
+    return _dataSource.removeTenantUser(
       unitId: unitId,
     );
   }

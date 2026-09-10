@@ -7,100 +7,92 @@ abstract final class RouteNames {
 
   static const login = '/login';
 
-  static const otpVerification =
-      '/otp-verification';
+  static const otpVerification = '/otp-verification';
 
-  static const onboarding =
-      '/onboarding';
+  static const onboarding = '/onboarding';
 
   // ============================================================
   // HOME
   // ============================================================
 
-  static const ownerHome =
-      '/owner';
+  static const ownerHome = '/owner';
 
-  static const managerHome =
-      '/manager';
+  static const managerHome = '/manager';
 
-  static const caretakerHome =
-      '/caretaker';
+  static const caretakerHome = '/caretaker';
 
-  static const tenantHome =
-      '/tenant';
+  static const tenantHome = '/tenant';
 
   // ============================================================
   // PROPERTIES
   // ============================================================
 
-  static const addProperty =
-      '/owner/add-property';
+  static const addProperty = '/owner/add-property';
 
-  static const propertyList =
-      '/owner/properties';
+  static const propertyList = '/owner/properties';
 
-  static const propertyDetails =
-      '/owner/properties/:propertyId';
+  static const propertyDetails = '/owner/properties/:propertyId';
 
-  static const editProperty =
-      '/owner/properties/:propertyId/edit';
+  static const editProperty = '/owner/properties/:propertyId/edit';
 
   // ============================================================
   // UNITS
   // ============================================================
 
-  static const propertyUnits =
-      '/owner/properties/:propertyId/units';
+  static const propertyUnits = '/owner/properties/:propertyId/units';
 
-  static const addUnit =
-      '/owner/properties/:propertyId/units/add';
+  static const addUnit = '/owner/properties/:propertyId/units/add';
 
-  static const unitDetails =
-      '/owner/units/:unitId';
+  static const unitDetails = '/owner/units/:unitId';
 
-  static const editUnit =
-      '/owner/units/:unitId/edit';
+  static const editUnit = '/owner/units/:unitId/edit';
 
+// ============================================================
+// RENTS
+// ============================================================
+
+  static const unitRentManagement =
+      '/owner/units/:unitId/rent';
+
+  static const changeUnitRent =
+      '/owner/units/:unitId/rent/change';
+
+  static const unitRentRateHistory =
+      '/owner/units/:unitId/rent/history';
+
+  static const unitMonthlyRent =
+      '/owner/units/:unitId/monthly-rent';
   // ============================================================
   // TENANTS
   // ============================================================
 
-  static const addTenant =
-      '/owner/add-tenant';
+  static const addTenant = '/owner/add-tenant';
 
-  static const ownerTenants =
-      '/owner/tenants';
+  static const ownerTenants = '/owner/tenants';
 
-  static const tenantDetails =
-      '/owner/tenants/:tenantId';
+  static const tenantDetails = '/owner/tenants/:tenantId';
 
-  static const editTenant =
-      '/owner/tenants/:tenantId/edit';
+  static const editTenant = '/owner/tenants/:tenantId/edit';
 
-  static const propertyTenants =
-      '/owner/properties/:propertyId/tenants';
+  static const propertyTenants = '/owner/properties/:propertyId/tenants';
 
   // ============================================================
   // TENANT ACCOUNT LINK
   // ============================================================
 
-  static const tenantAccountLink =
-      '/tenant-account-link';
+  static const tenantAccountLink = '/tenant-account-link';
 
   // ============================================================
   // TENANT INVITATION
   // ============================================================
 
-  static const tenantInvitation =
-      '/i/:invitationId';
+  static const tenantInvitation = '/i/:invitationId';
 
   // ============================================================
   // TENANT INVITATION URL
   // ============================================================
 
-  static String tenantInvitationPath(String invitationId,) {
-    return '/i/${Uri.encodeComponent(
-      invitationId.trim(),
-    )}';
+  static String tenantInvitationPath(String invitationId) {
+    return '/i/${Uri.encodeComponent(invitationId.trim())}';
   }
 }

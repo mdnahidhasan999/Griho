@@ -4,7 +4,9 @@ import '../repositories/unit_repository.dart';
 class UpdateUnit {
   final UnitRepository _repository;
 
-  const UpdateUnit(this._repository);
+  const UpdateUnit(
+      this._repository,
+      );
 
   Future<Unit> call(
       Unit unit,
@@ -33,13 +35,8 @@ class UpdateUnit {
       );
     }
 
-    if (unit.monthlyRent != null &&
-        unit.monthlyRent! < 0) {
-      throw ArgumentError(
-        'Monthly rent cannot be negative.',
-      );
-    }
-
-    return _repository.updateUnit(unit);
+    return _repository.updateUnit(
+      unit,
+    );
   }
 }

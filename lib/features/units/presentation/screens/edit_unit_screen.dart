@@ -19,12 +19,17 @@ class EditUnitScreen extends ConsumerStatefulWidget {
 
 class _EditUnitScreenState
     extends ConsumerState<EditUnitScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _formKey =
+  GlobalKey<FormState>();
 
-  late final TextEditingController _floorController;
-  late final TextEditingController _unitNumberController;
-  late final TextEditingController _nameController;
-  late final TextEditingController _rentController;
+  late final TextEditingController
+  _floorController;
+
+  late final TextEditingController
+  _unitNumberController;
+
+  late final TextEditingController
+  _nameController;
 
   late UnitStatus _selectedStatus;
 
@@ -32,26 +37,24 @@ class _EditUnitScreenState
   void initState() {
     super.initState();
 
-    _floorController = TextEditingController(
-      text: widget.unit.floorNumber.toString(),
-    );
+    _floorController =
+        TextEditingController(
+          text: widget.unit.floorNumber
+              .toString(),
+        );
 
-    _unitNumberController = TextEditingController(
-      text: widget.unit.unitNumber,
-    );
+    _unitNumberController =
+        TextEditingController(
+          text: widget.unit.unitNumber,
+        );
 
-    _nameController = TextEditingController(
-      text: widget.unit.name ?? '',
-    );
+    _nameController =
+        TextEditingController(
+          text: widget.unit.name ?? '',
+        );
 
-    _rentController = TextEditingController(
-      text: widget.unit.monthlyRent == null
-          ? ''
-          : widget.unit.monthlyRent!
-          .toStringAsFixed(0),
-    );
-
-    _selectedStatus = widget.unit.status;
+    _selectedStatus =
+        widget.unit.status;
   }
 
   @override
@@ -59,7 +62,6 @@ class _EditUnitScreenState
     _floorController.dispose();
     _unitNumberController.dispose();
     _nameController.dispose();
-    _rentController.dispose();
 
     super.dispose();
   }
@@ -79,24 +81,21 @@ class _EditUnitScreenState
     final name =
     _nameController.text.trim();
 
-    final rentText =
-    _rentController.text.trim();
-
-    final monthlyRent = rentText.isEmpty
-        ? null
-        : double.parse(rentText);
-
-    final updatedUnit = widget.unit.copyWith(
+    final updatedUnit =
+    widget.unit.copyWith(
       floorNumber: floorNumber,
       unitNumber: unitNumber,
-      name: name.isEmpty ? null : name,
+      name: name.isEmpty
+          ? null
+          : name,
       status: _selectedStatus,
-      monthlyRent: monthlyRent,
       updatedAt: DateTime.now(),
     );
 
     final result = await ref
-        .read(unitControllerProvider.notifier)
+        .read(
+      unitControllerProvider.notifier,
+    )
         .updateUnit(
       unit: updatedUnit,
     );
@@ -110,7 +109,8 @@ class _EditUnitScreenState
         unitControllerProvider,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             state.errorMessage ??
@@ -133,11 +133,13 @@ class _EditUnitScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Unit'),
+        title:
+        const Text('Edit Unit'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding:
+          const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
             child: Column(
@@ -154,18 +156,23 @@ class _EditUnitScreenState
                 const SizedBox(height: 32),
 
                 TextFormField(
-                  controller: _floorController,
+                  controller:
+                  _floorController,
                   keyboardType:
                   TextInputType.number,
                   textInputAction:
                   TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Floor Number',
-                    border: OutlineInputBorder(),
+                  decoration:
+                  const InputDecoration(
+                    labelText:
+                    'Floor Number',
+                    border:
+                    OutlineInputBorder(),
                   ),
                   validator: (value) {
                     final text =
-                        value?.trim() ?? '';
+                        value?.trim() ??
+                            '';
 
                     final floor =
                     int.tryParse(text);
@@ -192,15 +199,21 @@ class _EditUnitScreenState
                   controller:
                   _unitNumberController,
                   textCapitalization:
-                  TextCapitalization.characters,
+                  TextCapitalization
+                      .characters,
                   textInputAction:
                   TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Unit Number',
-                    border: OutlineInputBorder(),
+                  decoration:
+                  const InputDecoration(
+                    labelText:
+                    'Unit Number',
+                    border:
+                    OutlineInputBorder(),
                   ),
                   validator: (value) {
-                    if (value?.trim().isEmpty ?? true) {
+                    if (value?.trim()
+                        .isEmpty ??
+                        true) {
                       return 'Please enter unit number.';
                     }
 
@@ -211,26 +224,35 @@ class _EditUnitScreenState
                 const SizedBox(height: 20),
 
                 TextFormField(
-                  controller: _nameController,
+                  controller:
+                  _nameController,
                   textCapitalization:
-                  TextCapitalization.words,
+                  TextCapitalization
+                      .words,
                   textInputAction:
                   TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Unit Name',
+                  decoration:
+                  const InputDecoration(
+                    labelText:
+                    'Unit Name',
                     hintText:
                     'Optional, e.g. Family Apartment',
-                    border: OutlineInputBorder(),
+                    border:
+                    OutlineInputBorder(),
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
-                DropdownButtonFormField<UnitStatus>(
-                  initialValue: _selectedStatus,
-                  decoration: const InputDecoration(
+                DropdownButtonFormField<
+                    UnitStatus>(
+                  initialValue:
+                  _selectedStatus,
+                  decoration:
+                  const InputDecoration(
                     labelText: 'Status',
-                    border: OutlineInputBorder(),
+                    border:
+                    OutlineInputBorder(),
                   ),
                   items: UnitStatus.values
                       .map(
@@ -239,7 +261,9 @@ class _EditUnitScreenState
                           UnitStatus>(
                         value: status,
                         child: Text(
-                          _statusLabel(status),
+                          _statusLabel(
+                            status,
+                          ),
                         ),
                       );
                     },
@@ -251,58 +275,24 @@ class _EditUnitScreenState
                     }
 
                     setState(() {
-                      _selectedStatus = status;
+                      _selectedStatus =
+                          status;
                     });
-                  },
-                ),
-
-                const SizedBox(height: 20),
-
-                TextFormField(
-                  controller: _rentController,
-                  keyboardType:
-                  const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Monthly Rent',
-                    hintText:
-                    'Optional, e.g. 15000',
-                    prefixText: '৳ ',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    final text =
-                        value?.trim() ?? '';
-
-                    if (text.isEmpty) {
-                      return null;
-                    }
-
-                    final rent =
-                    double.tryParse(text);
-
-                    if (rent == null) {
-                      return 'Please enter a valid rent.';
-                    }
-
-                    if (rent < 0) {
-                      return 'Rent cannot be negative.';
-                    }
-
-                    return null;
                   },
                 ),
 
                 const SizedBox(height: 32),
 
                 SizedBox(
-                  width: double.infinity,
+                  width:
+                  double.infinity,
                   child: FilledButton(
-                    onPressed: state.isLoading
+                    onPressed:
+                    state.isLoading
                         ? null
                         : _updateUnit,
-                    child: state.isLoading
+                    child:
+                    state.isLoading
                         ? const SizedBox(
                       height: 20,
                       width: 20,

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
+import '../../../rents/domain/entities/rent_rate.dart';
+import '../../../rents/presentation/providers/rent_rate_provider.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
 import '../../../tenants/presentation/screens/tenant_tenancy_history_screen.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
@@ -62,6 +64,19 @@ class TenantHomeScreen extends ConsumerWidget {
           );
 
           final unitAsync = ref.watch(unitByIdProvider(tenant.unitId));
+
+          AsyncValue<RentRate?>? currentRentRateAsync;
+
+          propertyAsync.whenData((property) {
+            if (property != null) {
+              currentRentRateAsync = ref.watch(
+                currentRentRateProvider((
+                  unitId: tenant.unitId,
+                  ownerId: property.ownerId,
+                )),
+              );
+            }
+          });
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -129,7 +144,7 @@ class TenantHomeScreen extends ConsumerWidget {
                       unitNumber: unit.unitNumber,
                       unitName: unit.name,
                       floorNumber: unit.floorNumber,
-                      monthlyRent: unit.monthlyRent,
+                      rentRateAsync: currentRentRateAsync,
                       status: unit.status.name,
                     );
                   },
@@ -388,14 +403,14 @@ class _UnitCard extends StatelessWidget {
   final String unitNumber;
   final String? unitName;
   final int floorNumber;
-  final double? monthlyRent;
+  final AsyncValue<RentRate?>? rentRateAsync;
   final String status;
 
   const _UnitCard({
     required this.unitNumber,
     required this.unitName,
     required this.floorNumber,
-    required this.monthlyRent,
+    required this.rentRateAsync,
     required this.status,
   });
 
@@ -449,17 +464,73 @@ class _UnitCard extends StatelessWidget {
               value: _formatStatus(status),
             ),
 
-            if (monthlyRent != null) ...[
-              const SizedBox(height: 12),
-              _InfoRow(
-                icon: Icons.payments_outlined,
-                label: 'Monthly Rent',
-                value: _formatCurrency(monthlyRent!),
-              ),
-            ],
+            const SizedBox(height: 12),
+
+            _CurrentRentRow(rentRateAsync: rentRateAsync),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ============================================================================
+// CURRENT RENT ROW
+// ============================================================================
+
+class _CurrentRentRow extends StatelessWidget {
+  final AsyncValue<RentRate?>? rentRateAsync;
+
+  const _CurrentRentRow({required this.rentRateAsync});
+
+  @override
+  Widget build(BuildContext context) {
+    if (rentRateAsync == null) {
+      return const _InfoRow(
+        icon: Icons.payments_outlined,
+        label: 'Monthly Rent',
+        value: 'Unavailable',
+      );
+    }
+
+    return rentRateAsync!.when(
+      loading: () {
+        return const Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(Icons.payments_outlined, size: 20),
+            SizedBox(width: 12),
+            SizedBox(width: 95, child: Text('Monthly Rent')),
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ],
+        );
+      },
+      error: (_, _) {
+        return const _InfoRow(
+          icon: Icons.payments_outlined,
+          label: 'Monthly Rent',
+          value: 'Unavailable',
+        );
+      },
+      data: (rentRate) {
+        if (rentRate == null) {
+          return const _InfoRow(
+            icon: Icons.payments_outlined,
+            label: 'Monthly Rent',
+            value: 'Not set',
+          );
+        }
+
+        return _InfoRow(
+          icon: Icons.payments_outlined,
+          label: 'Monthly Rent',
+          value: _formatCurrency(rentRate.amount),
+        );
+      },
     );
   }
 }
@@ -533,8 +604,6 @@ class _QuickActionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -543,9 +612,9 @@ class _QuickActionsCard extends StatelessWidget {
           children: [
             Text(
               'Quick Actions',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
 
             const SizedBox(height: 16),

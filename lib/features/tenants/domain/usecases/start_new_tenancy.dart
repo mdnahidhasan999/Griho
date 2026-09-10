@@ -12,6 +12,7 @@ class StartNewTenancy {
     required String tenantId,
     required String propertyId,
     required String unitId,
+    required double amount,
   }) async {
     final normalizedTenantId = tenantId.trim();
     final normalizedPropertyId = propertyId.trim();
@@ -29,10 +30,15 @@ class StartNewTenancy {
       throw ArgumentError('Unit ID cannot be empty.');
     }
 
+    if (amount <= 0) {
+      throw ArgumentError('Rent amount must be greater than zero.');
+    }
+
     return _repository.startNewTenancy(
       tenantId: normalizedTenantId,
       propertyId: normalizedPropertyId,
       unitId: normalizedUnitId,
+      amount: amount,
     );
   }
 }

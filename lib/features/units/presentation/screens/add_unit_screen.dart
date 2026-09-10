@@ -33,15 +33,11 @@ class _AddUnitScreenState
   final _nameController =
   TextEditingController();
 
-  final _rentController =
-  TextEditingController();
-
   @override
   void dispose() {
     _floorController.dispose();
     _unitNumberController.dispose();
     _nameController.dispose();
-    _rentController.dispose();
 
     super.dispose();
   }
@@ -61,14 +57,6 @@ class _AddUnitScreenState
     final name =
     _nameController.text.trim();
 
-    final rentText =
-    _rentController.text.trim();
-
-    final monthlyRent =
-    rentText.isEmpty
-        ? null
-        : double.parse(rentText);
-
     final request = CreateUnitRequest(
       propertyId: widget.propertyId,
       floorNumber: floorNumber,
@@ -76,7 +64,6 @@ class _AddUnitScreenState
       name: name.isEmpty
           ? null
           : name,
-      monthlyRent: monthlyRent,
     );
 
     final unit = await ref
@@ -124,19 +111,15 @@ class _AddUnitScreenState
           'Add Unit',
         ),
       ),
-
       body: SafeArea(
         child: SingleChildScrollView(
           padding:
           const EdgeInsets.all(24),
-
           child: Form(
             key: _formKey,
-
             child: Column(
               crossAxisAlignment:
               CrossAxisAlignment.start,
-
               children: [
                 Text(
                   'Unit Information',
@@ -174,13 +157,10 @@ class _AddUnitScreenState
                 TextFormField(
                   controller:
                   _floorController,
-
                   keyboardType:
                   TextInputType.number,
-
                   textInputAction:
                   TextInputAction.next,
-
                   decoration:
                   const InputDecoration(
                     labelText:
@@ -190,7 +170,6 @@ class _AddUnitScreenState
                     border:
                     OutlineInputBorder(),
                   ),
-
                   validator: (value) {
                     final text =
                         value?.trim() ??
@@ -231,14 +210,11 @@ class _AddUnitScreenState
                 TextFormField(
                   controller:
                   _unitNumberController,
-
                   textCapitalization:
                   TextCapitalization
                       .characters,
-
                   textInputAction:
                   TextInputAction.next,
-
                   decoration:
                   const InputDecoration(
                     labelText:
@@ -248,7 +224,6 @@ class _AddUnitScreenState
                     border:
                     OutlineInputBorder(),
                   ),
-
                   validator: (value) {
                     final unitNumber =
                         value?.trim() ??
@@ -272,14 +247,11 @@ class _AddUnitScreenState
                 TextFormField(
                   controller:
                   _nameController,
-
                   textCapitalization:
                   TextCapitalization
                       .words,
-
                   textInputAction:
-                  TextInputAction.next,
-
+                  TextInputAction.done,
                   decoration:
                   const InputDecoration(
                     labelText:
@@ -291,62 +263,6 @@ class _AddUnitScreenState
                   ),
                 ),
 
-                const SizedBox(height: 20),
-
-                // ==================================================
-                // MONTHLY RENT
-                // ==================================================
-
-                TextFormField(
-                  controller:
-                  _rentController,
-
-                  keyboardType:
-                  const TextInputType
-                      .numberWithOptions(
-                    decimal: true,
-                  ),
-
-                  textInputAction:
-                  TextInputAction.done,
-
-                  decoration:
-                  const InputDecoration(
-                    labelText:
-                    'Monthly Rent',
-                    hintText:
-                    'Optional, e.g. 15000',
-                    prefixText: '৳ ',
-                    border:
-                    OutlineInputBorder(),
-                  ),
-
-                  validator: (value) {
-                    final text =
-                        value?.trim() ??
-                            '';
-
-                    if (text.isEmpty) {
-                      return null;
-                    }
-
-                    final rent =
-                    double.tryParse(
-                      text,
-                    );
-
-                    if (rent == null) {
-                      return 'Please enter a valid rent.';
-                    }
-
-                    if (rent < 0) {
-                      return 'Rent cannot be negative.';
-                    }
-
-                    return null;
-                  },
-                ),
-
                 const SizedBox(height: 32),
 
                 // ==================================================
@@ -356,13 +272,11 @@ class _AddUnitScreenState
                 SizedBox(
                   width:
                   double.infinity,
-
                   child: FilledButton(
                     onPressed:
                     state.isLoading
                         ? null
                         : _createUnit,
-
                     child:
                     state.isLoading
                         ? const SizedBox(
