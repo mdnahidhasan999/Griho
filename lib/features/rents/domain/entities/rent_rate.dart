@@ -1,5 +1,6 @@
 enum RentRateSource {
   initial,
+  property,
   floor,
   unit,
 }
@@ -20,11 +21,24 @@ class RentRate {
 
   /// Date until which this rent rate was effective.
   ///
-  /// Null means this is the current rate.
+  /// Null means this rate has no end date.
   final DateTime? effectiveTo;
 
   /// How this rate was created.
   final RentRateSource source;
+
+  /// ID of the previous rent rate that this rate replaces.
+  ///
+  /// Null only for the initial rate.
+  final String? previousRentRateId;
+
+  /// ID of the next rent rate that replaces this rate.
+  ///
+  /// Null when this is currently the latest rate.
+  ///
+  /// When a future rent change is scheduled, this field points
+  /// to the newly-created future rent rate.
+  final String? nextRentRateId;
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -40,6 +54,8 @@ class RentRate {
     required this.effectiveFrom,
     this.effectiveTo,
     required this.source,
+    this.previousRentRateId,
+    this.nextRentRateId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -55,10 +71,14 @@ class RentRate {
     DateTime? effectiveFrom,
     DateTime? effectiveTo,
     RentRateSource? source,
+    String? previousRentRateId,
+    String? nextRentRateId,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool clearTenantUserId = false,
     bool clearEffectiveTo = false,
+    bool clearPreviousRentRateId = false,
+    bool clearNextRentRateId = false,
   }) {
     return RentRate(
       id: id ?? this.id,
@@ -67,14 +87,31 @@ class RentRate {
       unitId: unitId ?? this.unitId,
       tenantId: tenantId ?? this.tenantId,
       tenantUserId:
-      clearTenantUserId ? null : tenantUserId ?? this.tenantUserId,
+      clearTenantUserId
+          ? null
+          : tenantUserId ?? this.tenantUserId,
       amount: amount ?? this.amount,
-      effectiveFrom: effectiveFrom ?? this.effectiveFrom,
+      effectiveFrom:
+      effectiveFrom ?? this.effectiveFrom,
       effectiveTo:
-      clearEffectiveTo ? null : effectiveTo ?? this.effectiveTo,
+      clearEffectiveTo
+          ? null
+          : effectiveTo ?? this.effectiveTo,
       source: source ?? this.source,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
+      previousRentRateId:
+      clearPreviousRentRateId
+          ? null
+          : previousRentRateId ??
+          this.previousRentRateId,
+      nextRentRateId:
+      clearNextRentRateId
+          ? null
+          : nextRentRateId ??
+          this.nextRentRateId,
+      createdAt:
+      createdAt ?? this.createdAt,
+      updatedAt:
+      updatedAt ?? this.updatedAt,
     );
   }
 }

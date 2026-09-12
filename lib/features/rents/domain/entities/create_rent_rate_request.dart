@@ -10,6 +10,9 @@ class CreateRentRateRequest {
   final DateTime effectiveFrom;
   final RentRateSource source;
 
+  /// Null only when creating the initial rent rate.
+  final String? previousRentRateId;
+
   const CreateRentRateRequest({
     required this.ownerId,
     required this.propertyId,
@@ -19,5 +22,6 @@ class CreateRentRateRequest {
     required this.amount,
     required this.effectiveFrom,
     required this.source,
+    this.previousRentRateId,
   });
 }

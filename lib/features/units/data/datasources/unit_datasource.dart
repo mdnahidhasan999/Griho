@@ -7,8 +7,9 @@ import '../models/unit_model.dart';
 class UnitDataSource {
   final FirebaseFirestore _firestore;
 
-  UnitDataSource({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+  UnitDataSource({
+    FirebaseFirestore? firestore,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'units';
 
@@ -16,17 +17,19 @@ class UnitDataSource {
       _firestore.collection(_collectionName);
 
   // ============================================================
-  // GET UNIT BY FIRESTORE ID
+  // GET UNIT BY ID
   // ============================================================
 
-  Future<UnitModel?> getUnitById(String unitId) async {
+  Future<UnitModel?> getUnitById(String unitId,) async {
     final normalizedUnitId = unitId.trim();
 
     if (normalizedUnitId.isEmpty) {
       return null;
     }
 
-    final document = await _units.doc(normalizedUnitId).get();
+    final document = await _units
+        .doc(normalizedUnitId)
+        .get();
 
     if (!document.exists) {
       return null;
@@ -39,7 +42,7 @@ class UnitDataSource {
   // GET UNITS BY PROPERTY
   // ============================================================
 
-  Future<List<UnitModel>> getUnitsByPropertyId(String propertyId) async {
+  Future<List<UnitModel>> getUnitsByPropertyId(String propertyId,) async {
     final normalizedPropertyId = propertyId.trim();
 
     if (normalizedPropertyId.isEmpty) {
@@ -47,27 +50,54 @@ class UnitDataSource {
     }
 
     final snapshot = await _units
-        .where('propertyId', isEqualTo: normalizedPropertyId)
+        .where(
+      'propertyId',
+      isEqualTo: normalizedPropertyId,
+    )
         .orderBy('floorNumber')
         .orderBy('unitNumber')
         .get();
 
-    return snapshot.docs.map(UnitModel.fromFirestore).toList();
+    return snapshot.docs
+        .map(UnitModel.fromFirestore)
+        .toList();
+  }
+
+  // ============================================================
+  // GET OCCUPIED UNITS BY PROPERTY
+  // ============================================================
+
+  Future<List<UnitModel>> getOccupiedUnitsByProperty({
+    required String propertyId,
+  }) async {
+    final normalizedPropertyId = propertyId.trim();
+
+    if (normalizedPropertyId.isEmpty) {
+      throw ArgumentError(
+        'Property ID cannot be empty.',
+      );
+    }
+
+    final snapshot = await _units
+        .where(
+      'propertyId',
+      isEqualTo: normalizedPropertyId,
+    )
+        .where(
+      'status',
+      isEqualTo: UnitStatus.occupied.name,
+    )
+        .orderBy('floorNumber')
+        .orderBy('unitNumber')
+        .get();
+
+    return snapshot.docs
+        .map(UnitModel.fromFirestore)
+        .toList();
   }
 
   // ============================================================
   // GET OCCUPIED UNITS BY FLOOR
-  // ============================================================
-  //
-  // Used by the floor-wide rent change flow.
-  //
-  // Only occupied units are returned.
-  //
-  // Vacant / available / reserved / inactive units are excluded.
-  //
-  // This keeps the floor-rent operation connected to the existing
-  // Unit system instead of duplicating unit-state logic inside
-  // the Rent feature.
   // ============================================================
 
   Future<List<UnitModel>> getOccupiedUnitsByFloor({
@@ -77,46 +107,67 @@ class UnitDataSource {
     final normalizedPropertyId = propertyId.trim();
 
     if (normalizedPropertyId.isEmpty) {
-      throw ArgumentError('Property ID cannot be empty.');
+      throw ArgumentError(
+        'Property ID cannot be empty.',
+      );
     }
 
     if (floorNumber < 1) {
-      throw ArgumentError('Floor number must be at least 1.');
+      throw ArgumentError(
+        'Floor number must be at least 1.',
+      );
     }
 
     final snapshot = await _units
-        .where('propertyId', isEqualTo: normalizedPropertyId)
-        .where('floorNumber', isEqualTo: floorNumber)
-        .where('status', isEqualTo: UnitStatus.occupied.name)
+        .where(
+      'propertyId',
+      isEqualTo: normalizedPropertyId,
+    )
+        .where(
+      'floorNumber',
+      isEqualTo: floorNumber,
+    )
+        .where(
+      'status',
+      isEqualTo: UnitStatus.occupied.name,
+    )
         .orderBy('unitNumber')
         .get();
 
-    return snapshot.docs.map(UnitModel.fromFirestore).toList();
+    return snapshot.docs
+        .map(UnitModel.fromFirestore)
+        .toList();
   }
 
   // ============================================================
   // CREATE UNIT
   // ============================================================
 
-  Future<UnitModel> createUnit({required CreateUnitRequest request}) async {
+  Future<UnitModel> createUnit({
+    required CreateUnitRequest request,
+  }) async {
     final propertyId = request.propertyId.trim();
-
     final unitNumber = request.unitNumber.trim();
 
     if (propertyId.isEmpty) {
-      throw ArgumentError('Property ID cannot be empty.');
+      throw ArgumentError(
+        'Property ID cannot be empty.',
+      );
     }
 
     if (request.floorNumber < 1) {
-      throw ArgumentError('Floor number must be at least 1.');
+      throw ArgumentError(
+        'Floor number must be at least 1.',
+      );
     }
 
     if (unitNumber.isEmpty) {
-      throw ArgumentError('Unit number cannot be empty.');
+      throw ArgumentError(
+        'Unit number cannot be empty.',
+      );
     }
 
     final document = _units.doc();
-
     final now = DateTime.now();
 
     final unit = UnitModel(
@@ -124,14 +175,20 @@ class UnitDataSource {
       propertyId: propertyId,
       floorNumber: request.floorNumber,
       unitNumber: unitNumber,
-      name: request.name?.trim().isEmpty == true ? null : request.name?.trim(),
+      name: request.name
+          ?.trim()
+          .isEmpty == true
+          ? null
+          : request.name?.trim(),
       status: UnitStatus.available,
       tenantUserId: null,
       createdAt: now,
       updatedAt: now,
     );
 
-    await document.set(unit.toFirestore());
+    await document.set(
+      unit.toFirestore(),
+    );
 
     return unit;
   }
@@ -140,62 +197,72 @@ class UnitDataSource {
   // UPDATE UNIT
   // ============================================================
 
-  Future<UnitModel> updateUnit(UnitModel unit) async {
+  Future<UnitModel> updateUnit(UnitModel unit,) async {
     final unitId = unit.id.trim();
     final propertyId = unit.propertyId.trim();
     final unitNumber = unit.unitNumber.trim();
 
     if (unitId.isEmpty) {
-      throw ArgumentError('Unit ID cannot be empty.');
+      throw ArgumentError(
+        'Unit ID cannot be empty.',
+      );
     }
 
     if (propertyId.isEmpty) {
-      throw ArgumentError('Property ID cannot be empty.');
+      throw ArgumentError(
+        'Property ID cannot be empty.',
+      );
     }
 
     if (unit.floorNumber < 1) {
-      throw ArgumentError('Floor number must be at least 1.');
+      throw ArgumentError(
+        'Floor number must be at least 1.',
+      );
     }
 
     if (unitNumber.isEmpty) {
-      throw ArgumentError('Unit number cannot be empty.');
+      throw ArgumentError(
+        'Unit number cannot be empty.',
+      );
     }
 
     final document = _units.doc(unitId);
 
-    await document.update(unit.toFirestore());
+    await document.update(
+      unit.toFirestore(),
+    );
 
     final updatedDocument = await document.get();
 
     if (!updatedDocument.exists) {
-      throw StateError('Unit was updated but could not be retrieved.');
+      throw StateError(
+        'Unit was updated but could not be retrieved.',
+      );
     }
 
-    return UnitModel.fromFirestore(updatedDocument);
+    return UnitModel.fromFirestore(
+      updatedDocument,
+    );
   }
 
   // ============================================================
   // DELETE UNIT
   // ============================================================
 
-  Future<void> deleteUnit(String unitId) async {
+  Future<void> deleteUnit(String unitId,) async {
     final normalizedUnitId = unitId.trim();
 
     if (normalizedUnitId.isEmpty) {
       return;
     }
 
-    await _units.doc(normalizedUnitId).delete();
+    await _units
+        .doc(normalizedUnitId)
+        .delete();
   }
 
   // ============================================================
-  // ASSIGN TENANT USER TO UNIT
-  // ============================================================
-  //
-  // Internal relationship/security data.
-  //
-  // tenantUserId is a Firebase UID and must never be displayed
-  // directly to users.
+  // ASSIGN TENANT USER
   // ============================================================
 
   Future<void> assignTenantUser({
@@ -203,15 +270,18 @@ class UnitDataSource {
     required String tenantUserId,
   }) async {
     final normalizedUnitId = unitId.trim();
-
     final normalizedTenantUserId = tenantUserId.trim();
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError('Unit ID cannot be empty.');
+      throw ArgumentError(
+        'Unit ID cannot be empty.',
+      );
     }
 
     if (normalizedTenantUserId.isEmpty) {
-      throw ArgumentError('Tenant user ID cannot be empty.');
+      throw ArgumentError(
+        'Tenant user ID cannot be empty.',
+      );
     }
 
     await _units.doc(normalizedUnitId).update({
@@ -222,14 +292,12 @@ class UnitDataSource {
   }
 
   // ============================================================
-  // REMOVE TENANT USER FROM UNIT
-  // ============================================================
-  //
-  // Removes the internal tenant account reference.
-  // The unit becomes available.
+  // REMOVE TENANT USER
   // ============================================================
 
-  Future<void> removeTenantUser({required String unitId}) async {
+  Future<void> removeTenantUser({
+    required String unitId,
+  }) async {
     final normalizedUnitId = unitId.trim();
 
     if (normalizedUnitId.isEmpty) {

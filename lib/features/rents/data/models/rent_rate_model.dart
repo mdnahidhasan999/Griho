@@ -14,13 +14,14 @@ class RentRateModel extends RentRate {
     required super.effectiveFrom,
     super.effectiveTo,
     required super.source,
+    super.previousRentRateId,
+    super.nextRentRateId,
     required super.createdAt,
     required super.updatedAt,
   });
 
   factory RentRateModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc,
-      ) {
+      DocumentSnapshot<Map<String, dynamic>> doc,) {
     final data = doc.data();
 
     if (data == null) {
@@ -31,10 +32,22 @@ class RentRateModel extends RentRate {
 
     return RentRateModel(
       id: doc.id,
-      ownerId: _readRequiredString(data, 'ownerId'),
-      propertyId: _readRequiredString(data, 'propertyId'),
-      unitId: _readRequiredString(data, 'unitId'),
-      tenantId: _readRequiredString(data, 'tenantId'),
+      ownerId: _readRequiredString(
+        data,
+        'ownerId',
+      ),
+      propertyId: _readRequiredString(
+        data,
+        'propertyId',
+      ),
+      unitId: _readRequiredString(
+        data,
+        'unitId',
+      ),
+      tenantId: _readRequiredString(
+        data,
+        'tenantId',
+      ),
       tenantUserId: _readOptionalString(
         data,
         'tenantUserId',
@@ -52,6 +65,14 @@ class RentRateModel extends RentRate {
         'effectiveTo',
       ),
       source: _readSource(data),
+      previousRentRateId: _readOptionalString(
+        data,
+        'previousRentRateId',
+      ),
+      nextRentRateId: _readOptionalString(
+        data,
+        'nextRentRateId',
+      ),
       createdAt: _readRequiredDateTime(
         data,
         'createdAt',
@@ -74,10 +95,13 @@ class RentRateModel extends RentRate {
       'effectiveFrom': Timestamp.fromDate(
         effectiveFrom,
       ),
-      'effectiveTo': effectiveTo == null
+      'effectiveTo':
+      effectiveTo == null
           ? null
           : Timestamp.fromDate(effectiveTo!),
       'source': source.name,
+      'previousRentRateId': previousRentRateId,
+      'nextRentRateId': nextRentRateId,
       'createdAt': Timestamp.fromDate(
         createdAt,
       ),
@@ -87,13 +111,13 @@ class RentRateModel extends RentRate {
     };
   }
 
-  static String _readRequiredString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String _readRequiredString(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
-    if (value is! String || value.trim().isEmpty) {
+    if (value is! String || value
+        .trim()
+        .isEmpty) {
       throw StateError(
         'Rent rate field "$field" is missing or invalid.',
       );
@@ -102,10 +126,8 @@ class RentRateModel extends RentRate {
     return value.trim();
   }
 
-  static String? _readOptionalString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String? _readOptionalString(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value == null) {
@@ -120,13 +142,13 @@ class RentRateModel extends RentRate {
 
     final normalized = value.trim();
 
-    return normalized.isEmpty ? null : normalized;
+    return normalized.isEmpty
+        ? null
+        : normalized;
   }
 
-  static double _readRequiredDouble(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static double _readRequiredDouble(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value is num) {
@@ -146,10 +168,8 @@ class RentRateModel extends RentRate {
     );
   }
 
-  static DateTime _readRequiredDateTime(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime _readRequiredDateTime(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value is Timestamp) {
@@ -161,10 +181,8 @@ class RentRateModel extends RentRate {
     );
   }
 
-  static DateTime? _readOptionalDateTime(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime? _readOptionalDateTime(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value == null) {
@@ -180,9 +198,7 @@ class RentRateModel extends RentRate {
     );
   }
 
-  static RentRateSource _readSource(
-      Map<String, dynamic> data,
-      ) {
+  static RentRateSource _readSource(Map<String, dynamic> data,) {
     final value = data['source'];
 
     if (value is! String) {

@@ -5,7 +5,8 @@ import '../../domain/entities/tenant_invitation.dart';
 
 import '../datasources/tenant_invitation_data_source.dart';
 
-class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
+class TenantInvitationRepositoryImpl
+    implements TenantInvitationRepository {
   final TenantInvitationDataSource _dataSource;
   final CurrentUserService _currentUserService;
 
@@ -14,10 +15,10 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
     required this._currentUserService,
   });
 
-  // ==========================================================================
+  // ============================================================
   // CREATE INVITATION
   // CURRENT OWNER ONLY
-  // ==========================================================================
+  // ============================================================
 
   @override
   Future<TenantInvitation> createInvitation({
@@ -25,6 +26,7 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
     required String propertyId,
     required String unitId,
     required String phone,
+    required double rentAmount,
   }) {
     final ownerId = _currentUserService.requiredUid;
 
@@ -34,70 +36,99 @@ class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
       propertyId: propertyId,
       unitId: unitId,
       phone: phone,
+      rentAmount: rentAmount,
     );
   }
 
-  // ==========================================================================
+  // ============================================================
   // GET INVITATION BY ID
-  // ==========================================================================
+  // ============================================================
 
   @override
-  Future<TenantInvitation?> getInvitationById(String invitationId) {
-    return _dataSource.getInvitationById(invitationId);
+  Future<TenantInvitation?> getInvitationById(
+      String invitationId,
+      ) {
+    return _dataSource.getInvitationById(
+      invitationId,
+    );
   }
 
-  // ==========================================================================
+  // ============================================================
   // GET INVITATION BY TOKEN
-  // ==========================================================================
+  // ============================================================
 
   @override
-  Future<TenantInvitation?> getInvitationByToken(String token) {
-    return _dataSource.getInvitationByToken(token);
+  Future<TenantInvitation?> getInvitationByToken(
+      String token,
+      ) {
+    return _dataSource.getInvitationByToken(
+      token,
+    );
   }
 
-  // ==========================================================================
+  // ============================================================
   // GET PENDING INVITATION BY TENANT ID
   // CURRENT OWNER ONLY
-  // ==========================================================================
+  // ============================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId) {
-    return _dataSource.getPendingInvitationByTenantId(tenantId);
+  Future<TenantInvitation?> getPendingInvitationByTenantId(
+      String tenantId,
+      ) {
+    return _dataSource.getPendingInvitationByTenantId(
+      tenantId,
+    );
   }
 
-  // ==========================================================================
+  // ============================================================
   // GET PENDING INVITATION BY PHONE
-  // ==========================================================================
+  // ============================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByPhone(String phone) {
-    return _dataSource.getPendingInvitationByPhone(phone);
+  Future<TenantInvitation?> getPendingInvitationByPhone(
+      String phone,
+      ) {
+    return _dataSource.getPendingInvitationByPhone(
+      phone,
+    );
   }
 
-  // ==========================================================================
+  // ============================================================
   // ACCEPT INVITATION
-  // ==========================================================================
+  // ============================================================
 
   @override
-  Future<void> acceptInvitation(String invitationId) {
-    return _dataSource.acceptInvitation(invitationId);
+  Future<void> acceptInvitation(
+      String invitationId,
+      ) {
+    return _dataSource.acceptInvitation(
+      invitationId,
+    );
   }
 
-  // ==========================================================================
+  // ============================================================
   // CANCEL INVITATION
-  // ==========================================================================
+  // ============================================================
 
   @override
-  Future<void> cancelInvitation(String invitationId) {
-    return _dataSource.cancelInvitation(invitationId);
+  Future<void> cancelInvitation(
+      String invitationId,
+      ) {
+    return _dataSource.cancelInvitation(
+      invitationId,
+    );
   }
 
-  // ==========================================================================
+  // ============================================================
   // EXPIRE INVITATION
-  // ==========================================================================
+  // ============================================================
 
   @override
-  Future<void> expireInvitation(String invitationId) {
-    return _dataSource.expireInvitation(invitationId);
+  Future<void> expireInvitation(
+      String invitationId,
+      ) {
+    return _dataSource.expireInvitation(
+      invitationId,
+    );
   }
 }

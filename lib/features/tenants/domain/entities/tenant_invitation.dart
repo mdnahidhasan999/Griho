@@ -9,22 +9,10 @@ enum TenantInvitationStatus {
 class TenantInvitation {
   final String id;
 
-  // ============================================================
-  // OWNER
-  // ============================================================
-
   final String ownerId;
-
-  // ============================================================
-  // TENANT
-  // ============================================================
 
   final String tenantId;
   final String phone;
-
-  // ============================================================
-  // PROPERTY / UNIT
-  // ============================================================
 
   final String propertyId;
   final String? propertyName;
@@ -34,17 +22,15 @@ class TenantInvitation {
   final String? unitNumber;
   final String? unitName;
 
-  // ============================================================
-  // INVITATION
-  // ============================================================
+  /// Agreed initial monthly rent.
+  ///
+  /// This amount is fixed into the invitation and becomes the
+  /// initial RentRate when the tenant accepts the invitation.
+  final double rentAmount;
 
   final TenantInvitationStatus status;
 
   final String token;
-
-  // ============================================================
-  // DATES
-  // ============================================================
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -61,16 +47,13 @@ class TenantInvitation {
     required this.unitId,
     this.unitNumber,
     this.unitName,
+    required this.rentAmount,
     required this.status,
     required this.token,
     required this.createdAt,
     required this.updatedAt,
     required this.expiresAt,
   });
-
-  // ============================================================
-  // COPY WITH
-  // ============================================================
 
   TenantInvitation copyWith({
     String? id,
@@ -83,6 +66,7 @@ class TenantInvitation {
     String? unitId,
     String? unitNumber,
     String? unitName,
+    double? rentAmount,
     TenantInvitationStatus? status,
     String? token,
     DateTime? createdAt,
@@ -100,6 +84,7 @@ class TenantInvitation {
       unitId: unitId ?? this.unitId,
       unitNumber: unitNumber ?? this.unitNumber,
       unitName: unitName ?? this.unitName,
+      rentAmount: rentAmount ?? this.rentAmount,
       status: status ?? this.status,
       token: token ?? this.token,
       createdAt: createdAt ?? this.createdAt,
@@ -108,17 +93,9 @@ class TenantInvitation {
     );
   }
 
-  // ============================================================
-  // IS EXPIRED
-  // ============================================================
-
   bool get isExpired {
     return DateTime.now().isAfter(expiresAt);
   }
-
-  // ============================================================
-  // IS VALID
-  // ============================================================
 
   bool get isValid {
     return status == TenantInvitationStatus.pending && !isExpired;

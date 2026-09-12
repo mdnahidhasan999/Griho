@@ -14,10 +14,12 @@ class RentRateRepositoryImpl implements RentRateRepository {
     required this._unitRepository,
   });
 
+  // ============================================================
+  // CREATE INITIAL RENT RATE
+  // ============================================================
+
   @override
-  Future<RentRate> createInitialRentRate(
-      CreateRentRateRequest request,
-      ) {
+  Future<RentRate> createInitialRentRate(CreateRentRateRequest request,) {
     final now = DateTime.now();
 
     final rentRate = RentRateModel(
@@ -31,6 +33,7 @@ class RentRateRepositoryImpl implements RentRateRepository {
       effectiveFrom: request.effectiveFrom,
       effectiveTo: null,
       source: request.source,
+      previousRentRateId: request.previousRentRateId,
       createdAt: now,
       updatedAt: now,
     );
@@ -39,6 +42,10 @@ class RentRateRepositoryImpl implements RentRateRepository {
       rentRate: rentRate,
     );
   }
+
+  // ============================================================
+  // CURRENT RENT — OWNER
+  // ============================================================
 
   @override
   Future<RentRate?> getCurrentRentRate({
@@ -50,6 +57,25 @@ class RentRateRepositoryImpl implements RentRateRepository {
       ownerId: ownerId,
     );
   }
+
+  // ============================================================
+  // CURRENT RENT — TENANT
+  // ============================================================
+
+  @override
+  Future<RentRate?> getCurrentRentRateForTenant({
+    required String unitId,
+    required String tenantUserId,
+  }) {
+    return _dataSource.getCurrentRentRateForTenant(
+      unitId: unitId,
+      tenantUserId: tenantUserId,
+    );
+  }
+
+  // ============================================================
+  // APPLICABLE RENT RATE
+  // ============================================================
 
   @override
   Future<RentRate?> getRentRateApplicableAt({
@@ -64,6 +90,10 @@ class RentRateRepositoryImpl implements RentRateRepository {
     );
   }
 
+  // ============================================================
+  // UNIT HISTORY
+  // ============================================================
+
   @override
   Future<List<RentRate>> getRentRateHistoryByUnitId({
     required String unitId,
@@ -75,6 +105,10 @@ class RentRateRepositoryImpl implements RentRateRepository {
     );
   }
 
+  // ============================================================
+  // TENANT HISTORY
+  // ============================================================
+
   @override
   Future<List<RentRate>> getRentRateHistoryByTenantId({
     required String tenantId,
@@ -85,6 +119,10 @@ class RentRateRepositoryImpl implements RentRateRepository {
       ownerId: ownerId,
     );
   }
+
+  // ============================================================
+  // CURRENT RATES BY FLOOR
+  // ============================================================
 
   @override
   Future<List<RentRate>> getCurrentRentRatesByFloor({
@@ -98,6 +136,10 @@ class RentRateRepositoryImpl implements RentRateRepository {
       ownerId: ownerId,
     );
   }
+
+  // ============================================================
+  // CHANGE UNIT RENT
+  // ============================================================
 
   @override
   Future<RentRate> changeUnitRent({
@@ -116,6 +158,10 @@ class RentRateRepositoryImpl implements RentRateRepository {
     );
   }
 
+  // ============================================================
+  // CHANGE FLOOR RENT
+  // ============================================================
+
   @override
   Future<List<RentRate>> changeFloorRent({
     required String propertyId,
@@ -124,16 +170,15 @@ class RentRateRepositoryImpl implements RentRateRepository {
     required double amount,
     required DateTime effectiveFrom,
   }) async {
-    if (propertyId.trim().isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+    final normalizedPropertyId = propertyId.trim();
+    final normalizedOwnerId = ownerId.trim();
+
+    if (normalizedPropertyId.isEmpty) {
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
-    if (ownerId.trim().isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+    if (normalizedOwnerId.isEmpty) {
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     if (floorNumber < 1) {
@@ -148,9 +193,8 @@ class RentRateRepositoryImpl implements RentRateRepository {
       );
     }
 
-    final units =
-    await _unitRepository.getOccupiedUnitsByFloor(
-      propertyId: propertyId,
+    final units = await _unitRepository.getOccupiedUnitsByFloor(
+      propertyId: normalizedPropertyId,
       floorNumber: floorNumber,
     );
 
@@ -161,15 +205,14 @@ class RentRateRepositoryImpl implements RentRateRepository {
     final currentRates = <RentRateModel>[];
 
     for (final unit in units) {
-      final currentRate =
-      await _dataSource.getCurrentRentRate(
+      final currentRate = await _dataSource.getCurrentRentRate(
         unitId: unit.id,
-        ownerId: ownerId,
+        ownerId: normalizedOwnerId,
       );
 
       if (currentRate == null) {
         throw StateError(
-          'No current rent rate exists for occupied unit ${unit.id}.',
+          'No current rent rate exists for an occupied unit.',
         );
       }
 
@@ -177,6 +220,66 @@ class RentRateRepositoryImpl implements RentRateRepository {
     }
 
     return _dataSource.changeFloorRent(
+      currentRates: currentRates,
+      amount: amount,
+      effectiveFrom: effectiveFrom,
+    );
+  }
+
+  // ============================================================
+  // CHANGE PROPERTY RENT
+  // ============================================================
+
+  @override
+  Future<List<RentRate>> changePropertyRent({
+    required String propertyId,
+    required String ownerId,
+    required double amount,
+    required DateTime effectiveFrom,
+  }) async {
+    final normalizedPropertyId = propertyId.trim();
+    final normalizedOwnerId = ownerId.trim();
+
+    if (normalizedPropertyId.isEmpty) {
+      throw ArgumentError('Property ID cannot be empty.');
+    }
+
+    if (normalizedOwnerId.isEmpty) {
+      throw ArgumentError('Owner ID cannot be empty.');
+    }
+
+    if (amount <= 0) {
+      throw ArgumentError(
+        'Rent amount must be greater than zero.',
+      );
+    }
+
+    final units = await _unitRepository.getOccupiedUnitsByProperty(
+      propertyId: normalizedPropertyId,
+    );
+
+    if (units.isEmpty) {
+      return [];
+    }
+
+    final currentRates = <RentRateModel>[];
+
+    for (final unit in units) {
+      final currentRate = await _dataSource.getCurrentRentRate(
+        unitId: unit.id,
+        ownerId: normalizedOwnerId,
+      );
+
+      if (currentRate == null) {
+        throw StateError(
+          'No current rent rate exists for an occupied unit.',
+        );
+      }
+
+      currentRates.add(currentRate);
+    }
+
+    return _dataSource.changePropertyRent(
       currentRates: currentRates,
       amount: amount,
       effectiveFrom: effectiveFrom,

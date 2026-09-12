@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../../app/router/route_names.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../tenants/domain/entities/tenant.dart';
@@ -9,9 +11,9 @@ import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
 import '../../domain/entities/rent_rate.dart';
 import '../providers/rent_rate_provider.dart';
-import '../../../../app/router/route_names.dart';
 
-class RentManagementScreen extends ConsumerStatefulWidget {
+class RentManagementScreen
+    extends ConsumerStatefulWidget {
   final String unitId;
 
   const RentManagementScreen({
@@ -132,12 +134,14 @@ class _RentManagementScreenState
       return;
     }
 
-    context.push(
+    context
+        .push(
       RouteNames.changeUnitRent.replaceFirst(
         ':unitId',
         unit.id,
       ),
-    ).then((_) {
+    )
+        .then((_) {
       if (mounted) {
         _refresh();
       }
@@ -229,23 +233,17 @@ class _RentManagementScreenState
               unit: unit,
               property: property,
             ),
-
             const SizedBox(height: 20),
-
             _CurrentTenantCard(
               tenants: _activeTenants,
             ),
-
             const SizedBox(height: 16),
-
             _CurrentRentCard(
               rentRate: _currentRentRate,
-              onSetInitialRent: _openRentChange,
+              hasActiveTenant: _activeTenants.isNotEmpty,
               onChangeRent: _openRentChange,
             ),
-
             const SizedBox(height: 16),
-
             if (_currentRentRate != null)
               SizedBox(
                 width: double.infinity,
@@ -259,16 +257,12 @@ class _RentManagementScreenState
                   ),
                 ),
               ),
-
             const SizedBox(height: 10),
-
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: _openRentHistory,
-                icon: const Icon(
-                  Icons.history,
-                ),
+                icon: const Icon(Icons.history),
                 label: const Text(
                   'View Rent History',
                 ),
@@ -390,7 +384,9 @@ class _CurrentTenantCard extends StatelessWidget {
                         children: [
                           CircleAvatar(
                             child: Text(
-                              _initials(tenant.name),
+                              _initials(
+                                tenant.name,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -432,12 +428,12 @@ class _CurrentTenantCard extends StatelessWidget {
 
 class _CurrentRentCard extends StatelessWidget {
   final RentRate? rentRate;
-  final VoidCallback onSetInitialRent;
+  final bool hasActiveTenant;
   final VoidCallback onChangeRent;
 
   const _CurrentRentCard({
     required this.rentRate,
-    required this.onSetInitialRent,
+    required this.hasActiveTenant,
     required this.onChangeRent,
   });
 
@@ -459,23 +455,12 @@ class _CurrentRentCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'No rent rate has been configured for this unit.',
+                hasActiveTenant
+                    ? 'No rent rate has been configured for this unit.'
+                    : 'No active tenant is assigned. The initial rent will be set when a tenant invitation is accepted.',
                 style: Theme.of(context)
                     .textTheme
                     .bodyLarge,
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: onSetInitialRent,
-                  icon: const Icon(
-                    Icons.add,
-                  ),
-                  label: const Text(
-                    'Set Initial Rent',
-                  ),
-                ),
               ),
             ],
           ),
@@ -505,9 +490,7 @@ class _CurrentRentCard extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 20),
-
             Text(
               '৳ ${_formatAmount(rentRate!.amount)}',
               style: Theme.of(context)
@@ -517,9 +500,7 @@ class _CurrentRentCard extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 12),
-
             Text(
               'Effective from '
                   '${_formatDate(rentRate!.effectiveFrom)}',
@@ -527,13 +508,13 @@ class _CurrentRentCard extends StatelessWidget {
                   .textTheme
                   .bodyMedium,
             ),
-
             const SizedBox(height: 20),
-
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: onChangeRent,
+                onPressed: hasActiveTenant
+                    ? onChangeRent
+                    : null,
                 icon: const Icon(
                   Icons.edit_outlined,
                 ),
@@ -595,9 +576,7 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: onRetry,
-              child: const Text(
-                'Retry',
-              ),
+              child: const Text('Retry'),
             ),
           ],
         ),
@@ -622,7 +601,9 @@ String _initials(String name) {
     return parts.first
         .substring(
       0,
-      parts.first.length >= 2 ? 2 : 1,
+      parts.first.length >= 2
+          ? 2
+          : 1,
     )
         .toUpperCase();
   }
@@ -651,6 +632,9 @@ String _sourceLabel(RentRateSource source) {
   switch (source) {
     case RentRateSource.initial:
       return 'Initial';
+
+    case RentRateSource.property:
+      return 'Property';
 
     case RentRateSource.floor:
       return 'Floor';

@@ -18,31 +18,39 @@ import '../../domain/usecases/get_tenant_invitation.dart';
 import '../../domain/usecases/link_and_accept_tenant_invitation.dart';
 
 // ================================================================
+// TENANT INVITATION DATA SOURCE
+// ================================================================
+
+final tenantInvitationDataSourceProvider = Provider<TenantInvitationDataSource>(
+  (ref) {
+    return TenantInvitationDataSource();
+  },
+);
+
+// ================================================================
 // TENANT INVITATION REPOSITORY
 // ================================================================
 
-final tenantInvitationRepositoryProvider =
-Provider<TenantInvitationRepository>((ref) {
-  final dataSource = TenantInvitationDataSource();
+final tenantInvitationRepositoryProvider = Provider<TenantInvitationRepository>(
+  (ref) {
+    final dataSource = ref.read(tenantInvitationDataSourceProvider);
 
-  final currentUserService = CurrentUserService();
+    final currentUserService = CurrentUserService();
 
-  return TenantInvitationRepositoryImpl(
-    dataSource: dataSource,
-    currentUserService: currentUserService,
-  );
-});
+    return TenantInvitationRepositoryImpl(
+      dataSource: dataSource,
+      currentUserService: currentUserService,
+    );
+  },
+);
 
 // ================================================================
 // CREATE TENANT INVITATION
 // ================================================================
 
-final createTenantInvitationProvider =
-Provider<CreateTenantInvitation>((ref) {
+final createTenantInvitationProvider = Provider<CreateTenantInvitation>((ref) {
   return CreateTenantInvitation(
-    repository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.read(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -50,12 +58,9 @@ Provider<CreateTenantInvitation>((ref) {
 // GET TENANT INVITATION
 // ================================================================
 
-final getTenantInvitationProvider =
-Provider<GetTenantInvitation>((ref) {
+final getTenantInvitationProvider = Provider<GetTenantInvitation>((ref) {
   return GetTenantInvitation(
-    repository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.read(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -63,12 +68,9 @@ Provider<GetTenantInvitation>((ref) {
 // GET INVITATION BY TOKEN
 // ================================================================
 
-final getInvitationByTokenProvider =
-Provider<GetInvitationByToken>((ref) {
+final getInvitationByTokenProvider = Provider<GetInvitationByToken>((ref) {
   return GetInvitationByToken(
-    repository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.read(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -77,38 +79,32 @@ Provider<GetInvitationByToken>((ref) {
 // BY TENANT ID
 // ================================================================
 
-final getPendingTenantInvitationProvider =
-Provider<GetPendingTenantInvitation>((ref) {
-  return GetPendingTenantInvitation(
-    repository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
-  );
-});
+final getPendingTenantInvitationProvider = Provider<GetPendingTenantInvitation>(
+  (ref) {
+    return GetPendingTenantInvitation(
+      repository: ref.read(tenantInvitationRepositoryProvider),
+    );
+  },
+);
 
 // ================================================================
 // GET PENDING INVITATION BY PHONE
 // ================================================================
 
 final getPendingInvitationByPhoneProvider =
-Provider<GetPendingInvitationByPhone>((ref) {
-  return GetPendingInvitationByPhone(
-    repository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
-  );
-});
+    Provider<GetPendingInvitationByPhone>((ref) {
+      return GetPendingInvitationByPhone(
+        repository: ref.read(tenantInvitationRepositoryProvider),
+      );
+    });
 
 // ================================================================
 // ACCEPT TENANT INVITATION
 // ================================================================
 
-final acceptTenantInvitationProvider =
-Provider<AcceptTenantInvitation>((ref) {
+final acceptTenantInvitationProvider = Provider<AcceptTenantInvitation>((ref) {
   return AcceptTenantInvitation(
-    repository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.read(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -116,12 +112,9 @@ Provider<AcceptTenantInvitation>((ref) {
 // CANCEL TENANT INVITATION
 // ================================================================
 
-final cancelTenantInvitationProvider =
-Provider<CancelTenantInvitation>((ref) {
+final cancelTenantInvitationProvider = Provider<CancelTenantInvitation>((ref) {
   return CancelTenantInvitation(
-    repository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.read(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -129,12 +122,9 @@ Provider<CancelTenantInvitation>((ref) {
 // EXPIRE TENANT INVITATION
 // ================================================================
 
-final expireTenantInvitationProvider =
-Provider<ExpireTenantInvitation>((ref) {
+final expireTenantInvitationProvider = Provider<ExpireTenantInvitation>((ref) {
   return ExpireTenantInvitation(
-    repository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.read(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -143,10 +133,8 @@ Provider<ExpireTenantInvitation>((ref) {
 // ================================================================
 
 final linkAndAcceptTenantInvitationProvider =
-Provider<LinkAndAcceptTenantInvitation>((ref) {
-  return LinkAndAcceptTenantInvitation(
-    invitationRepository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
-  );
-});
+    Provider<LinkAndAcceptTenantInvitation>((ref) {
+      return LinkAndAcceptTenantInvitation(
+        invitationRepository: ref.read(tenantInvitationRepositoryProvider),
+      );
+    });

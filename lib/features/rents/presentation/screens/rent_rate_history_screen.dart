@@ -16,7 +16,8 @@ class RentRateHistoryScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context,
+      WidgetRef ref,) {
     final unitAsync = ref.watch(
       unitByIdProvider(unitId),
     );
@@ -49,7 +50,9 @@ class RentRateHistoryScreen extends ConsumerWidget {
           }
 
           final propertyAsync = ref.watch(
-            propertyByIdProvider(unit.propertyId),
+            propertyByIdProvider(
+              unit.propertyId,
+            ),
           );
 
           return propertyAsync.when(
@@ -63,7 +66,9 @@ class RentRateHistoryScreen extends ConsumerWidget {
                 message: error.toString(),
                 onRetry: () {
                   ref.invalidate(
-                    propertyByIdProvider(unit.propertyId),
+                    propertyByIdProvider(
+                      unit.propertyId,
+                    ),
                   );
                 },
               );
@@ -71,7 +76,9 @@ class RentRateHistoryScreen extends ConsumerWidget {
             data: (property) {
               if (property == null) {
                 return const Center(
-                  child: Text('Property not found.'),
+                  child: Text(
+                    'Property not found.',
+                  ),
                 );
               }
 
@@ -148,7 +155,8 @@ class _HistoryBody extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 'No rent history',
-                style: Theme.of(context)
+                style: Theme
+                    .of(context)
                     .textTheme
                     .titleLarge,
               ),
@@ -164,12 +172,10 @@ class _HistoryBody extends StatelessWidget {
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        // Provider invalidation is handled by the parent
-        // when this screen is recreated.
-      },
+      onRefresh: () async {},
       child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
+        physics:
+        const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
         children: [
           Card(
@@ -181,14 +187,16 @@ class _HistoryBody extends StatelessWidget {
                 children: [
                   Text(
                     unitNumber,
-                    style: Theme.of(context)
+                    style: Theme
+                        .of(context)
                         .textTheme
                         .headlineSmall,
                   ),
                   const SizedBox(height: 6),
                   Text(
                     propertyName,
-                    style: Theme.of(context)
+                    style: Theme
+                        .of(context)
                         .textTheme
                         .bodyLarge,
                   ),
@@ -196,7 +204,8 @@ class _HistoryBody extends StatelessWidget {
                   Text(
                     '${history.length} rent '
                         '${history.length == 1 ? 'record' : 'records'}',
-                    style: Theme.of(context)
+                    style: Theme
+                        .of(context)
                         .textTheme
                         .bodySmall,
                   ),
@@ -204,9 +213,7 @@ class _HistoryBody extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 16),
-
           ...List.generate(
             history.length,
                 (index) {
@@ -240,7 +247,8 @@ class _RentRateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isCurrent = rate.effectiveTo == null;
+    final isCurrent =
+        rate.effectiveTo == null;
 
     return Card(
       child: Padding(
@@ -254,11 +262,13 @@ class _RentRateCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '৳ ${_formatAmount(rate.amount)}',
-                    style: Theme.of(context)
+                    style: Theme
+                        .of(context)
                         .textTheme
                         .titleLarge
                         ?.copyWith(
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                      FontWeight.bold,
                     ),
                   ),
                 ),
@@ -267,45 +277,48 @@ class _RentRateCard extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
-
             _DetailRow(
               label: 'Effective From',
               value: _formatDate(
                 rate.effectiveFrom,
               ),
             ),
-
             const SizedBox(height: 8),
-
             _DetailRow(
               label: 'Effective To',
               value: rate.effectiveTo == null
                   ? 'Current'
-                  : _formatDate(rate.effectiveTo!),
+                  : _formatDate(
+                rate.effectiveTo!,
+              ),
             ),
-
             const SizedBox(height: 12),
-
             Container(
-              padding: const EdgeInsets.symmetric(
+              padding:
+              const EdgeInsets.symmetric(
                 horizontal: 10,
                 vertical: 6,
               ),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius:
+                BorderRadius.circular(20),
                 color: isCurrent
-                    ? Theme.of(context)
+                    ? Theme
+                    .of(context)
                     .colorScheme
                     .primaryContainer
-                    : Theme.of(context)
+                    : Theme
+                    .of(context)
                     .colorScheme
                     .surfaceContainerHighest,
               ),
               child: Text(
-                isCurrent ? 'Current' : 'Historical',
-                style: Theme.of(context)
+                isCurrent
+                    ? 'Current'
+                    : 'Historical',
+                style: Theme
+                    .of(context)
                     .textTheme
                     .labelMedium,
               ),
@@ -348,6 +361,9 @@ class _SourceChip extends StatelessWidget {
       case RentRateSource.initial:
         label = 'Initial';
 
+      case RentRateSource.property:
+        label = 'Property';
+
       case RentRateSource.floor:
         label = 'Floor';
 
@@ -356,19 +372,23 @@ class _SourceChip extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
+      padding:
+      const EdgeInsets.symmetric(
         horizontal: 10,
         vertical: 5,
       ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context)
+        borderRadius:
+        BorderRadius.circular(20),
+        color: Theme
+            .of(context)
             .colorScheme
             .surfaceContainerHighest,
       ),
       child: Text(
         label,
-        style: Theme.of(context)
+        style: Theme
+            .of(context)
             .textTheme
             .labelSmall,
       ),
@@ -395,7 +415,8 @@ class _DetailRow extends StatelessWidget {
           width: 130,
           child: Text(
             label,
-            style: Theme.of(context)
+            style: Theme
+                .of(context)
                 .textTheme
                 .labelMedium,
           ),
@@ -403,7 +424,8 @@ class _DetailRow extends StatelessWidget {
         Expanded(
           child: Text(
             value,
-            style: Theme.of(context)
+            style: Theme
+                .of(context)
                 .textTheme
                 .bodyMedium,
           ),

@@ -30,6 +30,19 @@ class UnitRepositoryImpl implements UnitRepository {
   }
 
   // ============================================================
+  // GET OCCUPIED UNITS BY PROPERTY
+  // ============================================================
+
+  @override
+  Future<List<Unit>> getOccupiedUnitsByProperty({
+    required String propertyId,
+  }) {
+    return _dataSource.getOccupiedUnitsByProperty(
+      propertyId: propertyId,
+    );
+  }
+
+  // ============================================================
   // GET OCCUPIED UNITS BY FLOOR
   // ============================================================
 

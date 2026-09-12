@@ -158,8 +158,11 @@ service cloud.firestore {
                       // ==========================================
 
                       (
-                        !resource.data.keys()
-                          .hasAny(['tenantUserIds'])
+                        resource.data.tenantUserIds is list
+
+                        &&
+                        resource.data.tenantUserIds.size()
+                           == 0
 
                         &&
                         request.resource.data.tenantUserIds is list
@@ -223,10 +226,6 @@ service cloud.firestore {
                       // ==========================================
 
                       (
-                        resource.data.keys()
-                          .hasAny(['tenantUserIds'])
-
-                        &&
                         resource.data.tenantUserIds is list
 
                         &&
@@ -865,10 +864,6 @@ service cloud.firestore {
 
     match /tenancyHistories/{historyId} {
 
-      // ----------------------------------------------------------
-      // READ
-      // ----------------------------------------------------------
-
       allow read: if isAuthenticated()
                   && (
                     resource.data.ownerId
@@ -884,25 +879,10 @@ service cloud.firestore {
                     )
                   );
 
-
-      // ----------------------------------------------------------
-      // CREATE
-      // ----------------------------------------------------------
-
       allow create: if isAuthenticated()
                     && isValidOwnerEndTenancyHistory();
 
-
-      // ----------------------------------------------------------
-      // UPDATE
-      // ----------------------------------------------------------
-
       allow update: if false;
-
-
-      // ----------------------------------------------------------
-      // DELETE
-      // ----------------------------------------------------------
 
       allow delete: if false;
     }
@@ -940,8 +920,8 @@ service cloud.firestore {
 
       allow create: if isAuthenticated()
 
-                    && request.resource.data.ownerId
-                       == request.auth.uid
+                    && request.resource.data.ownerId is string
+                    && request.resource.data.ownerId != ''
 
                     && request.resource.data.propertyId is string
                     && request.resource.data.propertyId != ''
@@ -977,7 +957,52 @@ service cloud.firestore {
                        is string
 
                     && request.resource.data.source
-                       in ['initial', 'unit', 'floor']
+                       in [
+                         'initial',
+                         'property',
+                         'floor',
+                         'unit'
+                       ]
+
+                    // ------------------------------------------------
+                    // A newly-created rent rate must NOT have
+                    // nextRentRateId.
+                    // ------------------------------------------------
+
+                    && (
+                      !request.resource.data.keys()
+                        .hasAny(['nextRentRateId'])
+
+                      ||
+
+                      request.resource.data.nextRentRateId
+                         == null
+                    )
+
+                    // ------------------------------------------------
+                    // previousRentRateId
+                    // ------------------------------------------------
+
+                    && (
+                      !request.resource.data.keys()
+                        .hasAny(['previousRentRateId'])
+
+                      ||
+
+                      request.resource.data.previousRentRateId
+                         == null
+
+                      ||
+
+                      (
+                        request.resource.data.previousRentRateId
+                           is string
+
+                        &&
+                        request.resource.data.previousRentRateId
+                           != ''
+                      )
+                    )
 
                     && request.resource.data.createdAt
                        is timestamp
@@ -1027,8 +1052,47 @@ service cloud.firestore {
                     && request.resource.data.source
                        == resource.data.source
 
+                    // ------------------------------------------------
+                    // previousRentRateId cannot be changed.
+                    // ------------------------------------------------
+
+                    && (
+                      (
+                        !resource.data.keys()
+                          .hasAny(['previousRentRateId'])
+
+                        &&
+                        (
+                          !request.resource.data.keys()
+                            .hasAny(['previousRentRateId'])
+
+                          ||
+
+                          request.resource.data.previousRentRateId
+                             == null
+                        )
+                      )
+
+                      ||
+
+                      (
+                        resource.data.keys()
+                          .hasAny(['previousRentRateId'])
+
+                        && request.resource.data.keys()
+                          .hasAny(['previousRentRateId'])
+
+                        && request.resource.data.previousRentRateId
+                           == resource.data.previousRentRateId
+                      )
+                    )
+
                     && request.resource.data.createdAt
                        == resource.data.createdAt
+
+                    // ------------------------------------------------
+                    // Only an open/current rate may be closed.
+                    // ------------------------------------------------
 
                     && resource.data.effectiveTo
                        == null
@@ -1042,12 +1106,49 @@ service cloud.firestore {
                     && request.resource.data.updatedAt
                        is timestamp
 
+                    && request.resource.data.updatedAt
+                       <= request.time
+
+                    // ------------------------------------------------
+                    // nextRentRateId rules
+                    //
+                    // End-tenancy:
+                    //   nextRentRateId must be absent/null.
+                    //
+                    // Normal rent change:
+                    //   nextRentRateId must be a valid string and
+                    //   point to the new rate created atomically.
+                    // ------------------------------------------------
+
                     && (
-                      isValidEndTenancyRentRateClose()
+                      (
+                        isValidEndTenancyRentRateClose()
+
+                        &&
+                        (
+                          !request.resource.data.keys()
+                            .hasAny(['nextRentRateId'])
+
+                          ||
+
+                          request.resource.data.nextRentRateId
+                             == null
+                        )
+                      )
 
                       ||
 
-                      isValidChangedRentRateClose()
+                      (
+                        request.resource.data.nextRentRateId
+                           is string
+
+                        &&
+                        request.resource.data.nextRentRateId
+                           != ''
+
+                        &&
+                        isValidChangedRentRateClose()
+                      )
                     );
 
 
@@ -1059,122 +1160,111 @@ service cloud.firestore {
     }
 
 
-       // ============================================================
-       // MONTHLY RENTS
-       // ============================================================
+    // ============================================================
+    // MONTHLY RENTS
+    // ============================================================
 
-       match /monthlyRents/{monthlyRentId} {
+    match /monthlyRents/{monthlyRentId} {
 
-         // ----------------------------------------------------------
-         // READ
-         // ----------------------------------------------------------
+      // ----------------------------------------------------------
+      // READ
+      // ----------------------------------------------------------
 
-         allow read: if isAuthenticated()
-                     && (
-                       resource.data.ownerId
-                          == request.auth.uid
+      allow read: if isAuthenticated()
+                  && (
+                    resource.data.ownerId
+                       == request.auth.uid
 
-                       ||
+                    ||
 
-                       (
-                         resource.data.tenantUserId is string
-                         &&
-                         resource.data.tenantUserId
-                            == request.auth.uid
-                       )
-                     );
-
-
-         // ----------------------------------------------------------
-         // CREATE
-         // ----------------------------------------------------------
-
-         allow create: if isAuthenticated()
-                       && isValidMonthlyRentCreate();
+                    (
+                      resource.data.tenantUserId is string
+                      &&
+                      resource.data.tenantUserId
+                         == request.auth.uid
+                    )
+                  );
 
 
-         // ----------------------------------------------------------
-         // UPDATE
-         // ----------------------------------------------------------
+      // ----------------------------------------------------------
+      // CREATE
+      // ----------------------------------------------------------
 
-         allow update: if isAuthenticated()
-
-                       && resource.data.ownerId
-                          == request.auth.uid
-
-                       // ------------------------------------------------
-                       // IMMUTABLE IDENTITY
-                       // ------------------------------------------------
-
-                       && request.resource.data.ownerId
-                          == resource.data.ownerId
-
-                       && request.resource.data.propertyId
-                          == resource.data.propertyId
-
-                       && request.resource.data.unitId
-                          == resource.data.unitId
-
-                       && request.resource.data.tenantId
-                          == resource.data.tenantId
-
-                       && request.resource.data.tenantUserId
-                          == resource.data.tenantUserId
-
-                       && request.resource.data.rentRateId
-                          == resource.data.rentRateId
-
-                       && request.resource.data.amount
-                          == resource.data.amount
-
-                       && request.resource.data.billingPeriodStart
-                          == resource.data.billingPeriodStart
-
-                       && request.resource.data.billingPeriodEnd
-                          == resource.data.billingPeriodEnd
-
-                       && request.resource.data.dueDate
-                          == resource.data.dueDate
-
-                       && request.resource.data.createdAt
-                          == resource.data.createdAt
-
-                       // ------------------------------------------------
-                       // STATUS
-                       // ------------------------------------------------
-
-                       && request.resource.data.status
-                          is string
-
-                       && request.resource.data.status
-                          in [
-                            'unpaid',
-                            'partiallyPaid',
-                            'paid',
-                            'overdue',
-                            'cancelled'
-                          ]
-
-                       // ------------------------------------------------
-                       // UPDATED AT
-                       // ------------------------------------------------
-
-                       && request.resource.data.updatedAt
-                          is timestamp
-
-                       && request.resource.data.updatedAt
-                          >= resource.data.updatedAt
-
-                       && request.resource.data.updatedAt
-                          <= request.time;
+      allow create: if isAuthenticated()
+                    && isValidMonthlyRentCreate();
 
 
-         // ----------------------------------------------------------
-         // DELETE
-         // ----------------------------------------------------------
+      // ----------------------------------------------------------
+      // UPDATE
+      // ----------------------------------------------------------
 
-         allow delete: if false;
-       }
+      allow update: if isAuthenticated()
+
+                    && resource.data.ownerId
+                       == request.auth.uid
+
+                    && request.resource.data.ownerId
+                       == resource.data.ownerId
+
+                    && request.resource.data.propertyId
+                       == resource.data.propertyId
+
+                    && request.resource.data.unitId
+                       == resource.data.unitId
+
+                    && request.resource.data.tenantId
+                       == resource.data.tenantId
+
+                    && request.resource.data.tenantUserId
+                       == resource.data.tenantUserId
+
+                    && request.resource.data.rentRateId
+                       == resource.data.rentRateId
+
+                    && request.resource.data.amount
+                       == resource.data.amount
+
+                    && request.resource.data.billingPeriodStart
+                       == resource.data.billingPeriodStart
+
+                    && request.resource.data.billingPeriodEnd
+                       == resource.data.billingPeriodEnd
+
+                    && request.resource.data.dueDate
+                       == resource.data.dueDate
+
+                    && request.resource.data.createdAt
+                       == resource.data.createdAt
+
+                    && request.resource.data.status
+                       is string
+
+                    && request.resource.data.status
+                       in [
+                         'unpaid',
+                         'partiallyPaid',
+                         'paid',
+                         'overdue',
+                         'cancelled'
+                       ]
+
+                    && request.resource.data.updatedAt
+                       is timestamp
+
+                    && request.resource.data.updatedAt
+                       >= resource.data.updatedAt
+
+                    && request.resource.data.updatedAt
+                       <= request.time;
+
+
+      // ----------------------------------------------------------
+      // DELETE
+      // ----------------------------------------------------------
+
+      allow delete: if false;
+    }
+
 
     // ============================================================
     // RENTS
@@ -1196,8 +1286,7 @@ service cloud.firestore {
                     (
                       resource.data.tenantUserId is string
 
-                      &&
-                      resource.data.tenantUserId
+                      && resource.data.tenantUserId
                          == request.auth.uid
                     )
                   );
@@ -1240,6 +1329,12 @@ service cloud.firestore {
 
                     && request.resource.data.ownerId
                        == request.auth.uid
+
+                    && request.resource.data.rentAmount
+                       is number
+
+                    && request.resource.data.rentAmount
+                       > 0
 
                     && exists(
                       /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
@@ -1326,6 +1421,10 @@ service cloud.firestore {
                            == resource.data.token
 
                         &&
+                        request.resource.data.rentAmount
+                           == resource.data.rentAmount
+
+                        &&
                         request.resource.data.createdAt
                            == resource.data.createdAt
 
@@ -1381,6 +1480,10 @@ service cloud.firestore {
                            == resource.data.token
 
                         &&
+                        request.resource.data.rentAmount
+                           == resource.data.rentAmount
+
+                        &&
                         request.resource.data.createdAt
                            == resource.data.createdAt
 
@@ -1399,6 +1502,12 @@ service cloud.firestore {
                           /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
                         ).data.tenantId
                            == resource.data.tenantId
+
+                        &&
+                        getAfter(
+                          /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+                        ).data.ownerId
+                           == resource.data.ownerId
 
                         &&
                         getAfter(
@@ -1464,6 +1573,10 @@ service cloud.firestore {
                         &&
                         request.resource.data.token
                            == resource.data.token
+
+                        &&
+                        request.resource.data.rentAmount
+                           == resource.data.rentAmount
 
                         &&
                         request.resource.data.createdAt
@@ -2129,7 +2242,12 @@ service cloud.firestore {
 
       let accessAfter =
         getAfter(
-          /databases/$(database)/documents/tenantAccess/$(tenantAfter.userId)
+          /databases/$(database)/documents/tenantAccess/$(request.resource.data.tenantUserId)
+        ).data;
+
+      let invitationAfter =
+        getAfter(
+          /databases/$(database)/documents/tenantInvitations/$(accessAfter.invitationId)
         ).data;
 
       return
@@ -2137,11 +2255,31 @@ service cloud.firestore {
         request.resource.data.source
            == 'initial'
 
+        && (
+          !request.resource.data.keys()
+            .hasAny(['previousRentRateId'])
+
+          ||
+
+          request.resource.data.previousRentRateId
+             == null
+        )
+
+        && (
+          !request.resource.data.keys()
+            .hasAny(['nextRentRateId'])
+
+          ||
+
+          request.resource.data.nextRentRateId
+             == null
+        )
+
         && tenantAfter.ownerId
-           == request.auth.uid
+           == invitationAfter.ownerId
 
         && propertyAfter.ownerId
-           == request.auth.uid
+           == invitationAfter.ownerId
 
         && tenantAfter.status
            == 'active'
@@ -2181,7 +2319,7 @@ service cloud.firestore {
            == request.resource.data.tenantId
 
         && accessAfter.ownerId
-           == request.auth.uid
+           == tenantAfter.ownerId
 
         && accessAfter.propertyId
            == request.resource.data.propertyId
@@ -2189,81 +2327,240 @@ service cloud.firestore {
         && accessAfter.unitId
            == request.resource.data.unitId
 
-        && accessAfter.invitationId
-           == null;
-    }
+        && accessAfter.invitationId is string
 
+        && accessAfter.invitationId != ''
 
-    // ============================================================
-    // RENT RATE — CHANGED RATE CREATE
-    // ============================================================
+        && invitationAfter.status
+           == 'accepted'
 
-    function isValidChangedRentRateCreate() {
+        && invitationAfter.ownerId
+           == tenantAfter.ownerId
 
-      let property =
-        get(
-          /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
-        ).data;
+        && invitationAfter.tenantId
+           == request.resource.data.tenantId
 
-      let unit =
-        get(
-          /databases/$(database)/documents/units/$(request.resource.data.unitId)
-        ).data;
-
-      let tenant =
-        get(
-          /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-        ).data;
-
-      return
-
-        request.resource.data.source
-           in ['unit', 'floor']
-
-        && property.ownerId
-           == request.auth.uid
-
-        && request.resource.data.ownerId
-           == request.auth.uid
-
-        && tenant.ownerId
-           == request.auth.uid
-
-        && tenant.status
-           == 'active'
-
-        && tenant.propertyId
+        && invitationAfter.propertyId
            == request.resource.data.propertyId
 
-        && tenant.unitId
+        && invitationAfter.unitId
            == request.resource.data.unitId
 
-        && unit.propertyId
-           == request.resource.data.propertyId
+        && invitationAfter.rentAmount
+           is number
 
-        && unit.status
-           == 'occupied'
+        && invitationAfter.rentAmount
+           > 0
 
-        && tenant.userId is string
-
-        && tenant.userId != ''
-
-        && request.resource.data.tenantUserId
-           == tenant.userId
-
-        && unit.tenantUserId
-           == tenant.userId
-
-        && request.resource.data.effectiveFrom
-           >= tenant.tenancyStartedAt
+        && request.resource.data.amount
+           == invitationAfter.rentAmount
 
         && request.resource.data.createdAt
            is timestamp
 
         && request.resource.data.updatedAt
-           is timestamp;
+           is timestamp
+
+        && request.resource.data.createdAt
+           <= request.time
+
+        && request.resource.data.updatedAt
+           <= request.time;
     }
 
+
+     // ============================================================
+     // RENT RATE — CHANGED RATE CREATE
+     // ============================================================
+
+     function isValidChangedRentRateCreate() {
+
+       let previousRateBefore =
+         get(
+           /databases/$(database)/documents/rentRates/$(request.resource.data.previousRentRateId)
+         ).data;
+
+       let previousRateAfter =
+         getAfter(
+           /databases/$(database)/documents/rentRates/$(request.resource.data.previousRentRateId)
+         ).data;
+
+       let unitAfter =
+         getAfter(
+           /databases/$(database)/documents/units/$(request.resource.data.unitId)
+         ).data;
+
+       let propertyAfter =
+         getAfter(
+           /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+         ).data;
+
+       return
+
+         // --------------------------------------------------------
+         // SOURCE
+         // --------------------------------------------------------
+
+         request.resource.data.source
+            in [
+              'property',
+              'floor',
+              'unit'
+            ]
+
+         // --------------------------------------------------------
+         // PREVIOUS RATE ID
+         // --------------------------------------------------------
+
+         && request.resource.data.previousRentRateId
+            is string
+
+         && request.resource.data.previousRentRateId
+            != ''
+
+         && request.resource.data.previousRentRateId
+            != request.resource.id
+
+         // --------------------------------------------------------
+         // NEW RATE MUST NOT POINT FORWARD.
+         //
+         // It is the latest rate at creation time.
+         // --------------------------------------------------------
+
+         && (
+           !request.resource.data.keys()
+             .hasAny(['nextRentRateId'])
+
+           ||
+
+           request.resource.data.nextRentRateId
+              == null
+         )
+
+         // --------------------------------------------------------
+         // PREVIOUS RATE BEFORE OPERATION
+         // --------------------------------------------------------
+
+         && previousRateBefore.ownerId
+            == request.auth.uid
+
+         && previousRateBefore.propertyId
+            == request.resource.data.propertyId
+
+         && previousRateBefore.unitId
+            == request.resource.data.unitId
+
+         && previousRateBefore.tenantId
+            == request.resource.data.tenantId
+
+         && previousRateBefore.effectiveTo
+            == null
+
+         // --------------------------------------------------------
+         // PREVIOUS RATE AFTER OPERATION
+         // --------------------------------------------------------
+
+         && previousRateAfter.ownerId
+            == request.auth.uid
+
+         && previousRateAfter.propertyId
+            == request.resource.data.propertyId
+
+         && previousRateAfter.unitId
+            == request.resource.data.unitId
+
+         && previousRateAfter.tenantId
+            == request.resource.data.tenantId
+
+         && previousRateAfter.effectiveTo
+            is timestamp
+
+         && previousRateAfter.effectiveTo
+            >= previousRateAfter.effectiveFrom
+
+         && previousRateAfter.effectiveTo
+            < request.resource.data.effectiveFrom
+
+         // --------------------------------------------------------
+         // IMPORTANT:
+         //
+         // The old rate MUST point forward to THIS newly-created
+         // rate.
+         // --------------------------------------------------------
+
+         && previousRateAfter.nextRentRateId
+            == request.resource.id
+
+         // --------------------------------------------------------
+         // NEW RATE RELATIONSHIP
+         // --------------------------------------------------------
+
+         && request.resource.data.ownerId
+            == request.auth.uid
+
+         && request.resource.data.propertyId
+            == previousRateBefore.propertyId
+
+         && request.resource.data.unitId
+            == previousRateBefore.unitId
+
+         && request.resource.data.tenantId
+            == previousRateBefore.tenantId
+
+         && request.resource.data.amount
+            is number
+
+         && request.resource.data.amount
+            > 0
+
+         && request.resource.data.effectiveFrom
+            is timestamp
+
+         && request.resource.data.effectiveFrom
+            > previousRateBefore.effectiveFrom
+
+         && request.resource.data.effectiveTo
+            == null
+
+         && request.resource.data.tenantUserId
+            == previousRateBefore.tenantUserId
+
+         // --------------------------------------------------------
+         // CURRENT UNIT MUST REMAIN OCCUPIED BY SAME TENANT
+         // --------------------------------------------------------
+
+         && unitAfter.propertyId
+            == request.resource.data.propertyId
+
+         && unitAfter.status
+            == 'occupied'
+
+         && unitAfter.tenantUserId
+            == request.resource.data.tenantUserId
+
+         // --------------------------------------------------------
+         // PROPERTY OWNERSHIP
+         // --------------------------------------------------------
+
+         && propertyAfter.ownerId
+            == request.auth.uid
+
+         // --------------------------------------------------------
+         // TIMESTAMPS
+         // --------------------------------------------------------
+
+         && request.resource.data.createdAt
+            is timestamp
+
+         && request.resource.data.updatedAt
+            is timestamp
+
+         && request.resource.data.createdAt
+            <= request.time
+
+         && request.resource.data.updatedAt
+            <= request.time;
+     }
 
     // ============================================================
     // RENT RATE — END TENANCY CLOSE
@@ -2339,7 +2636,6 @@ service cloud.firestore {
            >= resource.data.effectiveFrom;
     }
 
-
     // ============================================================
     // RENT RATE — NORMAL RATE CHANGE CLOSE
     // ============================================================
@@ -2361,13 +2657,26 @@ service cloud.firestore {
           /databases/$(database)/documents/properties/$(resource.data.propertyId)
         ).data;
 
+      let nextRate =
+        getAfter(
+          /databases/$(database)/documents/rentRates/$(request.resource.data.nextRentRateId)
+        ).data;
+
       return
+
+        // --------------------------------------------------------
+        // OWNER
+        // --------------------------------------------------------
 
         property.ownerId
            == request.auth.uid
 
         && tenant.ownerId
            == request.auth.uid
+
+        // --------------------------------------------------------
+        // ACTIVE TENANCY
+        // --------------------------------------------------------
 
         && tenant.status
            == 'active'
@@ -2378,11 +2687,19 @@ service cloud.firestore {
         && tenant.unitId
            == resource.data.unitId
 
+        // --------------------------------------------------------
+        // UNIT
+        // --------------------------------------------------------
+
         && unit.propertyId
            == resource.data.propertyId
 
         && unit.status
            == 'occupied'
+
+        // --------------------------------------------------------
+        // TENANT
+        // --------------------------------------------------------
 
         && tenant.userId is string
 
@@ -2394,213 +2711,251 @@ service cloud.firestore {
         && unit.tenantUserId
            == tenant.userId
 
+        // --------------------------------------------------------
+        // NEXT RATE ID
+        // --------------------------------------------------------
+
+        && request.resource.data.nextRentRateId
+           is string
+
+        && request.resource.data.nextRentRateId
+           != ''
+
+        && request.resource.data.nextRentRateId
+           != resource.id
+
+        // --------------------------------------------------------
+        // OLD RATE CLOSE
+        // --------------------------------------------------------
+
         && request.resource.data.effectiveTo
-           >= resource.data.effectiveFrom;
+           is timestamp
+
+        && request.resource.data.effectiveTo
+           >= resource.data.effectiveFrom
+
+        && request.resource.data.effectiveTo
+           < nextRate.effectiveFrom
+
+        // --------------------------------------------------------
+        // NEW RATE MUST BE CREATED IN SAME ATOMIC OPERATION
+        // --------------------------------------------------------
+
+        && nextRate.previousRentRateId
+           == resource.id
+
+        // --------------------------------------------------------
+        // NEW RATE RELATIONSHIP
+        // --------------------------------------------------------
+
+        && nextRate.ownerId
+           == resource.data.ownerId
+
+        && nextRate.propertyId
+           == resource.data.propertyId
+
+        && nextRate.unitId
+           == resource.data.unitId
+
+        && nextRate.tenantId
+           == resource.data.tenantId
+
+        && nextRate.tenantUserId
+           == resource.data.tenantUserId
+
+        && nextRate.effectiveFrom
+           is timestamp
+
+        && nextRate.effectiveFrom
+           > resource.data.effectiveFrom
+
+        && nextRate.effectiveTo
+           == null
+
+        // --------------------------------------------------------
+        // NEXT RATE MUST NOT POINT FORWARD
+        // --------------------------------------------------------
+
+        && (
+          !nextRate.keys()
+            .hasAny(['nextRentRateId'])
+
+          ||
+
+          nextRate.nextRentRateId
+             == null
+        )
+
+        // --------------------------------------------------------
+        // NEW RATE AMOUNT
+        // --------------------------------------------------------
+
+        && nextRate.amount
+           is number
+
+        && nextRate.amount
+           > 0
+
+        // --------------------------------------------------------
+        // NEW RATE TIMESTAMPS
+        // --------------------------------------------------------
+
+        && nextRate.createdAt
+           is timestamp
+
+        && nextRate.updatedAt
+           is timestamp
+
+        // --------------------------------------------------------
+        // OLD RATE MUST END BEFORE NEW RATE STARTS
+        // --------------------------------------------------------
+
+        && request.resource.data.effectiveTo
+           < nextRate.effectiveFrom;
     }
 
 
-       // ============================================================
-       // MONTHLY RENT — CREATE VALIDATION
-       // ============================================================
+    // ============================================================
+    // MONTHLY RENT — CREATE VALIDATION
+    // ============================================================
 
-       function isValidMonthlyRentCreate() {
+    function isValidMonthlyRentCreate() {
 
-         let property =
-           get(
-             /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
-           ).data;
+      let property =
+        get(
+          /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+        ).data;
 
-         let unit =
-           get(
-             /databases/$(database)/documents/units/$(request.resource.data.unitId)
-           ).data;
+      let unit =
+        get(
+          /databases/$(database)/documents/units/$(request.resource.data.unitId)
+        ).data;
 
-         let tenant =
-           get(
-             /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-           ).data;
+      let tenant =
+        get(
+          /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+        ).data;
 
-         let rentRate =
-           get(
-             /databases/$(database)/documents/rentRates/$(request.resource.data.rentRateId)
-           ).data;
+      let rentRate =
+        get(
+          /databases/$(database)/documents/rentRates/$(request.resource.data.rentRateId)
+        ).data;
 
+      return
 
-         return
+        request.resource.data.ownerId
+           == request.auth.uid
 
-           // ========================================================
-           // OWNER
-           // ========================================================
+        && property.ownerId
+           == request.auth.uid
 
-           request.resource.data.ownerId
-              == request.auth.uid
+        && tenant.ownerId
+           == request.auth.uid
 
-           && property.ownerId
-              == request.auth.uid
+        && rentRate.ownerId
+           == request.auth.uid
 
-           && tenant.ownerId
-              == request.auth.uid
+        && tenant.propertyId
+           == request.resource.data.propertyId
 
-           && rentRate.ownerId
-              == request.auth.uid
+        && unit.propertyId
+           == request.resource.data.propertyId
 
+        && rentRate.propertyId
+           == request.resource.data.propertyId
 
-           // ========================================================
-           // PROPERTY
-           // ========================================================
+        && tenant.unitId
+           == request.resource.data.unitId
 
-           && tenant.propertyId
-              == request.resource.data.propertyId
+        && rentRate.unitId
+           == request.resource.data.unitId
 
-           && unit.propertyId
-              == request.resource.data.propertyId
+        && unit.status
+           == 'occupied'
 
-           && rentRate.propertyId
-              == request.resource.data.propertyId
+        && tenant.status
+           == 'active'
 
+        && rentRate.tenantId
+           == request.resource.data.tenantId
 
-           // ========================================================
-           // UNIT
-           // ========================================================
+        && tenant.userId is string
 
-           && tenant.unitId
-              == request.resource.data.unitId
+        && tenant.userId != ''
 
-           && rentRate.unitId
-              == request.resource.data.unitId
+        && unit.tenantUserId
+           == tenant.userId
 
-           && unit.status
-              == 'occupied'
+        && request.resource.data.tenantUserId
+           == tenant.userId
 
+        && rentRate.tenantUserId
+           == tenant.userId
 
-           // ========================================================
-           // TENANT
-           // ========================================================
+        && rentRate.effectiveFrom
+           <= request.resource.data.billingPeriodStart
 
-           && tenant.status
-              == 'active'
+        && (
+          rentRate.effectiveTo == null
 
-           && rentRate.tenantId
-              == request.resource.data.tenantId
+          ||
 
+          rentRate.effectiveTo
+             >= request.resource.data.billingPeriodStart
+        )
 
-           // ========================================================
-           // TENANT USER
-           // ========================================================
+        && request.resource.data.rentRateId
+           is string
 
-           && tenant.userId is string
+        && request.resource.data.rentRateId
+           != ''
 
-           && tenant.userId != ''
+        && request.resource.data.amount
+           is number
 
-           && unit.tenantUserId
-              == tenant.userId
+        && request.resource.data.amount
+           > 0
 
-           && request.resource.data.tenantUserId
-              == tenant.userId
+        && request.resource.data.amount
+           == rentRate.amount
 
-           && rentRate.tenantUserId
-              == tenant.userId
+        && request.resource.data.billingPeriodStart
+           is timestamp
 
+        && request.resource.data.billingPeriodEnd
+           is timestamp
 
-           // ========================================================
-           // RENT RATE EFFECTIVE PERIOD
-           // ========================================================
+        && request.resource.data.billingPeriodEnd
+           > request.resource.data.billingPeriodStart
 
-           && rentRate.effectiveFrom
-              <= request.resource.data.billingPeriodStart
+        && request.resource.data.dueDate
+           is timestamp
 
-           && (
-             rentRate.effectiveTo == null
+        && request.resource.data.dueDate
+           >= request.resource.data.billingPeriodStart
 
-             ||
+        && request.resource.data.status
+           == 'unpaid'
 
-             rentRate.effectiveTo
-                >= request.resource.data.billingPeriodStart
-           )
+        && request.resource.data.createdAt
+           is timestamp
 
+        && request.resource.data.updatedAt
+           is timestamp
 
-           // ========================================================
-           // RENT RATE ID
-           // ========================================================
+        && request.resource.data.updatedAt
+           == request.resource.data.createdAt
 
-           && request.resource.data.rentRateId
-              is string
+        && request.resource.data.createdAt
+           <= request.time
 
-           && request.resource.data.rentRateId
-              != ''
-
-
-           // ========================================================
-           // AMOUNT
-           // ========================================================
-
-           && request.resource.data.amount
-              is number
-
-           && request.resource.data.amount
-              > 0
-
-           && request.resource.data.amount
-              == rentRate.amount
-
-
-           // ========================================================
-           // BILLING PERIOD
-           // ========================================================
-
-           && request.resource.data.billingPeriodStart
-              is timestamp
-
-           && request.resource.data.billingPeriodEnd
-              is timestamp
-
-           && request.resource.data.billingPeriodEnd
-              > request.resource.data.billingPeriodStart
-
-
-           // ========================================================
-           // DUE DATE
-           // ========================================================
-
-           && request.resource.data.dueDate
-              is timestamp
-
-           && request.resource.data.dueDate
-              >= request.resource.data.billingPeriodStart
-
-
-           // ========================================================
-           // STATUS
-           // ========================================================
-
-           && request.resource.data.status
-              == 'unpaid'
-
-
-           // ========================================================
-           // TIMESTAMPS
-           // ========================================================
-
-           && request.resource.data.createdAt
-              is timestamp
-
-           && request.resource.data.updatedAt
-              is timestamp
-
-           && request.resource.data.updatedAt
-              == request.resource.data.createdAt
-
-           && request.resource.data.createdAt
-              <= request.time
-
-           && request.resource.data.updatedAt
-              <= request.time;
-       }
+        && request.resource.data.updatedAt
+           <= request.time;
+    }
 
 
     // ============================================================
     // OWNER — CREATE RENT
-    // RENT DATA + RELATIONSHIP VALIDATION
     // ============================================================
 
     function isValidOwnerCreateRent() {
@@ -2619,7 +2974,6 @@ service cloud.firestore {
         get(
           /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
         ).data;
-
 
       return
 

@@ -1,38 +1,28 @@
 import '../entities/rent_rate.dart';
 import '../repositories/rent_rate_repository.dart';
 
-class ChangeUnitRent {
+class ChangePropertyRent {
   final RentRateRepository _repository;
 
-  const ChangeUnitRent({
+  const ChangePropertyRent({
     required this._repository,
   });
 
-  Future<RentRate> call({
-    required String unitId,
-    required String tenantId,
+  Future<List<RentRate>> call({
+    required String propertyId,
     required String ownerId,
     required double amount,
     required DateTime effectiveFrom,
   }) async {
-    final normalizedUnitId =
-    unitId.trim();
-
-    final normalizedTenantId =
-    tenantId.trim();
+    final normalizedPropertyId =
+    propertyId.trim();
 
     final normalizedOwnerId =
     ownerId.trim();
 
-    if (normalizedUnitId.isEmpty) {
+    if (normalizedPropertyId.isEmpty) {
       throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
-    }
-
-    if (normalizedTenantId.isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
+        'Property ID cannot be empty.',
       );
     }
 
@@ -48,9 +38,8 @@ class ChangeUnitRent {
       );
     }
 
-    return _repository.changeUnitRent(
-      unitId: normalizedUnitId,
-      tenantId: normalizedTenantId,
+    return _repository.changePropertyRent(
+      propertyId: normalizedPropertyId,
       ownerId: normalizedOwnerId,
       amount: amount,
       effectiveFrom: effectiveFrom,
