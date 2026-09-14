@@ -7,6 +7,7 @@ import '../../../../app/utils/app_snackbar.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+import '../../../tenants/presentation/providers/owner_tenants_provider.dart';
 
 class OwnerHomeScreen extends ConsumerWidget {
   const OwnerHomeScreen({super.key});
@@ -151,28 +152,45 @@ class OwnerHomeScreen extends ConsumerWidget {
                       currentOwnerPropertiesProvider,
                     );
 
+                    final tenantsAsync = ref.watch(
+                      ownerTenantsProvider,
+                    );
+
                     return Row(
                       children: [
                         Expanded(
                           child: _SummaryCard(
-                            icon:
-                            Icons.home_work_outlined,
+                            icon: Icons.home_work_outlined,
                             title: 'Properties',
                             value: propertiesAsync.when(
                               loading: () => '...',
                               error: (_, _) => '0',
-                              data: (properties) =>
-                              '${properties.length}',
+                              data: (properties) => '${properties.length}',
                             ),
+                            onTap: () {
+                              context.push(
+                                RouteNames.propertyList,
+                              );
+                            },
                           ),
                         ),
+
                         const SizedBox(width: 12),
-                        const Expanded(
+
+                        Expanded(
                           child: _SummaryCard(
-                            icon:
-                            Icons.people_outline,
+                            icon: Icons.people_outline,
                             title: 'Tenants',
-                            value: '0',
+                            value: tenantsAsync.when(
+                              loading: () => '...',
+                              error: (_, _) => '0',
+                              data: (tenants) => '${tenants.length}',
+                            ),
+                            onTap: () {
+                              context.push(
+                                RouteNames.ownerTenants,
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -444,47 +462,53 @@ class _SummaryCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String value;
+  final VoidCallback? onTap;
 
   const _SummaryCard({
     required this.icon,
     required this.title,
     required this.value,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Icon(
-              icon,
-              size: 28,
-            ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment:
+            CrossAxisAlignment.start,
+            children: [
+              Icon(
+                icon,
+                size: 28,
+              ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            Text(
-              value,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .headlineSmall,
-            ),
+              Text(
+                value,
+                style: Theme
+                    .of(context)
+                    .textTheme
+                    .headlineSmall,
+              ),
 
-            const SizedBox(height: 4),
+              const SizedBox(height: 4),
 
-            Text(
-              title,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .bodyMedium,
-            ),
-          ],
+              Text(
+                title,
+                style: Theme
+                    .of(context)
+                    .textTheme
+                    .bodyMedium,
+              ),
+            ],
+          ),
         ),
       ),
     );
