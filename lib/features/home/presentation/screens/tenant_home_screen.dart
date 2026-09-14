@@ -1,254 +1,230 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/route_names.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
-import '../../../properties/presentation/providers/property_provider.dart';
-import '../../../rents/presentation/providers/rent_rate_provider.dart';
+import '../../../tenants/domain/entities/tenant.dart';
+import '../../../tenants/domain/entities/tenant_invitation.dart';
+import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
-import '../../../tenants/presentation/screens/tenant_tenancy_history_screen.dart';
-import '../../../units/presentation/providers/unit_provider.dart';
-import '../../../rents/domain/entities/rent_rate.dart';
 
-class TenantHomeScreen extends ConsumerWidget {
+class TenantHomeScreen extends ConsumerStatefulWidget {
   const TenantHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tenantAsync = ref.watch(currentTenantProvider);
+  ConsumerState<TenantHomeScreen> createState() =>
+      _TenantHomeScreenState();
+}
+
+class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
+  Future<void> _refresh() async {
+    ref.invalidate(tenantDashboardProvider);
+
+    await ref.read(tenantDashboardProvider.future);
+  }
+
+  Future<void> _logout() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Logout'),
+          content: const Text(
+            'Are you sure you want to logout?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLogout != true) {
+      return;
+    }
+
+    await ref
+        .read(authControllerProvider.notifier)
+        .signOut();
+  }
+
+  void _openInvitation(TenantInvitation invitation) {
+    context.push(
+      RouteNames.tenantInvitationPath(invitation.id),
+    );
+  }
+
+  Future<void> _openEditProfile(TenantDashboardData dashboard,) async {
+    final user = dashboard.appUser;
+
+    if (user == null) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Profile information is not available.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    final result = await context.push(
+      RouteNames.editProfile,
+      extra: user,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    // Edit Profile returns the updated AppUser after a
+    // successful Firestore update.
+    if (result != null) {
+      // First invalidate the dashboard so all dependent
+      // information is loaded again from Firestore.
+      ref.invalidate(tenantDashboardProvider);
+
+      // Wait until the new dashboard data has actually
+      // been loaded before allowing the screen to continue.
+      //
+      // This prevents the old profile data from remaining
+      // visible until a hot reload.
+      try {
+        await ref.read(tenantDashboardProvider.future);
+      } catch (_) {
+        // The dashboard itself will display the error state
+        // if the reload fails.
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dashboardAsync = ref.watch(
+      tenantDashboardProvider,
+    );
 
     return Scaffold(
+      backgroundColor:
+      Theme
+          .of(context)
+          .colorScheme
+          .surface,
       appBar: AppBar(
-        title: const Text('Griho'),
+        title: const Text(
+          'Griho',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        centerTitle: false,
         actions: [
-          IconButton(
-            tooltip: 'Tenancy History',
-            icon: const Icon(Icons.history_outlined),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                  const TenantTenancyHistoryScreen(),
+          dashboardAsync.maybeWhen(
+            data: (dashboard) {
+              if (!dashboard.hasPendingInvitation) {
+                return const SizedBox.shrink();
+              }
+
+              final invitation =
+                  dashboard.pendingInvitation;
+
+              if (invitation == null) {
+                return const SizedBox.shrink();
+              }
+
+              return IconButton(
+                tooltip: 'New invitation',
+                onPressed: () {
+                  _openInvitation(invitation);
+                },
+                icon: Badge(
+                  smallSize: 9,
+                  child: const Icon(
+                    Icons.notifications_outlined,
+                  ),
                 ),
               );
             },
+            orElse: () => const SizedBox.shrink(),
           ),
-          IconButton(
-            tooltip: 'Logout',
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              _showLogoutDialog(context, ref);
+          PopupMenuButton<String>(
+            tooltip: 'Account',
+            onSelected: (value) {
+              if (value == 'edit_profile') {
+                dashboardAsync.maybeWhen(
+                  data: (dashboard) {
+                    _openEditProfile(dashboard);
+                  },
+                  orElse: () {},
+                );
+              }
+
+              if (value == 'logout') {
+                _logout();
+              }
+            },
+            itemBuilder: (context) {
+              return const [
+                PopupMenuItem<String>(
+                  value: 'edit_profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_outlined),
+                      SizedBox(width: 12),
+                      Text('Edit Profile'),
+                    ],
+                  ),
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout),
+                      SizedBox(width: 12),
+                      Text('Logout'),
+                    ],
+                  ),
+                ),
+              ];
             },
           ),
         ],
       ),
-      body: tenantAsync.when(
-        loading: () =>
-        const Center(
-          child: CircularProgressIndicator(),
-        ),
-        error: (error, stackTrace) =>
-            _ErrorView(
-              onRetry: () {
-                ref.invalidate(currentTenantProvider);
-              },
-            ),
-        data: (tenant) {
-          if (tenant == null) {
-            return const _NoTenancyView();
-          }
-
-          final propertyAsync = ref.watch(
-            propertyByIdProvider(tenant.propertyId),
+      body: dashboardAsync.when(
+        loading: () {
+          return const Center(
+            child: CircularProgressIndicator(),
           );
-
-          final unitAsync = ref.watch(
-            unitByIdProvider(tenant.unitId),
+        },
+        error: (error, stackTrace) {
+          return _DashboardErrorView(
+            error: error,
+            onRetry: _refresh,
           );
-
-          // ----------------------------------------------------------
-          // TENANT CURRENT RENT
-          // ----------------------------------------------------------
-          //
-          // IMPORTANT:
-          // Tenant must query by tenantUserId == Firebase Auth UID.
-          // Do NOT use property.ownerId here.
-          //
-          final currentRentRateAsync = ref.watch(
-            currentTenantRentRateProvider(
-              tenant.unitId,
-            ),
-          );
-
+        },
+        data: (dashboard) {
           return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(currentTenantProvider);
-              ref.invalidate(
-                currentTenantRentRateProvider(
-                  tenant.unitId,
-                ),
-              );
-
-              await ref.read(
-                currentTenantProvider.future,
-              );
-            },
-            child: ListView(
-              physics:
-              const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              children: [
-                // ======================================================
-                // WELCOME
-                // ======================================================
-
-                _WelcomeCard(
-                  tenantName: tenant.name,
-                ),
-
-                const SizedBox(height: 16),
-
-                // ======================================================
-                // TENANT PROFILE
-                // ======================================================
-
-                _TenantAccountCard(
-                  name: tenant.name,
-                  phone: tenant.phone,
-                  accountStatus:
-                  tenant.accountStatus.name,
-                  tenantStatus: tenant.status.name,
-                ),
-
-                const SizedBox(height: 16),
-
-                // ======================================================
-                // CURRENT PROPERTY
-                // ======================================================
-
-                propertyAsync.when(
-                  loading: () =>
-                  const _LoadingCard(
-                    title: 'Property',
-                  ),
-                  error: (_, _) =>
-                  const _DataErrorCard(
-                    title: 'Property',
-                  ),
-                  data: (property) {
-                    if (property == null) {
-                      return const _DataErrorCard(
-                        title: 'Property',
-                      );
-                    }
-
-                    return _PropertyCard(
-                      propertyName: property.name,
-                      propertyCode:
-                      property.propertyCode,
-                      address: property.address,
-                      propertyType:
-                      property.type.name,
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // ======================================================
-                // CURRENT UNIT
-                // ======================================================
-
-                unitAsync.when(
-                  loading: () =>
-                  const _LoadingCard(
-                    title: 'Unit',
-                  ),
-                  error: (_, _) =>
-                  const _DataErrorCard(
-                    title: 'Unit',
-                  ),
-                  data: (unit) {
-                    if (unit == null) {
-                      return const _DataErrorCard(
-                        title: 'Unit',
-                      );
-                    }
-
-                    return _UnitCard(
-                      unitNumber: unit.unitNumber,
-                      unitName: unit.name,
-                      floorNumber: unit.floorNumber,
-                      rentRateAsync:
-                      currentRentRateAsync,
-                      status: unit.status.name,
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // ======================================================
-                // RENT SUMMARY
-                // ======================================================
-
-                const _RentSummaryCard(),
-
-                const SizedBox(height: 16),
-
-                // ======================================================
-                // QUICK ACTIONS
-                // ======================================================
-
-                propertyAsync.when(
-                  loading: () =>
-                  const _QuickActionsCard(
-                    propertyAvailable: false,
-                  ),
-                  error: (_, _) =>
-                  const _QuickActionsCard(
-                    propertyAvailable: false,
-                  ),
-                  data: (property) {
-                    return _QuickActionsCard(
-                      propertyAvailable:
-                      property != null,
-                      propertyName: property?.name,
-                      propertyCode:
-                      property?.propertyCode,
-                      address: property?.address,
-                      propertyType:
-                      property?.type.name,
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // ======================================================
-                // TENANCY HISTORY
-                // ======================================================
-
-                _TenancyHistoryCard(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                        const TenantTenancyHistoryScreen(),
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // ======================================================
-                // RECENT ACTIVITY
-                // ======================================================
-
-                const _RecentActivityCard(),
-
-                const SizedBox(height: 24),
-              ],
+            onRefresh: _refresh,
+            child: _TenantDashboardContent(
+              dashboard: dashboard,
+              onOpenInvitation: _openInvitation,
+              onEditProfile: () {
+                _openEditProfile(dashboard);
+              },
             ),
           );
         },
@@ -258,14 +234,423 @@ class TenantHomeScreen extends ConsumerWidget {
 }
 
 // ============================================================================
-// WELCOME CARD
+// DASHBOARD CONTENT
 // ============================================================================
 
-class _WelcomeCard extends StatelessWidget {
-  final String tenantName;
+class _TenantDashboardContent extends StatelessWidget {
+  final TenantDashboardData dashboard;
+  final ValueChanged<TenantInvitation> onOpenInvitation;
+  final VoidCallback onEditProfile;
 
-  const _WelcomeCard({
-    required this.tenantName,
+  const _TenantDashboardContent({
+    required this.dashboard,
+    required this.onOpenInvitation,
+    required this.onEditProfile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        32,
+      ),
+      children: [
+        _WelcomeHeader(
+          name: dashboard.displayName,
+          hasActiveTenancy: dashboard.hasActiveTenancy,
+        ),
+
+        const SizedBox(height: 20),
+
+        if (dashboard.hasPendingInvitation) ...[
+          _PendingInvitationCard(
+            invitation: dashboard.pendingInvitation!,
+            onReview: () {
+              onOpenInvitation(
+                dashboard.pendingInvitation!,
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+        ],
+
+        if (dashboard.hasActiveTenancy) ...[
+          _CurrentTenancyCard(
+            dashboard: dashboard,
+          ),
+          const SizedBox(height: 20),
+        ] else
+          ...[
+            _NoActiveTenancyCard(
+              hasHistory: dashboard.hasTenancyHistory,
+              hasPendingInvitation:
+              dashboard.hasPendingInvitation,
+            ),
+            const SizedBox(height: 20),
+          ],
+
+        _AccountOverviewCard(
+          dashboard: dashboard,
+          onEditProfile: onEditProfile,
+        ),
+
+        const SizedBox(height: 20),
+
+        const _SectionHeader(
+          title: 'Tenancy History',
+        ),
+
+        const SizedBox(height: 10),
+
+        if (dashboard.hasTenancyHistory)
+          _TenancyHistoryPreview(
+            history: dashboard.tenancyHistory,
+          )
+        else
+          const _EmptyHistoryCard(),
+
+        const SizedBox(height: 20),
+
+        const _SectionHeader(
+          title: 'Recent Activity',
+        ),
+
+        const SizedBox(height: 10),
+
+        _RecentActivityCard(
+          dashboard: dashboard,
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// WELCOME HEADER
+// ============================================================================
+
+class _WelcomeHeader extends StatelessWidget {
+  final String name;
+  final bool hasActiveTenancy;
+
+  const _WelcomeHeader({
+    required this.name,
+    required this.hasActiveTenancy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _greeting(),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$name 👋',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          hasActiveTenancy
+              ? 'Here is an overview of your current home.'
+              : 'Manage your Griho account and tenancy from here.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _greeting() {
+    final hour = DateTime
+        .now()
+        .hour;
+
+    if (hour < 12) {
+      return 'Good morning';
+    }
+
+    if (hour < 17) {
+      return 'Good afternoon';
+    }
+
+    return 'Good evening';
+  }
+}
+
+// ============================================================================
+// PENDING INVITATION
+// ============================================================================
+
+class _PendingInvitationCard extends StatelessWidget {
+  final TenantInvitation invitation;
+  final VoidCallback onReview;
+
+  const _PendingInvitationCard({
+    required this.invitation,
+    required this.onReview,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final propertyName =
+    invitation.propertyName?.trim();
+
+    final unitName =
+    invitation.unitNumber?.trim();
+
+    return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: theme.colorScheme.primary.withValues(
+              alpha: 0.35,
+            ),
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor:
+                  theme.colorScheme.primaryContainer,
+                  child: Icon(
+                    Icons.mail_outline,
+                    color:
+                    theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'New tenancy invitation',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'An owner has invited you to a property.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(
+                          color: theme.colorScheme
+                              .onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+            if (propertyName != null &&
+                propertyName.isNotEmpty)
+              _InfoRow(
+                icon: Icons.apartment_outlined,
+                label: 'Property',
+                value: propertyName,
+              ),
+            if (unitName != null &&
+                unitName.isNotEmpty)
+              _InfoRow(
+                icon: Icons.home_work_outlined,
+                label: 'Unit',
+                value: unitName,
+              ),
+            _InfoRow(
+              icon: Icons.payments_outlined,
+              label: 'Monthly rent',
+              value:
+              '৳ ${_formatAmount(invitation.rentAmount)}',
+            ),
+            _InfoRow(
+              icon: Icons.event_outlined,
+              label: 'Expires',
+              value: _formatDate(
+                invitation.expiresAt,
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onReview,
+                icon: const Icon(
+                  Icons.arrow_forward,
+                ),
+                label: const Text(
+                  'Review Invitation',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// CURRENT TENANCY
+// ============================================================================
+
+class _CurrentTenancyCard extends StatelessWidget {
+  final TenantDashboardData dashboard;
+
+  const _CurrentTenancyCard({
+    required this.dashboard,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final propertyName =
+        dashboard.currentPropertyName;
+
+    final unitDisplayName =
+        dashboard.currentUnitDisplayName;
+
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor:
+                  theme.colorScheme.primaryContainer,
+                  child: Icon(
+                    Icons.home_outlined,
+                    color: theme
+                        .colorScheme
+                        .onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'My Home',
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Current tenancy',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(
+                          color: theme.colorScheme
+                              .onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(
+                      alpha: 0.10,
+                    ),
+                    borderRadius:
+                    BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Active',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _InfoRow(
+              icon: Icons.apartment_outlined,
+              label: 'Property',
+              value: propertyName ??
+                  'Property information unavailable',
+            ),
+            _InfoRow(
+              icon: Icons.door_front_door_outlined,
+              label: 'Unit',
+              value: unitDisplayName ??
+                  'Unit information unavailable',
+            ),
+            if (dashboard.tenant?.tenancyStartedAt !=
+                null)
+              _InfoRow(
+                icon: Icons.calendar_month_outlined,
+                label: 'Started',
+                value: _formatDate(
+                  dashboard.tenant!.tenancyStartedAt!,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// NO ACTIVE TENANCY
+// ============================================================================
+
+class _NoActiveTenancyCard extends StatelessWidget {
+  final bool hasHistory;
+  final bool hasPendingInvitation;
+
+  const _NoActiveTenancyCard({
+    required this.hasHistory,
+    required this.hasPendingInvitation,
   });
 
   @override
@@ -273,550 +658,302 @@ class _WelcomeCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color:
+                theme.colorScheme.secondaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                hasPendingInvitation
+                    ? Icons.mark_email_unread_outlined
+                    : Icons.home_outlined,
+                size: 30,
+                color: theme
+                    .colorScheme
+                    .onSecondaryContainer,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              hasPendingInvitation
+                  ? 'You have a new invitation'
+                  : 'No active tenancy',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              hasPendingInvitation
+                  ? 'Review the invitation above to see the property and tenancy details.'
+                  : hasHistory
+                  ? 'You currently do not have an active tenancy. Your previous tenancy records are still available below.'
+                  : 'Your account is ready. When an owner sends you an invitation, it will appear here.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color:
+                theme.colorScheme.onSurfaceVariant,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// ACCOUNT OVERVIEW
+// ============================================================================
+
+class _AccountOverviewCard extends StatelessWidget {
+  final TenantDashboardData dashboard;
+  final VoidCallback onEditProfile;
+
+  const _AccountOverviewCard({
+    required this.dashboard,
+    required this.onEditProfile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final profile = dashboard.appUser;
+
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'My Account',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: onEditProfile,
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: 18,
+                  ),
+                  label: const Text(
+                    'Edit Profile',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (profile != null) ...[
+              _InfoRow(
+                icon: Icons.badge_outlined,
+                label: 'Griho ID',
+                value: profile.publicId,
+              ),
+              _InfoRow(
+                icon: Icons.person_outline,
+                label: 'Name',
+                value: profile.name,
+              ),
+              if (profile.phoneNumber != null &&
+                  profile.phoneNumber!.trim().isNotEmpty)
+                _InfoRow(
+                  icon: Icons.phone_outlined,
+                  label: 'Phone',
+                  value: profile.phoneNumber!,
+                ),
+              if (profile.email != null &&
+                  profile.email!.trim().isNotEmpty)
+                _InfoRow(
+                  icon: Icons.email_outlined,
+                  label: 'Email',
+                  value: profile.email!,
+                ),
+            ] else
+              _InfoRow(
+                icon: Icons.person_outline,
+                label: 'Profile',
+                value:
+                'Profile information unavailable',
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// TENANCY HISTORY
+// ============================================================================
+
+class _TenancyHistoryPreview extends StatelessWidget {
+  final List<TenancyHistory> history;
+
+  const _TenancyHistoryPreview({
+    required this.history,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = history.take(3).toList();
+
+    return Column(
+      children: [
+        for (var index = 0;
+        index < preview.length;
+        index++) ...[
+          _HistoryItem(
+            history: preview[index],
+          ),
+          if (index != preview.length - 1)
+            const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _HistoryItem extends StatelessWidget {
+  final TenancyHistory history;
+
+  const _HistoryItem({
+    required this.history,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final propertyName =
+    history.propertyName.trim();
+
+    final unitNumber =
+    history.unitNumber.trim();
+
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor:
+              theme.colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.history,
+                color:
+                theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    propertyName.isNotEmpty
+                        ? propertyName
+                        : 'Previous tenancy',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    unitNumber.isNotEmpty
+                        ? 'Unit $unitNumber'
+                        : 'Unit information unavailable',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(
+                      color: theme.colorScheme
+                          .onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment:
+              CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _formatDate(history.startedAt),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'to ${_formatDate(history.endedAt)}',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(
+                    color: theme.colorScheme
+                        .onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyHistoryCard extends StatelessWidget {
+  const _EmptyHistoryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      elevation: 0,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 28,
-              child: Icon(
-                Icons.person_outline,
-                color: theme.colorScheme.primary,
-                size: 30,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Welcome back',
-                    style:
-                    theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    tenantName,
-                    style: theme.textTheme.titleLarge
-                        ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// TENANT ACCOUNT CARD
-// ============================================================================
-
-class _TenantAccountCard extends StatelessWidget {
-  final String name;
-  final String phone;
-  final String accountStatus;
-  final String tenantStatus;
-
-  const _TenantAccountCard({
-    required this.name,
-    required this.phone,
-    required this.accountStatus,
-    required this.tenantStatus,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Tenant Profile',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _InfoRow(
-              icon: Icons.person_outline,
-              label: 'Name',
-              value: name,
-            ),
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.phone_outlined,
-              label: 'Phone',
-              value: phone,
-            ),
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.verified_user_outlined,
-              label: 'Account',
-              value: _formatStatus(
-                accountStatus,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.badge_outlined,
-              label: 'Tenant Status',
-              value: _formatStatus(
-                tenantStatus,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// PROPERTY CARD
-// ============================================================================
-
-class _PropertyCard extends StatelessWidget {
-  final String propertyName;
-  final String propertyCode;
-  final String? address;
-  final String propertyType;
-
-  const _PropertyCard({
-    required this.propertyName,
-    required this.propertyCode,
-    required this.address,
-    required this.propertyType,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Current Property',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _InfoRow(
-              icon: Icons.home_work_outlined,
-              label: 'Property',
-              value: propertyName,
-            ),
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.tag_outlined,
-              label: 'Code',
-              value: propertyCode,
-            ),
-            if (address != null &&
-                address!.trim().isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _InfoRow(
-                icon: Icons.location_on_outlined,
-                label: 'Address',
-                value: address!,
-              ),
-            ],
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.category_outlined,
-              label: 'Type',
-              value: _formatStatus(
-                propertyType,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// UNIT CARD
-// ============================================================================
-
-class _UnitCard extends StatelessWidget {
-  final String unitNumber;
-  final String? unitName;
-  final int floorNumber;
-  final AsyncValue<RentRate?>
-  rentRateAsync;
-  final String status;
-
-  const _UnitCard({
-    required this.unitNumber,
-    required this.unitName,
-    required this.floorNumber,
-    required this.rentRateAsync,
-    required this.status,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Current Unit',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _InfoRow(
-              icon: Icons.meeting_room_outlined,
-              label: 'Unit',
-              value: unitNumber,
-            ),
-            if (unitName != null &&
-                unitName!.trim().isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _InfoRow(
-                icon: Icons.label_outline,
-                label: 'Name',
-                value: unitName!,
-              ),
-            ],
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.layers_outlined,
-              label: 'Floor',
-              value: floorNumber.toString(),
-            ),
-            const SizedBox(height: 12),
-            _InfoRow(
-              icon: Icons.home_outlined,
-              label: 'Status',
-              value: _formatStatus(status),
-            ),
-            const SizedBox(height: 12),
-            _CurrentRentRow(
-              rentRateAsync: rentRateAsync,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// CURRENT RENT ROW
-// ============================================================================
-
-class _CurrentRentRow extends StatelessWidget {
-  final AsyncValue<RentRate?>
-  rentRateAsync;
-
-  const _CurrentRentRow({
-    required this.rentRateAsync,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return rentRateAsync.when(
-      loading: () {
-        return const Row(
-          crossAxisAlignment:
-          CrossAxisAlignment.center,
-          children: [
             Icon(
-              Icons.payments_outlined,
-              size: 20,
+              Icons.history_outlined,
+              color:
+              theme.colorScheme.onSurfaceVariant,
             ),
-            SizedBox(width: 12),
-            SizedBox(
-              width: 95,
-              child: Text('Monthly Rent'),
-            ),
-            SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-              ),
-            ),
-          ],
-        );
-      },
-      error: (_, _) {
-        return const _InfoRow(
-          icon: Icons.payments_outlined,
-          label: 'Monthly Rent',
-          value: 'Unavailable',
-        );
-      },
-      data: (rentRate) {
-        if (rentRate == null) {
-          return const _InfoRow(
-            icon: Icons.payments_outlined,
-            label: 'Monthly Rent',
-            value: 'Not set',
-          );
-        }
-
-        return _InfoRow(
-          icon: Icons.payments_outlined,
-          label: 'Monthly Rent',
-          value: _formatCurrency(
-            rentRate.amount,
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ============================================================================
-// RENT SUMMARY CARD
-// ============================================================================
-
-class _RentSummaryCard extends StatelessWidget {
-  const _RentSummaryCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 28,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Rent Summary',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Rent, payment and due information will appear here once the billing system is available.',
-                    style:
-                    theme.textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// QUICK ACTIONS CARD
-// ============================================================================
-
-class _QuickActionsCard extends StatelessWidget {
-  final bool propertyAvailable;
-  final String? propertyName;
-  final String? propertyCode;
-  final String? address;
-  final String? propertyType;
-
-  const _QuickActionsCard({
-    required this.propertyAvailable,
-    this.propertyName,
-    this.propertyCode,
-    this.address,
-    this.propertyType,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Quick Actions',
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _QuickActionButton(
-                    icon: Icons.payments_outlined,
-                    label: 'Rent',
-                    enabled: false,
-                    onPressed: null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _QuickActionButton(
-                    icon:
-                    Icons.receipt_long_outlined,
-                    label: 'Bills',
-                    enabled: false,
-                    onPressed: null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _QuickActionButton(
-                    icon:
-                    Icons.history_outlined,
-                    label: 'Payments',
-                    enabled: false,
-                    onPressed: null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _QuickActionButton(
-                    icon:
-                    Icons.home_work_outlined,
-                    label: 'Property',
-                    enabled: propertyAvailable,
-                    onPressed: propertyAvailable
-                        ? () {
-                      _showPropertyDetails(
-                        context,
-                        propertyName:
-                        propertyName!,
-                        propertyCode:
-                        propertyCode!,
-                        address: address,
-                        propertyType:
-                        propertyType!,
-                      );
-                    }
-                        : null,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// TENANCY HISTORY CARD
-// ============================================================================
-
-class _TenancyHistoryCard extends StatelessWidget {
-  final VoidCallback onPressed;
-
-  const _TenancyHistoryCard({
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius:
-        BorderRadius.circular(12),
-        child: Padding(
-          padding:
-          const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              CircleAvatar(
-                child: Icon(
-                  Icons.history_outlined,
+              child: Text(
+                'Your previous tenancy records will appear here.',
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color:
-                  theme.colorScheme.primary,
+                  theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tenancy History',
-                      style: theme.textTheme
-                          .titleMedium
-                          ?.copyWith(
-                        fontWeight:
-                        FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'View your previous tenancies and rental history.',
-                      style: theme.textTheme
-                          .bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -824,134 +961,158 @@ class _TenancyHistoryCard extends StatelessWidget {
 }
 
 // ============================================================================
-// QUICK ACTION BUTTON
+// RECENT ACTIVITY
 // ============================================================================
 
-class _QuickActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool enabled;
-  final VoidCallback? onPressed;
+class _RecentActivityCard extends StatelessWidget {
+  final TenantDashboardData dashboard;
 
-  const _QuickActionButton({
-    required this.icon,
-    required this.label,
-    required this.enabled,
-    required this.onPressed,
+  const _RecentActivityCard({
+    required this.dashboard,
   });
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        minimumSize:
-        const Size.fromHeight(52),
+    final activities =
+    _buildActivities(dashboard);
+
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            for (var index = 0;
+            index < activities.length;
+            index++) ...[
+              _ActivityItem(
+                activity: activities[index],
+              ),
+              if (index != activities.length - 1)
+                const Divider(height: 24),
+            ],
+          ],
+        ),
       ),
     );
   }
-}
 
-// ============================================================================
-// PROPERTY DETAILS DIALOG
-// ============================================================================
+  List<_ActivityData> _buildActivities(TenantDashboardData dashboard,) {
+    final activities = <_ActivityData>[];
 
-Future<void> _showPropertyDetails(BuildContext context, {
-  required String propertyName,
-  required String propertyCode,
-  required String? address,
-  required String propertyType,
-}) async {
-  await showDialog<void>(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: const Text(
-          'Property Details',
+    final invitation =
+        dashboard.pendingInvitation;
+
+    if (invitation != null && invitation.isValid) {
+      activities.add(
+        _ActivityData(
+          icon: Icons.mail_outline,
+          title: 'New invitation received',
+          subtitle: invitation.propertyName ??
+              'A property owner sent you an invitation.',
+          date: invitation.createdAt,
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize:
-            MainAxisSize.min,
-            children: [
-              _DialogInfoRow(
-                icon:
-                Icons.home_work_outlined,
-                label: 'Property',
-                value: propertyName,
-              ),
-              const SizedBox(height: 16),
-              _DialogInfoRow(
-                icon: Icons.tag_outlined,
-                label: 'Code',
-                value: propertyCode,
-              ),
-              if (address != null &&
-                  address
-                      .trim()
-                      .isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _DialogInfoRow(
-                  icon:
-                  Icons.location_on_outlined,
-                  label: 'Address',
-                  value: address,
-                ),
-              ],
-              const SizedBox(height: 16),
-              _DialogInfoRow(
-                icon: Icons.category_outlined,
-                label: 'Type',
-                value:
-                _formatStatus(propertyType),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text('Close'),
-          ),
-        ],
       );
-    },
-  );
+    }
+
+    final tenant = dashboard.tenant;
+
+    if (tenant != null &&
+        tenant.status == TenantStatus.active &&
+        tenant.tenancyStartedAt != null) {
+      activities.add(
+        _ActivityData(
+          icon: Icons.home_outlined,
+          title: 'Current tenancy started',
+          subtitle:
+          'You currently have an active tenancy.',
+          date: tenant.tenancyStartedAt!,
+        ),
+      );
+    }
+
+    for (final history
+    in dashboard.tenancyHistory.take(3)) {
+      activities.add(
+        _ActivityData(
+          icon: Icons.history,
+          title: 'Tenancy ended',
+          subtitle:
+          history.propertyName
+              .trim()
+              .isNotEmpty
+              ? history.propertyName
+              : 'Previous tenancy',
+          date: history.endedAt,
+        ),
+      );
+    }
+
+    activities.sort(
+          (a, b) => b.date.compareTo(a.date),
+    );
+
+    if (activities.length > 5) {
+      return activities.take(5).toList();
+    }
+
+    if (activities.isEmpty) {
+      return [
+        _ActivityData(
+          icon: Icons.check_circle_outline,
+          title: 'Account ready',
+          subtitle:
+          'Your Griho account is ready to use.',
+          date: dashboard.appUser?.createdAt ??
+              dashboard.firebaseUser?.metadata.creationTime ??
+              DateTime.now(),
+        ),
+      ];
+    }
+
+    return activities;
+  }
 }
 
-// ============================================================================
-// DIALOG INFO ROW
-// ============================================================================
-
-class _DialogInfoRow extends StatelessWidget {
+class _ActivityData {
   final IconData icon;
-  final String label;
-  final String value;
+  final String title;
+  final String subtitle;
+  final DateTime date;
 
-  const _DialogInfoRow({
+  const _ActivityData({
     required this.icon,
-    required this.label,
-    required this.value,
+    required this.title,
+    required this.subtitle,
+    required this.date,
+  });
+}
+
+class _ActivityItem extends StatelessWidget {
+  final _ActivityData activity;
+
+  const _ActivityItem({
+    required this.activity,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Row(
       crossAxisAlignment:
       CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 22,
-          color:
-          Theme
-              .of(context)
-              .colorScheme
-              .primary,
+        CircleAvatar(
+          radius: 20,
+          backgroundColor:
+          theme.colorScheme.surfaceContainerHighest,
+          child: Icon(
+            activity.icon,
+            size: 20,
+            color:
+            theme.colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -960,25 +1121,32 @@ class _DialogInfoRow extends StatelessWidget {
             CrossAxisAlignment.start,
             children: [
               Text(
-                label,
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .labelMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .bodyLarge
+                activity.title,
+                style: theme.textTheme.titleSmall
                     ?.copyWith(
-                  fontWeight:
-                  FontWeight.w600,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                activity.subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(
+                  color: theme.colorScheme
+                      .onSurfaceVariant,
                 ),
               ),
             ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          _relativeDate(activity.date),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color:
+            theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -987,53 +1155,24 @@ class _DialogInfoRow extends StatelessWidget {
 }
 
 // ============================================================================
-// RECENT ACTIVITY CARD
+// SECTION HEADER
 // ============================================================================
 
-class _RecentActivityCard extends StatelessWidget {
-  const _RecentActivityCard();
+class _SectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SectionHeader({
+    required this.title,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.history_outlined,
-              size: 28,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Recent Activity',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(
-                      fontWeight:
-                      FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Recent rent, bill and payment activity will appear here once those systems are available.',
-                    style:
-                    theme.textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return Text(
+      title,
+      style: theme.textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w800,
       ),
     );
   }
@@ -1056,162 +1195,46 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
-      children: [
-        Icon(
-          icon,
-          size: 20,
-          color:
-          Theme
-              .of(context)
-              .colorScheme
-              .primary,
-        ),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 95,
-          child: Text(
-            label,
-            style:
-            Theme
-                .of(context)
-                .textTheme
-                .bodyMedium,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: Theme
-                .of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(
-              fontWeight:
-              FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// LOADING CARD
-// ============================================================================
-
-class _LoadingCard extends StatelessWidget {
-  final String title;
-
-  const _LoadingCard({
-    required this.title,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Text('Loading $title...'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// DATA ERROR CARD
-// ============================================================================
-
-class _DataErrorCard extends StatelessWidget {
-  final String title;
-
-  const _DataErrorCard({
-    required this.title,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading:
-        const Icon(Icons.error_outline),
-        title: Text(
-          '$title unavailable',
-        ),
-        subtitle: const Text(
-          'The requested information could not be loaded.',
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// NO TENANCY VIEW
-// ============================================================================
-
-class _NoTenancyView extends StatelessWidget {
-  const _NoTenancyView();
-
-  @override
-  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
-      child: Padding(
-        padding:
-        const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize:
-          MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.home_work_outlined,
-              size: 72,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Active Tenancy',
-              style: theme.textTheme
-                  .headlineSmall
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        vertical: 7,
+      ),
+      child: Row(
+        crossAxisAlignment:
+        CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color:
+            theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium
                   ?.copyWith(
-                fontWeight:
-                FontWeight.bold,
+                color: theme.colorScheme
+                    .onSurfaceVariant,
               ),
-              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Your account is active, but you currently do not have an active tenancy connected to your account.',
-              style:
-              theme.textTheme.bodyMedium,
-              textAlign: TextAlign.center,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'When a property owner sends you a new invitation, you can review and accept it to connect a tenancy to your account.',
-              style:
-              theme.textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1221,43 +1244,57 @@ class _NoTenancyView extends StatelessWidget {
 // ERROR VIEW
 // ============================================================================
 
-class _ErrorView extends StatelessWidget {
+class _DashboardErrorView extends StatelessWidget {
+  final Object error;
   final VoidCallback onRetry;
 
-  const _ErrorView({
+  const _DashboardErrorView({
+    required this.error,
     required this.onRetry,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Center(
       child: Padding(
-        padding:
-        const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize:
-          MainAxisSize.min,
+          mainAxisAlignment:
+          MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.error_outline,
-              size: 64,
+              size: 56,
+              color: theme.colorScheme.error,
             ),
             const SizedBox(height: 16),
             Text(
-              'Unable to load your account',
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleMedium,
+              'Could not load your dashboard',
               textAlign: TextAlign.center,
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Text(
+              error.toString(),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(
+                color:
+                theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: onRetry,
-              icon:
-              const Icon(Icons.refresh),
-              label:
-              const Text('Retry'),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
             ),
           ],
         ),
@@ -1270,72 +1307,48 @@ class _ErrorView extends StatelessWidget {
 // HELPERS
 // ============================================================================
 
-String _formatStatus(String value) {
-  if (value.isEmpty) {
-    return value;
-  }
+String _formatDate(DateTime date) {
+  final day =
+  date.day.toString().padLeft(2, '0');
+  final month =
+  date.month.toString().padLeft(2, '0');
+  final year =
+  date.year.toString();
 
-  final formatted = value.replaceAllMapped(
-    RegExp(r'([A-Z])'),
-        (match) => ' ${match.group(1)}',
-  );
-
-  return formatted[0].toUpperCase() +
-      formatted.substring(1);
+  return '$day/$month/$year';
 }
 
-String _formatCurrency(double amount) {
-  return '৳${amount.toStringAsFixed(2)}';
-}
-
-// ============================================================================
-// LOGOUT
-// ============================================================================
-
-Future<void> _showLogoutDialog(BuildContext context,
-    WidgetRef ref,) async {
-  final shouldLogout =
-  await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) {
-      return AlertDialog(
-        title:
-        const Text('Logout'),
-        content: const Text(
-          'Are you sure you want to logout?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(
-                dialogContext,
-              ).pop(false);
-            },
-            child:
-            const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(
-                dialogContext,
-              ).pop(true);
-            },
-            child:
-            const Text('Logout'),
-          ),
-        ],
-      );
-    },
-  );
-
-  if (shouldLogout != true) {
-    return;
+String _formatAmount(double amount) {
+  if (amount == amount.roundToDouble()) {
+    return amount.toStringAsFixed(0);
   }
 
-  await ref
-      .read(
-    authControllerProvider
-        .notifier,
-  )
-      .signOut();
+  return amount.toStringAsFixed(2);
+}
+
+String _relativeDate(DateTime date) {
+  final now = DateTime.now();
+  final difference = now.difference(date);
+
+  if (difference.isNegative) {
+    return 'Upcoming';
+  }
+
+  if (difference.inMinutes < 1) {
+    return 'Now';
+  }
+
+  if (difference.inHours < 1) {
+    return '${difference.inMinutes}m ago';
+  }
+
+  if (difference.inDays < 1) {
+    return '${difference.inHours}h ago';
+  }
+
+  if (difference.inDays < 7) {
+    return '${difference.inDays}d ago';
+  }
+
+  return _formatDate(date);
 }

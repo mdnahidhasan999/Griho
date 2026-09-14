@@ -22,6 +22,7 @@ abstract final class RouteNames {
   static const caretakerHome = '/caretaker';
 
   static const tenantHome = '/tenant';
+  static const editProfile = '/profile/edit';
 
   // ============================================================
   // PROPERTIES
@@ -62,6 +63,7 @@ abstract final class RouteNames {
 
   static const unitMonthlyRent =
       '/owner/units/:unitId/monthly-rent';
+
   // ============================================================
   // TENANTS
   // ============================================================

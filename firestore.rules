@@ -19,14 +19,36 @@ service cloud.firestore {
 
       allow update: if isAuthenticated()
                     && request.auth.uid == userId
+
+                    // Identity fields cannot be changed.
                     && request.resource.data.uid
                        == resource.data.uid
+
                     && request.resource.data.publicId
                        == resource.data.publicId
+
                     && request.resource.data.role
                        == resource.data.role
+
                     && request.resource.data.createdAt
-                       == resource.data.createdAt;
+                       == resource.data.createdAt
+
+                    // Phone number is permanently linked
+                    // to the Firebase account.
+                    && request.resource.data.phoneNumber
+                       == resource.data.phoneNumber
+
+                    // Account activation state cannot be changed
+                    // by the user.
+                    && request.resource.data.isActive
+                       == resource.data.isActive
+
+                    // updatedAt must be a valid server-side timestamp.
+                    && request.resource.data.updatedAt
+                       is timestamp
+
+                    && request.resource.data.updatedAt
+                       <= request.time;
 
       allow delete: if false;
     }

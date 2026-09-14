@@ -17,25 +17,87 @@ class OwnerHomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Griho'),
+        title: const Text(
+          'Griho',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         centerTitle: false,
         actions: [
-          IconButton(
-            tooltip: 'Sign out',
-            onPressed: () => _showSignOutDialog(context, ref),
-            icon: const Icon(Icons.logout),
+          profileAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
+            data: (profile) {
+              if (profile == null) {
+                return IconButton(
+                  tooltip: 'Sign out',
+                  onPressed: () {
+                    _showSignOutDialog(context, ref);
+                  },
+                  icon: const Icon(Icons.logout),
+                );
+              }
+
+              return PopupMenuButton<String>(
+                tooltip: 'Account',
+                onSelected: (value) {
+                  if (value == 'edit_profile') {
+                    _openEditProfile(
+                      context,
+                      ref,
+                      profile,
+                    );
+                  } else if (value == 'logout') {
+                    _showSignOutDialog(
+                      context,
+                      ref,
+                    );
+                  }
+                },
+                itemBuilder: (context) {
+                  return const [
+                    PopupMenuItem<String>(
+                      value: 'edit_profile',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined),
+                          SizedBox(width: 12),
+                          Text('Edit Profile'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuDivider(),
+                    PopupMenuItem<String>(
+                      value: 'logout',
+                      child: Row(
+                        children: [
+                          Icon(Icons.logout),
+                          SizedBox(width: 12),
+                          Text('Sign out'),
+                        ],
+                      ),
+                    ),
+                  ];
+                },
+              );
+            },
           ),
         ],
       ),
       body: profileAsync.when(
         loading: () {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
         },
         error: (error, stackTrace) {
           return _ErrorView(
             message: 'Unable to load your profile.',
             onRetry: () {
-              ref.invalidate(currentUserProfileProvider);
+              ref.invalidate(
+                currentUserProfileProvider,
+              );
             },
           );
         },
@@ -44,26 +106,42 @@ class OwnerHomeScreen extends ConsumerWidget {
             return _ErrorView(
               message: 'User profile not found.',
               onRetry: () {
-                ref.invalidate(currentUserProfileProvider);
+                ref.invalidate(
+                  currentUserProfileProvider,
+                );
               },
             );
           }
 
           return RefreshIndicator(
             onRefresh: () async {
-              ref.invalidate(currentUserProfileProvider);
+              ref.invalidate(
+                currentUserProfileProvider,
+              );
 
-              await ref.read(currentUserProfileProvider.future);
+              await ref.read(
+                currentUserProfileProvider.future,
+              );
             },
             child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics:
+              const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
               children: [
-                _WelcomeCard(name: profile.name, publicId: profile.publicId),
+                _WelcomeCard(
+                  name: profile.name,
+                  publicId: profile.publicId,
+                ),
 
                 const SizedBox(height: 24),
 
-                Text('Overview', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  'Overview',
+                  style: Theme
+                      .of(context)
+                      .textTheme
+                      .titleLarge,
+                ),
 
                 const SizedBox(height: 12),
 
@@ -77,19 +155,22 @@ class OwnerHomeScreen extends ConsumerWidget {
                       children: [
                         Expanded(
                           child: _SummaryCard(
-                            icon: Icons.home_work_outlined,
+                            icon:
+                            Icons.home_work_outlined,
                             title: 'Properties',
                             value: propertiesAsync.when(
                               loading: () => '...',
                               error: (_, _) => '0',
-                              data: (properties) => '${properties.length}',
+                              data: (properties) =>
+                              '${properties.length}',
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         const Expanded(
                           child: _SummaryCard(
-                            icon: Icons.people_outline,
+                            icon:
+                            Icons.people_outline,
                             title: 'Tenants',
                             value: '0',
                           ),
@@ -105,7 +186,8 @@ class OwnerHomeScreen extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: _SummaryCard(
-                        icon: Icons.receipt_long_outlined,
+                        icon:
+                        Icons.receipt_long_outlined,
                         title: 'Pending Bills',
                         value: '0',
                       ),
@@ -113,7 +195,8 @@ class OwnerHomeScreen extends ConsumerWidget {
                     SizedBox(width: 12),
                     Expanded(
                       child: _SummaryCard(
-                        icon: Icons.payments_outlined,
+                        icon:
+                        Icons.payments_outlined,
                         title: 'This Month',
                         value: '৳0',
                       ),
@@ -125,33 +208,47 @@ class OwnerHomeScreen extends ConsumerWidget {
 
                 Text(
                   'Quick Actions',
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme
+                      .of(context)
+                      .textTheme
+                      .titleLarge,
                 ),
 
                 const SizedBox(height: 12),
 
                 _ActionCard(
-                  icon: Icons.add_home_work_outlined,
+                  icon:
+                  Icons.add_home_work_outlined,
                   title: 'Add Property',
-                  description: 'Add and manage your property.',
+                  description:
+                  'Add and manage your property.',
                   onTap: () async {
-                    await context.push(RouteNames.addProperty);
+                    await context.push(
+                      RouteNames.addProperty,
+                    );
 
                     if (!context.mounted) {
                       return;
                     }
 
-                    ref.invalidate(currentOwnerPropertiesProvider);
+                    ref.invalidate(
+                      currentOwnerPropertiesProvider,
+                    );
                   },
                 ),
+
                 const SizedBox(height: 12),
 
                 _ActionCard(
-                  icon: Icons.home_work_outlined,
+                  icon:
+                  Icons.home_work_outlined,
                   title: 'My Properties',
-                  description: 'View and manage your properties.',
+                  description:
+                  'View and manage your properties.',
                   onTap: () {
-                    context.push(RouteNames.propertyList);
+                    context.push(
+                      RouteNames.propertyList,
+                    );
                   },
                 ),
 
@@ -161,29 +258,37 @@ class OwnerHomeScreen extends ConsumerWidget {
                   icon: Icons.people_outline,
                   title: 'My Tenants',
                   description:
-                      'View and search tenants across your properties.',
+                  'View and search tenants across your properties.',
                   onTap: () {
-                    context.push(RouteNames.ownerTenants);
+                    context.push(
+                      RouteNames.ownerTenants,
+                    );
                   },
                 ),
 
                 const SizedBox(height: 12),
 
                 _ActionCard(
-                  icon: Icons.person_add_alt_1_outlined,
+                  icon:
+                  Icons.person_add_alt_1_outlined,
                   title: 'Add Tenant',
-                  description: 'Add a tenant to one of your properties.',
+                  description:
+                  'Add a tenant to one of your properties.',
                   onTap: () async {
-                    await context.push(RouteNames.addTenant);
+                    await context.push(
+                      RouteNames.addTenant,
+                    );
                   },
                 ),
 
                 const SizedBox(height: 12),
 
                 _ActionCard(
-                  icon: Icons.receipt_long_outlined,
+                  icon:
+                  Icons.receipt_long_outlined,
                   title: 'Manage Bills',
-                  description: 'View and manage property bills.',
+                  description:
+                  'View and manage property bills.',
                   onTap: () {
                     AppSnackbar.info(
                       context,
@@ -199,7 +304,36 @@ class OwnerHomeScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showSignOutDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _openEditProfile(BuildContext context,
+      WidgetRef ref,
+      dynamic profile,) async {
+    final result = await context.push(
+      RouteNames.editProfile,
+      extra: profile,
+    );
+
+    if (!context.mounted) {
+      return;
+    }
+
+    if (result != null) {
+      ref.invalidate(
+        currentUserProfileProvider,
+      );
+
+      try {
+        await ref.read(
+          currentUserProfileProvider.future,
+        );
+      } catch (_) {
+        // The provider will expose the error state
+        // if the profile reload fails.
+      }
+    }
+  }
+
+  Future<void> _showSignOutDialog(BuildContext context,
+      WidgetRef ref,) async {
     final shouldSignOut = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -226,11 +360,14 @@ class OwnerHomeScreen extends ConsumerWidget {
       },
     );
 
-    if (shouldSignOut != true || !context.mounted) {
+    if (shouldSignOut != true ||
+        !context.mounted) {
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).signOut();
+    await ref
+        .read(authControllerProvider.notifier)
+        .signOut();
   }
 }
 
@@ -238,7 +375,10 @@ class _WelcomeCard extends StatelessWidget {
   final String name;
   final String publicId;
 
-  const _WelcomeCard({required this.name, required this.publicId});
+  const _WelcomeCard({
+    required this.name,
+    required this.publicId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -246,27 +386,43 @@ class _WelcomeCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
           children: [
             Text(
               'Welcome back,',
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .bodyMedium,
             ),
 
             const SizedBox(height: 4),
 
-            Text(name, style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              name,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .headlineSmall,
+            ),
 
             if (publicId.isNotEmpty) ...[
               const SizedBox(height: 12),
 
               Row(
                 children: [
-                  const Icon(Icons.badge_outlined, size: 20),
+                  const Icon(
+                    Icons.badge_outlined,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Griho ID: $publicId',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: Theme
+                        .of(context)
+                        .textTheme
+                        .bodyMedium,
                   ),
                 ],
               ),
@@ -301,17 +457,33 @@ class _SummaryCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 28),
+            Icon(
+              icon,
+              size: 28,
+            ),
 
             const SizedBox(height: 16),
 
-            Text(value, style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              value,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .headlineSmall,
+            ),
 
             const SizedBox(height: 4),
 
-            Text(title, style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              title,
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .bodyMedium,
+            ),
           ],
         ),
       ),
@@ -342,21 +514,34 @@ class _ActionCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(icon, size: 30),
+              Icon(
+                icon,
+                size: 30,
+              ),
 
               const SizedBox(width: 16),
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      title,
+                      style: Theme
+                          .of(context)
+                          .textTheme
+                          .titleMedium,
+                    ),
 
                     const SizedBox(height: 4),
 
                     Text(
                       description,
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme
+                          .of(context)
+                          .textTheme
+                          .bodySmall,
                     ),
                   ],
                 ),
@@ -364,7 +549,9 @@ class _ActionCard extends StatelessWidget {
 
               const SizedBox(width: 12),
 
-              const Icon(Icons.chevron_right),
+              const Icon(
+                Icons.chevron_right,
+              ),
             ],
           ),
         ),
@@ -377,7 +564,10 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({required this.message, required this.onRetry});
+  const _ErrorView({
+    required this.message,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -385,17 +575,27 @@ class _ErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+          MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+            ),
 
             const SizedBox(height: 16),
 
-            Text(message, textAlign: TextAlign.center),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+            ),
 
             const SizedBox(height: 16),
 
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            FilledButton(
+              onPressed: onRetry,
+              child: const Text('Retry'),
+            ),
           ],
         ),
       ),

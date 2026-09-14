@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/domain/entities/app_user.dart';
+import '../../features/auth/presentation/screens/edit_profile_screen.dart';
 import '../../features/home/presentation/screens/tenant_home_screen.dart';
 
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
@@ -89,7 +91,9 @@ abstract final class AppRouter {
           builder: (context, state) {
             final phoneNumber = state.extra as String?;
 
-            if (phoneNumber == null || phoneNumber.trim().isEmpty) {
+            if (phoneNumber == null || phoneNumber
+                .trim()
+                .isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid phone number.')),
               );
@@ -267,7 +271,9 @@ abstract final class AppRouter {
           builder: (context, state) {
             final unitId = state.pathParameters['unitId'];
 
-            if (unitId == null || unitId.trim().isEmpty) {
+            if (unitId == null || unitId
+                .trim()
+                .isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid unit ID.')),
               );
@@ -282,7 +288,9 @@ abstract final class AppRouter {
           builder: (context, state) {
             final unitId = state.pathParameters['unitId'];
 
-            if (unitId == null || unitId.trim().isEmpty) {
+            if (unitId == null || unitId
+                .trim()
+                .isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid unit ID.')),
               );
@@ -297,7 +305,9 @@ abstract final class AppRouter {
           builder: (context, state) {
             final unitId = state.pathParameters['unitId'];
 
-            if (unitId == null || unitId.trim().isEmpty) {
+            if (unitId == null || unitId
+                .trim()
+                .isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid unit ID.')),
               );
@@ -311,7 +321,9 @@ abstract final class AppRouter {
           builder: (context, state) {
             final unitId = state.pathParameters['unitId'];
 
-            if (unitId == null || unitId.trim().isEmpty) {
+            if (unitId == null || unitId
+                .trim()
+                .isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid unit ID.')),
               );
@@ -410,7 +422,9 @@ abstract final class AppRouter {
           builder: (context, state) {
             final invitationId = state.pathParameters['invitationId'];
 
-            if (invitationId == null || invitationId.trim().isEmpty) {
+            if (invitationId == null || invitationId
+                .trim()
+                .isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid invitation link.')),
               );
@@ -441,6 +455,16 @@ abstract final class AppRouter {
           path: RouteNames.tenantHome,
           builder: (context, state) {
             return const TenantHomeScreen();
+          },
+        ),
+        GoRoute(
+          path: RouteNames.editProfile,
+          builder: (context, state) {
+            final user = state.extra as AppUser;
+
+            return EditProfileScreen(
+              user: user,
+            );
           },
         ),
       ],
