@@ -10,29 +10,16 @@ class ChangeUnitRent {
 
   Future<RentRate> call({
     required String unitId,
-    required String tenantId,
     required String ownerId,
     required double amount,
     required DateTime effectiveFrom,
   }) async {
-    final normalizedUnitId =
-    unitId.trim();
-
-    final normalizedTenantId =
-    tenantId.trim();
-
-    final normalizedOwnerId =
-    ownerId.trim();
+    final normalizedUnitId = unitId.trim();
+    final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty) {
       throw ArgumentError(
         'Unit ID cannot be empty.',
-      );
-    }
-
-    if (normalizedTenantId.isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
       );
     }
 
@@ -50,7 +37,6 @@ class ChangeUnitRent {
 
     return _repository.changeUnitRent(
       unitId: normalizedUnitId,
-      tenantId: normalizedTenantId,
       ownerId: normalizedOwnerId,
       amount: amount,
       effectiveFrom: effectiveFrom,

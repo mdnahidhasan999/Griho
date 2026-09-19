@@ -31,6 +31,21 @@ abstract interface class UnitRepository {
     required int floorNumber,
   });
 
+// ============================================================
+// GET ALL UNITS BY FLOOR
+// ============================================================
+//
+// Returns both occupied and vacant units.
+//
+// This is required for Unit-based rent management because
+// vacant units also have rent.
+//
+
+  Future<List<Unit>> getUnitsByFloor({
+    required String propertyId,
+    required int floorNumber,
+  });
+
   // ============================================================
   // CREATE UNIT
   // ============================================================

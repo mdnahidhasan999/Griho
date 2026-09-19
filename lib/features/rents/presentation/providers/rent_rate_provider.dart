@@ -1,12 +1,15 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
+
 import '../../data/datasources/rent_rate_datasource.dart';
 import '../../data/repositories/rent_rate_repository_impl.dart';
+
 import '../../domain/entities/rent_rate.dart';
 import '../../domain/repositories/rent_rate_repository.dart';
+
 import '../../domain/usecases/change_floor_rent.dart';
 import '../../domain/usecases/change_property_rent.dart';
 import '../../domain/usecases/change_unit_rent.dart';
@@ -15,6 +18,7 @@ import '../../domain/usecases/get_current_rent_rate.dart';
 import '../../domain/usecases/get_rent_rate_applicable_at.dart';
 import '../../domain/usecases/get_tenant_rent_rate_history.dart';
 import '../../domain/usecases/get_unit_rent_rate_history.dart';
+
 import '../controllers/rent_rate_controller.dart';
 
 // ============================================================================
@@ -141,31 +145,53 @@ FutureProvider.family<
 // ============================================================================
 // CURRENT RENT RATE — TENANT
 // ============================================================================
+//
+// Tenant flow:
+// Tenant User
+//     ↓
+// Unit
+//     ↓
+// Property
+//     ↓
+// Property Owner
+//     ↓
+// Current Unit RentRate
+//
+// RentRate itself does NOT contain tenantId/tenantUserId.
+//
 
 final currentTenantRentRateProvider =
 FutureProvider.family<RentRate?, String>(
       (ref, unitId) async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      throw StateError(
-        'You must be signed in to view your rent.',
-      );
-    }
-
     final normalizedUnitId = unitId.trim();
 
     if (normalizedUnitId.isEmpty) {
       return null;
     }
 
-    final repository = ref.read(
-      rentRateRepositoryProvider,
+    final unit = await ref.read(
+      unitByIdProvider(normalizedUnitId).future,
     );
 
-    return repository.getCurrentRentRateForTenant(
-      unitId: normalizedUnitId,
-      tenantUserId: user.uid,
+    if (unit == null) {
+      return null;
+    }
+
+    final property = await ref.read(
+      propertyByIdProvider(unit.propertyId).future,
+    );
+
+    if (property == null) {
+      return null;
+    }
+
+    final getCurrentRentRate = ref.read(
+      getCurrentRentRateProvider,
+    );
+
+    return getCurrentRentRate(
+      unitId: unit.id,
+      ownerId: property.ownerId,
     );
   },
 );
@@ -193,18 +219,23 @@ FutureProvider.family<
 // ============================================================================
 // RENT RATE HISTORY — TENANT
 // ============================================================================
+//
+// RentRate history is Unit-based.
+// The tenant's historical rent is obtained through the tenancy/unit
+// relationship rather than a tenantId stored inside RentRate.
+//
 
 final tenantRentRateHistoryProvider =
 FutureProvider.family<
     List<RentRate>,
-    ({String tenantId, String ownerId})>(
+    ({String unitId, String ownerId})>(
       (ref, args) async {
     final getHistory = ref.read(
       getTenantRentRateHistoryProvider,
     );
 
     return getHistory(
-      tenantId: args.tenantId,
+      unitId: args.unitId,
       ownerId: args.ownerId,
     );
   },

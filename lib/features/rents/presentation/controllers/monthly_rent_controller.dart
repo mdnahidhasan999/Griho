@@ -10,7 +10,7 @@ class MonthlyRentController extends StateNotifier<AsyncValue<void>> {
 
   MonthlyRentController({
     required this._createMonthlyRent,
-  })  : super(const AsyncData(null));
+  }) : super(const AsyncData(null));
 
   // ============================================================
   // CREATE MONTHLY RENT

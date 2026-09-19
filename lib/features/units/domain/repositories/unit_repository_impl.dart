@@ -29,6 +29,21 @@ class UnitRepositoryImpl implements UnitRepository {
     return _dataSource.getUnitsByPropertyId(propertyId);
   }
 
+// ============================================================
+// GET ALL UNITS BY FLOOR
+// ============================================================
+
+  @override
+  Future<List<Unit>> getUnitsByFloor({
+    required String propertyId,
+    required int floorNumber,
+  }) {
+    return _dataSource.getUnitsByFloor(
+      propertyId: propertyId,
+      floorNumber: floorNumber,
+    );
+  }
+
   // ============================================================
   // GET OCCUPIED UNITS BY PROPERTY
   // ============================================================
@@ -62,9 +77,7 @@ class UnitRepositoryImpl implements UnitRepository {
   // ============================================================
 
   @override
-  Future<Unit> createUnit(
-      CreateUnitRequest request,
-      ) {
+  Future<Unit> createUnit(CreateUnitRequest request,) {
     return _dataSource.createUnit(
       request: request,
     );
@@ -75,9 +88,7 @@ class UnitRepositoryImpl implements UnitRepository {
   // ============================================================
 
   @override
-  Future<Unit> updateUnit(
-      Unit unit,
-      ) {
+  Future<Unit> updateUnit(Unit unit,) {
     final model = UnitModel(
       id: unit.id,
       propertyId: unit.propertyId,
@@ -98,9 +109,7 @@ class UnitRepositoryImpl implements UnitRepository {
   // ============================================================
 
   @override
-  Future<void> deleteUnit(
-      String unitId,
-      ) {
+  Future<void> deleteUnit(String unitId,) {
     return _dataSource.deleteUnit(unitId);
   }
 

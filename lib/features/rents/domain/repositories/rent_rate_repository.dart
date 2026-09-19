@@ -1,9 +1,10 @@
 import '../entities/create_rent_rate_request.dart';
+import '../entities/rent_adjustment.dart';
 import '../entities/rent_rate.dart';
 
 abstract interface class RentRateRepository {
   // ============================================================
-  // CREATE
+  // CREATE INITIAL RENT RATE
   // ============================================================
 
   Future<RentRate> createInitialRentRate(
@@ -20,15 +21,6 @@ abstract interface class RentRateRepository {
   });
 
   // ============================================================
-  // CURRENT RENT — TENANT
-  // ============================================================
-
-  Future<RentRate?> getCurrentRentRateForTenant({
-    required String unitId,
-    required String tenantUserId,
-  });
-
-  // ============================================================
   // APPLICABLE RENT RATE
   // ============================================================
 
@@ -39,7 +31,7 @@ abstract interface class RentRateRepository {
   });
 
   // ============================================================
-  // UNIT HISTORY
+  // UNIT RENT HISTORY
   // ============================================================
 
   Future<List<RentRate>> getRentRateHistoryByUnitId({
@@ -48,18 +40,11 @@ abstract interface class RentRateRepository {
   });
 
   // ============================================================
-  // TENANT HISTORY
+  // CURRENT RENT RATES BY FLOOR
   // ============================================================
 
-  Future<List<RentRate>> getRentRateHistoryByTenantId({
-    required String tenantId,
-    required String ownerId,
-  });
-
-  // ============================================================
-  // CURRENT RATES BY FLOOR
-  // ============================================================
-
+  /// Returns current rent rates for ALL units on the floor,
+  /// including vacant units.
   Future<List<RentRate>> getCurrentRentRatesByFloor({
     required String propertyId,
     required int floorNumber,
@@ -67,12 +52,26 @@ abstract interface class RentRateRepository {
   });
 
   // ============================================================
+  // CURRENT RENT RATES BY PROPERTY
+  // ============================================================
+
+  /// Returns current rent rates for ALL units in the property,
+  /// including vacant units.
+  Future<List<RentRate>> getCurrentRentRatesByProperty({
+    required String propertyId,
+    required String ownerId,
+  });
+
+  // ============================================================
   // CHANGE UNIT RENT
   // ============================================================
 
+  /// Changes rent for one Unit.
+  ///
+  /// tenantId is intentionally NOT required because rent belongs
+  /// to the Unit, not to the Tenant.
   Future<RentRate> changeUnitRent({
     required String unitId,
-    required String tenantId,
     required String ownerId,
     required double amount,
     required DateTime effectiveFrom,
@@ -82,11 +81,14 @@ abstract interface class RentRateRepository {
   // CHANGE FLOOR RENT
   // ============================================================
 
+  /// Applies the adjustment to every Unit on the floor,
+  /// occupied or vacant.
   Future<List<RentRate>> changeFloorRent({
     required String propertyId,
     required int floorNumber,
     required String ownerId,
     required double amount,
+    required RentAdjustmentType adjustmentType,
     required DateTime effectiveFrom,
   });
 
@@ -94,10 +96,13 @@ abstract interface class RentRateRepository {
   // CHANGE PROPERTY RENT
   // ============================================================
 
+  /// Applies the adjustment to every Unit in the property,
+  /// occupied or vacant.
   Future<List<RentRate>> changePropertyRent({
     required String propertyId,
     required String ownerId,
     required double amount,
+    required RentAdjustmentType adjustmentType,
     required DateTime effectiveFrom,
   });
 }

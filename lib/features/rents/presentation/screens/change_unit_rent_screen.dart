@@ -19,20 +19,17 @@ class ChangeUnitRentScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<ChangeUnitRentScreen>
-  createState() =>
+  ConsumerState<ChangeUnitRentScreen> createState() =>
       _ChangeUnitRentScreenState();
 }
 
-class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
-  final _formKey =
-  GlobalKey<FormState>();
+class _ChangeUnitRentScreenState
+    extends ConsumerState<ChangeUnitRentScreen> {
+  final _formKey = GlobalKey<FormState>();
 
-  final _amountController =
-  TextEditingController();
+  final _amountController = TextEditingController();
 
-  DateTime _effectiveFrom =
-  DateTime.now();
+  DateTime _effectiveFrom = DateTime.now();
 
   bool _isSubmitting = false;
 
@@ -64,25 +61,21 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
         return;
       }
 
-      final property =
-      await ref.read(
+      final property = await ref.read(
         propertyByIdProvider(
           unit.propertyId,
         ).future,
       );
 
-      if (!mounted ||
-          property == null) {
+      if (!mounted || property == null) {
         return;
       }
 
-      final getActiveTenants =
-      ref.read(
+      final getActiveTenants = ref.read(
         getActiveTenantsByUnitIdProvider,
       );
 
-      final tenants =
-      await getActiveTenants(
+      final tenants = await getActiveTenants(
         unit.id,
       );
 
@@ -90,8 +83,7 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
         return;
       }
 
-      final currentRent =
-      await ref.read(
+      final currentRent = await ref.read(
         currentRentRateProvider(
           (
           unitId: unit.id,
@@ -107,16 +99,12 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
       setState(() {
         _unit = unit;
         _property = property;
-        _tenant =
-        tenants.isEmpty
-            ? null
-            : tenants.first;
+        _tenant = tenants.isEmpty ? null : tenants.first;
 
         if (currentRent != null) {
-          _amountController.text =
-              _formatAmount(
-                currentRent.amount,
-              );
+          _amountController.text = _formatAmount(
+            currentRent.amount,
+          );
         }
       });
     } catch (_) {
@@ -132,10 +120,8 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
     }
   }
 
-  Future<void>
-  _selectEffectiveDate() async {
-    final selectedDate =
-    await showDatePicker(
+  Future<void> _selectEffectiveDate() async {
+    final selectedDate = await showDatePicker(
       context: context,
       initialDate: _effectiveFrom,
       firstDate: DateTime.now(),
@@ -144,8 +130,7 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
       ),
     );
 
-    if (!mounted ||
-        selectedDate == null) {
+    if (!mounted || selectedDate == null) {
       return;
     }
 
@@ -163,37 +148,25 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
       return;
     }
 
-    if (!_formKey.currentState!
-        .validate()) {
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
     final unit = _unit;
     final property = _property;
-    final tenant = _tenant;
 
-    if (unit == null ||
-        property == null) {
+    if (unit == null || property == null) {
       _showError(
         'Unit or property information is unavailable.',
       );
       return;
     }
 
-    if (tenant == null) {
-      _showError(
-        'This unit does not have an active tenant.',
-      );
-      return;
-    }
-
-    final amount =
-    double.tryParse(
+    final amount = double.tryParse(
       _amountController.text.trim(),
     );
 
-    if (amount == null ||
-        amount <= 0) {
+    if (amount == null || amount <= 0) {
       _showError(
         'Enter a valid rent amount.',
       );
@@ -204,20 +177,15 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
       _isSubmitting = true;
     });
 
-    final controller =
-    ref.read(
-      rentRateControllerProvider
-          .notifier,
+    final controller = ref.read(
+      rentRateControllerProvider.notifier,
     );
 
-    final result =
-    await controller.changeUnitRent(
+    final result = await controller.changeUnitRent(
       unitId: unit.id,
-      tenantId: tenant.id,
       ownerId: property.ownerId,
       amount: amount,
-      effectiveFrom:
-      _effectiveFrom,
+      effectiveFrom: _effectiveFrom,
     );
 
     if (!mounted) {
@@ -233,10 +201,12 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
         rentRateControllerProvider,
       );
 
-      final error =
-      state.whenOrNull(
-        error: (error,
-            stackTrace,) => error.toString(),
+      final error = state.whenOrNull(
+        error: (
+            error,
+            stackTrace,
+            ) =>
+            error.toString(),
       );
 
       _showError(
@@ -269,7 +239,7 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
     }
   }
 
-  void _showError(String message,) {
+  void _showError(String message) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(
@@ -279,18 +249,16 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
     );
   }
 
-  String _formatAmount(double amount,) {
-    if (amount ==
-        amount.roundToDouble()) {
+  String _formatAmount(double amount) {
+    if (amount == amount.roundToDouble()) {
       return amount.toStringAsFixed(0);
     }
 
     return amount.toStringAsFixed(2);
   }
 
-  String _formatDate(DateTime dateTime,) {
-    final local =
-    dateTime.toLocal();
+  String _formatDate(DateTime dateTime) {
+    final local = dateTime.toLocal();
 
     return '${local.day.toString().padLeft(2, '0')}/'
         '${local.month.toString().padLeft(2, '0')}/'
@@ -298,13 +266,12 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
   }
 
   @override
-  Widget build(BuildContext context,) {
+  Widget build(BuildContext context) {
     final unit = _unit;
     final property = _property;
     final tenant = _tenant;
 
-    if (unit == null ||
-        property == null) {
+    if (unit == null || property == null) {
       return Scaffold(
         appBar: AppBar(
           title: const Text(
@@ -312,8 +279,7 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
           ),
         ),
         body: const Center(
-          child:
-          CircularProgressIndicator(),
+          child: CircularProgressIndicator(),
         ),
       );
     }
@@ -327,27 +293,18 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding:
-          const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
           children: [
             Card(
               child: Padding(
-                padding:
-                const EdgeInsets.all(
-                  20,
-                ),
+                padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment:
-                  CrossAxisAlignment
-                      .start,
+                  CrossAxisAlignment.start,
                   children: [
                     Text(
                       unit.unitNumber,
-                      style:
-                      Theme
-                          .of(
-                        context,
-                      )
+                      style: Theme.of(context)
                           .textTheme
                           .headlineSmall,
                     ),
@@ -356,11 +313,7 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
                     ),
                     Text(
                       property.name,
-                      style:
-                      Theme
-                          .of(
-                        context,
-                      )
+                      style: Theme.of(context)
                           .textTheme
                           .bodyLarge,
                     ),
@@ -370,38 +323,28 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
                     Text(
                       'Floor ${unit.floorNumber}',
                     ),
-                    if (tenant != null) ...[
-                      const SizedBox(
-                        height: 16,
-                      ),
-                      const Divider(),
-                      const SizedBox(
-                        height: 16,
-                      ),
-                      Text(
-                        'Tenant',
-                        style:
-                        Theme
-                            .of(
-                          context,
-                        )
-                            .textTheme
-                            .labelMedium,
-                      ),
-                      const SizedBox(
-                        height: 4,
-                      ),
-                      Text(
-                        tenant.name,
-                        style:
-                        Theme
-                            .of(
-                          context,
-                        )
-                            .textTheme
-                            .titleMedium,
-                      ),
-                    ],
+                    const SizedBox(
+                      height: 16,
+                    ),
+                    const Divider(),
+                    const SizedBox(
+                      height: 16,
+                    ),
+                    Text(
+                      'Current Tenant',
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelMedium,
+                    ),
+                    const SizedBox(
+                      height: 4,
+                    ),
+                    Text(
+                      tenant?.name ?? 'Vacant',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium,
+                    ),
                   ],
                 ),
               ),
@@ -412,34 +355,26 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
             ),
 
             TextFormField(
-              controller:
-              _amountController,
+              controller: _amountController,
               keyboardType:
-              const TextInputType
-                  .numberWithOptions(
+              const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration:
-              const InputDecoration(
-                labelText:
-                'New Monthly Rent',
+              decoration: const InputDecoration(
+                labelText: 'New Monthly Rent',
                 prefixText: '৳ ',
-                border:
-                OutlineInputBorder(),
+                border: OutlineInputBorder(),
               ),
               validator: (value) {
-                final text =
-                    value?.trim() ?? '';
+                final text = value?.trim() ?? '';
 
                 if (text.isEmpty) {
                   return 'Enter the new rent amount.';
                 }
 
-                final amount =
-                double.tryParse(text);
+                final amount = double.tryParse(text);
 
-                if (amount == null ||
-                    amount <= 0) {
+                if (amount == null || amount <= 0) {
                   return 'Enter a valid amount.';
                 }
 
@@ -454,8 +389,7 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
             Card(
               child: ListTile(
                 leading: const Icon(
-                  Icons
-                      .calendar_today_outlined,
+                  Icons.calendar_today_outlined,
                 ),
                 title: const Text(
                   'Effective From',
@@ -465,8 +399,7 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
                     _effectiveFrom,
                   ),
                 ),
-                trailing:
-                const Icon(
+                trailing: const Icon(
                   Icons.chevron_right,
                 ),
                 onTap: _isSubmitting
@@ -489,12 +422,9 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
 
             SizedBox(
               width: double.infinity,
-              child:
-              FilledButton(
+              child: FilledButton(
                 onPressed:
-                _isSubmitting
-                    ? null
-                    : _submit,
+                _isSubmitting ? null : _submit,
                 child: _isSubmitting
                     ? const SizedBox(
                   width: 22,

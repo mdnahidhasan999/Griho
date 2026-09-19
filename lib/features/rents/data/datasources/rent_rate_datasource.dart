@@ -1,16 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../domain/entities/rent_adjustment.dart';
 import '../../domain/entities/rent_rate.dart';
 import '../models/rent_rate_model.dart';
 
 class RentRateDataSource {
   final FirebaseFirestore _firestore;
 
-  RentRateDataSource({FirebaseFirestore? firestore})
-      : _firestore =
+  RentRateDataSource({
+    FirebaseFirestore? firestore,
+  }) : _firestore =
       firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'rentRates';
+
+  static const int _unitsPerBatch = 2;
 
   CollectionReference<Map<String, dynamic>> get _rentRates =>
       _firestore.collection(_collectionName);
@@ -22,35 +26,25 @@ class RentRateDataSource {
   Future<RentRateModel> createInitialRentRate({
     required RentRateModel rentRate,
   }) async {
-    if (rentRate.ownerId
-        .trim()
-        .isEmpty) {
+    final ownerId = rentRate.ownerId.trim();
+    final propertyId = rentRate.propertyId.trim();
+    final unitId = rentRate.unitId.trim();
+
+    if (ownerId.isEmpty) {
       throw ArgumentError(
         'Owner ID cannot be empty.',
       );
     }
 
-    if (rentRate.propertyId
-        .trim()
-        .isEmpty) {
+    if (propertyId.isEmpty) {
       throw ArgumentError(
         'Property ID cannot be empty.',
       );
     }
 
-    if (rentRate.unitId
-        .trim()
-        .isEmpty) {
+    if (unitId.isEmpty) {
       throw ArgumentError(
         'Unit ID cannot be empty.',
-      );
-    }
-
-    if (rentRate.tenantId
-        .trim()
-        .isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
       );
     }
 
@@ -84,21 +78,30 @@ class RentRateDataSource {
       );
     }
 
+    final existingRate = await getRentRateApplicableAt(
+      unitId: unitId,
+      ownerId: ownerId,
+      effectiveAt: rentRate.effectiveFrom,
+    );
+
+    if (existingRate != null) {
+      throw StateError(
+        'A rent rate already exists for this unit at the specified effective date.',
+      );
+    }
+
     final document = _rentRates.doc();
 
     final initialRentRate = RentRateModel(
       id: document.id,
-      ownerId: rentRate.ownerId,
-      propertyId: rentRate.propertyId,
-      unitId: rentRate.unitId,
-      tenantId: rentRate.tenantId,
-      tenantUserId: rentRate.tenantUserId,
+      ownerId: ownerId,
+      propertyId: propertyId,
+      unitId: unitId,
       amount: rentRate.amount,
       effectiveFrom: rentRate.effectiveFrom,
       effectiveTo: null,
-      source: rentRate.source,
-      previousRentRateId:
-      rentRate.previousRentRateId,
+      source: RentRateSource.initial,
+      previousRentRateId: null,
       nextRentRateId: null,
       createdAt: rentRate.createdAt,
       updatedAt: rentRate.updatedAt,
@@ -124,145 +127,39 @@ class RentRateDataSource {
   // ============================================================
   // GET CURRENT RENT RATE — OWNER
   // ============================================================
-  //
-  // IMPORTANT:
-  //
-  // A future scheduled rate must NOT be returned as the current
-  // rate.
-  //
-  // Example:
-  //
-  // Today:              10 September
-  //
-  // Old rate:
-  // effectiveFrom:      01 January
-  // effectiveTo:        30 September
-  //
-  // Future rate:
-  // effectiveFrom:      01 October
-  // effectiveTo:        null
-  //
-  // On 10 September, the old rate is applicable.
-  // The future rate must not be returned here.
-  //
-  // Therefore we require:
-  //
-  // effectiveFrom <= now
-  // AND
-  // effectiveTo == null
-  //
-  // ============================================================
 
   Future<RentRateModel?> getCurrentRentRate({
     required String unitId,
     required String ownerId,
   }) async {
-    final normalizedUnitId =
-    unitId.trim();
-
-    final normalizedOwnerId =
-    ownerId.trim();
+    final normalizedUnitId = unitId.trim();
+    final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty ||
         normalizedOwnerId.isEmpty) {
       return null;
     }
 
-    final now = Timestamp.fromDate(
-      DateTime.now(),
-    );
-
-    final snapshot = await _rentRates
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'unitId',
-      isEqualTo: normalizedUnitId,
-    )
-        .where(
-      'effectiveFrom',
-      isLessThanOrEqualTo: now,
-    )
-        .where(
-      'effectiveTo',
-      isNull: true,
-    )
-        .orderBy(
-      'effectiveFrom',
-      descending: true,
-    )
-        .limit(1)
-        .get();
-
-    if (snapshot.docs.isEmpty) {
-      return null;
-    }
-
-    return RentRateModel.fromFirestore(
-      snapshot.docs.first,
-    );
-  }
-
-  // ============================================================
-  // GET CURRENT RENT RATE — TENANT
-  // ============================================================
-
-  Future<RentRateModel?> getCurrentRentRateForTenant({
-    required String unitId,
-    required String tenantUserId,
-  }) async {
-    final normalizedUnitId =
-    unitId.trim();
-
-    final normalizedTenantUserId =
-    tenantUserId.trim();
-
-    if (normalizedUnitId.isEmpty ||
-        normalizedTenantUserId.isEmpty) {
-      return null;
-    }
-
-    final now = Timestamp.fromDate(
-      DateTime.now(),
-    );
-
-    final snapshot = await _rentRates
-        .where(
-      'tenantUserId',
-      isEqualTo: normalizedTenantUserId,
-    )
-        .where(
-      'unitId',
-      isEqualTo: normalizedUnitId,
-    )
-        .where(
-      'effectiveFrom',
-      isLessThanOrEqualTo: now,
-    )
-        .where(
-      'effectiveTo',
-      isNull: true,
-    )
-        .orderBy(
-      'effectiveFrom',
-      descending: true,
-    )
-        .limit(1)
-        .get();
-
-    if (snapshot.docs.isEmpty) {
-      return null;
-    }
-
-    return RentRateModel.fromFirestore(
-      snapshot.docs.first,
+    return getRentRateApplicableAt(
+      unitId: normalizedUnitId,
+      ownerId: normalizedOwnerId,
+      effectiveAt: DateTime.now(),
     );
   }
 
   // ============================================================
   // GET APPLICABLE RENT RATE — OWNER
+  // ============================================================
+  //
+  // Rent interval:
+  //
+  // [effectiveFrom, effectiveTo)
+  //
+  // We intentionally read all rates whose effectiveFrom is
+  // before/equal to the requested date and find the first rate
+  // whose interval actually contains that date.
+  //
+  // This correctly handles future scheduled rent changes.
   // ============================================================
 
   Future<RentRateModel?> getRentRateApplicableAt({
@@ -270,16 +167,17 @@ class RentRateDataSource {
     required String ownerId,
     required DateTime effectiveAt,
   }) async {
-    final normalizedUnitId =
-    unitId.trim();
-
-    final normalizedOwnerId =
-    ownerId.trim();
+    final normalizedUnitId = unitId.trim();
+    final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty ||
         normalizedOwnerId.isEmpty) {
       return null;
     }
+
+    final timestamp = Timestamp.fromDate(
+      effectiveAt,
+    );
 
     final snapshot = await _rentRates
         .where(
@@ -292,51 +190,37 @@ class RentRateDataSource {
     )
         .where(
       'effectiveFrom',
-      isLessThanOrEqualTo:
-      Timestamp.fromDate(
-        effectiveAt,
-      ),
+      isLessThanOrEqualTo: timestamp,
     )
         .orderBy(
       'effectiveFrom',
       descending: true,
     )
-        .limit(1)
         .get();
 
-    if (snapshot.docs.isEmpty) {
-      return null;
+    for (final document in snapshot.docs) {
+      final rate = RentRateModel.fromFirestore(
+        document,
+      );
+
+      if (rate.isApplicableAt(effectiveAt)) {
+        return rate;
+      }
     }
 
-    final rate =
-    RentRateModel.fromFirestore(
-      snapshot.docs.first,
-    );
-
-    if (rate.effectiveTo != null &&
-        effectiveAt.isAfter(
-          rate.effectiveTo!,
-        )) {
-      return null;
-    }
-
-    return rate;
+    return null;
   }
 
   // ============================================================
   // UNIT HISTORY — OWNER
   // ============================================================
 
-  Future<List<RentRateModel>>
-  getRentRateHistoryByUnitId({
+  Future<List<RentRateModel>> getRentRateHistoryByUnitId({
     required String unitId,
     required String ownerId,
   }) async {
-    final normalizedUnitId =
-    unitId.trim();
-
-    final normalizedOwnerId =
-    ownerId.trim();
+    final normalizedUnitId = unitId.trim();
+    final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty ||
         normalizedOwnerId.isEmpty) {
@@ -366,85 +250,29 @@ class RentRateDataSource {
   }
 
   // ============================================================
-  // TENANT HISTORY — OWNER
-  // ============================================================
-
-  Future<List<RentRateModel>>
-  getRentRateHistoryByTenantId({
-    required String tenantId,
-    required String ownerId,
-  }) async {
-    final normalizedTenantId =
-    tenantId.trim();
-
-    final normalizedOwnerId =
-    ownerId.trim();
-
-    if (normalizedTenantId.isEmpty ||
-        normalizedOwnerId.isEmpty) {
-      return [];
-    }
-
-    final snapshot = await _rentRates
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'tenantId',
-      isEqualTo: normalizedTenantId,
-    )
-        .orderBy(
-      'effectiveFrom',
-      descending: true,
-    )
-        .get();
-
-    return snapshot.docs
-        .map(
-      RentRateModel.fromFirestore,
-    )
-        .toList();
-  }
-
-  // ============================================================
-  // CURRENT RATES BY FLOOR — OWNER
+  // CURRENT RATES BY PROPERTY
   // ============================================================
   //
-  // NOTE:
+  // This returns all currently applicable Unit rent rates in a
+  // property, including VACANT units.
   //
-  // floorNumber is currently retained in the method signature
-  // for compatibility with the existing architecture.
-  //
-  // The rentRates collection does not contain floorNumber.
-  // Therefore this query currently returns current rates for
-  // the whole property.
-  //
-  // Proper floor filtering should be done by resolving units
-  // belonging to the requested floor first.
-  //
+  // Property/Floor rent adjustment must operate on Units, not
+  // tenants.
   // ============================================================
 
-  Future<List<RentRateModel>>
-  getCurrentRentRatesByFloor({
+  Future<List<RentRateModel>> getCurrentRentRatesByProperty({
     required String propertyId,
-    required int floorNumber,
     required String ownerId,
   }) async {
-    final normalizedPropertyId =
-    propertyId.trim();
-
-    final normalizedOwnerId =
-    ownerId.trim();
+    final normalizedPropertyId = propertyId.trim();
+    final normalizedOwnerId = ownerId.trim();
 
     if (normalizedPropertyId.isEmpty ||
         normalizedOwnerId.isEmpty) {
       return [];
     }
 
-    final now = Timestamp.fromDate(
-      DateTime.now(),
-    );
+    final now = DateTime.now();
 
     final snapshot = await _rentRates
         .where(
@@ -457,50 +285,106 @@ class RentRateDataSource {
     )
         .where(
       'effectiveFrom',
-      isLessThanOrEqualTo: now,
+      isLessThanOrEqualTo: Timestamp.fromDate(now),
     )
-        .where(
-      'effectiveTo',
-      isNull: true,
+        .orderBy(
+      'effectiveFrom',
+      descending: true,
     )
         .get();
 
-    return snapshot.docs
-        .map(
-      RentRateModel.fromFirestore,
+    return _getLatestApplicableRates(
+      documents: snapshot.docs,
+      effectiveAt: now,
+    );
+  }
+
+  // ============================================================
+  // CURRENT RATES BY FLOOR
+  // ============================================================
+  //
+  // RentRate itself does not store floorNumber.
+  //
+  // Therefore this datasource method cannot reliably filter by
+  // floor unless the Unit layer supplies the relevant Unit IDs.
+  //
+  // It is kept for compatibility with the existing architecture.
+  // The Repository should resolve Units by floor and then obtain
+  // their current rent rates individually.
+  // ============================================================
+
+  Future<List<RentRateModel>> getCurrentRentRatesByFloor({
+    required String propertyId,
+    required int floorNumber,
+    required String ownerId,
+  }) async {
+    final normalizedPropertyId = propertyId.trim();
+    final normalizedOwnerId = ownerId.trim();
+
+    if (normalizedPropertyId.isEmpty ||
+        normalizedOwnerId.isEmpty) {
+      return [];
+    }
+
+    final now = DateTime.now();
+
+    final snapshot = await _rentRates
+        .where(
+      'ownerId',
+      isEqualTo: normalizedOwnerId,
     )
-        .toList();
+        .where(
+      'propertyId',
+      isEqualTo: normalizedPropertyId,
+    )
+        .where(
+      'effectiveFrom',
+      isLessThanOrEqualTo: Timestamp.fromDate(now),
+    )
+        .orderBy(
+      'effectiveFrom',
+      descending: true,
+    )
+        .get();
+
+    return _getLatestApplicableRates(
+      documents: snapshot.docs,
+      effectiveAt: now,
+    );
   }
 
   // ============================================================
   // CHANGE UNIT RENT
   // ============================================================
+  //
+  // IMPORTANT:
+  //
+  // There is NO tenantId here.
+  //
+  // Rent belongs to the Unit.
+  //
+  // This works for:
+  //
+  // 1. Occupied unit
+  // 2. Vacant unit
+  // 3. Unit receiving a new tenant
+  //
+  // A new tenant may have a different agreed rent.
+  // That new rent will simply become a new RentRate for the Unit.
+  // ============================================================
 
   Future<RentRateModel> changeUnitRent({
     required String unitId,
-    required String tenantId,
     required String ownerId,
     required double amount,
     required DateTime effectiveFrom,
   }) async {
-    final normalizedUnitId =
-    unitId.trim();
-
-    final normalizedTenantId =
-    tenantId.trim();
-
-    final normalizedOwnerId =
-    ownerId.trim();
+    final normalizedUnitId = unitId.trim();
+    final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty) {
       throw ArgumentError(
         'Unit ID cannot be empty.',
-      );
-    }
-
-    if (normalizedTenantId.isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
       );
     }
 
@@ -516,22 +400,14 @@ class RentRateDataSource {
       );
     }
 
-    final currentRate =
-    await getCurrentRentRate(
+    final currentRate = await getCurrentRentRate(
       unitId: normalizedUnitId,
       ownerId: normalizedOwnerId,
     );
 
     if (currentRate == null) {
       throw StateError(
-        'No current rent rate exists.',
-      );
-    }
-
-    if (currentRate.tenantId !=
-        normalizedTenantId) {
-      throw StateError(
-        'The current rent rate does not belong to this tenant.',
+        'No current rent rate exists for this unit.',
       );
     }
 
@@ -543,8 +419,13 @@ class RentRateDataSource {
       );
     }
 
-    final newDocument =
-    _rentRates.doc();
+    await _ensureNoFutureRateConflict(
+      unitId: normalizedUnitId,
+      ownerId: normalizedOwnerId,
+      effectiveFrom: effectiveFrom,
+    );
+
+    final newDocument = _rentRates.doc();
 
     final now = DateTime.now();
 
@@ -553,34 +434,23 @@ class RentRateDataSource {
       ownerId: currentRate.ownerId,
       propertyId: currentRate.propertyId,
       unitId: currentRate.unitId,
-      tenantId: currentRate.tenantId,
-      tenantUserId:
-      currentRate.tenantUserId,
       amount: amount,
       effectiveFrom: effectiveFrom,
       effectiveTo: null,
       source: RentRateSource.unit,
-      previousRentRateId:
-      currentRate.id,
+      previousRentRateId: currentRate.id,
       nextRentRateId: null,
       createdAt: now,
       updatedAt: now,
     );
 
-    final oldEffectiveTo =
-    effectiveFrom.subtract(
-      const Duration(seconds: 1),
-    );
-
     await _firestore.runTransaction(
           (transaction) async {
-        final oldRateReference =
-        _rentRates.doc(
+        final oldRateReference = _rentRates.doc(
           currentRate.id,
         );
 
-        final freshOldSnapshot =
-        await transaction.get(
+        final freshOldSnapshot = await transaction.get(
           oldRateReference,
         );
 
@@ -590,22 +460,15 @@ class RentRateDataSource {
           );
         }
 
-        final freshOld =
-        RentRateModel.fromFirestore(
+        final freshOld = RentRateModel.fromFirestore(
           freshOldSnapshot,
         );
 
-        if (freshOld.effectiveTo !=
-            null) {
+        if (!freshOld.isApplicableAt(
+          DateTime.now(),
+        )) {
           throw StateError(
-            'The current rent rate has already been closed.',
-          );
-        }
-
-        if (freshOld.tenantId !=
-            normalizedTenantId) {
-          throw StateError(
-            'Tenant changed while updating rent.',
+            'The current rent rate is no longer applicable.',
           );
         }
 
@@ -617,31 +480,16 @@ class RentRateDataSource {
           );
         }
 
-        // --------------------------------------------------------
-        // CLOSE OLD RENT RATE
-        //
-        // The forward link allows Firestore Rules to verify that
-        // this old rate is being closed specifically because of
-        // the newly-created rate in the same transaction.
-        // --------------------------------------------------------
-
         transaction.update(
           oldRateReference,
           {
-            'effectiveTo':
-            Timestamp.fromDate(
-              oldEffectiveTo,
+            'effectiveTo': Timestamp.fromDate(
+              effectiveFrom,
             ),
-            'nextRentRateId':
-            newDocument.id,
-            'updatedAt':
-            FieldValue.serverTimestamp(),
+            'nextRentRateId': newDocument.id,
+            'updatedAt': FieldValue.serverTimestamp(),
           },
         );
-
-        // --------------------------------------------------------
-        // CREATE NEW RENT RATE
-        // --------------------------------------------------------
 
         transaction.set(
           newDocument,
@@ -660,11 +508,13 @@ class RentRateDataSource {
   Future<List<RentRateModel>> changeFloorRent({
     required List<RentRateModel> currentRates,
     required double amount,
+    required RentAdjustmentType adjustmentType,
     required DateTime effectiveFrom,
   }) async {
     return _changeBulkRent(
       currentRates: currentRates,
       amount: amount,
+      adjustmentType: adjustmentType,
       effectiveFrom: effectiveFrom,
       source: RentRateSource.floor,
     );
@@ -677,23 +527,44 @@ class RentRateDataSource {
   Future<List<RentRateModel>> changePropertyRent({
     required List<RentRateModel> currentRates,
     required double amount,
+    required RentAdjustmentType adjustmentType,
     required DateTime effectiveFrom,
   }) async {
     return _changeBulkRent(
       currentRates: currentRates,
       amount: amount,
+      adjustmentType: adjustmentType,
       effectiveFrom: effectiveFrom,
       source: RentRateSource.property,
     );
   }
 
   // ============================================================
-  // BULK RENT CHANGE
+  // BULK RENT ADJUSTMENT
+  // ============================================================
+  //
+  // Every supplied RentRate represents a UNIT.
+  //
+  // The Repository is responsible for supplying ALL units,
+  // including vacant units.
+  //
+  // Example:
+  //
+  // Property has 10 units:
+  //   occupied = 6
+  //   vacant   = 4
+  //
+  // Property rent increase must update:
+  //   10 / 10 units
+  //
+  // NOT:
+  //   6 / 6 occupied units.
   // ============================================================
 
   Future<List<RentRateModel>> _changeBulkRent({
     required List<RentRateModel> currentRates,
     required double amount,
+    required RentAdjustmentType adjustmentType,
     required DateTime effectiveFrom,
     required RentRateSource source,
   }) async {
@@ -703,22 +574,30 @@ class RentRateDataSource {
 
     if (amount <= 0) {
       throw ArgumentError(
-        'Rent amount must be greater than zero.',
+        'Rent adjustment amount must be greater than zero.',
       );
     }
+
+    final adjustment = RentAdjustment(
+      type: adjustmentType,
+      amount: amount,
+    );
 
     final unitIds = <String>{};
 
     for (final rate in currentRates) {
       if (!unitIds.add(rate.unitId)) {
         throw StateError(
-          'Duplicate current rent rate found for a unit.',
+          'Duplicate current rent rate found for unit ${rate.unitId}.',
         );
       }
 
-      if (rate.effectiveTo != null) {
+      if (!rate.isApplicableAt(
+        DateTime.now(),
+      )) {
         throw StateError(
-          'All supplied rent rates must be current rates.',
+          'Supplied rent rate for unit ${rate
+              .unitId} is not currently applicable.',
         );
       }
 
@@ -731,12 +610,22 @@ class RentRateDataSource {
       }
     }
 
-    final newRates =
-    <RentRateModel>[];
+    for (final rate in currentRates) {
+      await _ensureNoFutureRateConflict(
+        unitId: rate.unitId,
+        ownerId: rate.ownerId,
+        effectiveFrom: effectiveFrom,
+      );
+    }
+
+    final newRates = <RentRateModel>[];
 
     for (final currentRate in currentRates) {
-      final document =
-      _rentRates.doc();
+      final newAmount = adjustment.applyTo(
+        currentRate.amount,
+      );
+
+      final document = _rentRates.doc();
 
       final now = DateTime.now();
 
@@ -744,19 +633,13 @@ class RentRateDataSource {
         RentRateModel(
           id: document.id,
           ownerId: currentRate.ownerId,
-          propertyId:
-          currentRate.propertyId,
+          propertyId: currentRate.propertyId,
           unitId: currentRate.unitId,
-          tenantId: currentRate.tenantId,
-          tenantUserId:
-          currentRate.tenantUserId,
-          amount: amount,
-          effectiveFrom:
-          effectiveFrom,
+          amount: newAmount,
+          effectiveFrom: effectiveFrom,
           effectiveTo: null,
           source: source,
-          previousRentRateId:
-          currentRate.id,
+          previousRentRateId: currentRate.id,
           nextRentRateId: null,
           createdAt: now,
           updatedAt: now,
@@ -765,84 +648,59 @@ class RentRateDataSource {
     }
 
     // ==========================================================
-    // FIRESTORE SECURITY-RULE ACCESS LIMIT
-    //
-    // We intentionally process only 2 units per batch.
-    //
-    // Each unit performs:
-    //
-    //   1. old rent-rate update
-    //   2. new rent-rate create
-    //
-    // The rent-rate security rules use multiple get/getAfter
-    // operations.
-    //
-    // Two units keeps the expected access-call count safely
-    // below Firestore's 20-call limit for the atomic batch.
-    //
+    // FIRESTORE BATCHES
     // ==========================================================
-
-    const unitsPerBatch = 2;
+    //
+    // Each unit requires:
+    //
+    // 1 update old RentRate
+    // 1 create new RentRate
+    //
+    // Keep the existing conservative two-unit batch size.
+    // ==========================================================
 
     for (
     var start = 0;
     start < currentRates.length;
-    start += unitsPerBatch
+    start += _unitsPerBatch
     ) {
-      final end =
-      (start + unitsPerBatch)
+      final end = (start + _unitsPerBatch)
           .clamp(
         0,
         currentRates.length,
       );
 
-      final batch =
-      _firestore.batch();
+      final batch = _firestore.batch();
 
       for (
       var index = start;
       index < end;
       index++
       ) {
-        final currentRate =
-        currentRates[index];
+        final currentRate = currentRates[index];
+        final newRate = newRates[index];
 
-        final newRate =
-        newRates[index];
-
-        final oldEffectiveTo =
-        effectiveFrom.subtract(
-          const Duration(seconds: 1),
+        final oldReference = _rentRates.doc(
+          currentRate.id,
         );
 
-        // ------------------------------------------------------
-        // CLOSE OLD RATE
-        // ------------------------------------------------------
+        final newReference = _rentRates.doc(
+          newRate.id,
+        );
 
         batch.update(
-          _rentRates.doc(
-            currentRate.id,
-          ),
+          oldReference,
           {
-            'effectiveTo':
-            Timestamp.fromDate(
-              oldEffectiveTo,
+            'effectiveTo': Timestamp.fromDate(
+              effectiveFrom,
             ),
-            'nextRentRateId':
-            newRate.id,
-            'updatedAt':
-            FieldValue.serverTimestamp(),
+            'nextRentRateId': newRate.id,
+            'updatedAt': FieldValue.serverTimestamp(),
           },
         );
 
-        // ------------------------------------------------------
-        // CREATE NEW RATE
-        // ------------------------------------------------------
-
         batch.set(
-          _rentRates.doc(
-            newRate.id,
-          ),
+          newReference,
           newRate.toFirestore(),
         );
       }
@@ -851,5 +709,74 @@ class RentRateDataSource {
     }
 
     return newRates;
+  }
+
+  // ============================================================
+  // ENSURE NO FUTURE RATE CONFLICT
+  // ============================================================
+
+  Future<void> _ensureNoFutureRateConflict({
+    required String unitId,
+    required String ownerId,
+    required DateTime effectiveFrom,
+  }) async {
+    final snapshot = await _rentRates
+        .where(
+      'ownerId',
+      isEqualTo: ownerId,
+    )
+        .where(
+      'unitId',
+      isEqualTo: unitId,
+    )
+        .where(
+      'effectiveFrom',
+      isGreaterThanOrEqualTo: Timestamp.fromDate(
+        effectiveFrom,
+      ),
+    )
+        .orderBy(
+      'effectiveFrom',
+      descending: false,
+    )
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isNotEmpty) {
+      throw StateError(
+        'A future rent rate is already scheduled for unit $unitId.',
+      );
+    }
+  }
+
+  // ============================================================
+  // GET LATEST APPLICABLE RATES
+  // ============================================================
+
+  List<RentRateModel> _getLatestApplicableRates({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>>
+    documents,
+    required DateTime effectiveAt,
+  }) {
+    final latestByUnit = <String, RentRateModel>{};
+
+    for (final document in documents) {
+      final rate = RentRateModel.fromFirestore(
+        document,
+      );
+
+      if (!rate.isApplicableAt(
+        effectiveAt,
+      )) {
+        continue;
+      }
+
+      latestByUnit.putIfAbsent(
+        rate.unitId,
+            () => rate,
+      );
+    }
+
+    return latestByUnit.values.toList();
   }
 }

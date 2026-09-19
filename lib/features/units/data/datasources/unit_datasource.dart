@@ -63,6 +63,58 @@ class UnitDataSource {
         .toList();
   }
 
+
+
+
+// ============================================================
+// GET ALL UNITS BY FLOOR
+// ============================================================
+//
+// Returns both occupied and vacant units.
+//
+// This method is intentionally different from
+// getOccupiedUnitsByFloor().
+//
+// Rent belongs to the Unit, so floor-level rent adjustments
+// must include vacant units as well.
+//
+
+  Future<List<UnitModel>> getUnitsByFloor({
+    required String propertyId,
+    required int floorNumber,
+  }) async {
+    final normalizedPropertyId = propertyId.trim();
+
+    if (normalizedPropertyId.isEmpty) {
+      throw ArgumentError(
+        'Property ID cannot be empty.',
+      );
+    }
+
+    if (floorNumber < 1) {
+      throw ArgumentError(
+        'Floor number must be at least 1.',
+      );
+    }
+
+    final snapshot = await _units
+        .where(
+      'propertyId',
+      isEqualTo: normalizedPropertyId,
+    )
+        .where(
+      'floorNumber',
+      isEqualTo: floorNumber,
+    )
+        .orderBy('unitNumber')
+        .get();
+
+    return snapshot.docs
+        .map(UnitModel.fromFirestore)
+        .toList();
+  }
+
+
   // ============================================================
   // GET OCCUPIED UNITS BY PROPERTY
   // ============================================================

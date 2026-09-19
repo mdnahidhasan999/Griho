@@ -28,8 +28,7 @@ class MonthlyRentScreen extends ConsumerStatefulWidget {
       _MonthlyRentScreenState();
 }
 
-class _MonthlyRentScreenState
-    extends ConsumerState<MonthlyRentScreen> {
+class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
   Unit? _unit;
   Property? _property;
   Tenant? _tenant;
@@ -254,6 +253,28 @@ class _MonthlyRentScreenState
       return;
     }
 
+    if (tenant.userId == null ||
+        tenant.userId!.trim().isEmpty) {
+      _showError(
+        'The tenant account is not linked.',
+      );
+      return;
+    }
+
+    if (_currentMonthlyRent != null) {
+      _showError(
+        'Monthly rent already exists for this billing period.',
+      );
+      return;
+    }
+
+    if (_dueDate.isBefore(_billingPeriodStart)) {
+      _showError(
+        'Due date cannot be before the billing period starts.',
+      );
+      return;
+    }
+
     final rentRate = await ref.read(
       currentRentRateProvider(
         (
@@ -270,35 +291,6 @@ class _MonthlyRentScreenState
     if (rentRate == null) {
       _showError(
         'No current rent rate is configured for this unit.',
-      );
-      return;
-    }
-
-    if (_currentMonthlyRent != null) {
-      _showError(
-        'Monthly rent already exists for this billing period.',
-      );
-      return;
-    }
-
-    if (tenant.userId == null ||
-        tenant.userId!.trim().isEmpty) {
-      _showError(
-        'The tenant account is not linked.',
-      );
-      return;
-    }
-
-    if (rentRate.tenantId != tenant.id) {
-      _showError(
-        'The current rent rate does not belong to the active tenant.',
-      );
-      return;
-    }
-
-    if (_dueDate.isBefore(_billingPeriodStart)) {
-      _showError(
-        'Due date cannot be before the billing period starts.',
       );
       return;
     }
@@ -378,15 +370,13 @@ class _MonthlyRentScreenState
       ),
     );
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Monthly rent created successfully.',
-          ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Monthly rent created successfully.',
         ),
-      );
-    }
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -431,7 +421,9 @@ class _MonthlyRentScreenState
           title: const Text('Monthly Rent'),
         ),
         body: const Center(
-          child: Text('Required information not found.'),
+          child: Text(
+            'Required information not found.',
+          ),
         ),
       );
     }
@@ -513,21 +505,24 @@ class _UnitHeader extends StatelessWidget {
             const SizedBox(height: 14),
             Text(
               unit.unitNumber,
-              style: Theme.of(context)
+              style: Theme
+                  .of(context)
                   .textTheme
                   .headlineSmall,
             ),
             const SizedBox(height: 6),
             Text(
               property.name,
-              style: Theme.of(context)
+              style: Theme
+                  .of(context)
                   .textTheme
                   .bodyLarge,
             ),
             const SizedBox(height: 4),
             Text(
               'Floor ${unit.floorNumber}',
-              style: Theme.of(context)
+              style: Theme
+                  .of(context)
                   .textTheme
                   .bodyMedium,
             ),
@@ -591,15 +586,15 @@ class _ExistingMonthlyRentCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'Monthly Rent',
-                    style: Theme.of(context)
+                    style: Theme
+                        .of(context)
                         .textTheme
                         .titleMedium,
                   ),
@@ -614,7 +609,8 @@ class _ExistingMonthlyRentCard extends StatelessWidget {
 
             Text(
               '৳ ${_formatAmount(monthlyRent.amount)}',
-              style: Theme.of(context)
+              style: Theme
+                  .of(context)
                   .textTheme
                   .headlineMedium
                   ?.copyWith(
@@ -672,23 +668,25 @@ class _CreateMonthlyRentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasTenant = tenant != null;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Create Monthly Rent',
-              style: Theme.of(context)
+              style: Theme
+                  .of(context)
                   .textTheme
                   .titleMedium,
             ),
 
             const SizedBox(height: 16),
 
-            if (tenant == null)
+            if (!hasTenant)
               const _InfoRow(
                 label: 'Tenant',
                 value: 'No active tenant.',
@@ -725,7 +723,7 @@ class _CreateMonthlyRentCard extends StatelessWidget {
 
             const Text(
               'The monthly rent amount will be taken from '
-                  'the current rent rate for this tenant and '
+                  'the current rent rate of this unit and '
                   'frozen in this monthly billing record.',
             ),
 
@@ -734,7 +732,7 @@ class _CreateMonthlyRentCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: isCreating
+                onPressed: isCreating || !hasTenant
                     ? null
                     : onCreate,
                 icon: isCreating
@@ -751,7 +749,9 @@ class _CreateMonthlyRentCard extends StatelessWidget {
                 label: Text(
                   isCreating
                       ? 'Creating...'
-                      : 'Create Monthly Rent',
+                      : hasTenant
+                      ? 'Create Monthly Rent'
+                      : 'No Active Tenant',
                 ),
               ),
             ),
@@ -762,8 +762,7 @@ class _CreateMonthlyRentCard extends StatelessWidget {
   }
 }
 
-class _MonthlyRentHistorySection
-    extends ConsumerWidget {
+class _MonthlyRentHistorySection extends ConsumerWidget {
   final String unitId;
   final String ownerId;
 
@@ -773,10 +772,8 @@ class _MonthlyRentHistorySection
   });
 
   @override
-  Widget build(
-      BuildContext context,
-      WidgetRef ref,
-      ) {
+  Widget build(BuildContext context,
+      WidgetRef ref,) {
     final historyAsync = ref.watch(
       unitMonthlyRentHistoryProvider(
         (
@@ -808,7 +805,8 @@ class _MonthlyRentHistorySection
               children: [
                 Text(
                   'Monthly Rent History',
-                  style: Theme.of(context)
+                  style: Theme
+                      .of(context)
                       .textTheme
                       .titleMedium,
                 ),
@@ -870,7 +868,8 @@ class _MonthlyHistoryItem extends StatelessWidget {
                 _formatMonth(
                   monthlyRent.billingPeriodStart,
                 ),
-                style: Theme.of(context)
+                style: Theme
+                    .of(context)
                     .textTheme
                     .titleSmall,
               ),
@@ -885,7 +884,8 @@ class _MonthlyHistoryItem extends StatelessWidget {
 
         Text(
           '৳ ${_formatAmount(monthlyRent.amount)}',
-          style: Theme.of(context)
+          style: Theme
+              .of(context)
               .textTheme
               .titleMedium,
         ),
@@ -896,7 +896,8 @@ class _MonthlyHistoryItem extends StatelessWidget {
           '${_formatDate(monthlyRent.billingPeriodStart)}'
               ' - '
               '${_formatDate(periodEnd)}',
-          style: Theme.of(context)
+          style: Theme
+              .of(context)
               .textTheme
               .bodySmall,
         ),
@@ -905,7 +906,8 @@ class _MonthlyHistoryItem extends StatelessWidget {
 
         Text(
           'Due: ${_formatDate(monthlyRent.dueDate)}',
-          style: Theme.of(context)
+          style: Theme
+              .of(context)
               .textTheme
               .bodySmall,
         ),
@@ -923,7 +925,8 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context)
+    final colorScheme = Theme
+        .of(context)
         .colorScheme;
 
     final isPaid = status == MonthlyRentStatus.paid;
@@ -941,7 +944,8 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         _statusLabel(status),
-        style: Theme.of(context)
+        style: Theme
+            .of(context)
             .textTheme
             .labelSmall,
       ),
@@ -968,7 +972,8 @@ class _InfoRow extends StatelessWidget {
           width: 120,
           child: Text(
             label,
-            style: Theme.of(context)
+            style: Theme
+                .of(context)
                 .textTheme
                 .labelMedium,
           ),
@@ -976,7 +981,8 @@ class _InfoRow extends StatelessWidget {
         Expanded(
           child: Text(
             value,
-            style: Theme.of(context)
+            style: Theme
+                .of(context)
                 .textTheme
                 .bodyMedium,
           ),
@@ -999,7 +1005,8 @@ class _LoadingRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: Theme.of(context)
+          style: Theme
+              .of(context)
               .textTheme
               .titleMedium,
         ),

@@ -1,3 +1,4 @@
+import '../entities/rent_adjustment.dart';
 import '../entities/rent_rate.dart';
 import '../repositories/rent_rate_repository.dart';
 
@@ -12,6 +13,7 @@ class ChangePropertyRent {
     required String propertyId,
     required String ownerId,
     required double amount,
+    required RentAdjustmentType adjustmentType,
     required DateTime effectiveFrom,
   }) async {
     final normalizedPropertyId =
@@ -34,7 +36,7 @@ class ChangePropertyRent {
 
     if (amount <= 0) {
       throw ArgumentError(
-        'Rent amount must be greater than zero.',
+        'Rent adjustment amount must be greater than zero.',
       );
     }
 
@@ -42,6 +44,7 @@ class ChangePropertyRent {
       propertyId: normalizedPropertyId,
       ownerId: normalizedOwnerId,
       amount: amount,
+      adjustmentType: adjustmentType,
       effectiveFrom: effectiveFrom,
     );
   }

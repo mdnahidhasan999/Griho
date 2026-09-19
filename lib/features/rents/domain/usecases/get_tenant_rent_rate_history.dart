@@ -9,15 +9,15 @@ class GetTenantRentRateHistory {
   });
 
   Future<List<RentRate>> call({
-    required String tenantId,
+    required String unitId,
     required String ownerId,
   }) async {
-    final normalizedTenantId = tenantId.trim();
+    final normalizedUnitId = unitId.trim();
     final normalizedOwnerId = ownerId.trim();
 
-    if (normalizedTenantId.isEmpty) {
+    if (normalizedUnitId.isEmpty) {
       throw ArgumentError(
-        'Tenant ID cannot be empty.',
+        'Unit ID cannot be empty.',
       );
     }
 
@@ -27,8 +27,8 @@ class GetTenantRentRateHistory {
       );
     }
 
-    return _repository.getRentRateHistoryByTenantId(
-      tenantId: normalizedTenantId,
+    return _repository.getRentRateHistoryByUnitId(
+      unitId: normalizedUnitId,
       ownerId: normalizedOwnerId,
     );
   }
