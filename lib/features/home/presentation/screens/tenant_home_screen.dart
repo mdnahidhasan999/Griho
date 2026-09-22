@@ -4,9 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../../rents/presentation/providers/rent_rate_provider.dart';
+import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/domain/entities/tenant_invitation.dart';
-import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
 
 class TenantHomeScreen extends ConsumerStatefulWidget {
@@ -17,7 +18,8 @@ class TenantHomeScreen extends ConsumerStatefulWidget {
       _TenantHomeScreenState();
 }
 
-class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
+class _TenantHomeScreenState
+    extends ConsumerState<TenantHomeScreen> {
   Future<void> _refresh() async {
     ref.invalidate(tenantDashboardProvider);
 
@@ -35,11 +37,13 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
+              onPressed: () =>
+                  Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () =>
+                  Navigator.of(context).pop(true),
               child: const Text('Logout'),
             ),
           ],
@@ -56,13 +60,19 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
         .signOut();
   }
 
-  void _openInvitation(TenantInvitation invitation) {
+  void _openInvitation(
+      TenantInvitation invitation,
+      ) {
     context.push(
-      RouteNames.tenantInvitationPath(invitation.id),
+      RouteNames.tenantInvitationPath(
+        invitation.id,
+      ),
     );
   }
 
-  Future<void> _openEditProfile(TenantDashboardData dashboard,) async {
+  Future<void> _openEditProfile(
+      TenantDashboardData dashboard,
+      ) async {
     final user = dashboard.appUser;
 
     if (user == null) {
@@ -90,23 +100,15 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
       return;
     }
 
-    // Edit Profile returns the updated AppUser after a
-    // successful Firestore update.
     if (result != null) {
-      // First invalidate the dashboard so all dependent
-      // information is loaded again from Firestore.
       ref.invalidate(tenantDashboardProvider);
 
-      // Wait until the new dashboard data has actually
-      // been loaded before allowing the screen to continue.
-      //
-      // This prevents the old profile data from remaining
-      // visible until a hot reload.
       try {
-        await ref.read(tenantDashboardProvider.future);
+        await ref.read(
+          tenantDashboardProvider.future,
+        );
       } catch (_) {
-        // The dashboard itself will display the error state
-        // if the reload fails.
+        // Dashboard displays its own error state.
       }
     }
   }
@@ -119,10 +121,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
 
     return Scaffold(
       backgroundColor:
-      Theme
-          .of(context)
-          .colorScheme
-          .surface,
+      Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text(
           'Griho',
@@ -158,7 +157,8 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                 ),
               );
             },
-            orElse: () => const SizedBox.shrink(),
+            orElse: () =>
+            const SizedBox.shrink(),
           ),
           PopupMenuButton<String>(
             tooltip: 'Account',
@@ -221,7 +221,8 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
             onRefresh: _refresh,
             child: _TenantDashboardContent(
               dashboard: dashboard,
-              onOpenInvitation: _openInvitation,
+              onOpenInvitation:
+              _openInvitation,
               onEditProfile: () {
                 _openEditProfile(dashboard);
               },
@@ -237,9 +238,11 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
 // DASHBOARD CONTENT
 // ============================================================================
 
-class _TenantDashboardContent extends StatelessWidget {
+class _TenantDashboardContent
+    extends StatelessWidget {
   final TenantDashboardData dashboard;
-  final ValueChanged<TenantInvitation> onOpenInvitation;
+  final ValueChanged<TenantInvitation>
+  onOpenInvitation;
   final VoidCallback onEditProfile;
 
   const _TenantDashboardContent({
@@ -251,7 +254,8 @@ class _TenantDashboardContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics:
+      const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
         16,
         16,
@@ -261,14 +265,14 @@ class _TenantDashboardContent extends StatelessWidget {
       children: [
         _WelcomeHeader(
           name: dashboard.displayName,
-          hasActiveTenancy: dashboard.hasActiveTenancy,
+          hasActiveTenancy:
+          dashboard.hasActiveTenancy,
         ),
-
         const SizedBox(height: 20),
-
         if (dashboard.hasPendingInvitation) ...[
           _PendingInvitationCard(
-            invitation: dashboard.pendingInvitation!,
+            invitation:
+            dashboard.pendingInvitation!,
             onReview: () {
               onOpenInvitation(
                 dashboard.pendingInvitation!,
@@ -277,50 +281,40 @@ class _TenantDashboardContent extends StatelessWidget {
           ),
           const SizedBox(height: 20),
         ],
-
         if (dashboard.hasActiveTenancy) ...[
           _CurrentTenancyCard(
             dashboard: dashboard,
           ),
           const SizedBox(height: 20),
-        ] else
-          ...[
-            _NoActiveTenancyCard(
-              hasHistory: dashboard.hasTenancyHistory,
-              hasPendingInvitation:
-              dashboard.hasPendingInvitation,
-            ),
-            const SizedBox(height: 20),
-          ],
-
+        ] else ...[
+          _NoActiveTenancyCard(
+            hasHistory:
+            dashboard.hasTenancyHistory,
+            hasPendingInvitation:
+            dashboard.hasPendingInvitation,
+          ),
+          const SizedBox(height: 20),
+        ],
         _AccountOverviewCard(
           dashboard: dashboard,
           onEditProfile: onEditProfile,
         ),
-
         const SizedBox(height: 20),
-
         const _SectionHeader(
           title: 'Tenancy History',
         ),
-
         const SizedBox(height: 10),
-
         if (dashboard.hasTenancyHistory)
           _TenancyHistoryPreview(
             history: dashboard.tenancyHistory,
           )
         else
           const _EmptyHistoryCard(),
-
         const SizedBox(height: 20),
-
         const _SectionHeader(
           title: 'Recent Activity',
         ),
-
         const SizedBox(height: 10),
-
         _RecentActivityCard(
           dashboard: dashboard,
         ),
@@ -347,12 +341,14 @@ class _WelcomeHeader extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+      CrossAxisAlignment.start,
       children: [
         Text(
           _greeting(),
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+            color:
+            theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 4),
@@ -360,7 +356,8 @@ class _WelcomeHeader extends StatelessWidget {
           '$name 👋',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.headlineSmall?.copyWith(
+          style: theme.textTheme.headlineSmall
+              ?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -370,7 +367,8 @@ class _WelcomeHeader extends StatelessWidget {
               ? 'Here is an overview of your current home.'
               : 'Manage your Griho account and tenancy from here.',
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+            color:
+            theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -378,9 +376,7 @@ class _WelcomeHeader extends StatelessWidget {
   }
 
   String _greeting() {
-    final hour = DateTime
-        .now()
-        .hour;
+    final hour = DateTime.now().hour;
 
     if (hour < 12) {
       return 'Good morning';
@@ -398,7 +394,8 @@ class _WelcomeHeader extends StatelessWidget {
 // PENDING INVITATION
 // ============================================================================
 
-class _PendingInvitationCard extends StatelessWidget {
+class _PendingInvitationCard
+    extends StatelessWidget {
   final TenantInvitation invitation;
   final VoidCallback onReview;
 
@@ -423,11 +420,11 @@ class _PendingInvitationCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           border: Border.all(
-            color: theme.colorScheme.primary.withValues(
-              alpha: 0.35,
-            ),
+            color: theme.colorScheme.primary
+                .withValues(alpha: 0.35),
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius:
+          BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -438,11 +435,12 @@ class _PendingInvitationCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   backgroundColor:
-                  theme.colorScheme.primaryContainer,
+                  theme.colorScheme
+                      .primaryContainer,
                   child: Icon(
                     Icons.mail_outline,
-                    color:
-                    theme.colorScheme.onPrimaryContainer,
+                    color: theme.colorScheme
+                        .onPrimaryContainer,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -453,15 +451,18 @@ class _PendingInvitationCard extends StatelessWidget {
                     children: [
                       Text(
                         'New tenancy invitation',
-                        style: theme.textTheme.titleMedium
+                        style: theme.textTheme
+                            .titleMedium
                             ?.copyWith(
-                          fontWeight: FontWeight.w800,
+                          fontWeight:
+                          FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'An owner has invited you to a property.',
-                        style: theme.textTheme.bodySmall
+                        style: theme.textTheme
+                            .bodySmall
                             ?.copyWith(
                           color: theme.colorScheme
                               .onSurfaceVariant,
@@ -485,7 +486,8 @@ class _PendingInvitationCard extends StatelessWidget {
             if (unitName != null &&
                 unitName.isNotEmpty)
               _InfoRow(
-                icon: Icons.home_work_outlined,
+                icon:
+                Icons.home_work_outlined,
                 label: 'Unit',
                 value: unitName,
               ),
@@ -526,7 +528,8 @@ class _PendingInvitationCard extends StatelessWidget {
 // CURRENT TENANCY
 // ============================================================================
 
-class _CurrentTenancyCard extends StatelessWidget {
+class _CurrentTenancyCard
+    extends ConsumerWidget {
   final TenantDashboardData dashboard;
 
   const _CurrentTenancyCard({
@@ -534,7 +537,10 @@ class _CurrentTenancyCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+      BuildContext context,
+      WidgetRef ref,
+      ) {
     final theme = Theme.of(context);
 
     final propertyName =
@@ -542,6 +548,21 @@ class _CurrentTenancyCard extends StatelessWidget {
 
     final unitDisplayName =
         dashboard.currentUnitDisplayName;
+
+    final tenant = dashboard.tenant;
+
+    final unitId = tenant?.unitId.trim();
+
+    final hasValidUnitId =
+        unitId != null && unitId.isNotEmpty;
+
+    final rentAsync = hasValidUnitId
+        ? ref.watch(
+      currentTenantRentRateProvider(
+        unitId,
+      ),
+    )
+        : null;
 
     return Card(
       elevation: 0,
@@ -555,11 +576,11 @@ class _CurrentTenancyCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   backgroundColor:
-                  theme.colorScheme.primaryContainer,
+                  theme.colorScheme
+                      .primaryContainer,
                   child: Icon(
                     Icons.home_outlined,
-                    color: theme
-                        .colorScheme
+                    color: theme.colorScheme
                         .onPrimaryContainer,
                   ),
                 ),
@@ -571,15 +592,18 @@ class _CurrentTenancyCard extends StatelessWidget {
                     children: [
                       Text(
                         'My Home',
-                        style: theme.textTheme.titleLarge
+                        style: theme.textTheme
+                            .titleLarge
                             ?.copyWith(
-                          fontWeight: FontWeight.w800,
+                          fontWeight:
+                          FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Current tenancy',
-                        style: theme.textTheme.bodySmall
+                        style: theme.textTheme
+                            .bodySmall
                             ?.copyWith(
                           color: theme.colorScheme
                               .onSurfaceVariant,
@@ -589,14 +613,14 @@ class _CurrentTenancyCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                  const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.green.withValues(
-                      alpha: 0.10,
-                    ),
+                    color: Colors.green
+                        .withValues(alpha: 0.10),
                     borderRadius:
                     BorderRadius.circular(20),
                   ),
@@ -604,33 +628,51 @@ class _CurrentTenancyCard extends StatelessWidget {
                     'Active',
                     style: TextStyle(
                       color: Colors.green,
-                      fontWeight: FontWeight.w700,
+                      fontWeight:
+                      FontWeight.w700,
                       fontSize: 12,
                     ),
                   ),
                 ),
               ],
             ),
+
             const SizedBox(height: 18),
+
             _InfoRow(
               icon: Icons.apartment_outlined,
               label: 'Property',
               value: propertyName ??
                   'Property information unavailable',
             ),
+
             _InfoRow(
-              icon: Icons.door_front_door_outlined,
+              icon:
+              Icons.door_front_door_outlined,
               label: 'Unit',
               value: unitDisplayName ??
                   'Unit information unavailable',
             ),
-            if (dashboard.tenant?.tenancyStartedAt !=
+
+            // ========================================================
+            // CURRENT MONTHLY RENT
+            // ========================================================
+
+            _CurrentTenantRentRow(
+              rentAsync: rentAsync,
+              hasValidUnitId: hasValidUnitId,
+            ),
+
+            if (dashboard.tenant
+                ?.tenancyStartedAt !=
                 null)
               _InfoRow(
-                icon: Icons.calendar_month_outlined,
+                icon:
+                Icons.calendar_month_outlined,
                 label: 'Started',
                 value: _formatDate(
-                  dashboard.tenant!.tenancyStartedAt!,
+                  dashboard.tenant!
+                      .tenancyStartedAt!,
                 ),
               ),
           ],
@@ -641,10 +683,114 @@ class _CurrentTenancyCard extends StatelessWidget {
 }
 
 // ============================================================================
+// CURRENT TENANT RENT ROW
+// ============================================================================
+
+class _CurrentTenantRentRow
+    extends StatelessWidget {
+  final AsyncValue<dynamic>? rentAsync;
+  final bool hasValidUnitId;
+
+  const _CurrentTenantRentRow({
+    required this.rentAsync,
+    required this.hasValidUnitId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!hasValidUnitId ||
+        rentAsync == null) {
+      return const _InfoRow(
+        icon: Icons.payments_outlined,
+        label: 'Monthly Rent',
+        value: 'Not available',
+      );
+    }
+
+    return rentAsync!.when(
+      loading: () {
+        return const _LoadingTenantRentRow();
+      },
+      error: (_, _) {
+        return const _InfoRow(
+          icon: Icons.payments_outlined,
+          label: 'Monthly Rent',
+          value: 'Unable to load',
+        );
+      },
+      data: (rentRate) {
+        if (rentRate == null) {
+          return const _InfoRow(
+            icon: Icons.payments_outlined,
+            label: 'Monthly Rent',
+            value: 'Not set',
+          );
+        }
+
+        return _InfoRow(
+          icon: Icons.payments_outlined,
+          label: 'Monthly Rent',
+          value:
+          '৳ ${_formatAmount(rentRate.amount)}',
+          emphasized: true,
+        );
+      },
+    );
+  }
+}
+
+class _LoadingTenantRentRow
+    extends StatelessWidget {
+  const _LoadingTenantRentRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        vertical: 7,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.payments_outlined,
+            size: 20,
+            color:
+            theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 90,
+            child: Text(
+              'Monthly Rent',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(
+                color: theme.colorScheme
+                    .onSurfaceVariant,
+              ),
+            ),
+          ),
+          const Spacer(),
+          const SizedBox(
+            height: 18,
+            width: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
 // NO ACTIVE TENANCY
 // ============================================================================
 
-class _NoActiveTenancyCard extends StatelessWidget {
+class _NoActiveTenancyCard
+    extends StatelessWidget {
   final bool hasHistory;
   final bool hasPendingInvitation;
 
@@ -667,17 +813,17 @@ class _NoActiveTenancyCard extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color:
-                theme.colorScheme.secondaryContainer,
+                color: theme.colorScheme
+                    .secondaryContainer,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 hasPendingInvitation
-                    ? Icons.mark_email_unread_outlined
+                    ? Icons
+                    .mark_email_unread_outlined
                     : Icons.home_outlined,
                 size: 30,
-                color: theme
-                    .colorScheme
+                color: theme.colorScheme
                     .onSecondaryContainer,
               ),
             ),
@@ -687,7 +833,8 @@ class _NoActiveTenancyCard extends StatelessWidget {
                   ? 'You have a new invitation'
                   : 'No active tenancy',
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge?.copyWith(
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -699,9 +846,10 @@ class _NoActiveTenancyCard extends StatelessWidget {
                   ? 'You currently do not have an active tenancy. Your previous tenancy records are still available below.'
                   : 'Your account is ready. When an owner sends you an invitation, it will appear here.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color:
-                theme.colorScheme.onSurfaceVariant,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(
+                color: theme.colorScheme
+                    .onSurfaceVariant,
                 height: 1.45,
               ),
             ),
@@ -716,7 +864,8 @@ class _NoActiveTenancyCard extends StatelessWidget {
 // ACCOUNT OVERVIEW
 // ============================================================================
 
-class _AccountOverviewCard extends StatelessWidget {
+class _AccountOverviewCard
+    extends StatelessWidget {
   final TenantDashboardData dashboard;
   final VoidCallback onEditProfile;
 
@@ -743,9 +892,11 @@ class _AccountOverviewCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'My Account',
-                    style: theme.textTheme.titleMedium
+                    style: theme.textTheme
+                        .titleMedium
                         ?.copyWith(
-                      fontWeight: FontWeight.w800,
+                      fontWeight:
+                      FontWeight.w800,
                     ),
                   ),
                 ),
@@ -774,14 +925,18 @@ class _AccountOverviewCard extends StatelessWidget {
                 value: profile.name,
               ),
               if (profile.phoneNumber != null &&
-                  profile.phoneNumber!.trim().isNotEmpty)
+                  profile.phoneNumber!
+                      .trim()
+                      .isNotEmpty)
                 _InfoRow(
                   icon: Icons.phone_outlined,
                   label: 'Phone',
                   value: profile.phoneNumber!,
                 ),
               if (profile.email != null &&
-                  profile.email!.trim().isNotEmpty)
+                  profile.email!
+                      .trim()
+                      .isNotEmpty)
                 _InfoRow(
                   icon: Icons.email_outlined,
                   label: 'Email',
@@ -805,7 +960,8 @@ class _AccountOverviewCard extends StatelessWidget {
 // TENANCY HISTORY
 // ============================================================================
 
-class _TenancyHistoryPreview extends StatelessWidget {
+class _TenancyHistoryPreview
+    extends StatelessWidget {
   final List<TenancyHistory> history;
 
   const _TenancyHistoryPreview({
@@ -814,7 +970,8 @@ class _TenancyHistoryPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final preview = history.take(3).toList();
+    final preview =
+    history.take(3).toList();
 
     return Column(
       children: [
@@ -832,7 +989,8 @@ class _TenancyHistoryPreview extends StatelessWidget {
   }
 }
 
-class _HistoryItem extends StatelessWidget {
+class _HistoryItem
+    extends StatelessWidget {
   final TenancyHistory history;
 
   const _HistoryItem({
@@ -856,12 +1014,12 @@ class _HistoryItem extends StatelessWidget {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor:
-              theme.colorScheme.surfaceContainerHighest,
+              backgroundColor: theme.colorScheme
+                  .surfaceContainerHighest,
               child: Icon(
                 Icons.history,
-                color:
-                theme.colorScheme.onSurfaceVariant,
+                color: theme.colorScheme
+                    .onSurfaceVariant,
               ),
             ),
             const SizedBox(width: 12),
@@ -875,10 +1033,13 @@ class _HistoryItem extends StatelessWidget {
                         ? propertyName
                         : 'Previous tenancy',
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall
+                    overflow:
+                    TextOverflow.ellipsis,
+                    style: theme.textTheme
+                        .titleSmall
                         ?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight:
+                      FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -886,7 +1047,8 @@ class _HistoryItem extends StatelessWidget {
                     unitNumber.isNotEmpty
                         ? 'Unit $unitNumber'
                         : 'Unit information unavailable',
-                    style: theme.textTheme.bodySmall
+                    style: theme.textTheme
+                        .bodySmall
                         ?.copyWith(
                       color: theme.colorScheme
                           .onSurfaceVariant,
@@ -901,16 +1063,21 @@ class _HistoryItem extends StatelessWidget {
               CrossAxisAlignment.end,
               children: [
                 Text(
-                  _formatDate(history.startedAt),
-                  style: theme.textTheme.bodySmall
+                  _formatDate(
+                    history.startedAt,
+                  ),
+                  style: theme.textTheme
+                      .bodySmall
                       ?.copyWith(
-                    fontWeight: FontWeight.w600,
+                    fontWeight:
+                    FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   'to ${_formatDate(history.endedAt)}',
-                  style: theme.textTheme.bodySmall
+                  style: theme.textTheme
+                      .bodySmall
                       ?.copyWith(
                     color: theme.colorScheme
                         .onSurfaceVariant,
@@ -925,7 +1092,8 @@ class _HistoryItem extends StatelessWidget {
   }
 }
 
-class _EmptyHistoryCard extends StatelessWidget {
+class _EmptyHistoryCard
+    extends StatelessWidget {
   const _EmptyHistoryCard();
 
   @override
@@ -940,16 +1108,18 @@ class _EmptyHistoryCard extends StatelessWidget {
           children: [
             Icon(
               Icons.history_outlined,
-              color:
-              theme.colorScheme.onSurfaceVariant,
+              color: theme.colorScheme
+                  .onSurfaceVariant,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Your previous tenancy records will appear here.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color:
-                  theme.colorScheme.onSurfaceVariant,
+                style: theme.textTheme
+                    .bodyMedium
+                    ?.copyWith(
+                  color: theme.colorScheme
+                      .onSurfaceVariant,
                 ),
               ),
             ),
@@ -964,7 +1134,8 @@ class _EmptyHistoryCard extends StatelessWidget {
 // RECENT ACTIVITY
 // ============================================================================
 
-class _RecentActivityCard extends StatelessWidget {
+class _RecentActivityCard
+    extends StatelessWidget {
   final TenantDashboardData dashboard;
 
   const _RecentActivityCard({
@@ -997,13 +1168,16 @@ class _RecentActivityCard extends StatelessWidget {
     );
   }
 
-  List<_ActivityData> _buildActivities(TenantDashboardData dashboard,) {
+  List<_ActivityData> _buildActivities(
+      TenantDashboardData dashboard,
+      ) {
     final activities = <_ActivityData>[];
 
     final invitation =
         dashboard.pendingInvitation;
 
-    if (invitation != null && invitation.isValid) {
+    if (invitation != null &&
+        invitation.isValid) {
       activities.add(
         _ActivityData(
           icon: Icons.mail_outline,
@@ -1037,8 +1211,7 @@ class _RecentActivityCard extends StatelessWidget {
         _ActivityData(
           icon: Icons.history,
           title: 'Tenancy ended',
-          subtitle:
-          history.propertyName
+          subtitle: history.propertyName
               .trim()
               .isNotEmpty
               ? history.propertyName
@@ -1064,7 +1237,8 @@ class _RecentActivityCard extends StatelessWidget {
           subtitle:
           'Your Griho account is ready to use.',
           date: dashboard.appUser?.createdAt ??
-              dashboard.firebaseUser?.metadata.creationTime ??
+              dashboard.firebaseUser?.metadata
+                  .creationTime ??
               DateTime.now(),
         ),
       ];
@@ -1088,7 +1262,8 @@ class _ActivityData {
   });
 }
 
-class _ActivityItem extends StatelessWidget {
+class _ActivityItem
+    extends StatelessWidget {
   final _ActivityData activity;
 
   const _ActivityItem({
@@ -1105,13 +1280,13 @@ class _ActivityItem extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 20,
-          backgroundColor:
-          theme.colorScheme.surfaceContainerHighest,
+          backgroundColor: theme.colorScheme
+              .surfaceContainerHighest,
           child: Icon(
             activity.icon,
             size: 20,
-            color:
-            theme.colorScheme.onSurfaceVariant,
+            color: theme.colorScheme
+                .onSurfaceVariant,
           ),
         ),
         const SizedBox(width: 12),
@@ -1122,17 +1297,21 @@ class _ActivityItem extends StatelessWidget {
             children: [
               Text(
                 activity.title,
-                style: theme.textTheme.titleSmall
+                style: theme.textTheme
+                    .titleSmall
                     ?.copyWith(
-                  fontWeight: FontWeight.w700,
+                  fontWeight:
+                  FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 activity.subtitle,
                 maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
+                overflow:
+                TextOverflow.ellipsis,
+                style: theme.textTheme
+                    .bodySmall
                     ?.copyWith(
                   color: theme.colorScheme
                       .onSurfaceVariant,
@@ -1144,9 +1323,10 @@ class _ActivityItem extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           _relativeDate(activity.date),
-          style: theme.textTheme.labelSmall?.copyWith(
-            color:
-            theme.colorScheme.onSurfaceVariant,
+          style: theme.textTheme.labelSmall
+              ?.copyWith(
+            color: theme.colorScheme
+                .onSurfaceVariant,
           ),
         ),
       ],
@@ -1158,7 +1338,8 @@ class _ActivityItem extends StatelessWidget {
 // SECTION HEADER
 // ============================================================================
 
-class _SectionHeader extends StatelessWidget {
+class _SectionHeader
+    extends StatelessWidget {
   final String title;
 
   const _SectionHeader({
@@ -1171,7 +1352,8 @@ class _SectionHeader extends StatelessWidget {
 
     return Text(
       title,
-      style: theme.textTheme.titleMedium?.copyWith(
+      style: theme.textTheme.titleMedium
+          ?.copyWith(
         fontWeight: FontWeight.w800,
       ),
     );
@@ -1186,11 +1368,13 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final bool emphasized;
 
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
+    this.emphasized = false,
   });
 
   @override
@@ -1208,15 +1392,16 @@ class _InfoRow extends StatelessWidget {
           Icon(
             icon,
             size: 20,
-            color:
-            theme.colorScheme.onSurfaceVariant,
+            color: theme.colorScheme
+                .onSurfaceVariant,
           ),
           const SizedBox(width: 12),
           SizedBox(
             width: 90,
             child: Text(
               label,
-              style: theme.textTheme.bodyMedium
+              style: theme.textTheme
+                  .bodyMedium
                   ?.copyWith(
                 color: theme.colorScheme
                     .onSurfaceVariant,
@@ -1228,9 +1413,12 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: theme.textTheme.bodyMedium
+              style: theme.textTheme
+                  .bodyMedium
                   ?.copyWith(
-                fontWeight: FontWeight.w600,
+                fontWeight: emphasized
+                    ? FontWeight.w800
+                    : FontWeight.w600,
               ),
             ),
           ),
@@ -1241,10 +1429,11 @@ class _InfoRow extends StatelessWidget {
 }
 
 // ============================================================================
-// ERROR VIEW
+// DASHBOARD ERROR
 // ============================================================================
 
-class _DashboardErrorView extends StatelessWidget {
+class _DashboardErrorView
+    extends StatelessWidget {
   final Object error;
   final VoidCallback onRetry;
 
@@ -1273,28 +1462,36 @@ class _DashboardErrorView extends StatelessWidget {
             Text(
               'Could not load your dashboard',
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge
+              style: theme.textTheme
+                  .titleLarge
                   ?.copyWith(
-                fontWeight: FontWeight.w800,
+                fontWeight:
+                FontWeight.w800,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               error.toString(),
               maxLines: 4,
-              overflow: TextOverflow.ellipsis,
+              overflow:
+              TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
+              style: theme.textTheme
+                  .bodySmall
                   ?.copyWith(
-                color:
-                theme.colorScheme.onSurfaceVariant,
+                color: theme.colorScheme
+                    .onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try Again'),
+              icon: const Icon(
+                Icons.refresh,
+              ),
+              label: const Text(
+                'Try Again',
+              ),
             ),
           ],
         ),
@@ -1312,8 +1509,7 @@ String _formatDate(DateTime date) {
   date.day.toString().padLeft(2, '0');
   final month =
   date.month.toString().padLeft(2, '0');
-  final year =
-  date.year.toString();
+  final year = date.year.toString();
 
   return '$day/$month/$year';
 }

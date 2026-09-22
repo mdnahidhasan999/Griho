@@ -219,10 +219,43 @@ class TenantDataSource {
 
     return snapshot.docs.map(TenantModel.fromFirestore).toList();
   }
-
-  // ==========================================================================
-  // CREATE TENANT
-  // ==========================================================================
+// ==========================================================================
+// CREATE TENANT
+// ==========================================================================
+//
+// IMPORTANT:
+//
+// Creating a Tenant record does NOT start a tenancy.
+//
+// Even if the tenant already has a Firebase account:
+//
+//     userId = existing Firebase UID
+//     accountStatus = registered
+//
+// the tenant remains:
+//
+//     status = inactive
+//     confirmationStatus = pending
+//     tenancyStartedAt = null
+//
+// Tenant invitation acceptance is responsible for starting the tenancy.
+//
+// startNewTenancy() owns:
+//
+//     inactive -> active
+//     unit -> occupied
+//     unit.tenantUserId -> tenant UID
+//     property.tenantUserIds -> tenant UID
+//     tenantAccess -> create
+//     rentRate -> create/update
+//
+// createTenant() must NEVER modify:
+//
+//     - unit.status
+//     - unit.tenantUserId
+//     - property.tenantUserIds
+//
+// ==========================================================================
 
   Future<TenantModel> createTenant({
     required TenantModel tenant,
@@ -256,6 +289,10 @@ class TenantDataSource {
       );
     }
 
+    // --------------------------------------------------------------------------
+    // DUPLICATE PHONE CHECK
+    // --------------------------------------------------------------------------
+
     final phoneSnapshot = await _tenants
         .where(
       'ownerId',
@@ -279,45 +316,73 @@ class TenantDataSource {
       );
     }
 
-    if (tenant.status == TenantStatus.active) {
-      final activeSnapshot = await _tenants
-          .where(
-        'unitId',
-        isEqualTo: normalizedUnitId,
-      )
-          .where(
-        'ownerId',
-        isEqualTo: normalizedOwnerId,
-      )
-          .where(
-        'status',
-        isEqualTo: TenantStatus.active.name,
-      )
-          .limit(1)
-          .get();
-
-      if (activeSnapshot.docs.isNotEmpty) {
-        final existingTenant = TenantModel.fromFirestore(
-          activeSnapshot.docs.first,
-        );
-
-        throw StateError(
-          'This unit already has an active tenant: '
-              '${existingTenant.name} (${existingTenant.phone}).',
-        );
-      }
-    }
+    // --------------------------------------------------------------------------
+    // DOCUMENT REFERENCE
+    // --------------------------------------------------------------------------
 
     final tenantDocument = _tenants.doc(tenant.id);
+
     final propertyDocument = _properties.doc(
       normalizedPropertyId,
     );
+
     final unitDocument = _units.doc(
       normalizedUnitId,
     );
 
+    // --------------------------------------------------------------------------
+    // IMPORTANT
+    // --------------------------------------------------------------------------
+    //
+    // Creating a tenant is NOT starting a tenancy.
+    //
+    // Therefore the tenant MUST always be created as inactive.
+    //
+    // Even if the caller accidentally sends:
+    //
+    //     status = active
+    //
+    // we force the persisted state to:
+    //
+    //     status = inactive
+    //     tenancyStartedAt = null
+    //
+    // Existing Firebase account linking is preserved through userId.
+    //
+    // --------------------------------------------------------------------------
+
+    final normalizedUserId = tenant.userId?.trim();
+
+    final persistedUserId =
+    normalizedUserId != null &&
+        normalizedUserId.isNotEmpty
+        ? normalizedUserId
+        : null;
+
+    final persistedAccountStatus =
+    persistedUserId != null
+        ? TenantAccountStatus.registered
+        : TenantAccountStatus.notRegistered;
+
+    final tenantToCreate = tenant.copyWith(
+      status: TenantStatus.inactive,
+      userId: persistedUserId,
+      accountStatus: persistedAccountStatus,
+      confirmationStatus: TenantConfirmationStatus.pending,
+      tenancyStartedAt: null,
+      updatedAt: DateTime.now(),
+    );
+
+    // --------------------------------------------------------------------------
+    // TRANSACTION
+    // --------------------------------------------------------------------------
+
     await _firestore.runTransaction(
           (transaction) async {
+        // ------------------------------------------------------------------------
+        // ALL READS FIRST
+        // ------------------------------------------------------------------------
+
         final propertySnapshot = await transaction.get(
           propertyDocument,
         );
@@ -326,15 +391,13 @@ class TenantDataSource {
           unitDocument,
         );
 
+        // ------------------------------------------------------------------------
+        // PROPERTY VALIDATION
+        // ------------------------------------------------------------------------
+
         if (!propertySnapshot.exists) {
           throw StateError(
             'Property $normalizedPropertyId does not exist.',
-          );
-        }
-
-        if (!unitSnapshot.exists) {
-          throw StateError(
-            'Unit $normalizedUnitId does not exist.',
           );
         }
 
@@ -355,6 +418,16 @@ class TenantDataSource {
           );
         }
 
+        // ------------------------------------------------------------------------
+        // UNIT VALIDATION
+        // ------------------------------------------------------------------------
+
+        if (!unitSnapshot.exists) {
+          throw StateError(
+            'Unit $normalizedUnitId does not exist.',
+          );
+        }
+
         final unitData = unitSnapshot.data();
 
         if (unitData == null) {
@@ -372,75 +445,57 @@ class TenantDataSource {
           );
         }
 
-        if (tenant.status == TenantStatus.active) {
-          final unitStatus = unitData['status'];
+        // ------------------------------------------------------------------------
+        // IMPORTANT:
+        //
+        // DO NOT CHECK:
+        //
+        //     unit.status == available
+        //
+        // and DO NOT MODIFY:
+        //
+        //     unit.status
+        //     unit.tenantUserId
+        //
+        // here.
+        //
+        // Why?
+        //
+        // createTenant() only creates the tenant record.
+        //
+        // A tenancy starts only after invitation acceptance.
+        //
+        // ------------------------------------------------------------------------
 
-          if (unitStatus != UnitStatus.available.name) {
-            throw StateError(
-              'The selected unit is not available.',
-            );
-          }
-
-          final existingTenantUserId =
-          unitData['tenantUserId'];
-
-          if (existingTenantUserId != null) {
-            if (existingTenantUserId is! String ||
-                existingTenantUserId
-                    .trim()
-                    .isNotEmpty) {
-              throw StateError(
-                'The selected unit already has a tenant.',
-              );
-            }
-          }
-        }
+        // ------------------------------------------------------------------------
+        // SAVE TENANT
+        // ------------------------------------------------------------------------
 
         transaction.set(
           tenantDocument,
-          tenant.toFirestore(),
+          TenantModel.fromEntity(
+            tenantToCreate,
+          ).toFirestore(),
         );
-
-        if (tenant.status == TenantStatus.active) {
-          final tenantUserId = tenant.userId?.trim();
-
-          transaction.update(
-            unitDocument,
-            {
-              'status': UnitStatus.occupied.name,
-              'tenantUserId': tenantUserId,
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-          );
-
-          if (tenantUserId != null &&
-              tenantUserId.isNotEmpty) {
-            transaction.update(
-              propertyDocument,
-              {
-                'tenantUserIds': FieldValue.arrayUnion(
-                  [tenantUserId],
-                ),
-                'updatedAt': FieldValue.serverTimestamp(),
-              },
-            );
-          }
-        } else {
-          transaction.update(
-            unitDocument,
-            {
-              'status': UnitStatus.available.name,
-              'tenantUserId': null,
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-          );
-        }
       },
     );
 
-    return tenant;
-  }
+    // --------------------------------------------------------------------------
+    // RETURN CREATED TENANT
+    // --------------------------------------------------------------------------
 
+    final createdSnapshot = await tenantDocument.get();
+
+    if (!createdSnapshot.exists) {
+      throw StateError(
+        'Tenant was created but could not be retrieved.',
+      );
+    }
+
+    return TenantModel.fromFirestore(
+      createdSnapshot,
+    );
+  }
   // ==========================================================================
   // LINK TENANT ACCOUNT
   // ==========================================================================
