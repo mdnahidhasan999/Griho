@@ -1,6 +1,10 @@
 import '../tenant_invitation.dart';
 
 abstract class TenantInvitationRepository {
+  // ================================================================
+  // CREATE INVITATION
+  // ================================================================
+
   Future<TenantInvitation> createInvitation({
     required String tenantId,
     required String propertyId,
@@ -9,17 +13,75 @@ abstract class TenantInvitationRepository {
     required double rentAmount,
   });
 
-  Future<TenantInvitation?> getInvitationById(String invitationId);
+  // ================================================================
+  // GET INVITATION BY ID
+  // ================================================================
 
-  Future<TenantInvitation?> getInvitationByToken(String token);
+  Future<TenantInvitation?> getInvitationById(
+      String invitationId,
+      );
 
-  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId);
+  // ================================================================
+  // GET INVITATION BY TOKEN
+  // ================================================================
 
-  Future<TenantInvitation?> getPendingInvitationByPhone(String phone);
+  Future<TenantInvitation?> getInvitationByToken(
+      String token,
+      );
 
-  Future<void> acceptInvitation(String invitationId);
+  // ================================================================
+  // GET PENDING INVITATION BY TENANT ID
+  // ================================================================
 
-  Future<void> cancelInvitation(String invitationId);
+  Future<TenantInvitation?> getPendingInvitationByTenantId(
+      String tenantId,
+      );
 
-  Future<void> expireInvitation(String invitationId);
+  // ================================================================
+  // GET PENDING INVITATION BY PHONE
+  // ================================================================
+
+  Future<TenantInvitation?> getPendingInvitationByPhone(
+      String phone,
+      );
+
+  // ================================================================
+  // REALTIME — ALL TENANT INVITATIONS
+  // ================================================================
+
+  Stream<List<TenantInvitation>> watchInvitationsByTenantId(
+      String tenantId,
+      );
+
+  // ================================================================
+  // REALTIME — PENDING INVITATION
+  // ================================================================
+
+  Stream<TenantInvitation?> watchPendingInvitationByTenantId(
+      String tenantId,
+      );
+
+  // ================================================================
+  // ACCEPT INVITATION
+  // ================================================================
+
+  Future<void> acceptInvitation(
+      String invitationId,
+      );
+
+  // ================================================================
+  // CANCEL / REJECT INVITATION
+  // ================================================================
+
+  Future<void> cancelInvitation(
+      String invitationId,
+      );
+
+  // ================================================================
+  // EXPIRE INVITATION
+  // ================================================================
+
+  Future<void> expireInvitation(
+      String invitationId,
+      );
 }

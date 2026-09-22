@@ -32,6 +32,7 @@ import '../../features/tenants/presentation/screens/owner_tenant_list_screen.dar
 import '../../features/tenants/presentation/screens/tenant_details_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_home_invitation_gate_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_invitation_receive_screen.dart';
+import '../../features/tenants/presentation/screens/tenant_invitations_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_list_screen.dart';
 
 import '../../features/units/domain/entities/unit.dart';
@@ -537,7 +538,23 @@ abstract final class AppRouter {
             );
           },
         ),
+// ========================================================
 
+// TENANT INVITATIONS HISTORY
+
+// ========================================================
+
+        GoRoute(
+
+          path: RouteNames.tenantInvitations,
+
+          builder: (context, state) {
+
+            return const TenantInvitationsScreen();
+
+          },
+
+        ),
         // ========================================================
         // OTHER ROLES
         // ========================================================

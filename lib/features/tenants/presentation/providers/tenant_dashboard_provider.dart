@@ -81,31 +81,42 @@ final hasActiveTenancyProvider = FutureProvider<bool>((ref) async {
 });
 
 /// =========================================================================
-/// PENDING INVITATION FOR CURRENT ACCOUNT
+/// PENDING INVITATION FOR CURRENT TENANT
 /// =========================================================================
 ///
-/// This provider reads the invitation directly through the repository.
-/// It does NOT call TenantInvitationController, so it cannot modify
-/// another provider while this provider is initializing.
+/// Invitation lookup is tenantId-based.
+///
+/// This uses the realtime Firestore stream provided by
+/// pendingTenantInvitationStreamProvider.
+///
+/// No phone-number invitation query is used here.
 ///
 
 final pendingTenantInvitationForCurrentUserProvider =
-FutureProvider<TenantInvitation?>((ref) async {
-  final firebaseUser = ref.watch(currentFirebaseUserProvider);
+StreamProvider<TenantInvitation?>((ref) async* {
+  final tenant = await ref.watch(
+    currentTenantProvider.future,
+  );
 
-  if (firebaseUser == null) {
-    return null;
+  if (tenant == null) {
+    yield null;
+    return;
   }
 
-  final phoneNumber = firebaseUser.phoneNumber?.trim();
+  final tenantId = tenant.id.trim();
 
-  if (phoneNumber == null || phoneNumber.isEmpty) {
-    return null;
+  if (tenantId.isEmpty) {
+    yield null;
+    return;
   }
 
-  final repository = ref.read(tenantInvitationRepositoryProvider);
+  final repository = ref.read(
+    tenantInvitationRepositoryProvider,
+  );
 
-  return repository.getPendingInvitationByPhone(phoneNumber);
+  yield* repository.watchPendingInvitationByTenantId(
+    tenantId,
+  );
 });
 
 /// =========================================================================
@@ -135,17 +146,16 @@ FutureProvider<List<TenancyHistory>>((ref) async {
 /// CURRENT PROPERTY
 /// =========================================================================
 ///
-/// Loads the property belonging to the current active tenant record.
+/// Loads the property belonging to the current tenant record.
 ///
 /// If there is no tenant record, this returns null.
-///
-/// Property Firestore ID is never exposed to the UI as the display value.
-/// The UI uses Property.name.
 ///
 
 final currentTenantPropertyProvider =
 FutureProvider<Property?>((ref) async {
-  final tenant = await ref.watch(currentTenantProvider.future);
+  final tenant = await ref.watch(
+    currentTenantProvider.future,
+  );
 
   if (tenant == null) {
     return null;
@@ -166,24 +176,16 @@ FutureProvider<Property?>((ref) async {
 /// CURRENT UNIT
 /// =========================================================================
 ///
-/// Loads the unit belonging to the current active tenant record.
+/// Loads the unit belonging to the current tenant record.
 ///
 /// If there is no tenant record, this returns null.
-///
-/// The UI uses:
-///
-///     unit.name
-///
-/// when available, otherwise:
-///
-///     unit.unitNumber
-///
-/// The internal Firestore unit ID is never displayed.
 ///
 
 final currentTenantUnitProvider =
 FutureProvider<Unit?>((ref) async {
-  final tenant = await ref.watch(currentTenantProvider.future);
+  final tenant = await ref.watch(
+    currentTenantProvider.future,
+  );
 
   if (tenant == null) {
     return null;
@@ -208,13 +210,8 @@ class TenantDashboardData {
   final User? firebaseUser;
   final AppUser? appUser;
   final Tenant? tenant;
-
-  /// Current property loaded from the property collection.
   final Property? currentProperty;
-
-  /// Current unit loaded from the units collection.
   final Unit? currentUnit;
-
   final TenantInvitation? pendingInvitation;
   final List<TenancyHistory> tenancyHistory;
 
@@ -266,7 +263,8 @@ class TenantDashboardData {
       return profileName;
     }
 
-    final firebaseDisplayName = firebaseUser?.displayName?.trim();
+    final firebaseDisplayName =
+    firebaseUser?.displayName?.trim();
 
     if (firebaseDisplayName != null &&
         firebaseDisplayName.isNotEmpty) {
@@ -317,8 +315,6 @@ class TenantDashboardData {
   }
 
   /// Display name for the current property.
-  ///
-  /// Returns null when there is no current property.
   String? get currentPropertyName {
     final name = currentProperty?.name.trim();
 
@@ -373,11 +369,7 @@ class TenantDashboardData {
 ///
 /// Loads all tenant-home information together.
 ///
-/// Important:
-///
-/// A tenant account does NOT require a tenant record.
-///
-/// Therefore these data sources are independent:
+/// Data sources:
 ///
 /// - App profile
 /// - Tenant record
@@ -386,13 +378,14 @@ class TenantDashboardData {
 /// - Pending invitation
 /// - Tenancy history
 ///
-/// If tenant/property/unit is missing, the account can still use
-/// the dashboard.
+/// Pending invitations are resolved by tenantId.
 ///
 
 final tenantDashboardProvider =
 FutureProvider<TenantDashboardData>((ref) async {
-  final firebaseUser = ref.watch(currentFirebaseUserProvider);
+  final firebaseUser = ref.watch(
+    currentFirebaseUserProvider,
+  );
 
   if (firebaseUser == null) {
     return TenantDashboardData.empty();
@@ -414,12 +407,12 @@ FutureProvider<TenantDashboardData>((ref) async {
     currentTenantUnitProvider.future,
   );
 
-  final invitationFuture = ref.watch(
-    pendingTenantInvitationForCurrentUserProvider.future,
-  );
-
   final historyFuture = ref.watch(
     currentUserTenancyHistoryProvider.future,
+  );
+
+  final invitationFuture = ref.watch(
+    pendingTenantInvitationForCurrentUserProvider.future,
   );
 
   final results = await Future.wait<dynamic>([

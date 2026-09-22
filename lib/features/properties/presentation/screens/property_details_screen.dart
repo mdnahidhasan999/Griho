@@ -1314,13 +1314,20 @@ class _TenantsSection extends ConsumerWidget {
                 );
               },
               data: (tenants) {
-                if (tenants.isEmpty) {
+                final activeTenants = tenants
+                    .where(
+                      (tenant) =>
+                  tenant.status == TenantStatus.active,
+                )
+                    .toList();
+
+                if (activeTenants.isEmpty) {
                   return Column(
                     crossAxisAlignment:
                     CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'No tenants added yet.',
+                        'No active tenants yet.',
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
@@ -1342,40 +1349,33 @@ class _TenantsSection extends ConsumerWidget {
                 }
 
                 final previewTenants =
-                tenants.take(5).toList();
+                activeTenants.take(5).toList();
 
                 return Column(
                   children: [
                     for (
                     int index = 0;
-                    index <
-                        previewTenants.length;
+                    index < previewTenants.length;
                     index++
                     ) ...[
                       _TenantPreviewCard(
-                        tenant:
-                        previewTenants[index],
+                        tenant: previewTenants[index],
                       ),
-                      if (index !=
-                          previewTenants.length - 1)
+                      if (index != previewTenants.length - 1)
                         const Divider(
                           height: 24,
                         ),
                     ],
-                    if (tenants.length > 5) ...[
+                    if (activeTenants.length > 5) ...[
                       const SizedBox(height: 8),
                       Align(
-                        alignment:
-                        Alignment.centerRight,
+                        alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () {
-                            _openTenantList(
-                              context,
-                            );
+                            _openTenantList(context);
                           },
                           child: Text(
-                            'View all '
-                                '${tenants.length} tenants',
+                            'View all ${activeTenants.length} tenants',
                           ),
                         ),
                       ),

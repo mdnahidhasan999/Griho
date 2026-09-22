@@ -1,42 +1,38 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/utils/phone_number_utils.dart';
 import '../../domain/entities/tenant_invitation.dart';
+import 'tenant_dashboard_provider.dart';
 import 'tenant_invitation_provider.dart';
 
-/// Loads the currently signed-in tenant's pending invitation.
+/// Realtime pending invitation for the currently signed-in tenant.
 ///
-/// This provider is intentionally independent from:
-/// - tenantAccess
-/// - active tenancy
-/// - unit access
+/// Invitation lookup is based on tenantId, not phone number.
 ///
-/// A tenant must be able to see a pending invitation BEFORE
-/// accepting it. Therefore this provider only uses the authenticated
-/// Firebase phone number and the invitation repository.
+/// This provider is kept for compatibility with existing code that
+/// still references currentTenantPendingInvitationProvider.
 final currentTenantPendingInvitationProvider =
-FutureProvider.autoDispose<TenantInvitation?>((ref) async {
-  final user = FirebaseAuth.instance.currentUser;
+StreamProvider.autoDispose<TenantInvitation?>((ref) async* {
+  final tenant = await ref.watch(
+    currentTenantProvider.future,
+  );
 
-  if (user == null) {
-    return null;
+  if (tenant == null) {
+    yield null;
+    return;
   }
 
-  final firebasePhone = user.phoneNumber?.trim();
+  final tenantId = tenant.id.trim();
 
-  if (firebasePhone == null || firebasePhone.isEmpty) {
-    return null;
+  if (tenantId.isEmpty) {
+    yield null;
+    return;
   }
-
-  final normalizedPhone =
-  PhoneNumberUtils.normalizeAndValidate(firebasePhone);
 
   final repository = ref.read(
     tenantInvitationRepositoryProvider,
   );
 
-  return repository.getPendingInvitationByPhone(
-    normalizedPhone,
+  yield* repository.watchPendingInvitationByTenantId(
+    tenantId,
   );
 });

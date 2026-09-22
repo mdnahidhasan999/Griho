@@ -17,8 +17,10 @@ class OwnerTenantListScreen extends ConsumerStatefulWidget {
       _OwnerTenantListScreenState();
 }
 
-class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
-  final TextEditingController _searchController = TextEditingController();
+class _OwnerTenantListScreenState
+    extends ConsumerState<OwnerTenantListScreen> {
+  final TextEditingController _searchController =
+  TextEditingController();
 
   String _searchQuery = '';
 
@@ -52,16 +54,13 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
 
   List<Tenant> _filterTenants(List<Tenant> tenants) {
     if (_searchQuery.isEmpty) {
-      return tenants;
+      return List<Tenant>.from(tenants);
     }
 
     return tenants.where((tenant) {
       final name = tenant.name.toLowerCase();
-
       final phone = tenant.phone.toLowerCase();
-
       final email = tenant.email?.toLowerCase() ?? '';
-
       final nid = tenant.nidNumber?.toLowerCase() ?? '';
 
       return name.contains(_searchQuery) ||
@@ -71,10 +70,29 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
     }).toList();
   }
 
+  List<Tenant> _sortTenants(List<Tenant> tenants) {
+    final sorted = List<Tenant>.from(tenants);
+
+    sorted.sort((a, b) {
+      final aIsActive = a.status == TenantStatus.active;
+      final bIsActive = b.status == TenantStatus.active;
+
+      if (aIsActive == bIsActive) {
+        return 0;
+      }
+
+      return aIsActive ? -1 : 1;
+    });
+
+    return sorted;
+  }
+
   Future<void> _openTenantDetails(Tenant tenant) async {
     final shouldRefresh = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => TenantDetailsScreen(tenantId: tenant.id),
+        builder: (_) => TenantDetailsScreen(
+          tenantId: tenant.id,
+        ),
       ),
     );
 
@@ -98,10 +116,14 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
     final tenantsAsync = ref.watch(ownerTenantsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Tenants')),
+      appBar: AppBar(
+        title: const Text('My Tenants'),
+      ),
       body: tenantsAsync.when(
         loading: () {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
         },
         error: (error, stackTrace) {
           return _ErrorView(
@@ -111,6 +133,21 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
         },
         data: (tenants) {
           final filteredTenants = _filterTenants(tenants);
+          final sortedTenants = _sortTenants(filteredTenants);
+
+          final activeTenants = sortedTenants
+              .where(
+                (tenant) =>
+            tenant.status == TenantStatus.active,
+          )
+              .toList();
+
+          final inactiveTenants = sortedTenants
+              .where(
+                (tenant) =>
+            tenant.status == TenantStatus.inactive,
+          )
+              .toList();
 
           return RefreshIndicator(
             onRefresh: _refreshTenants,
@@ -128,11 +165,11 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
                     suffixIcon: _searchQuery.isEmpty
                         ? null
                         : IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                            },
-                            icon: const Icon(Icons.clear),
-                          ),
+                      onPressed: () {
+                        _searchController.clear();
+                      },
+                      icon: const Icon(Icons.clear),
+                    ),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -142,33 +179,127 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
                 Text(
                   _searchQuery.isEmpty
                       ? '${tenants.length} tenants'
-                      : '${filteredTenants.length} result(s)',
+                      : '${sortedTenants.length} result(s)',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
 
                 if (tenants.isEmpty)
                   const _EmptyTenantView()
-                else if (filteredTenants.isEmpty)
+                else if (sortedTenants.isEmpty)
                   const _NoSearchResultView()
-                else
-                  ...filteredTenants.map((tenant) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _TenantCard(
-                        tenant: tenant,
-                        onTap: () {
-                          _openTenantDetails(tenant);
+                else ...[
+                    if (activeTenants.isNotEmpty) ...[
+                      _SectionHeader(
+                        title: 'Active Tenants',
+                        count: activeTenants.length,
+                        icon: Icons.people_outline,
+                      ),
+                      const SizedBox(height: 12),
+                      ...activeTenants.map(
+                            (tenant) {
+                          return Padding(
+                            padding:
+                            const EdgeInsets.only(bottom: 12),
+                            child: _TenantCard(
+                              tenant: tenant,
+                              onTap: () {
+                                _openTenantDetails(tenant);
+                              },
+                            ),
+                          );
                         },
                       ),
-                    );
-                  }),
+                    ],
+
+                    if (inactiveTenants.isNotEmpty) ...[
+                      if (activeTenants.isNotEmpty)
+                        const SizedBox(height: 8),
+
+                      _SectionHeader(
+                        title: 'Inactive Tenants',
+                        count: inactiveTenants.length,
+                        icon: Icons.person_off_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                      ...inactiveTenants.map(
+                            (tenant) {
+                          return Padding(
+                            padding:
+                            const EdgeInsets.only(bottom: 12),
+                            child: _TenantCard(
+                              tenant: tenant,
+                              onTap: () {
+                                _openTenantDetails(tenant);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+// ============================================================================
+// SECTION HEADER
+// ============================================================================
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final int count;
+  final IconData icon;
+
+  const _SectionHeader({
+    required this.title,
+    required this.count,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 21,
+          color: theme.colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 9,
+            vertical: 4,
+          ),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '$count',
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -181,13 +312,20 @@ class _TenantCard extends ConsumerWidget {
   final Tenant tenant;
   final VoidCallback onTap;
 
-  const _TenantCard({required this.tenant, required this.onTap});
+  const _TenantCard({
+    required this.tenant,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final propertyAsync = ref.watch(propertyByIdProvider(tenant.propertyId));
+    final propertyAsync = ref.watch(
+      propertyByIdProvider(tenant.propertyId),
+    );
 
-    final unitAsync = ref.watch(unitByIdProvider(tenant.unitId));
+    final unitAsync = ref.watch(
+      unitByIdProvider(tenant.unitId),
+    );
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -196,7 +334,8 @@ class _TenantCard extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+            CrossAxisAlignment.start,
             children: [
               CircleAvatar(
                 child: Icon(
@@ -210,14 +349,20 @@ class _TenantCard extends ConsumerWidget {
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
                   children: [
                     Text(
                       tenant.name,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      overflow:
+                      TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(
+                        fontWeight:
+                        FontWeight.w600,
                       ),
                     ),
 
@@ -225,17 +370,24 @@ class _TenantCard extends ConsumerWidget {
 
                     Text(
                       tenant.phone,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium,
                     ),
 
                     if (tenant.email != null &&
-                        tenant.email!.trim().isNotEmpty) ...[
+                        tenant.email!
+                            .trim()
+                            .isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
                         tenant.email!,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow:
+                        TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall,
                       ),
                     ],
 
@@ -243,15 +395,20 @@ class _TenantCard extends ConsumerWidget {
 
                     propertyAsync.when(
                       loading: () =>
-                          const _SmallLoadingRow(icon: Icons.home_outlined),
-                      error: (_, _) => const _LocationRow(
+                      const _SmallLoadingRow(
                         icon: Icons.home_outlined,
-                        text: 'Property unavailable',
+                      ),
+                      error: (_, _) =>
+                      const _LocationRow(
+                        icon: Icons.home_outlined,
+                        text:
+                        'Property unavailable',
                       ),
                       data: (Property? property) {
                         return _LocationRow(
                           icon: Icons.home_outlined,
-                          text: property?.name ?? 'Property not found',
+                          text: property?.name ??
+                              'Property not found',
                         );
                       },
                     ),
@@ -259,24 +416,32 @@ class _TenantCard extends ConsumerWidget {
                     const SizedBox(height: 5),
 
                     unitAsync.when(
-                      loading: () => const _SmallLoadingRow(
-                        icon: Icons.meeting_room_outlined,
+                      loading: () =>
+                      const _SmallLoadingRow(
+                        icon:
+                        Icons.meeting_room_outlined,
                       ),
-                      error: (_, _) => const _LocationRow(
-                        icon: Icons.meeting_room_outlined,
+                      error: (_, _) =>
+                      const _LocationRow(
+                        icon:
+                        Icons.meeting_room_outlined,
                         text: 'Unit unavailable',
                       ),
                       data: (Unit? unit) {
                         return _LocationRow(
-                          icon: Icons.meeting_room_outlined,
-                          text: _unitDisplayName(unit),
+                          icon:
+                          Icons.meeting_room_outlined,
+                          text:
+                          _unitDisplayName(unit),
                         );
                       },
                     ),
 
                     const SizedBox(height: 10),
 
-                    _TenantStatusChip(status: tenant.status),
+                    _TenantStatusChip(
+                      status: tenant.status,
+                    ),
                   ],
                 ),
               ),
@@ -284,10 +449,13 @@ class _TenantCard extends ConsumerWidget {
               const SizedBox(width: 8),
 
               Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding:
+                const EdgeInsets.only(top: 4),
                 child: Icon(
                   Icons.chevron_right,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant,
                 ),
               ),
             ],
@@ -320,7 +488,10 @@ class _LocationRow extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _LocationRow({required this.icon, required this.text});
+  const _LocationRow({
+    required this.icon,
+    required this.text,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -329,7 +500,9 @@ class _LocationRow extends StatelessWidget {
         Icon(
           icon,
           size: 17,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          color: Theme.of(context)
+              .colorScheme
+              .onSurfaceVariant,
         ),
         const SizedBox(width: 7),
         Expanded(
@@ -337,7 +510,9 @@ class _LocationRow extends StatelessWidget {
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall,
           ),
         ),
       ],
@@ -352,18 +527,25 @@ class _LocationRow extends StatelessWidget {
 class _SmallLoadingRow extends StatelessWidget {
   final IconData icon;
 
-  const _SmallLoadingRow({required this.icon});
+  const _SmallLoadingRow({
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 17),
+        Icon(
+          icon,
+          size: 17,
+        ),
         const SizedBox(width: 7),
         const SizedBox(
           height: 14,
           width: 14,
-          child: CircularProgressIndicator(strokeWidth: 2),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+          ),
         ),
       ],
     );
@@ -377,16 +559,23 @@ class _SmallLoadingRow extends StatelessWidget {
 class _TenantStatusChip extends StatelessWidget {
   final TenantStatus status;
 
-  const _TenantStatusChip({required this.status});
+  const _TenantStatusChip({
+    required this.status,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isActive = status == TenantStatus.active;
+    final isActive =
+        status == TenantStatus.active;
 
-    final colorScheme = Theme.of(context).colorScheme;
+    final colorScheme =
+        Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 5,
+      ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         color: isActive
@@ -395,9 +584,12 @@ class _TenantStatusChip extends StatelessWidget {
       ),
       child: Text(
         isActive ? 'Active' : 'Inactive',
-        style: Theme.of(
-          context,
-        ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -413,12 +605,20 @@ class _EmptyTenantView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 80),
+      padding: EdgeInsets.symmetric(
+        vertical: 80,
+      ),
       child: Column(
         children: [
-          Icon(Icons.people_outline, size: 60),
+          Icon(
+            Icons.people_outline,
+            size: 60,
+          ),
           SizedBox(height: 16),
-          Text('No tenants yet.', textAlign: TextAlign.center),
+          Text(
+            'No tenants yet.',
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -435,12 +635,20 @@ class _NoSearchResultView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 60),
+      padding: EdgeInsets.symmetric(
+        vertical: 60,
+      ),
       child: Column(
         children: [
-          Icon(Icons.search_off, size: 56),
+          Icon(
+            Icons.search_off,
+            size: 56,
+          ),
           SizedBox(height: 16),
-          Text('No tenant found.', textAlign: TextAlign.center),
+          Text(
+            'No tenant found.',
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -455,7 +663,10 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final Future<void> Function() onRetry;
 
-  const _ErrorView({required this.message, required this.onRetry});
+  const _ErrorView({
+    required this.message,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -465,11 +676,20 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+            ),
             const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            FilledButton(
+              onPressed: onRetry,
+              child: const Text('Retry'),
+            ),
           ],
         ),
       ),

@@ -70,6 +70,12 @@ class _TenantHomeScreenState
     );
   }
 
+  void _openInvitations() {
+    context.push(
+      RouteNames.tenantInvitations,
+    );
+  }
+
   Future<void> _openEditProfile(
       TenantDashboardData dashboard,
       ) async {
@@ -223,6 +229,8 @@ class _TenantHomeScreenState
               dashboard: dashboard,
               onOpenInvitation:
               _openInvitation,
+              onOpenInvitations:
+              _openInvitations,
               onEditProfile: () {
                 _openEditProfile(dashboard);
               },
@@ -241,13 +249,18 @@ class _TenantHomeScreenState
 class _TenantDashboardContent
     extends StatelessWidget {
   final TenantDashboardData dashboard;
+
   final ValueChanged<TenantInvitation>
   onOpenInvitation;
+
+  final VoidCallback onOpenInvitations;
+
   final VoidCallback onEditProfile;
 
   const _TenantDashboardContent({
     required this.dashboard,
     required this.onOpenInvitation,
+    required this.onOpenInvitations,
     required this.onEditProfile,
   });
 
@@ -268,7 +281,13 @@ class _TenantDashboardContent
           hasActiveTenancy:
           dashboard.hasActiveTenancy,
         ),
+
         const SizedBox(height: 20),
+
+        // ========================================================
+        // PENDING INVITATION
+        // ========================================================
+
         if (dashboard.hasPendingInvitation) ...[
           _PendingInvitationCard(
             invitation:
@@ -281,6 +300,23 @@ class _TenantDashboardContent
           ),
           const SizedBox(height: 20),
         ],
+
+        // ========================================================
+        // INVITATIONS
+        // ========================================================
+
+        _InvitationsCard(
+          hasPendingInvitation:
+          dashboard.hasPendingInvitation,
+          onOpen: onOpenInvitations,
+        ),
+
+        const SizedBox(height: 20),
+
+        // ========================================================
+        // CURRENT TENANCY
+        // ========================================================
+
         if (dashboard.hasActiveTenancy) ...[
           _CurrentTenancyCard(
             dashboard: dashboard,
@@ -295,30 +331,188 @@ class _TenantDashboardContent
           ),
           const SizedBox(height: 20),
         ],
+
+        // ========================================================
+        // ACCOUNT
+        // ========================================================
+
         _AccountOverviewCard(
           dashboard: dashboard,
           onEditProfile: onEditProfile,
         ),
+
         const SizedBox(height: 20),
+
         const _SectionHeader(
           title: 'Tenancy History',
         ),
+
         const SizedBox(height: 10),
+
         if (dashboard.hasTenancyHistory)
           _TenancyHistoryPreview(
             history: dashboard.tenancyHistory,
           )
         else
           const _EmptyHistoryCard(),
+
         const SizedBox(height: 20),
+
         const _SectionHeader(
           title: 'Recent Activity',
         ),
+
         const SizedBox(height: 10),
+
         _RecentActivityCard(
           dashboard: dashboard,
         ),
       ],
+    );
+  }
+}
+
+// ============================================================================
+// INVITATIONS CARD
+// ============================================================================
+
+class _InvitationsCard
+    extends StatelessWidget {
+  final bool hasPendingInvitation;
+  final VoidCallback onOpen;
+
+  const _InvitationsCard({
+    required this.hasPendingInvitation,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor:
+                hasPendingInvitation
+                    ? theme
+                    .colorScheme
+                    .primaryContainer
+                    : theme
+                    .colorScheme
+                    .surfaceContainerHighest,
+                child: Icon(
+                  hasPendingInvitation
+                      ? Icons
+                      .mark_email_unread_outlined
+                      : Icons.mail_outline,
+                  color:
+                  hasPendingInvitation
+                      ? theme
+                      .colorScheme
+                      .onPrimaryContainer
+                      : theme
+                      .colorScheme
+                      .onSurfaceVariant,
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Invitations',
+                            style: theme
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                              fontWeight:
+                              FontWeight.w800,
+                            ),
+                          ),
+                        ),
+
+                        if (hasPendingInvitation)
+                          Container(
+                            padding:
+                            const EdgeInsets
+                                .symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration:
+                            BoxDecoration(
+                              color: theme
+                                  .colorScheme
+                                  .primaryContainer,
+                              borderRadius:
+                              BorderRadius
+                                  .circular(
+                                20,
+                              ),
+                            ),
+                            child: Text(
+                              'Pending',
+                              style: theme
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                fontWeight:
+                                FontWeight.w700,
+                                color: theme
+                                    .colorScheme
+                                    .onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    Text(
+                      hasPendingInvitation
+                          ? 'You have a new tenancy invitation.'
+                          : 'View your tenancy invitation history.',
+                      style: theme
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(
+                        color: theme
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              Icon(
+                Icons.chevron_right,
+                color: theme
+                    .colorScheme
+                    .onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -636,16 +830,13 @@ class _CurrentTenancyCard
                 ),
               ],
             ),
-
             const SizedBox(height: 18),
-
             _InfoRow(
               icon: Icons.apartment_outlined,
               label: 'Property',
               value: propertyName ??
                   'Property information unavailable',
             ),
-
             _InfoRow(
               icon:
               Icons.door_front_door_outlined,
@@ -653,16 +844,10 @@ class _CurrentTenancyCard
               value: unitDisplayName ??
                   'Unit information unavailable',
             ),
-
-            // ========================================================
-            // CURRENT MONTHLY RENT
-            // ========================================================
-
             _CurrentTenantRentRow(
               rentAsync: rentAsync,
               hasValidUnitId: hasValidUnitId,
             ),
-
             if (dashboard.tenant
                 ?.tenancyStartedAt !=
                 null)
@@ -1261,9 +1446,7 @@ class _ActivityData {
     required this.date,
   });
 }
-
-class _ActivityItem
-    extends StatelessWidget {
+class _ActivityItem extends StatelessWidget {
   final _ActivityData activity;
 
   const _ActivityItem({
@@ -1300,8 +1483,7 @@ class _ActivityItem
                 style: theme.textTheme
                     .titleSmall
                     ?.copyWith(
-                  fontWeight:
-                  FontWeight.w700,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 3),
@@ -1333,7 +1515,6 @@ class _ActivityItem
     );
   }
 }
-
 // ============================================================================
 // SECTION HEADER
 // ============================================================================
@@ -1507,8 +1688,10 @@ class _DashboardErrorView
 String _formatDate(DateTime date) {
   final day =
   date.day.toString().padLeft(2, '0');
+
   final month =
   date.month.toString().padLeft(2, '0');
+
   final year = date.year.toString();
 
   return '$day/$month/$year';

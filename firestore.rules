@@ -106,7 +106,10 @@ service cloud.firestore {
       allow update: if isAuthenticated()
                     && (
 
+                      // ------------------------------------------------
                       // OWNER
+                      // ------------------------------------------------
+
                       (
                         resource.data.ownerId == request.auth.uid
                         &&
@@ -115,7 +118,10 @@ service cloud.firestore {
 
                       ||
 
+                      // ------------------------------------------------
                       // TENANT ACCEPTANCE — FIRST ACCESS
+                      // ------------------------------------------------
+
                       (
                         resource.data.tenantUserIds is list
                         &&
@@ -158,7 +164,10 @@ service cloud.firestore {
 
                       ||
 
+                      // ------------------------------------------------
                       // TENANT ACCEPTANCE — ADD ACCESS
+                      // ------------------------------------------------
+
                       (
                         resource.data.tenantUserIds is list
 
@@ -245,7 +254,10 @@ service cloud.firestore {
       allow update: if isAuthenticated()
                     && (
 
+                      // ------------------------------------------------
                       // PROPERTY OWNER
+                      // ------------------------------------------------
+
                       (
                         isPropertyOwner(
                           resource.data.propertyId
@@ -259,7 +271,10 @@ service cloud.firestore {
 
                       ||
 
+                      // ------------------------------------------------
                       // TENANT ACCEPTANCE
+                      // ------------------------------------------------
+
                       (
                         (
                           !resource.data.keys().hasAny(['tenantUserId'])
@@ -331,7 +346,10 @@ service cloud.firestore {
 
                     && (
 
+                      // ------------------------------------------------
                       // TENANT — INVITATION ACCEPTANCE
+                      // ------------------------------------------------
+
                       (
                         request.auth.uid == userId
 
@@ -350,7 +368,10 @@ service cloud.firestore {
 
                       ||
 
+                      // ------------------------------------------------
                       // OWNER — START NEW TENANCY
+                      // ------------------------------------------------
+
                       (
                         request.resource.data.invitationId == null
 
@@ -447,7 +468,10 @@ service cloud.firestore {
       allow update: if isAuthenticated()
                     && (
 
+                      // ==================================================
                       // OWNER — NORMAL UPDATE
+                      // ==================================================
+
                       (
                         resource.data.ownerId == request.auth.uid
 
@@ -473,9 +497,14 @@ service cloud.firestore {
                         )
                       )
 
+
                       ||
 
+
+                      // ==================================================
                       // OWNER — START NEW TENANCY
+                      // ==================================================
+
                       (
                         resource.data.ownerId == request.auth.uid
 
@@ -510,9 +539,14 @@ service cloud.firestore {
                         )
                       )
 
+
                       ||
 
+
+                      // ==================================================
                       // OWNER — END TENANCY
+                      // ==================================================
+
                       (
                         resource.data.ownerId == request.auth.uid
 
@@ -550,9 +584,19 @@ service cloud.firestore {
                         isValidOwnerEndTenancy()
                       )
 
+
                       ||
 
-                      // ALREADY LINKED TENANT
+
+                      // ==================================================
+                      // ALREADY LINKED TENANT — NORMAL UPDATE
+                      //
+                      // Existing linked tenant can update only
+                      // non-tenancy fields.
+                      //
+                      // status MUST remain unchanged here.
+                      // ==================================================
+
                       (
                         resource.data.userId == request.auth.uid
 
@@ -593,9 +637,83 @@ service cloud.firestore {
                            == resource.data.createdAt
                       )
 
+
                       ||
 
+
+                      // ==================================================
+                      // ALREADY LINKED INACTIVE TENANT
+                      // — INVITATION ACCEPTANCE
+                      //
+                      // THIS IS THE IMPORTANT FIX.
+                      //
+                      // Existing Firebase-linked tenant:
+                      //
+                      // inactive
+                      //    ↓
+                      // active
+                      //
+                      // only when a valid invitation is being accepted.
+                      // ==================================================
+
+                      (
+                        resource.data.userId == request.auth.uid
+
+                        &&
+                        resource.data.status == 'inactive'
+
+                        &&
+                        request.resource.data.userId
+                           == resource.data.userId
+
+                        &&
+                        request.resource.data.ownerId
+                           == resource.data.ownerId
+
+                        &&
+                        request.resource.data.propertyId
+                           == resource.data.propertyId
+
+                        &&
+                        request.resource.data.unitId
+                           == resource.data.unitId
+
+                        &&
+                        request.resource.data.phone
+                           == resource.data.phone
+
+                        &&
+                        request.resource.data.accountStatus
+                           == resource.data.accountStatus
+
+                        &&
+                        request.resource.data.status == 'active'
+
+                        &&
+                        request.resource.data.confirmationStatus
+                           == 'confirmed'
+
+                        &&
+                        request.resource.data.tenancyStartedAt is timestamp
+
+                        &&
+                        request.resource.data.createdAt
+                           == resource.data.createdAt
+
+                        &&
+                        isValidLinkedTenantInvitationAcceptance(
+                          tenantId
+                        )
+                      )
+
+
+                      ||
+
+
+                      // ==================================================
                       // FIRST-TIME TENANT LINK
+                      // ==================================================
+
                       (
                         (
                           !resource.data.keys().hasAny(['userId'])
@@ -694,24 +812,11 @@ service cloud.firestore {
     // ============================================================
     // RENT RATES
     //
-    // IMPORTANT:
-    //
     // RentRate is UNIT based.
     //
     // RentRate does NOT contain:
     //   tenantId
     //   tenantUserId
-    //
-    // Tenant relationship is resolved through:
-    //
-    // tenantAccess
-    //      ↓
-    // tenantId
-    // ownerId
-    // propertyId
-    // unitId
-    //
-    // A RentRate belongs to a Unit, not to a Tenant.
     // ============================================================
 
     match /rentRates/{rentRateId} {
@@ -829,7 +934,6 @@ service cloud.firestore {
                     && request.resource.data.source
                        == resource.data.source
 
-                    // previousRentRateId cannot change.
                     && (
                       (
                         !resource.data.keys()
@@ -865,7 +969,6 @@ service cloud.firestore {
                     && request.resource.data.createdAt
                        == resource.data.createdAt
 
-                    // Only open/current rate can be closed.
                     && resource.data.effectiveTo == null
 
                     && request.resource.data.effectiveTo is timestamp
@@ -907,10 +1010,6 @@ service cloud.firestore {
                       )
                     );
 
-
-      // ----------------------------------------------------------
-      // DELETE
-      // ----------------------------------------------------------
 
       allow delete: if false;
     }
@@ -1069,26 +1168,34 @@ service cloud.firestore {
                     ).data.unitId
                        == request.resource.data.unitId;
 
-
       // ----------------------------------------------------------
       // READ
       // ----------------------------------------------------------
 
       allow read: if isAuthenticated()
                   && (
+                    // OWNER
                     resource.data.ownerId == request.auth.uid
 
                     ||
 
+                    // TENANT
+                    // A tenant can read only invitations that belong
+                    // to their own tenant document.
                     (
-                      request.auth.token.phone_number != null
+                      resource.data.tenantId is string
+                      &&
+                      resource.data.tenantId != ''
 
                       &&
-                      resource.data.phone
-                         == request.auth.token.phone_number
+                      exists(
+                        /databases/$(database)/documents/tenants/$(resource.data.tenantId)
+                      )
 
                       &&
-                      resource.data.status == 'pending'
+                      get(
+                        /databases/$(database)/documents/tenants/$(resource.data.tenantId)
+                      ).data.userId == request.auth.uid
                     )
                   );
 
@@ -1100,7 +1207,10 @@ service cloud.firestore {
       allow update: if isAuthenticated()
                     && (
 
+                      // ------------------------------------------------
                       // OWNER
+                      // ------------------------------------------------
+
                       (
                         resource.data.ownerId == request.auth.uid
 
@@ -1141,9 +1251,14 @@ service cloud.firestore {
                            == resource.data.expiresAt
                       )
 
+
                       ||
 
+
+                      // ------------------------------------------------
                       // TENANT ACCEPTANCE
+                      // ------------------------------------------------
+
                       (
                         request.auth.token.phone_number != null
 
@@ -1229,9 +1344,14 @@ service cloud.firestore {
                            == invitationId
                       )
 
+
                       ||
 
+
+                      // ------------------------------------------------
                       // TENANT REJECTION
+                      // ------------------------------------------------
+
                       (
                         request.auth.token.phone_number != null
 
@@ -1461,6 +1581,99 @@ service cloud.firestore {
 
              && invitationAfter.ownerId
                 == request.resource.data.ownerId;
+    }
+
+
+    // ============================================================
+    // LINKED TENANT — INVITATION ACCEPTANCE
+    //
+    // Used when tenant already has Firebase UID linked.
+    //
+    // Before:
+    //   status = inactive
+    //
+    // After:
+    //   status = active
+    // ============================================================
+
+    function isValidLinkedTenantInvitationAcceptance(
+      tenantId
+    ) {
+
+      let accessAfter =
+        getAfter(
+          /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+        ).data;
+
+      let invitationAfter =
+        getAfter(
+          /databases/$(database)/documents/tenantInvitations/$(accessAfter.invitationId)
+        ).data;
+
+      let tenantAfter =
+        getAfter(
+          /databases/$(database)/documents/tenants/$(tenantId)
+        ).data;
+
+      return
+
+        accessAfter.userId
+           == request.auth.uid
+
+        && accessAfter.tenantId
+           == tenantId
+
+        && accessAfter.ownerId
+           == resource.data.ownerId
+
+        && accessAfter.propertyId
+           == resource.data.propertyId
+
+        && accessAfter.unitId
+           == resource.data.unitId
+
+        && accessAfter.invitationId is string
+
+        && accessAfter.invitationId != ''
+
+        && invitationAfter.status == 'accepted'
+
+        && invitationAfter.tenantId
+           == tenantId
+
+        && invitationAfter.ownerId
+           == resource.data.ownerId
+
+        && invitationAfter.propertyId
+           == resource.data.propertyId
+
+        && invitationAfter.unitId
+           == resource.data.unitId
+
+        && invitationAfter.phone
+           == resource.data.phone
+
+        && tenantAfter.userId
+           == request.auth.uid
+
+        && tenantAfter.ownerId
+           == resource.data.ownerId
+
+        && tenantAfter.propertyId
+           == resource.data.propertyId
+
+        && tenantAfter.unitId
+           == resource.data.unitId
+
+        && tenantAfter.status == 'active'
+
+        && tenantAfter.accountStatus
+           == resource.data.accountStatus
+
+        && tenantAfter.confirmationStatus
+           == 'confirmed'
+
+        && tenantAfter.tenancyStartedAt is timestamp;
     }
 
 
@@ -1909,23 +2122,6 @@ service cloud.firestore {
 
     // ============================================================
     // RENT RATE — INITIAL CREATE
-    //
-    // RentRate itself contains NO tenantId/tenantUserId.
-    //
-    // Tenant is resolved through:
-    //
-    // Unit
-    //   ↓
-    // tenantUserId
-    //   ↓
-    // tenantAccess
-    //   ↓
-    // tenantId
-    //
-    // Supports:
-    //
-    // 1. Owner starts a new tenancy.
-    // 2. Tenant accepts invitation.
     // ============================================================
 
     function isValidInitialRentRateCreate() {
@@ -2063,7 +2259,7 @@ service cloud.firestore {
            == unitAfter.tenantUserId
 
         && request.auth.uid
-           == request.resource.data.ownerId == false
+           != request.resource.data.ownerId
 
         && request.resource.data.source == 'initial'
 
@@ -2138,10 +2334,6 @@ service cloud.firestore {
 
     // ============================================================
     // RENT RATE — CHANGED RATE CREATE
-    //
-    // Property / Floor / Unit
-    //
-    // Occupied AND vacant units are supported.
     // ============================================================
 
     function isValidChangedRentRateCreate() {
@@ -2185,7 +2377,6 @@ service cloud.firestore {
         && request.resource.data.previousRentRateId
            != request.resource.id
 
-        // PREVIOUS RATE BEFORE
         && previousRateBefore.ownerId
            == request.auth.uid
 
@@ -2197,7 +2388,6 @@ service cloud.firestore {
 
         && previousRateBefore.effectiveTo == null
 
-        // PREVIOUS RATE AFTER
         && previousRateAfter.ownerId
            == request.auth.uid
 
@@ -2212,21 +2402,12 @@ service cloud.firestore {
         && previousRateAfter.effectiveTo
            >= previousRateAfter.effectiveFrom
 
-        // IMPORTANT:
-        //
-        // Old rate can end exactly when the new rate starts.
-        //
-        // [old effectiveFrom, old effectiveTo)
-        // [new effectiveFrom, ...)
-        //
         && previousRateAfter.effectiveTo
            <= request.resource.data.effectiveFrom
 
-        // OLD RATE POINTS TO NEW RATE
         && previousRateAfter.nextRentRateId
            == request.resource.id
 
-        // NEW RATE
         && request.resource.data.ownerId
            == previousRateBefore.ownerId
 
@@ -2247,15 +2428,12 @@ service cloud.firestore {
 
         && request.resource.data.effectiveTo == null
 
-        // UNIT
         && unitAfter.propertyId
            == request.resource.data.propertyId
 
-        // PROPERTY
         && propertyAfter.ownerId
            == request.auth.uid
 
-        // TIMESTAMPS
         && request.resource.data.createdAt is timestamp
 
         && request.resource.data.updatedAt is timestamp
@@ -2368,10 +2546,6 @@ service cloud.firestore {
         && request.resource.data.effectiveTo
            >= resource.data.effectiveFrom
 
-        // IMPORTANT:
-        //
-        // Old rate may end exactly when next rate starts.
-        //
         && request.resource.data.effectiveTo
            <= nextRate.effectiveFrom
 
@@ -2419,10 +2593,6 @@ service cloud.firestore {
 
     // ============================================================
     // MONTHLY RENT — CREATE VALIDATION
-    //
-    // MonthlyRent keeps tenant snapshot.
-    //
-    // RentRate does NOT contain tenant information.
     // ============================================================
 
     function isValidMonthlyRentCreate() {
@@ -2490,7 +2660,6 @@ service cloud.firestore {
         && request.resource.data.tenantUserId
            == tenant.userId
 
-        // RentRate valid for billing period.
         && rentRate.effectiveFrom
            <= request.resource.data.billingPeriodStart
 

@@ -7,6 +7,7 @@ import '../../../../app/utils/app_snackbar.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/owner_tenants_provider.dart';
 
 class OwnerHomeScreen extends ConsumerWidget {
@@ -184,7 +185,16 @@ class OwnerHomeScreen extends ConsumerWidget {
                             value: tenantsAsync.when(
                               loading: () => '...',
                               error: (_, _) => '0',
-                              data: (tenants) => '${tenants.length}',
+                              data: (tenants) {
+                                final activeTenantCount = tenants
+                                    .where(
+                                      (tenant) =>
+                                  tenant.status == TenantStatus.active,
+                                )
+                                    .length;
+
+                                return '$activeTenantCount';
+                              },
                             ),
                             onTap: () {
                               context.push(

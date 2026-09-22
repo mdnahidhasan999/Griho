@@ -15,10 +15,10 @@ class TenantInvitationRepositoryImpl
     required this._currentUserService,
   });
 
-  // ============================================================
+  // ================================================================
   // CREATE INVITATION
   // CURRENT OWNER ONLY
-  // ============================================================
+  // ================================================================
 
   @override
   Future<TenantInvitation> createInvitation({
@@ -28,7 +28,8 @@ class TenantInvitationRepositoryImpl
     required String phone,
     required double rentAmount,
   }) {
-    final ownerId = _currentUserService.requiredUid;
+    final ownerId =
+        _currentUserService.requiredUid;
 
     return _dataSource.createInvitation(
       ownerId: ownerId,
@@ -40,9 +41,9 @@ class TenantInvitationRepositoryImpl
     );
   }
 
-  // ============================================================
+  // ================================================================
   // GET INVITATION BY ID
-  // ============================================================
+  // ================================================================
 
   @override
   Future<TenantInvitation?> getInvitationById(
@@ -53,9 +54,9 @@ class TenantInvitationRepositoryImpl
     );
   }
 
-  // ============================================================
+  // ================================================================
   // GET INVITATION BY TOKEN
-  // ============================================================
+  // ================================================================
 
   @override
   Future<TenantInvitation?> getInvitationByToken(
@@ -66,36 +67,69 @@ class TenantInvitationRepositoryImpl
     );
   }
 
-  // ============================================================
+  // ================================================================
   // GET PENDING INVITATION BY TENANT ID
-  // CURRENT OWNER ONLY
-  // ============================================================
+  // ================================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByTenantId(
+  Future<TenantInvitation?>
+  getPendingInvitationByTenantId(
       String tenantId,
       ) {
-    return _dataSource.getPendingInvitationByTenantId(
+    return _dataSource
+        .getPendingInvitationByTenantId(
       tenantId,
     );
   }
 
-  // ============================================================
+  // ================================================================
   // GET PENDING INVITATION BY PHONE
-  // ============================================================
+  // ================================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByPhone(
+  Future<TenantInvitation?>
+  getPendingInvitationByPhone(
       String phone,
       ) {
-    return _dataSource.getPendingInvitationByPhone(
+    return _dataSource
+        .getPendingInvitationByPhone(
       phone,
     );
   }
 
-  // ============================================================
+  // ================================================================
+  // REALTIME — ALL INVITATIONS
+  // ================================================================
+
+  @override
+  Stream<List<TenantInvitation>>
+  watchInvitationsByTenantId(
+      String tenantId,
+      ) {
+    return _dataSource
+        .watchInvitationsByTenantId(
+      tenantId,
+    );
+  }
+
+  // ================================================================
+  // REALTIME — PENDING INVITATION
+  // ================================================================
+
+  @override
+  Stream<TenantInvitation?>
+  watchPendingInvitationByTenantId(
+      String tenantId,
+      ) {
+    return _dataSource
+        .watchPendingInvitationByTenantId(
+      tenantId,
+    );
+  }
+
+  // ================================================================
   // ACCEPT INVITATION
-  // ============================================================
+  // ================================================================
 
   @override
   Future<void> acceptInvitation(
@@ -106,9 +140,9 @@ class TenantInvitationRepositoryImpl
     );
   }
 
-  // ============================================================
-  // CANCEL INVITATION
-  // ============================================================
+  // ================================================================
+  // CANCEL / REJECT INVITATION
+  // ================================================================
 
   @override
   Future<void> cancelInvitation(
@@ -119,9 +153,9 @@ class TenantInvitationRepositoryImpl
     );
   }
 
-  // ============================================================
+  // ================================================================
   // EXPIRE INVITATION
-  // ============================================================
+  // ================================================================
 
   @override
   Future<void> expireInvitation(

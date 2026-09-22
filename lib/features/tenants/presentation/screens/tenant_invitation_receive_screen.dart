@@ -6,12 +6,16 @@ import '../../../../app/router/route_names.dart';
 
 import '../../domain/entities/tenant_invitation.dart';
 
+import '../providers/current_tenant_pending_invitation_provider.dart';
 import '../providers/tenant_invitation_provider.dart';
 
 class TenantInvitationReceiveScreen extends ConsumerStatefulWidget {
   final String invitationId;
 
-  const TenantInvitationReceiveScreen({super.key, required this.invitationId});
+  const TenantInvitationReceiveScreen({
+    super.key,
+    required this.invitationId,
+  });
 
   @override
   ConsumerState<TenantInvitationReceiveScreen> createState() =>
@@ -24,6 +28,8 @@ class _TenantInvitationReceiveScreenState
 
   bool _isLoading = true;
   bool _isAccepting = false;
+  bool _isAccepted = false;
+
   String? _errorMessage;
 
   @override
@@ -64,7 +70,7 @@ class _TenantInvitationReceiveScreenState
         setState(() {
           _isLoading = false;
           _errorMessage =
-              'This invitation does not exist or is no longer available.';
+          'This invitation does not exist or is no longer available.';
         });
 
         return;
@@ -92,7 +98,7 @@ class _TenantInvitationReceiveScreenState
   Future<void> _acceptInvitation() async {
     final invitation = _invitation;
 
-    if (invitation == null || _isAccepting) {
+    if (invitation == null || _isAccepting || _isAccepted) {
       return;
     }
 
@@ -111,13 +117,75 @@ class _TenantInvitationReceiveScreenState
       _errorMessage = null;
     });
 
+    debugPrint('');
+    debugPrint('════════════════════════════════════════════');
+    debugPrint('🔐 ACCEPT INVITATION STARTED');
+    debugPrint('════════════════════════════════════════════');
+    debugPrint('Invitation ID : ${invitation.id}');
+    debugPrint('Tenant ID     : ${invitation.tenantId}');
+    debugPrint('Property ID   : ${invitation.propertyId}');
+    debugPrint('Unit ID       : ${invitation.unitId}');
+    debugPrint('Phone         : ${invitation.phone}');
+    debugPrint('Rent Amount   : ${invitation.rentAmount}');
+    debugPrint('Owner ID      : ${invitation.ownerId}');
+    debugPrint('════════════════════════════════════════════');
+    debugPrint('');
+
     try {
-      await ref.read(acceptTenantInvitationProvider)(invitation.id);
+      debugPrint(
+        '➡️ STEP 1: Calling acceptTenantInvitationProvider...',
+      );
+
+      await ref.read(acceptTenantInvitationProvider)(
+        invitation.id,
+      );
+
+      debugPrint(
+        '✅ STEP 1 SUCCESS: Invitation accepted.',
+      );
 
       if (!mounted) return;
 
       // --------------------------------------------------------
-      // SUCCESS
+      // IMPORTANT:
+      // The invitation status has changed from PENDING to
+      // ACCEPTED in Firestore.
+      //
+      // The TenantHomeInvitationGateScreen watches
+      // currentTenantPendingInvitationProvider.
+      //
+      // Invalidate it here so it does not keep using the old
+      // cached pending invitation.
+      // --------------------------------------------------------
+
+      ref.invalidate(
+        currentTenantPendingInvitationProvider,
+      );
+
+      debugPrint(
+        '✅ PENDING INVITATION PROVIDER INVALIDATED.',
+      );
+
+      // --------------------------------------------------------
+      // UPDATE LOCAL UI STATE
+      // --------------------------------------------------------
+
+      setState(() {
+        _isAccepting = false;
+        _isAccepted = true;
+        _errorMessage = null;
+      });
+
+      debugPrint(
+        '✅ ACCEPT UI: Loading state stopped.',
+      );
+
+      debugPrint(
+        '✅ ACCEPT UI: Invitation marked as locally accepted.',
+      );
+
+      // --------------------------------------------------------
+      // SUCCESS DIALOG
       // --------------------------------------------------------
 
       await showDialog<void>(
@@ -125,8 +193,13 @@ class _TenantInvitationReceiveScreenState
         barrierDismissible: false,
         builder: (context) {
           return AlertDialog(
-            icon: const Icon(Icons.check_circle_outline, size: 56),
-            title: const Text('Invitation Accepted'),
+            icon: const Icon(
+              Icons.check_circle_outline,
+              size: 56,
+            ),
+            title: const Text(
+              'Invitation Accepted',
+            ),
             content: const Text(
               'Your tenant account has been successfully connected to this tenancy.',
             ),
@@ -135,7 +208,9 @@ class _TenantInvitationReceiveScreenState
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
-                child: const Text('Continue'),
+                child: const Text(
+                  'Continue',
+                ),
               ),
             ],
           );
@@ -144,8 +219,29 @@ class _TenantInvitationReceiveScreenState
 
       if (!mounted) return;
 
-      context.go(RouteNames.tenantHome);
-    } catch (error) {
+      // --------------------------------------------------------
+      // GO TO TENANT HOME
+      // --------------------------------------------------------
+
+      debugPrint(
+        '➡️ NAVIGATING TO TENANT HOME...',
+      );
+
+      context.go(
+        RouteNames.tenantHome,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('');
+      debugPrint('❌❌❌ ACCEPT INVITATION FAILED ❌❌❌');
+      debugPrint('Invitation ID : ${invitation.id}');
+      debugPrint('Error Type    : ${error.runtimeType}');
+      debugPrint('Error         : $error');
+      debugPrint('');
+      debugPrint('STACK TRACE:');
+      debugPrint(stackTrace.toString());
+      debugPrint('════════════════════════════════════════════');
+      debugPrint('');
+
       if (!mounted) return;
 
       setState(() {
@@ -162,7 +258,7 @@ class _TenantInvitationReceiveScreenState
   Future<void> _rejectInvitation() async {
     final invitation = _invitation;
 
-    if (invitation == null || _isAccepting) {
+    if (invitation == null || _isAccepting || _isAccepted) {
       return;
     }
 
@@ -170,7 +266,9 @@ class _TenantInvitationReceiveScreenState
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Decline Invitation?'),
+          title: const Text(
+            'Decline Invitation?',
+          ),
           content: const Text(
             'Are you sure you want to decline this tenancy invitation?',
           ),
@@ -179,13 +277,17 @@ class _TenantInvitationReceiveScreenState
               onPressed: () {
                 Navigator.of(context).pop(false);
               },
-              child: const Text('Cancel'),
+              child: const Text(
+                'Cancel',
+              ),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(context).pop(true);
               },
-              child: const Text('Decline'),
+              child: const Text(
+                'Decline',
+              ),
             ),
           ],
         );
@@ -196,18 +298,44 @@ class _TenantInvitationReceiveScreenState
       return;
     }
 
+    if (!mounted) return;
+
     setState(() {
       _isAccepting = true;
       _errorMessage = null;
     });
 
     try {
-      await ref.read(cancelTenantInvitationProvider)(invitation.id);
+      await ref.read(cancelTenantInvitationProvider)(
+        invitation.id,
+      );
 
       if (!mounted) return;
 
       // --------------------------------------------------------
-      // SUCCESS
+      // IMPORTANT:
+      // Remove cached pending invitation after rejection.
+      // --------------------------------------------------------
+
+      ref.invalidate(
+        currentTenantPendingInvitationProvider,
+      );
+
+      debugPrint(
+        '✅ PENDING INVITATION PROVIDER INVALIDATED AFTER REJECTION.',
+      );
+
+      // --------------------------------------------------------
+      // STOP LOADING
+      // --------------------------------------------------------
+
+      setState(() {
+        _isAccepting = false;
+        _errorMessage = null;
+      });
+
+      // --------------------------------------------------------
+      // SUCCESS DIALOG
       // --------------------------------------------------------
 
       await showDialog<void>(
@@ -215,15 +343,24 @@ class _TenantInvitationReceiveScreenState
         barrierDismissible: false,
         builder: (context) {
           return AlertDialog(
-            icon: const Icon(Icons.cancel_outlined, size: 56),
-            title: const Text('Invitation Declined'),
-            content: const Text('You have declined this tenancy invitation.'),
+            icon: const Icon(
+              Icons.cancel_outlined,
+              size: 56,
+            ),
+            title: const Text(
+              'Invitation Declined',
+            ),
+            content: const Text(
+              'You have declined this tenancy invitation.',
+            ),
             actions: [
               FilledButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
-                child: const Text('Continue'),
+                child: const Text(
+                  'Continue',
+                ),
               ),
             ],
           );
@@ -232,8 +369,20 @@ class _TenantInvitationReceiveScreenState
 
       if (!mounted) return;
 
-      context.go(RouteNames.tenantHome);
-    } catch (error) {
+      context.go(
+        RouteNames.tenantHome,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('');
+      debugPrint('❌❌❌ REJECT INVITATION FAILED ❌❌❌');
+      debugPrint('Invitation ID : ${invitation.id}');
+      debugPrint('Error Type    : ${error.runtimeType}');
+      debugPrint('Error         : $error');
+      debugPrint('STACK TRACE:');
+      debugPrint(stackTrace.toString());
+      debugPrint('════════════════════════════════════════════');
+      debugPrint('');
+
       if (!mounted) return;
 
       setState(() {
@@ -251,7 +400,9 @@ class _TenantInvitationReceiveScreenState
     final message = error.toString();
 
     if (message.startsWith('Exception: ')) {
-      return message.substring('Exception: '.length);
+      return message.substring(
+        'Exception: '.length,
+      );
     }
 
     return message;
@@ -264,8 +415,14 @@ class _TenantInvitationReceiveScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tenant Invitation')),
-      body: SafeArea(child: _buildBody()),
+      appBar: AppBar(
+        title: const Text(
+          'Tenant Invitation',
+        ),
+      ),
+      body: SafeArea(
+        child: _buildBody(),
+      ),
     );
   }
 
@@ -285,7 +442,9 @@ class _TenantInvitationReceiveScreenState
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 20),
-            Text('Loading invitation...'),
+            Text(
+              'Loading invitation...',
+            ),
           ],
         ),
       );
@@ -302,13 +461,21 @@ class _TenantInvitationReceiveScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 64),
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+              ),
               const SizedBox(height: 20),
-              Text(_errorMessage!, textAlign: TextAlign.center),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 24),
               OutlinedButton(
                 onPressed: _loadInvitation,
-                child: const Text('Try Again'),
+                child: const Text(
+                  'Try Again',
+                ),
               ),
             ],
           ),
@@ -319,21 +486,28 @@ class _TenantInvitationReceiveScreenState
     final invitation = _invitation;
 
     if (invitation == null) {
-      return const Center(child: Text('Invitation unavailable.'));
+      return const Center(
+        child: Text(
+          'Invitation unavailable.',
+        ),
+      );
     }
 
     // ----------------------------------------------------------
     // EXPIRED / INVALID
     // ----------------------------------------------------------
 
-    if (!invitation.isValid) {
+    if (!invitation.isValid && !_isAccepted) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.event_busy_outlined, size: 64),
+              const Icon(
+                Icons.event_busy_outlined,
+                size: 64,
+              ),
               const SizedBox(height: 20),
               const Text(
                 'This invitation is no longer valid.',
@@ -365,23 +539,30 @@ class _TenantInvitationReceiveScreenState
           // ====================================================
           // HEADER
           // ====================================================
+
           Center(
             child: Column(
               children: [
                 Icon(
-                  Icons.home_work_outlined,
+                  _isAccepted
+                      ? Icons.check_circle_outline
+                      : Icons.home_work_outlined,
                   size: 72,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'You Have a Tenant Invitation',
+                  _isAccepted
+                      ? 'Invitation Accepted'
+                      : 'You Have a Tenant Invitation',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'A property owner has invited you to join a tenancy.',
+                  _isAccepted
+                      ? 'Your Griho account is now connected to this tenancy.'
+                      : 'A property owner has invited you to join a tenancy.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
@@ -394,53 +575,50 @@ class _TenantInvitationReceiveScreenState
           // ====================================================
           // INVITATION DETAILS
           // ====================================================
+
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  // ------------------------------------------------
-                  // PROPERTY
-                  // ------------------------------------------------
                   _DetailRow(
                     icon: Icons.home_outlined,
                     title: 'Property',
                     value:
-                        invitation.propertyName ??
+                    invitation.propertyName ??
                         'Property information unavailable',
                   ),
 
-                  const Divider(height: 28),
+                  const Divider(
+                    height: 28,
+                  ),
 
-                  // ------------------------------------------------
-                  // UNIT
-                  // ------------------------------------------------
                   _DetailRow(
                     icon: Icons.door_front_door_outlined,
                     title: 'Unit',
                     value: _formatUnit(invitation),
                   ),
 
-                  const Divider(height: 28),
+                  const Divider(
+                    height: 28,
+                  ),
 
-                  // ------------------------------------------------
-                  // PHONE
-                  // ------------------------------------------------
                   _DetailRow(
                     icon: Icons.phone_outlined,
                     title: 'Phone',
                     value: invitation.phone,
                   ),
 
-                  const Divider(height: 28),
+                  const Divider(
+                    height: 28,
+                  ),
 
-                  // ------------------------------------------------
-                  // EXPIRES
-                  // ------------------------------------------------
                   _DetailRow(
                     icon: Icons.calendar_today_outlined,
                     title: 'Expires',
-                    value: _formatDate(invitation.expiresAt),
+                    value: _formatDate(
+                      invitation.expiresAt,
+                    ),
                   ),
                 ],
               ),
@@ -450,18 +628,54 @@ class _TenantInvitationReceiveScreenState
           const SizedBox(height: 24),
 
           // ====================================================
-          // WARNING / ERROR
+          // SUCCESS MESSAGE
           // ====================================================
-          if (_errorMessage != null) ...[
+
+          if (_isAccepted) ...[
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.error_outline),
+                    const Icon(
+                      Icons.check_circle_outline,
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: Text(_errorMessage!)),
+                    Expanded(
+                      child: Text(
+                        'Invitation accepted successfully. '
+                            'Your tenant account is now connected to this tenancy.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // ====================================================
+          // WARNING / ERROR
+          // ====================================================
+
+          if (_errorMessage != null && !_isAccepted) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -472,17 +686,39 @@ class _TenantInvitationReceiveScreenState
           // ====================================================
           // ACCEPT
           // ====================================================
+
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: _isAccepting ? null : _acceptInvitation,
+              onPressed:
+              _isAccepting || _isAccepted
+                  ? null
+                  : _acceptInvitation,
               child: _isAccepting
                   ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Accept Invitation'),
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              )
+                  : _isAccepted
+                  ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Invitation Accepted',
+                  ),
+                ],
+              )
+                  : const Text(
+                'Accept Invitation',
+              ),
             ),
           ),
 
@@ -491,11 +727,17 @@ class _TenantInvitationReceiveScreenState
           // ====================================================
           // DECLINE
           // ====================================================
+
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: _isAccepting ? null : _rejectInvitation,
-              child: const Text('Decline'),
+              onPressed:
+              _isAccepting || _isAccepted
+                  ? null
+                  : _rejectInvitation,
+              child: const Text(
+                'Decline',
+              ),
             ),
           ),
 
@@ -504,8 +746,11 @@ class _TenantInvitationReceiveScreenState
           // ====================================================
           // INFO
           // ====================================================
+
           Text(
-            'By accepting this invitation, your Griho account will be connected to this tenancy.',
+            _isAccepted
+                ? 'Your Griho account has been connected to this tenancy.'
+                : 'By accepting this invitation, your Griho account will be connected to this tenancy.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -549,11 +794,15 @@ class _TenantInvitationReceiveScreenState
     final month = date.month.toString().padLeft(2, '0');
     final year = date.year.toString();
 
-    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    final hour = date.hour % 12 == 0
+        ? 12
+        : date.hour % 12;
 
     final minute = date.minute.toString().padLeft(2, '0');
 
-    final period = date.hour >= 12 ? 'PM' : 'AM';
+    final period = date.hour >= 12
+        ? 'PM'
+        : 'AM';
 
     return '$day/$month/$year, '
         '$hour:$minute $period';
@@ -580,15 +829,24 @@ class _DetailRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 24),
+        Icon(
+          icon,
+          size: 24,
+        ),
         const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.labelMedium),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
               const SizedBox(height: 4),
-              Text(value, style: Theme.of(context).textTheme.bodyLarge),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
             ],
           ),
         ),
