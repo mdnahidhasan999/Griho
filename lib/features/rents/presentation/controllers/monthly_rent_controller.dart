@@ -8,9 +8,8 @@ import '../../domain/usecases/create_monthly_rent.dart';
 class MonthlyRentController extends StateNotifier<AsyncValue<void>> {
   final CreateMonthlyRent _createMonthlyRent;
 
-  MonthlyRentController({
-    required this._createMonthlyRent,
-  }) : super(const AsyncData(null));
+  MonthlyRentController({required this._createMonthlyRent})
+    : super(const AsyncData(null));
 
   // ============================================================
   // CREATE MONTHLY RENT
