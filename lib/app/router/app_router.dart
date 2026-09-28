@@ -8,6 +8,10 @@ import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/otp_verification_screen.dart';
 import '../../features/auth/presentation/screens/phone_login_screen.dart';
 
+import '../../features/billing/domain/entities/billing_rule.dart';
+import '../../features/billing/presentation/screens/edit_billing_rule_screen.dart';
+import '../../features/billing/presentation/screens/owner_billing_rules_screen.dart';
+import '../../features/billing/presentation/screens/owner_billing_setup_screen.dart';
 import '../../features/home/presentation/screens/caretaker_home_screen.dart';
 import '../../features/home/presentation/screens/manager_home_screen.dart';
 import '../../features/home/presentation/screens/owner_home_screen.dart';
@@ -98,7 +102,9 @@ abstract final class AppRouter {
             final phoneNumber = state.extra as String?;
 
             if (phoneNumber == null ||
-                phoneNumber.trim().isEmpty) {
+                phoneNumber
+                    .trim()
+                    .isEmpty) {
               return const Scaffold(
                 body: Center(
                   child: Text('Invalid phone number.'),
@@ -327,7 +333,9 @@ abstract final class AppRouter {
             state.pathParameters['unitId'];
 
             if (unitId == null ||
-                unitId.trim().isEmpty) {
+                unitId
+                    .trim()
+                    .isEmpty) {
               return const Scaffold(
                 body: Center(
                   child: Text('Invalid unit ID.'),
@@ -348,7 +356,9 @@ abstract final class AppRouter {
             state.pathParameters['unitId'];
 
             if (unitId == null ||
-                unitId.trim().isEmpty) {
+                unitId
+                    .trim()
+                    .isEmpty) {
               return const Scaffold(
                 body: Center(
                   child: Text('Invalid unit ID.'),
@@ -369,7 +379,9 @@ abstract final class AppRouter {
             state.pathParameters['unitId'];
 
             if (unitId == null ||
-                unitId.trim().isEmpty) {
+                unitId
+                    .trim()
+                    .isEmpty) {
               return const Scaffold(
                 body: Center(
                   child: Text('Invalid unit ID.'),
@@ -390,7 +402,9 @@ abstract final class AppRouter {
             state.pathParameters['unitId'];
 
             if (unitId == null ||
-                unitId.trim().isEmpty) {
+                unitId
+                    .trim()
+                    .isEmpty) {
               return const Scaffold(
                 body: Center(
                   child: Text('Invalid unit ID.'),
@@ -404,6 +418,50 @@ abstract final class AppRouter {
           },
         ),
 
+
+// ========================================================
+// BILLING
+// ========================================================
+
+        GoRoute(
+          path: RouteNames.ownerBillingSetup,
+          builder: (context, state) {
+            return const OwnerBillingSetupScreen();
+          },
+        ),
+
+        GoRoute(
+          path: RouteNames.ownerBillingRules,
+          builder: (context, state) {
+            return const OwnerBillingRulesScreen();
+          },
+        ),
+
+        // ========================================================
+        // BILLING
+        // ========================================================
+
+        GoRoute(
+          path: RouteNames.editBillingRule,
+          builder: (context, state) {
+            final rule =
+            state.extra as BillingRule?;
+
+            if (rule == null) {
+              return const Scaffold(
+                body: Center(
+                  child: Text(
+                    'Invalid billing rule information.',
+                  ),
+                ),
+              );
+            }
+
+            return EditBillingRuleScreen(
+              rule: rule,
+            );
+          },
+        ),
         // ========================================================
         // TENANTS
         // ========================================================
@@ -523,7 +581,9 @@ abstract final class AppRouter {
             state.pathParameters['invitationId'];
 
             if (invitationId == null ||
-                invitationId.trim().isEmpty) {
+                invitationId
+                    .trim()
+                    .isEmpty) {
               return const Scaffold(
                 body: Center(
                   child: Text(
@@ -549,9 +609,7 @@ abstract final class AppRouter {
           path: RouteNames.tenantInvitations,
 
           builder: (context, state) {
-
             return const TenantInvitationsScreen();
-
           },
 
         ),

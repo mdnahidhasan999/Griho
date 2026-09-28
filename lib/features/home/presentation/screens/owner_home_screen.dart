@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
-import '../../../../app/utils/app_snackbar.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
@@ -166,7 +165,8 @@ class OwnerHomeScreen extends ConsumerWidget {
                             value: propertiesAsync.when(
                               loading: () => '...',
                               error: (_, _) => '0',
-                              data: (properties) => '${properties.length}',
+                              data: (properties) =>
+                              '${properties.length}',
                             ),
                             onTap: () {
                               context.push(
@@ -186,12 +186,14 @@ class OwnerHomeScreen extends ConsumerWidget {
                               loading: () => '...',
                               error: (_, _) => '0',
                               data: (tenants) {
-                                final activeTenantCount = tenants
-                                    .where(
-                                      (tenant) =>
-                                  tenant.status == TenantStatus.active,
-                                )
-                                    .length;
+                                final activeTenantCount =
+                                    tenants
+                                        .where(
+                                          (tenant) =>
+                                      tenant.status ==
+                                          TenantStatus.active,
+                                    )
+                                        .length;
 
                                 return '$activeTenantCount';
                               },
@@ -311,16 +313,18 @@ class OwnerHomeScreen extends ConsumerWidget {
 
                 const SizedBox(height: 12),
 
+                // ============================================================
+                // BILLING
+                // ============================================================
+
                 _ActionCard(
-                  icon:
-                  Icons.receipt_long_outlined,
-                  title: 'Manage Bills',
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Billing Rules',
                   description:
-                  'View and manage property bills.',
+                  'View, create and manage billing rules for your properties.',
                   onTap: () {
-                    AppSnackbar.info(
-                      context,
-                      'Billing will be available in the next step.',
+                    context.push(
+                      RouteNames.ownerBillingRules,
                     );
                   },
                 ),

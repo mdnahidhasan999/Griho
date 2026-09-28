@@ -1419,7 +1419,144 @@ service cloud.firestore {
                       )
                     );
     }
+    // ============================================================
+    // BILLING RULES
+    // ============================================================
 
+    match /billingRules/{billingRuleId} {
+
+      // ----------------------------------------------------------
+      // READ
+      //
+      // Owner can read billing rules belonging to their property.
+      // This also allows queries such as:
+      //
+      // where('ownerId', isEqualTo: uid)
+      // .where('propertyId', isEqualTo: propertyId)
+      // ----------------------------------------------------------
+
+      allow read: if isAuthenticated()
+                  && resource.data.ownerId == request.auth.uid;
+
+
+      // ----------------------------------------------------------
+      // CREATE
+      // ----------------------------------------------------------
+
+      allow create: if isAuthenticated()
+
+                    && request.resource.data.ownerId
+                       == request.auth.uid
+
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.propertyId != ''
+
+                    && request.resource.data.scopeType is string
+                    && request.resource.data.scopeType != ''
+
+                    && request.resource.data.scopeId is string
+                    && request.resource.data.scopeId != ''
+
+                    && request.resource.data.chargeType is string
+                    && request.resource.data.chargeType != ''
+
+                    && request.resource.data.valueType is string
+                    && request.resource.data.valueType != ''
+
+                    && request.resource.data.amount is number
+                    && request.resource.data.amount >= 0
+
+                    && request.resource.data.title is string
+                    && request.resource.data.title != ''
+
+                    && request.resource.data.effectiveFrom is timestamp
+
+                    && (
+                      request.resource.data.effectiveTo == null
+                      ||
+                      request.resource.data.effectiveTo is timestamp
+                    )
+
+                    && request.resource.data.isActive is bool
+
+                    && request.resource.data.createdAt is timestamp
+
+                    && request.resource.data.updatedAt is timestamp
+
+                    && request.resource.data.createdAt <= request.time
+
+                    && request.resource.data.updatedAt <= request.time
+
+                    && isPropertyOwner(
+                      request.resource.data.propertyId
+                    );
+
+
+      // ----------------------------------------------------------
+      // UPDATE
+      // ----------------------------------------------------------
+
+      allow update: if isAuthenticated()
+
+                    && resource.data.ownerId == request.auth.uid
+
+                    && request.resource.data.ownerId
+                       == resource.data.ownerId
+
+                    && request.resource.data.propertyId
+                       == resource.data.propertyId
+
+                    && request.resource.data.scopeType
+                       == resource.data.scopeType
+
+                    && request.resource.data.scopeId
+                       == resource.data.scopeId
+
+                    && request.resource.data.chargeType
+                       == resource.data.chargeType
+
+                    && request.resource.data.valueType
+                       == resource.data.valueType
+
+                    && request.resource.data.amount is number
+                    && request.resource.data.amount >= 0
+
+                    && request.resource.data.title is string
+                    && request.resource.data.title != ''
+
+                    && request.resource.data.effectiveFrom is timestamp
+
+                    && (
+                      request.resource.data.effectiveTo == null
+                      ||
+                      request.resource.data.effectiveTo is timestamp
+                    )
+
+                    && request.resource.data.isActive is bool
+
+                    && request.resource.data.createdAt
+                       == resource.data.createdAt
+
+                    && request.resource.data.updatedAt is timestamp
+
+                    && request.resource.data.updatedAt <= request.time
+
+                    && isPropertyOwner(
+                      request.resource.data.propertyId
+                    );
+
+
+      // ----------------------------------------------------------
+      // DELETE
+      // ----------------------------------------------------------
+
+      allow delete: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid
+
+                    && isPropertyOwner(
+                      resource.data.propertyId
+                    );
+    }
 
     // ============================================================
     // SECURITY HELPERS
