@@ -74,6 +74,8 @@ Provider<Future<BillingRule> Function(
   return repository.updateBillingRule;
 });
 
+
+
 final deactivateBillingRuleProvider =
 Provider<Future<void> Function({
 required String ruleId,
