@@ -41,9 +41,9 @@ class Unit {
     String? propertyId,
     int? floorNumber,
     String? unitNumber,
-    String? name,
+    Object? name = _keep,
     UnitStatus? status,
-    String? tenantUserId,
+    Object? tenantUserId = _keep,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -52,11 +52,21 @@ class Unit {
       propertyId: propertyId ?? this.propertyId,
       floorNumber: floorNumber ?? this.floorNumber,
       unitNumber: unitNumber ?? this.unitNumber,
-      name: name ?? this.name,
+
+      name: name == _keep
+          ? this.name
+          : name as String?,
+
       status: status ?? this.status,
-      tenantUserId: tenantUserId ?? this.tenantUserId,
+
+      tenantUserId: tenantUserId == _keep
+          ? this.tenantUserId
+          : tenantUserId as String?,
+
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  static const Object _keep = Object();
 }

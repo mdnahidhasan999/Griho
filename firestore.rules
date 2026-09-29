@@ -91,11 +91,15 @@ service cloud.firestore {
 
                     ||
 
-                    (
-                      resource.data.tenantUserIds is list
-                      &&
-                      request.auth.uid in resource.data.tenantUserIds
-                    )
+                   (
+                     resource.data.tenantUserIds is list
+
+                     && request.auth.uid in resource.data.tenantUserIds
+
+                     && isValidPropertyTenantAccess(
+                       propertyId
+                     )
+                   )
                   );
 
 
@@ -381,29 +385,38 @@ service cloud.firestore {
                     );
 
 
-      allow update: if isAuthenticated()
-                    && request.auth.uid == userId
+   allow update: if isAuthenticated()
+                 && request.auth.uid == userId
 
-                    && request.resource.data.userId
-                       == resource.data.userId
+                 && request.resource.data.userId
+                    == resource.data.userId
 
-                    && request.resource.data.tenantId
-                       == resource.data.tenantId
+                 && request.resource.data.tenantId
+                    == resource.data.tenantId
 
-                    && request.resource.data.ownerId
-                       == resource.data.ownerId
+                 && request.resource.data.ownerId
+                    == resource.data.ownerId
 
-                    && request.resource.data.propertyId
-                       == resource.data.propertyId
+                 && request.resource.data.propertyId
+                    == resource.data.propertyId
 
-                    && request.resource.data.unitId
-                       == resource.data.unitId
+                 && request.resource.data.unitId
+                    == resource.data.unitId
 
-                    && request.resource.data.invitationId
-                       == resource.data.invitationId
+                 && request.resource.data.invitationId
+                    == resource.data.invitationId
 
-                    && request.resource.data.createdAt
-                       == resource.data.createdAt;
+                 && request.resource.data.createdAt
+                    == resource.data.createdAt
+
+                 && request.resource.data.diff(resource.data)
+                    .affectedKeys()
+                    .hasOnly([
+                      'updatedAt'
+                    ])
+
+                 && request.resource.data.updatedAt is timestamp
+                 && request.resource.data.updatedAt <= request.time;
 
 
       allow delete: if isAuthenticated()
@@ -1419,145 +1432,156 @@ service cloud.firestore {
                       )
                     );
     }
-    // ============================================================
-    // BILLING RULES
-    // ============================================================
+   // ============================================================
+   // BILLING RULES
+   // ============================================================
 
-    match /billingRules/{billingRuleId} {
+   match /billingRules/{billingRuleId} {
 
-      // ----------------------------------------------------------
-      // READ
-      //
-      // Owner can read billing rules belonging to their property.
-      // This also allows queries such as:
-      //
-      // where('ownerId', isEqualTo: uid)
-      // .where('propertyId', isEqualTo: propertyId)
-      // ----------------------------------------------------------
+     // ----------------------------------------------------------
+     // READ
+     // ----------------------------------------------------------
 
-      allow read: if isAuthenticated()
-                  && resource.data.ownerId == request.auth.uid;
+     allow read: if isAuthenticated()
+                 && resource.data.ownerId == request.auth.uid;
 
 
-      // ----------------------------------------------------------
-      // CREATE
-      // ----------------------------------------------------------
+     // ----------------------------------------------------------
+     // CREATE
+     // ----------------------------------------------------------
 
-      allow create: if isAuthenticated()
+     allow create: if isAuthenticated()
 
-                    && request.resource.data.ownerId
-                       == request.auth.uid
+                   && request.resource.data.ownerId
+                      == request.auth.uid
 
-                    && request.resource.data.propertyId is string
-                    && request.resource.data.propertyId != ''
+                   && request.resource.data.propertyId is string
+                   && request.resource.data.propertyId != ''
 
-                    && request.resource.data.scopeType is string
-                    && request.resource.data.scopeType != ''
+                   && request.resource.data.scopeType is string
+                   && request.resource.data.scopeType
+                      in [
+                        'property',
+                        'floor',
+                        'unit'
+                      ]
 
-                    && request.resource.data.scopeId is string
-                    && request.resource.data.scopeId != ''
+                   && request.resource.data.scopeId is string
+                   && request.resource.data.scopeId != ''
 
-                    && request.resource.data.chargeType is string
-                    && request.resource.data.chargeType != ''
+                   && request.resource.data.chargeType is string
+                   && request.resource.data.chargeType != ''
 
-                    && request.resource.data.valueType is string
-                    && request.resource.data.valueType != ''
+                   && request.resource.data.valueType is string
+                   && request.resource.data.valueType != ''
 
-                    && request.resource.data.amount is number
-                    && request.resource.data.amount >= 0
+                   && request.resource.data.amount is number
+                   && request.resource.data.amount >= 0
 
-                    && request.resource.data.title is string
-                    && request.resource.data.title != ''
+                   && request.resource.data.title is string
+                   && request.resource.data.title != ''
 
-                    && request.resource.data.effectiveFrom is timestamp
+                   && request.resource.data.effectiveFrom is timestamp
 
-                    && (
-                      request.resource.data.effectiveTo == null
-                      ||
-                      request.resource.data.effectiveTo is timestamp
-                    )
+                   && (
+                     request.resource.data.effectiveTo == null
+                     ||
+                     request.resource.data.effectiveTo is timestamp
+                   )
 
-                    && request.resource.data.isActive is bool
+                   && request.resource.data.isActive is bool
 
-                    && request.resource.data.createdAt is timestamp
+                   && request.resource.data.createdAt is timestamp
 
-                    && request.resource.data.updatedAt is timestamp
+                   && request.resource.data.updatedAt is timestamp
 
-                    && request.resource.data.createdAt <= request.time
+                   && request.resource.data.createdAt <= request.time
 
-                    && request.resource.data.updatedAt <= request.time
+                   && request.resource.data.updatedAt <= request.time
 
-                    && isPropertyOwner(
-                      request.resource.data.propertyId
-                    );
+                   && isPropertyOwner(
+                     request.resource.data.propertyId
+                   )
 
-
-      // ----------------------------------------------------------
-      // UPDATE
-      // ----------------------------------------------------------
-
-      allow update: if isAuthenticated()
-
-                    && resource.data.ownerId == request.auth.uid
-
-                    && request.resource.data.ownerId
-                       == resource.data.ownerId
-
-                    && request.resource.data.propertyId
-                       == resource.data.propertyId
-
-                    && request.resource.data.scopeType
-                       == resource.data.scopeType
-
-                    && request.resource.data.scopeId
-                       == resource.data.scopeId
-
-                    && request.resource.data.chargeType
-                       == resource.data.chargeType
-
-                    && request.resource.data.valueType
-                       == resource.data.valueType
-
-                    && request.resource.data.amount is number
-                    && request.resource.data.amount >= 0
-
-                    && request.resource.data.title is string
-                    && request.resource.data.title != ''
-
-                    && request.resource.data.effectiveFrom is timestamp
-
-                    && (
-                      request.resource.data.effectiveTo == null
-                      ||
-                      request.resource.data.effectiveTo is timestamp
-                    )
-
-                    && request.resource.data.isActive is bool
-
-                    && request.resource.data.createdAt
-                       == resource.data.createdAt
-
-                    && request.resource.data.updatedAt is timestamp
-
-                    && request.resource.data.updatedAt <= request.time
-
-                    && isPropertyOwner(
-                      request.resource.data.propertyId
-                    );
+                   && isValidBillingRuleScope(
+                     request.resource.data.propertyId,
+                     request.resource.data.scopeType,
+                     request.resource.data.scopeId
+                   );
 
 
-      // ----------------------------------------------------------
-      // DELETE
-      // ----------------------------------------------------------
+     // ----------------------------------------------------------
+     // UPDATE
+     // ----------------------------------------------------------
 
-      allow delete: if isAuthenticated()
-                    && resource.data.ownerId == request.auth.uid
+     allow update: if isAuthenticated()
 
-                    && isPropertyOwner(
-                      resource.data.propertyId
-                    );
-    }
+                   && resource.data.ownerId == request.auth.uid
 
+                   && request.resource.data.ownerId
+                      == resource.data.ownerId
+
+                   && request.resource.data.propertyId
+                      == resource.data.propertyId
+
+                   && request.resource.data.scopeType
+                      == resource.data.scopeType
+
+                   && request.resource.data.scopeId
+                      == resource.data.scopeId
+
+                   && request.resource.data.chargeType
+                      == resource.data.chargeType
+
+                   && request.resource.data.valueType
+                      == resource.data.valueType
+
+                   && request.resource.data.amount is number
+                   && request.resource.data.amount >= 0
+
+                   && request.resource.data.title is string
+                   && request.resource.data.title != ''
+
+                   && request.resource.data.effectiveFrom is timestamp
+
+                   && (
+                     request.resource.data.effectiveTo == null
+                     ||
+                     request.resource.data.effectiveTo is timestamp
+                   )
+
+                   && request.resource.data.isActive is bool
+
+                   && request.resource.data.createdAt
+                      == resource.data.createdAt
+
+                   && request.resource.data.updatedAt is timestamp
+
+                   && request.resource.data.updatedAt <= request.time
+
+                   && isPropertyOwner(
+                     request.resource.data.propertyId
+                   )
+
+                   && isValidBillingRuleScope(
+                     request.resource.data.propertyId,
+                     request.resource.data.scopeType,
+                     request.resource.data.scopeId
+                   );
+
+
+     // ----------------------------------------------------------
+     // DELETE
+     // ----------------------------------------------------------
+
+     allow delete: if isAuthenticated()
+
+                   && resource.data.ownerId == request.auth.uid
+
+                   && isPropertyOwner(
+                     resource.data.propertyId
+                   );
+   }
     // ============================================================
     // SECURITY HELPERS
     // ============================================================
@@ -1566,7 +1590,78 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+// ============================================================
+// BILLING RULE SCOPE VALIDATION
+// ============================================================
 
+function isValidBillingRuleScope(
+  propertyId,
+  scopeType,
+  scopeId
+) {
+
+  // ----------------------------------------------------------
+  // PROPERTY SCOPE
+  // ----------------------------------------------------------
+
+  return (
+
+    (
+      scopeType == 'property'
+
+      && scopeId == propertyId
+    )
+
+    ||
+
+    // --------------------------------------------------------
+    // FLOOR SCOPE
+    //
+    // scopeId must be a valid floor identifier belonging
+    // to the specified property.
+    //
+    // NOTE:
+    // This assumes floors are represented by documents in:
+    // /floors/{floorId}
+    // --------------------------------------------------------
+
+    (
+      scopeType == 'floor'
+
+      && exists(
+        /databases/$(database)/documents/floors/$(scopeId)
+      )
+
+      && get(
+        /databases/$(database)/documents/floors/$(scopeId)
+      ).data.propertyId == propertyId
+
+      && get(
+        /databases/$(database)/documents/floors/$(scopeId)
+      ).data.ownerId == request.auth.uid
+    )
+
+    ||
+
+    // --------------------------------------------------------
+    // UNIT SCOPE
+    // --------------------------------------------------------
+
+    (
+      scopeType == 'unit'
+
+      && exists(
+        /databases/$(database)/documents/units/$(scopeId)
+      )
+
+      && get(
+        /databases/$(database)/documents/units/$(scopeId)
+      ).data.propertyId == propertyId
+
+      && isPropertyOwner(propertyId)
+    )
+  );
+}
     // ============================================================
     // PROPERTY OWNER
     // ============================================================
@@ -1671,6 +1766,9 @@ service cloud.firestore {
         ).data;
 
       return access.userId == request.auth.uid
+
+             && access.ownerId is string
+             && access.ownerId != ''
 
              && access.propertyId == propertyId
 

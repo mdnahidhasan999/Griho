@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+import '../../../tenants/domain/entities/tenant.dart';
+import '../../../tenants/presentation/providers/property_tenants_provider.dart';
+import '../../../units/domain/entities/unit.dart';
+import '../../../units/presentation/providers/property_units_provider.dart';
 
 import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/create_billing_rule_request.dart';
@@ -27,11 +31,12 @@ class _OwnerBillingSetupScreenState
 
   String? _selectedPropertyId;
 
-  BillingChargeType _chargeType =
-      BillingChargeType.water;
+  BillingScopeType _scopeType = BillingScopeType.property;
+  String? _selectedScopeId;
 
-  BillingValueType _valueType =
-      BillingValueType.fixed;
+  BillingChargeType _chargeType = BillingChargeType.water;
+
+  BillingValueType _valueType = BillingValueType.fixed;
 
   DateTime _effectiveDate = DateTime.now();
 
@@ -67,6 +72,117 @@ class _OwnerBillingSetupScreenState
   }
 
   // ========================================================================
+  // SCOPE
+  // ========================================================================
+
+  String _scopeTypeLabel(BillingScopeType type) {
+    switch (type) {
+      case BillingScopeType.property:
+        return 'Entire Property';
+
+      case BillingScopeType.floor:
+        return 'Specific Floor';
+
+      case BillingScopeType.unit:
+        return 'Specific Unit';
+
+      case BillingScopeType.tenant:
+        return 'Specific Tenant';
+    }
+  }
+
+  IconData _scopeTypeIcon(BillingScopeType type) {
+    switch (type) {
+      case BillingScopeType.property:
+        return Icons.apartment_outlined;
+
+      case BillingScopeType.floor:
+        return Icons.layers_outlined;
+
+      case BillingScopeType.unit:
+        return Icons.door_front_door_outlined;
+
+      case BillingScopeType.tenant:
+        return Icons.person_outline;
+    }
+  }
+
+  void _changeScopeType(BillingScopeType? value) {
+    if (value == null) {
+      return;
+    }
+
+    setState(() {
+      _scopeType = value;
+      _selectedScopeId = null;
+    });
+  }
+
+  // ========================================================================
+  // FLOOR LIST
+  // ========================================================================
+
+  List<int> _getFloorNumbers(List<Unit> units) {
+    final floors = <int>{};
+
+    for (final unit in units) {
+      floors.add(unit.floorNumber);
+    }
+
+    final result = floors.toList()..sort();
+
+    return result;
+  }
+
+  String _floorLabel(int floorNumber) {
+    if (floorNumber == 0) {
+      return 'Ground Floor';
+    }
+
+    if (floorNumber == 1) {
+      return '1st Floor';
+    }
+
+    if (floorNumber == 2) {
+      return '2nd Floor';
+    }
+
+    if (floorNumber == 3) {
+      return '3rd Floor';
+    }
+
+    return '$floorNumber Floor';
+  }
+
+  // ========================================================================
+  // UNIT LABEL
+  // ========================================================================
+
+  String _unitLabel(Unit unit) {
+    final unitNumber = unit.unitNumber.trim();
+
+    if (unit.name != null && unit.name!.trim().isNotEmpty) {
+      return '${unit.name!.trim()} • Unit $unitNumber';
+    }
+
+    return 'Unit $unitNumber';
+  }
+
+  // ========================================================================
+  // TENANT LABEL
+  // ========================================================================
+
+  String _tenantLabel(Tenant tenant) {
+    final name = tenant.name.trim();
+
+    if (tenant.phone.trim().isNotEmpty) {
+      return '$name • ${tenant.phone.trim()}';
+    }
+
+    return name;
+  }
+
+  // ========================================================================
   // SAVE
   // ========================================================================
 
@@ -79,6 +195,14 @@ class _OwnerBillingSetupScreenState
         _selectedPropertyId!.trim().isEmpty) {
       _showMessage(
         'Please select a property.',
+      );
+      return;
+    }
+
+    if (_selectedScopeId == null ||
+        _selectedScopeId!.trim().isEmpty) {
+      _showMessage(
+        'Please select a billing scope.',
       );
       return;
     }
@@ -131,17 +255,15 @@ class _OwnerBillingSetupScreenState
         ownerId: ownerId,
         propertyId: _selectedPropertyId!.trim(),
 
-        scopeType: BillingScopeType.property,
-        scopeId: _selectedPropertyId!.trim(),
+        scopeType: _scopeType,
+        scopeId: _selectedScopeId!.trim(),
 
         chargeType: _chargeType,
         valueType: _valueType,
 
         amount: amount,
 
-        title: title.isEmpty
-            ? null
-            : title,
+        title: title.isEmpty ? null : title,
 
         effectiveFrom: _effectiveDate,
 
@@ -150,13 +272,11 @@ class _OwnerBillingSetupScreenState
         isActive: _isActive,
       );
 
-      final createBillingRule =
-      ref.read(
+      final createBillingRule = ref.read(
         createBillingRuleProvider,
       );
 
-      final rule =
-      await createBillingRule(
+      final rule = await createBillingRule(
         request,
       );
 
@@ -168,8 +288,7 @@ class _OwnerBillingSetupScreenState
         propertyBillingRulesProvider(
           (
           ownerId: ownerId,
-          propertyId:
-          _selectedPropertyId!.trim(),
+          propertyId: _selectedPropertyId!.trim(),
           ),
         ),
       );
@@ -188,6 +307,14 @@ class _OwnerBillingSetupScreenState
 
       debugPrint(
         'BILLING: Property ID = ${rule.propertyId}',
+      );
+
+      debugPrint(
+        'BILLING: Scope Type = ${rule.scopeType.name}',
+      );
+
+      debugPrint(
+        'BILLING: Scope ID = ${rule.scopeId}',
       );
     } catch (error, stackTrace) {
       debugPrint(
@@ -253,14 +380,8 @@ class _OwnerBillingSetupScreenState
   // ========================================================================
 
   String _formatDate(DateTime date) {
-    final day = date.day
-        .toString()
-        .padLeft(2, '0');
-
-    final month = date.month
-        .toString()
-        .padLeft(2, '0');
-
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
     final year = date.year.toString();
 
     return '$day/$month/$year';
@@ -432,8 +553,7 @@ class _OwnerBillingSetupScreenState
                 return DropdownButtonFormField<String>(
                   initialValue: properties.any(
                         (property) =>
-                    property.id ==
-                        _selectedPropertyId,
+                    property.id == _selectedPropertyId,
                   )
                       ? _selectedPropertyId
                       : null,
@@ -450,19 +570,20 @@ class _OwnerBillingSetupScreenState
                         value: property.id,
                         child: Text(
                           property.name,
-                          overflow:
-                          TextOverflow.ellipsis,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                   ],
-                  onChanged: (value) {
+                  onChanged: _isSaving
+                      ? null
+                      : (value) {
                     setState(() {
                       _selectedPropertyId = value;
+                      _selectedScopeId = null;
                     });
                   },
                   validator: (value) {
-                    if (value == null ||
-                        value.isEmpty) {
+                    if (value == null || value.isEmpty) {
                       return 'Please select a property.';
                     }
 
@@ -470,6 +591,61 @@ class _OwnerBillingSetupScreenState
                   },
                 );
               },
+            ),
+
+            const SizedBox(height: 24),
+
+            // ==================================================================
+            // BILLING SCOPE
+            // ==================================================================
+
+            Text(
+              'Billing Scope',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            DropdownButtonFormField<BillingScopeType>(
+              initialValue: _scopeType,
+              decoration: const InputDecoration(
+                labelText: 'Apply rule to',
+                prefixIcon: Icon(
+                  Icons.account_tree_outlined,
+                ),
+                border: OutlineInputBorder(),
+              ),
+              items: BillingScopeType.values.map(
+                    (type) {
+                  return DropdownMenuItem<BillingScopeType>(
+                    value: type,
+                    child: Row(
+                      children: [
+                        Icon(
+                          _scopeTypeIcon(type),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          _scopeTypeLabel(type),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ).toList(),
+              onChanged: _isSaving
+                  ? null
+                  : _changeScopeType,
+            ),
+
+            const SizedBox(height: 12),
+
+            _buildScopeSelector(
+              context,
+              theme,
             ),
 
             const SizedBox(height: 24),
@@ -496,19 +672,19 @@ class _OwnerBillingSetupScreenState
                 ),
                 border: OutlineInputBorder(),
               ),
-              items: BillingChargeType.values
-                  .map(
-                    (type) =>
-                    DropdownMenuItem<
-                        BillingChargeType>(
-                      value: type,
-                      child: Text(
-                        _chargeTypeLabel(type),
-                      ),
+              items: BillingChargeType.values.map(
+                    (type) {
+                  return DropdownMenuItem<BillingChargeType>(
+                    value: type,
+                    child: Text(
+                      _chargeTypeLabel(type),
                     ),
-              )
-                  .toList(),
-              onChanged: (value) {
+                  );
+                },
+              ).toList(),
+              onChanged: _isSaving
+                  ? null
+                  : (value) {
                 if (value == null) {
                   return;
                 }
@@ -536,22 +712,19 @@ class _OwnerBillingSetupScreenState
 
             TextFormField(
               controller: _titleController,
-              textInputAction:
-              TextInputAction.next,
+              enabled: !_isSaving,
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'Optional title',
-                hintText:
-                'Example: Monthly water charge',
+                hintText: 'Example: Monthly water charge',
                 prefixIcon: Icon(
                   Icons.title_outlined,
                 ),
                 border: OutlineInputBorder(),
               ),
               validator: (value) {
-                if (_chargeType ==
-                    BillingChargeType.other &&
-                    (value == null ||
-                        value.trim().isEmpty)) {
+                if (_chargeType == BillingChargeType.other &&
+                    (value == null || value.trim().isEmpty)) {
                   return 'Please enter a title for this charge.';
                 }
 
@@ -592,14 +765,15 @@ class _OwnerBillingSetupScreenState
                 ),
               ],
               selected: {_valueType},
-              onSelectionChanged: (selection) {
+              onSelectionChanged: _isSaving
+                  ? null
+                  : (selection) {
                 if (selection.isEmpty) {
                   return;
                 }
 
                 setState(() {
-                  _valueType =
-                      selection.first;
+                  _valueType = selection.first;
                 });
               },
             ),
@@ -621,11 +795,9 @@ class _OwnerBillingSetupScreenState
 
             TextFormField(
               controller: _amountController,
-              enabled:
-              _valueType ==
-                  BillingValueType.fixed,
-              keyboardType:
-              const TextInputType.numberWithOptions(
+              enabled: !_isSaving &&
+                  _valueType == BillingValueType.fixed,
+              keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
               decoration: const InputDecoration(
@@ -638,20 +810,17 @@ class _OwnerBillingSetupScreenState
                 border: OutlineInputBorder(),
               ),
               validator: (value) {
-                if (_valueType ==
-                    BillingValueType.variable) {
+                if (_valueType == BillingValueType.variable) {
                   return null;
                 }
 
-                final text =
-                    value?.trim() ?? '';
+                final text = value?.trim() ?? '';
 
                 if (text.isEmpty) {
                   return 'Please enter an amount.';
                 }
 
-                final amount =
-                double.tryParse(text);
+                final amount = double.tryParse(text);
 
                 if (amount == null) {
                   return 'Enter a valid amount.';
@@ -665,61 +834,15 @@ class _OwnerBillingSetupScreenState
               },
             ),
 
-            if (_valueType ==
-                BillingValueType.variable) ...[
+            if (_valueType == BillingValueType.variable) ...[
               const SizedBox(height: 8),
               Text(
                 'Variable bills will use the actual amount when the monthly bill is generated.',
-                style:
-                theme.textTheme.bodySmall?.copyWith(
-                  color: theme
-                      .colorScheme
-                      .onSurfaceVariant,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
-
-            const SizedBox(height: 24),
-
-            // ==================================================================
-            // SCOPE
-            // ==================================================================
-
-            Text(
-              'Billing Scope',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            const InputDecorator(
-              decoration: InputDecoration(
-                labelText: 'Apply rule to',
-                prefixIcon: Icon(
-                  Icons.account_tree_outlined,
-                ),
-                border: OutlineInputBorder(),
-              ),
-              child: Text(
-                'Entire Property',
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(
-              'Property-level billing is currently configured. '
-                  'Floor, unit and tenant-specific rules will be connected '
-                  'when their selectors are added.',
-              style:
-              theme.textTheme.bodySmall?.copyWith(
-                color: theme
-                    .colorScheme
-                    .onSurfaceVariant,
-              ),
-            ),
 
             const SizedBox(height: 24),
 
@@ -737,19 +860,17 @@ class _OwnerBillingSetupScreenState
             const SizedBox(height: 8),
 
             InkWell(
-              borderRadius:
-              BorderRadius.circular(12),
-              onTap: _selectEffectiveDate,
+              borderRadius: BorderRadius.circular(12),
+              onTap: _isSaving
+                  ? null
+                  : _selectEffectiveDate,
               child: InputDecorator(
-                decoration:
-                const InputDecoration(
-                  labelText:
-                  'Rule starts from',
+                decoration: const InputDecoration(
+                  labelText: 'Rule starts from',
                   prefixIcon: Icon(
                     Icons.calendar_month_outlined,
                   ),
-                  border:
-                  OutlineInputBorder(),
+                  border: OutlineInputBorder(),
                 ),
                 child: Text(
                   _formatDate(
@@ -769,8 +890,7 @@ class _OwnerBillingSetupScreenState
               elevation: 0,
               margin: EdgeInsets.zero,
               child: SwitchListTile(
-                contentPadding:
-                const EdgeInsets.symmetric(
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                 ),
                 title: const Text(
@@ -784,8 +904,7 @@ class _OwnerBillingSetupScreenState
                     ? null
                     : (value) {
                   setState(() {
-                    _isActive =
-                        value;
+                    _isActive = value;
                   });
                 },
               ),
@@ -800,14 +919,12 @@ class _OwnerBillingSetupScreenState
             SizedBox(
               height: 52,
               child: FilledButton.icon(
-                onPressed:
-                _isSaving ? null : _save,
+                onPressed: _isSaving ? null : _save,
                 icon: _isSaving
                     ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child:
-                  CircularProgressIndicator(
+                  child: CircularProgressIndicator(
                     strokeWidth: 2,
                   ),
                 )
@@ -827,16 +944,473 @@ class _OwnerBillingSetupScreenState
             Text(
               'The rule will be used by automatic monthly bill generation.',
               textAlign: TextAlign.center,
-              style:
-              theme.textTheme.bodySmall?.copyWith(
-                color: theme
-                    .colorScheme
-                    .onSurfaceVariant,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // ========================================================================
+  // SCOPE SELECTOR
+  // ========================================================================
+
+  Widget _buildScopeSelector(
+      BuildContext context,
+      ThemeData theme,
+      ) {
+    final propertyId = _selectedPropertyId?.trim();
+
+    if (propertyId == null || propertyId.isEmpty) {
+      return const InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Scope',
+          border: OutlineInputBorder(),
+        ),
+        child: Text(
+          'Select a property first.',
+        ),
+      );
+    }
+
+    switch (_scopeType) {
+      case BillingScopeType.property:
+        return const InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Scope',
+            prefixIcon: Icon(
+              Icons.apartment_outlined,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          child: Text(
+            'Entire Property',
+          ),
+        );
+
+      case BillingScopeType.floor:
+        return _buildFloorSelector(
+          propertyId,
+        );
+
+      case BillingScopeType.unit:
+        return _buildUnitSelector(
+          propertyId,
+        );
+
+      case BillingScopeType.tenant:
+        return _buildTenantSelector(
+          propertyId,
+        );
+    }
+  }
+
+  // ========================================================================
+  // FLOOR SELECTOR
+  // ========================================================================
+
+  Widget _buildFloorSelector(
+      String propertyId,
+      ) {
+    final unitsAsync = ref.watch(
+      propertyUnitsProvider(
+        propertyId,
+      ),
+    );
+
+    return unitsAsync.when(
+      loading: () {
+        return const InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Select floor',
+            prefixIcon: Icon(
+              Icons.layers_outlined,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Loading floors...',
+              ),
+            ],
+          ),
+        );
+      },
+      error: (error, stackTrace) {
+        return InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'Select floor',
+            prefixIcon: Icon(
+              Icons.layers_outlined,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Unable to load floors.',
+                ),
+              ),
+              IconButton(
+                tooltip: 'Retry',
+                onPressed: () {
+                  ref.invalidate(
+                    propertyUnitsProvider(
+                      propertyId,
+                    ),
+                  );
+                },
+                icon: const Icon(
+                  Icons.refresh,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      data: (units) {
+        final floors = _getFloorNumbers(
+          units,
+        );
+
+        if (floors.isEmpty) {
+          return const InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Select floor',
+              prefixIcon: Icon(
+                Icons.layers_outlined,
+              ),
+              border: OutlineInputBorder(),
+            ),
+            child: Text(
+              'No floor found. Add units first.',
+            ),
+          );
+        }
+
+        final selectedFloor = _selectedScopeId == null
+            ? null
+            : int.tryParse(
+          _selectedScopeId!,
+        );
+
+        return DropdownButtonFormField<int>(
+          initialValue: floors.contains(
+            selectedFloor,
+          )
+              ? selectedFloor
+              : null,
+          decoration: const InputDecoration(
+            labelText: 'Select floor',
+            prefixIcon: Icon(
+              Icons.layers_outlined,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          items: floors.map(
+                (floor) {
+              return DropdownMenuItem<int>(
+                value: floor,
+                child: Text(
+                  _floorLabel(floor),
+                ),
+              );
+            },
+          ).toList(),
+          onChanged: _isSaving
+              ? null
+              : (value) {
+            setState(() {
+              _selectedScopeId =
+                  value?.toString();
+            });
+          },
+          validator: (value) {
+            if (value == null) {
+              return 'Please select a floor.';
+            }
+
+            return null;
+          },
+        );
+      },
+    );
+  }
+
+  // ========================================================================
+  // UNIT SELECTOR
+  // ========================================================================
+
+  Widget _buildUnitSelector(
+      String propertyId,
+      ) {
+    final unitsAsync = ref.watch(
+      propertyUnitsProvider(
+        propertyId,
+      ),
+    );
+
+    return unitsAsync.when(
+      loading: () {
+        return const InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Select unit',
+            prefixIcon: Icon(
+              Icons.door_front_door_outlined,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Loading units...',
+              ),
+            ],
+          ),
+        );
+      },
+      error: (error, stackTrace) {
+        return InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'Select unit',
+            prefixIcon: Icon(
+              Icons.door_front_door_outlined,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Unable to load units.',
+                ),
+              ),
+              IconButton(
+                tooltip: 'Retry',
+                onPressed: () {
+                  ref.invalidate(
+                    propertyUnitsProvider(
+                      propertyId,
+                    ),
+                  );
+                },
+                icon: const Icon(
+                  Icons.refresh,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      data: (units) {
+        if (units.isEmpty) {
+          return const InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Select unit',
+              prefixIcon: Icon(
+                Icons.door_front_door_outlined,
+              ),
+              border: OutlineInputBorder(),
+            ),
+            child: Text(
+              'No unit found. Add a unit first.',
+            ),
+          );
+        }
+
+        return DropdownButtonFormField<String>(
+          initialValue: units.any(
+                (unit) => unit.id == _selectedScopeId,
+          )
+              ? _selectedScopeId
+              : null,
+          decoration: const InputDecoration(
+            labelText: 'Select unit',
+            prefixIcon: Icon(
+              Icons.door_front_door_outlined,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          items: units.map(
+                (unit) {
+              return DropdownMenuItem<String>(
+                value: unit.id,
+                child: Text(
+                  '${_unitLabel(unit)} • ${_floorLabel(unit.floorNumber)}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            },
+          ).toList(),
+          onChanged: _isSaving
+              ? null
+              : (value) {
+            setState(() {
+              _selectedScopeId = value;
+            });
+          },
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please select a unit.';
+            }
+
+            return null;
+          },
+        );
+      },
+    );
+  }
+
+  // ========================================================================
+  // TENANT SELECTOR
+  // ========================================================================
+
+  Widget _buildTenantSelector(
+      String propertyId,
+      ) {
+    final tenantsAsync = ref.watch(
+      propertyTenantsProvider(
+        propertyId,
+      ),
+    );
+
+    return tenantsAsync.when(
+      loading: () {
+        return const InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Select tenant',
+            prefixIcon: Icon(
+              Icons.person_outline,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Loading tenants...',
+              ),
+            ],
+          ),
+        );
+      },
+      error: (error, stackTrace) {
+        return InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'Select tenant',
+            prefixIcon: Icon(
+              Icons.person_outline,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Unable to load tenants.',
+                ),
+              ),
+              IconButton(
+                tooltip: 'Retry',
+                onPressed: () {
+                  ref.invalidate(
+                    propertyTenantsProvider(
+                      propertyId,
+                    ),
+                  );
+                },
+                icon: const Icon(
+                  Icons.refresh,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      data: (tenants) {
+        if (tenants.isEmpty) {
+          return const InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Select tenant',
+              prefixIcon: Icon(
+                Icons.person_outline,
+              ),
+              border: OutlineInputBorder(),
+            ),
+            child: Text(
+              'No tenant found for this property.',
+            ),
+          );
+        }
+
+        return DropdownButtonFormField<String>(
+          initialValue: tenants.any(
+                (tenant) => tenant.id == _selectedScopeId,
+          )
+              ? _selectedScopeId
+              : null,
+          decoration: const InputDecoration(
+            labelText: 'Select tenant',
+            prefixIcon: Icon(
+              Icons.person_outline,
+            ),
+            border: OutlineInputBorder(),
+          ),
+          items: tenants.map(
+                (tenant) {
+              return DropdownMenuItem<String>(
+                value: tenant.id,
+                child: Text(
+                  _tenantLabel(tenant),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            },
+          ).toList(),
+          onChanged: _isSaving
+              ? null
+              : (value) {
+            setState(() {
+              _selectedScopeId = value;
+            });
+          },
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please select a tenant.';
+            }
+
+            return null;
+          },
+        );
+      },
     );
   }
 }

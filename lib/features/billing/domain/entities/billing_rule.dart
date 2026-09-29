@@ -37,10 +37,12 @@ class BillingRule {
 
   /// Required for fixed charges.
   ///
-  /// For variable charges this can be null.
+  /// For variable charges this is null.
   final double? amount;
 
-  /// Optional custom name for "other" charges.
+  /// Optional custom title.
+  ///
+  /// Required by the UI for [BillingChargeType.other].
   final String? title;
 
   final DateTime effectiveFrom;
@@ -83,8 +85,14 @@ class BillingRule {
     bool? isActive,
     DateTime? createdAt,
     DateTime? updatedAt,
+
+    /// Explicitly clears [amount].
     bool clearAmount = false,
+
+    /// Explicitly clears [title].
     bool clearTitle = false,
+
+    /// Explicitly clears [effectiveTo].
     bool clearEffectiveTo = false,
   }) {
     return BillingRule(
@@ -95,11 +103,17 @@ class BillingRule {
       scopeId: scopeId ?? this.scopeId,
       chargeType: chargeType ?? this.chargeType,
       valueType: valueType ?? this.valueType,
-      amount: clearAmount ? null : amount ?? this.amount,
-      title: clearTitle ? null : title ?? this.title,
-      effectiveFrom: effectiveFrom ?? this.effectiveFrom,
-      effectiveTo:
-      clearEffectiveTo ? null : effectiveTo ?? this.effectiveTo,
+      amount: clearAmount
+          ? null
+          : amount ?? this.amount,
+      title: clearTitle
+          ? null
+          : title ?? this.title,
+      effectiveFrom:
+      effectiveFrom ?? this.effectiveFrom,
+      effectiveTo: clearEffectiveTo
+          ? null
+          : effectiveTo ?? this.effectiveTo,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
