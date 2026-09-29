@@ -85,22 +85,22 @@ service cloud.firestore {
 
     match /properties/{propertyId} {
 
-      allow read: if isAuthenticated()
-                  && (
-                    resource.data.ownerId == request.auth.uid
+     allow read: if isAuthenticated()
+                 && (
+                   // OWNER
+                   resource.data.ownerId == request.auth.uid
 
-                    ||
+                   ||
 
+                   // TENANT
                    (
                      resource.data.tenantUserIds is list
 
                      && request.auth.uid in resource.data.tenantUserIds
 
-                     && isValidPropertyTenantAccess(
-                       propertyId
-                     )
+                     && isValidPropertyTenantAccess(propertyId)
                    )
-                  );
+                 );
 
 
       allow create: if isAuthenticated()
@@ -1417,20 +1417,21 @@ service cloud.firestore {
                     );
 
 
-      allow delete: if isAuthenticated()
-                    && (
-                      resource.data.ownerId == request.auth.uid
+   allow delete: if isAuthenticated()
+                 && (
+                   resource.data.ownerId == request.auth.uid
 
-                      ||
+                   ||
 
-                      (
-                        request.auth.token.phone_number != null
+                   (
+                     request.auth.token.phone_number != null
 
-                        &&
-                        resource.data.phone
-                           == request.auth.token.phone_number
-                      )
-                    );
+                     && resource.data.phone
+                        == request.auth.token.phone_number
+
+                     && resource.data.status == 'pending'
+                   )
+                 );
     }
    // ============================================================
    // BILLING RULES
@@ -1542,13 +1543,21 @@ service cloud.firestore {
                    && request.resource.data.title is string
                    && request.resource.data.title != ''
 
-                   && request.resource.data.effectiveFrom is timestamp
+                 && request.resource.data.effectiveFrom
+                    == resource.data.effectiveFrom
 
-                   && (
-                     request.resource.data.effectiveTo == null
-                     ||
-                     request.resource.data.effectiveTo is timestamp
-                   )
+                 && (
+                   request.resource.data.effectiveTo == null
+                   ||
+                   request.resource.data.effectiveTo is timestamp
+                 )
+
+                 && (
+                   request.resource.data.effectiveTo == null
+                   ||
+                   request.resource.data.effectiveTo
+                      >= request.resource.data.effectiveFrom
+                 )
 
                    && request.resource.data.isActive is bool
 
@@ -1589,7 +1598,47 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
+// ============================================================
 
+// PROPERTY TENANT ACCESS
+
+// ============================================================
+
+function isValidPropertyTenantAccess(propertyId) {
+
+  return exists(
+
+    /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+
+  )
+
+  &&
+
+  get(
+
+    /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+
+  ).data.userId == request.auth.uid
+
+  &&
+
+  get(
+
+    /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+
+  ).data.propertyId == propertyId
+
+  &&
+
+  get(
+
+    /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+
+  ).data.ownerId
+
+     == resource.data.ownerId;
+
+}
 // ============================================================
 // BILLING RULE SCOPE VALIDATION
 // ============================================================
@@ -1754,26 +1803,33 @@ function isValidBillingRuleScope(
     // ============================================================
     // TENANT UNIT/PROPERTY ACCESS
     // ============================================================
+function isActiveTenantAccessForUnit(
+  propertyId,
+  unitId
+) {
 
-    function isActiveTenantAccessForUnit(
-      propertyId,
-      unitId
-    ) {
+  return exists(
+    /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+  )
 
-      let access =
-        get(
-          /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-        ).data;
+  &&
 
-      return access.userId == request.auth.uid
+  get(
+    /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+  ).data.userId == request.auth.uid
 
-             && access.ownerId is string
-             && access.ownerId != ''
+  &&
 
-             && access.propertyId == propertyId
+  get(
+    /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+  ).data.propertyId == propertyId
 
-             && access.unitId == unitId;
-    }
+  &&
+
+  get(
+    /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
+  ).data.unitId == unitId;
+}
 
 
     // ============================================================
