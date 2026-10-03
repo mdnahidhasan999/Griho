@@ -11,6 +11,9 @@ class BillingRuleResolver {
     String? unitId,
     String? tenantId,
     required BillingChargeType chargeType,
+
+    /// The date for which the billing rule must be resolved.
+    required DateTime effectiveAt,
   }) {
     final normalizedPropertyId = propertyId.trim();
 
@@ -37,6 +40,13 @@ class BillingRuleResolver {
         return false;
       }
 
+      if (!_isEffectiveAt(
+        rule: rule,
+        date: effectiveAt,
+      )) {
+        return false;
+      }
+
       return _matchesScope(
         rule: rule,
         propertyId: normalizedPropertyId,
@@ -50,10 +60,26 @@ class BillingRuleResolver {
       return null;
     }
 
+    // More specific scope always wins.
+    //
+    // tenant > unit > floor > property
     matchingRules.sort(
           (a, b) {
-        return _priority(b.scopeType)
-            .compareTo(_priority(a.scopeType));
+        final priorityComparison =
+        _priority(b.scopeType)
+            .compareTo(
+          _priority(a.scopeType),
+        );
+
+        if (priorityComparison != 0) {
+          return priorityComparison;
+        }
+
+        // If multiple rules have the same scope,
+        // use the most recently effective rule.
+        return b.effectiveFrom.compareTo(
+          a.effectiveFrom,
+        );
       },
     );
 
@@ -64,6 +90,30 @@ class BillingRuleResolver {
       amount: selectedRule.amount,
     );
   }
+
+  // ==========================================================================
+  // EFFECTIVE DATE
+  // ==========================================================================
+
+  bool _isEffectiveAt({
+    required BillingRule rule,
+    required DateTime date,
+  }) {
+    if (date.isBefore(rule.effectiveFrom)) {
+      return false;
+    }
+
+    if (rule.effectiveTo != null &&
+        date.isAfter(rule.effectiveTo!)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // ==========================================================================
+  // SCOPE MATCHING
+  // ==========================================================================
 
   bool _matchesScope({
     required BillingRule rule,
@@ -96,10 +146,8 @@ class BillingRuleResolver {
     }
   }
 
-  bool _matchesId(
-      String ruleId,
-      String? targetId,
-      ) {
+  bool _matchesId(String ruleId,
+      String? targetId,) {
     if (targetId == null) {
       return false;
     }
@@ -107,9 +155,11 @@ class BillingRuleResolver {
     return ruleId.trim() == targetId.trim();
   }
 
-  int _priority(
-      BillingScopeType scopeType,
-      ) {
+  // ==========================================================================
+  // PRIORITY
+  // ==========================================================================
+
+  int _priority(BillingScopeType scopeType,) {
     switch (scopeType) {
       case BillingScopeType.property:
         return 1;
@@ -125,13 +175,15 @@ class BillingRuleResolver {
     }
   }
 
-  String? _normalizeId(String? value) {
+  String? _normalizeId(String? value,) {
     if (value == null) {
       return null;
     }
 
     final normalized = value.trim();
 
-    return normalized.isEmpty ? null : normalized;
+    return normalized.isEmpty
+        ? null
+        : normalized;
   }
 }

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
+import '../../../billing/presentation/widgets/tenant_current_bills_card.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
 import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
@@ -14,12 +15,10 @@ class TenantHomeScreen extends ConsumerStatefulWidget {
   const TenantHomeScreen({super.key});
 
   @override
-  ConsumerState<TenantHomeScreen> createState() =>
-      _TenantHomeScreenState();
+  ConsumerState<TenantHomeScreen> createState() => _TenantHomeScreenState();
 }
 
-class _TenantHomeScreenState
-    extends ConsumerState<TenantHomeScreen> {
+class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
   Future<void> _refresh() async {
     ref.invalidate(tenantDashboardProvider);
 
@@ -32,18 +31,14 @@ class _TenantHomeScreenState
       builder: (context) {
         return AlertDialog(
           title: const Text('Logout'),
-          content: const Text(
-            'Are you sure you want to logout?',
-          ),
+          content: const Text('Are you sure you want to logout?'),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(false),
+              onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(true),
+              onPressed: () => Navigator.of(context).pop(true),
               child: const Text('Logout'),
             ),
           ],
@@ -55,30 +50,18 @@ class _TenantHomeScreenState
       return;
     }
 
-    await ref
-        .read(authControllerProvider.notifier)
-        .signOut();
+    await ref.read(authControllerProvider.notifier).signOut();
   }
 
-  void _openInvitation(
-      TenantInvitation invitation,
-      ) {
-    context.push(
-      RouteNames.tenantInvitationPath(
-        invitation.id,
-      ),
-    );
+  void _openInvitation(TenantInvitation invitation) {
+    context.push(RouteNames.tenantInvitationPath(invitation.id));
   }
 
   void _openInvitations() {
-    context.push(
-      RouteNames.tenantInvitations,
-    );
+    context.push(RouteNames.tenantInvitations);
   }
 
-  Future<void> _openEditProfile(
-      TenantDashboardData dashboard,
-      ) async {
+  Future<void> _openEditProfile(TenantDashboardData dashboard) async {
     final user = dashboard.appUser;
 
     if (user == null) {
@@ -87,20 +70,13 @@ class _TenantHomeScreenState
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Profile information is not available.',
-          ),
-        ),
+        const SnackBar(content: Text('Profile information is not available.')),
       );
 
       return;
     }
 
-    final result = await context.push(
-      RouteNames.editProfile,
-      extra: user,
-    );
+    final result = await context.push(RouteNames.editProfile, extra: user);
 
     if (!mounted) {
       return;
@@ -110,9 +86,7 @@ class _TenantHomeScreenState
       ref.invalidate(tenantDashboardProvider);
 
       try {
-        await ref.read(
-          tenantDashboardProvider.future,
-        );
+        await ref.read(tenantDashboardProvider.future);
       } catch (_) {
         // Dashboard displays its own error state.
       }
@@ -121,19 +95,14 @@ class _TenantHomeScreenState
 
   @override
   Widget build(BuildContext context) {
-    final dashboardAsync = ref.watch(
-      tenantDashboardProvider,
-    );
+    final dashboardAsync = ref.watch(tenantDashboardProvider);
 
     return Scaffold(
-      backgroundColor:
-      Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text(
           'Griho',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
         centerTitle: false,
         actions: [
@@ -143,8 +112,7 @@ class _TenantHomeScreenState
                 return const SizedBox.shrink();
               }
 
-              final invitation =
-                  dashboard.pendingInvitation;
+              final invitation = dashboard.pendingInvitation;
 
               if (invitation == null) {
                 return const SizedBox.shrink();
@@ -157,14 +125,11 @@ class _TenantHomeScreenState
                 },
                 icon: Badge(
                   smallSize: 9,
-                  child: const Icon(
-                    Icons.notifications_outlined,
-                  ),
+                  child: const Icon(Icons.notifications_outlined),
                 ),
               );
             },
-            orElse: () =>
-            const SizedBox.shrink(),
+            orElse: () => const SizedBox.shrink(),
           ),
           PopupMenuButton<String>(
             tooltip: 'Account',
@@ -212,25 +177,18 @@ class _TenantHomeScreenState
       ),
       body: dashboardAsync.when(
         loading: () {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+          return const Center(child: CircularProgressIndicator());
         },
         error: (error, stackTrace) {
-          return _DashboardErrorView(
-            error: error,
-            onRetry: _refresh,
-          );
+          return _DashboardErrorView(error: error, onRetry: _refresh);
         },
         data: (dashboard) {
           return RefreshIndicator(
             onRefresh: _refresh,
             child: _TenantDashboardContent(
               dashboard: dashboard,
-              onOpenInvitation:
-              _openInvitation,
-              onOpenInvitations:
-              _openInvitations,
+              onOpenInvitation: _openInvitation,
+              onOpenInvitations: _openInvitations,
               onEditProfile: () {
                 _openEditProfile(dashboard);
               },
@@ -246,12 +204,10 @@ class _TenantHomeScreenState
 // DASHBOARD CONTENT
 // ============================================================================
 
-class _TenantDashboardContent
-    extends StatelessWidget {
+class _TenantDashboardContent extends StatelessWidget {
   final TenantDashboardData dashboard;
 
-  final ValueChanged<TenantInvitation>
-  onOpenInvitation;
+  final ValueChanged<TenantInvitation> onOpenInvitation;
 
   final VoidCallback onOpenInvitations;
 
@@ -267,19 +223,12 @@ class _TenantDashboardContent
   @override
   Widget build(BuildContext context) {
     return ListView(
-      physics:
-      const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        32,
-      ),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
         _WelcomeHeader(
           name: dashboard.displayName,
-          hasActiveTenancy:
-          dashboard.hasActiveTenancy,
+          hasActiveTenancy: dashboard.hasActiveTenancy,
         ),
 
         const SizedBox(height: 20),
@@ -287,15 +236,11 @@ class _TenantDashboardContent
         // ========================================================
         // PENDING INVITATION
         // ========================================================
-
         if (dashboard.hasPendingInvitation) ...[
           _PendingInvitationCard(
-            invitation:
-            dashboard.pendingInvitation!,
+            invitation: dashboard.pendingInvitation!,
             onReview: () {
-              onOpenInvitation(
-                dashboard.pendingInvitation!,
-              );
+              onOpenInvitation(dashboard.pendingInvitation!);
             },
           ),
           const SizedBox(height: 20),
@@ -304,10 +249,8 @@ class _TenantDashboardContent
         // ========================================================
         // INVITATIONS
         // ========================================================
-
         _InvitationsCard(
-          hasPendingInvitation:
-          dashboard.hasPendingInvitation,
+          hasPendingInvitation: dashboard.hasPendingInvitation,
           onOpen: onOpenInvitations,
         ),
 
@@ -316,18 +259,22 @@ class _TenantDashboardContent
         // ========================================================
         // CURRENT TENANCY
         // ========================================================
-
         if (dashboard.hasActiveTenancy) ...[
-          _CurrentTenancyCard(
-            dashboard: dashboard,
-          ),
+          _CurrentTenancyCard(dashboard: dashboard),
+
+          const SizedBox(height: 20),
+
+          const _SectionHeader(title: 'My Bills'),
+
+          const SizedBox(height: 10),
+
+          TenantCurrentBillsCard(),
+
           const SizedBox(height: 20),
         ] else ...[
           _NoActiveTenancyCard(
-            hasHistory:
-            dashboard.hasTenancyHistory,
-            hasPendingInvitation:
-            dashboard.hasPendingInvitation,
+            hasHistory: dashboard.hasTenancyHistory,
+            hasPendingInvitation: dashboard.hasPendingInvitation,
           ),
           const SizedBox(height: 20),
         ],
@@ -335,7 +282,6 @@ class _TenantDashboardContent
         // ========================================================
         // ACCOUNT
         // ========================================================
-
         _AccountOverviewCard(
           dashboard: dashboard,
           onEditProfile: onEditProfile,
@@ -343,30 +289,22 @@ class _TenantDashboardContent
 
         const SizedBox(height: 20),
 
-        const _SectionHeader(
-          title: 'Tenancy History',
-        ),
+        const _SectionHeader(title: 'Tenancy History'),
 
         const SizedBox(height: 10),
 
         if (dashboard.hasTenancyHistory)
-          _TenancyHistoryPreview(
-            history: dashboard.tenancyHistory,
-          )
+          _TenancyHistoryPreview(history: dashboard.tenancyHistory)
         else
           const _EmptyHistoryCard(),
 
         const SizedBox(height: 20),
 
-        const _SectionHeader(
-          title: 'Recent Activity',
-        ),
+        const _SectionHeader(title: 'Recent Activity'),
 
         const SizedBox(height: 10),
 
-        _RecentActivityCard(
-          dashboard: dashboard,
-        ),
+        _RecentActivityCard(dashboard: dashboard),
       ],
     );
   }
@@ -376,8 +314,7 @@ class _TenantDashboardContent
 // INVITATIONS CARD
 // ============================================================================
 
-class _InvitationsCard
-    extends StatelessWidget {
+class _InvitationsCard extends StatelessWidget {
   final bool hasPendingInvitation;
   final VoidCallback onOpen;
 
@@ -400,27 +337,16 @@ class _InvitationsCard
           child: Row(
             children: [
               CircleAvatar(
-                backgroundColor:
-                hasPendingInvitation
-                    ? theme
-                    .colorScheme
-                    .primaryContainer
-                    : theme
-                    .colorScheme
-                    .surfaceContainerHighest,
+                backgroundColor: hasPendingInvitation
+                    ? theme.colorScheme.primaryContainer
+                    : theme.colorScheme.surfaceContainerHighest,
                 child: Icon(
                   hasPendingInvitation
-                      ? Icons
-                      .mark_email_unread_outlined
+                      ? Icons.mark_email_unread_outlined
                       : Icons.mail_outline,
-                  color:
-                  hasPendingInvitation
-                      ? theme
-                      .colorScheme
-                      .onPrimaryContainer
-                      : theme
-                      .colorScheme
-                      .onSurfaceVariant,
+                  color: hasPendingInvitation
+                      ? theme.colorScheme.onPrimaryContainer
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
               ),
 
@@ -428,54 +354,34 @@ class _InvitationsCard
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         Expanded(
                           child: Text(
                             'Invitations',
-                            style: theme
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                              fontWeight:
-                              FontWeight.w800,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
 
                         if (hasPendingInvitation)
                           Container(
-                            padding:
-                            const EdgeInsets
-                                .symmetric(
+                            padding: const EdgeInsets.symmetric(
                               horizontal: 8,
                               vertical: 4,
                             ),
-                            decoration:
-                            BoxDecoration(
-                              color: theme
-                                  .colorScheme
-                                  .primaryContainer,
-                              borderRadius:
-                              BorderRadius
-                                  .circular(
-                                20,
-                              ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               'Pending',
-                              style: theme
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(
-                                fontWeight:
-                                FontWeight.w700,
-                                color: theme
-                                    .colorScheme
-                                    .onPrimaryContainer,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onPrimaryContainer,
                               ),
                             ),
                           ),
@@ -488,13 +394,8 @@ class _InvitationsCard
                       hasPendingInvitation
                           ? 'You have a new tenancy invitation.'
                           : 'View your tenancy invitation history.',
-                      style: theme
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(
-                        color: theme
-                            .colorScheme
-                            .onSurfaceVariant,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -505,9 +406,7 @@ class _InvitationsCard
 
               Icon(
                 Icons.chevron_right,
-                color: theme
-                    .colorScheme
-                    .onSurfaceVariant,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ],
           ),
@@ -525,24 +424,19 @@ class _WelcomeHeader extends StatelessWidget {
   final String name;
   final bool hasActiveTenancy;
 
-  const _WelcomeHeader({
-    required this.name,
-    required this.hasActiveTenancy,
-  });
+  const _WelcomeHeader({required this.name, required this.hasActiveTenancy});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Column(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           _greeting(),
           style: theme.textTheme.bodyMedium?.copyWith(
-            color:
-            theme.colorScheme.onSurfaceVariant,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 4),
@@ -550,8 +444,7 @@ class _WelcomeHeader extends StatelessWidget {
           '$name 👋',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.headlineSmall
-              ?.copyWith(
+          style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -561,8 +454,7 @@ class _WelcomeHeader extends StatelessWidget {
               ? 'Here is an overview of your current home.'
               : 'Manage your Griho account and tenancy from here.',
           style: theme.textTheme.bodyMedium?.copyWith(
-            color:
-            theme.colorScheme.onSurfaceVariant,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -588,8 +480,7 @@ class _WelcomeHeader extends StatelessWidget {
 // PENDING INVITATION
 // ============================================================================
 
-class _PendingInvitationCard
-    extends StatelessWidget {
+class _PendingInvitationCard extends StatelessWidget {
   final TenantInvitation invitation;
   final VoidCallback onReview;
 
@@ -602,11 +493,9 @@ class _PendingInvitationCard
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final propertyName =
-    invitation.propertyName?.trim();
+    final propertyName = invitation.propertyName?.trim();
 
-    final unitName =
-    invitation.unitNumber?.trim();
+    final unitName = invitation.unitNumber?.trim();
 
     return Card(
       elevation: 0,
@@ -614,52 +503,39 @@ class _PendingInvitationCard
       child: Container(
         decoration: BoxDecoration(
           border: Border.all(
-            color: theme.colorScheme.primary
-                .withValues(alpha: 0.35),
+            color: theme.colorScheme.primary.withValues(alpha: 0.35),
           ),
-          borderRadius:
-          BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor:
-                  theme.colorScheme
-                      .primaryContainer,
+                  backgroundColor: theme.colorScheme.primaryContainer,
                   child: Icon(
                     Icons.mail_outline,
-                    color: theme.colorScheme
-                        .onPrimaryContainer,
+                    color: theme.colorScheme.onPrimaryContainer,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'New tenancy invitation',
-                        style: theme.textTheme
-                            .titleMedium
-                            ?.copyWith(
-                          fontWeight:
-                          FontWeight.w800,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'An owner has invited you to a property.',
-                        style: theme.textTheme
-                            .bodySmall
-                            ?.copyWith(
-                          color: theme.colorScheme
-                              .onSurfaceVariant,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -670,45 +546,35 @@ class _PendingInvitationCard
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 12),
-            if (propertyName != null &&
-                propertyName.isNotEmpty)
+            if (propertyName != null && propertyName.isNotEmpty)
               _InfoRow(
                 icon: Icons.apartment_outlined,
                 label: 'Property',
                 value: propertyName,
               ),
-            if (unitName != null &&
-                unitName.isNotEmpty)
+            if (unitName != null && unitName.isNotEmpty)
               _InfoRow(
-                icon:
-                Icons.home_work_outlined,
+                icon: Icons.home_work_outlined,
                 label: 'Unit',
                 value: unitName,
               ),
             _InfoRow(
               icon: Icons.payments_outlined,
               label: 'Monthly rent',
-              value:
-              '৳ ${_formatAmount(invitation.rentAmount)}',
+              value: '৳ ${_formatAmount(invitation.rentAmount)}',
             ),
             _InfoRow(
               icon: Icons.event_outlined,
               label: 'Expires',
-              value: _formatDate(
-                invitation.expiresAt,
-              ),
+              value: _formatDate(invitation.expiresAt),
             ),
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: onReview,
-                icon: const Icon(
-                  Icons.arrow_forward,
-                ),
-                label: const Text(
-                  'Review Invitation',
-                ),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Review Invitation'),
               ),
             ),
           ],
@@ -722,40 +588,27 @@ class _PendingInvitationCard
 // CURRENT TENANCY
 // ============================================================================
 
-class _CurrentTenancyCard
-    extends ConsumerWidget {
+class _CurrentTenancyCard extends ConsumerWidget {
   final TenantDashboardData dashboard;
 
-  const _CurrentTenancyCard({
-    required this.dashboard,
-  });
+  const _CurrentTenancyCard({required this.dashboard});
 
   @override
-  Widget build(
-      BuildContext context,
-      WidgetRef ref,
-      ) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
-    final propertyName =
-        dashboard.currentPropertyName;
+    final propertyName = dashboard.currentPropertyName;
 
-    final unitDisplayName =
-        dashboard.currentUnitDisplayName;
+    final unitDisplayName = dashboard.currentUnitDisplayName;
 
     final tenant = dashboard.tenant;
 
     final unitId = tenant?.unitId.trim();
 
-    final hasValidUnitId =
-        unitId != null && unitId.isNotEmpty;
+    final hasValidUnitId = unitId != null && unitId.isNotEmpty;
 
     final rentAsync = hasValidUnitId
-        ? ref.watch(
-      currentTenantRentRateProvider(
-        unitId,
-      ),
-    )
+        ? ref.watch(currentTenantRentRateProvider(unitId))
         : null;
 
     return Card(
@@ -763,67 +616,52 @@ class _CurrentTenancyCard
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor:
-                  theme.colorScheme
-                      .primaryContainer,
+                  backgroundColor: theme.colorScheme.primaryContainer,
                   child: Icon(
                     Icons.home_outlined,
-                    color: theme.colorScheme
-                        .onPrimaryContainer,
+                    color: theme.colorScheme.onPrimaryContainer,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'My Home',
-                        style: theme.textTheme
-                            .titleLarge
-                            ?.copyWith(
-                          fontWeight:
-                          FontWeight.w800,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Current tenancy',
-                        style: theme.textTheme
-                            .bodySmall
-                            ?.copyWith(
-                          color: theme.colorScheme
-                              .onSurfaceVariant,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
                 ),
                 Container(
-                  padding:
-                  const EdgeInsets.symmetric(
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.green
-                        .withValues(alpha: 0.10),
-                    borderRadius:
-                    BorderRadius.circular(20),
+                    color: Colors.green.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
                     'Active',
                     style: TextStyle(
                       color: Colors.green,
-                      fontWeight:
-                      FontWeight.w700,
+                      fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
                   ),
@@ -834,31 +672,22 @@ class _CurrentTenancyCard
             _InfoRow(
               icon: Icons.apartment_outlined,
               label: 'Property',
-              value: propertyName ??
-                  'Property information unavailable',
+              value: propertyName ?? 'Property information unavailable',
             ),
             _InfoRow(
-              icon:
-              Icons.door_front_door_outlined,
+              icon: Icons.door_front_door_outlined,
               label: 'Unit',
-              value: unitDisplayName ??
-                  'Unit information unavailable',
+              value: unitDisplayName ?? 'Unit information unavailable',
             ),
             _CurrentTenantRentRow(
               rentAsync: rentAsync,
               hasValidUnitId: hasValidUnitId,
             ),
-            if (dashboard.tenant
-                ?.tenancyStartedAt !=
-                null)
+            if (dashboard.tenant?.tenancyStartedAt != null)
               _InfoRow(
-                icon:
-                Icons.calendar_month_outlined,
+                icon: Icons.calendar_month_outlined,
                 label: 'Started',
-                value: _formatDate(
-                  dashboard.tenant!
-                      .tenancyStartedAt!,
-                ),
+                value: _formatDate(dashboard.tenant!.tenancyStartedAt!),
               ),
           ],
         ),
@@ -871,8 +700,7 @@ class _CurrentTenancyCard
 // CURRENT TENANT RENT ROW
 // ============================================================================
 
-class _CurrentTenantRentRow
-    extends StatelessWidget {
+class _CurrentTenantRentRow extends StatelessWidget {
   final AsyncValue<dynamic>? rentAsync;
   final bool hasValidUnitId;
 
@@ -883,8 +711,7 @@ class _CurrentTenantRentRow
 
   @override
   Widget build(BuildContext context) {
-    if (!hasValidUnitId ||
-        rentAsync == null) {
+    if (!hasValidUnitId || rentAsync == null) {
       return const _InfoRow(
         icon: Icons.payments_outlined,
         label: 'Monthly Rent',
@@ -915,8 +742,7 @@ class _CurrentTenantRentRow
         return _InfoRow(
           icon: Icons.payments_outlined,
           label: 'Monthly Rent',
-          value:
-          '৳ ${_formatAmount(rentRate.amount)}',
+          value: '৳ ${_formatAmount(rentRate.amount)}',
           emphasized: true,
         );
       },
@@ -924,8 +750,7 @@ class _CurrentTenantRentRow
   }
 }
 
-class _LoadingTenantRentRow
-    extends StatelessWidget {
+class _LoadingTenantRentRow extends StatelessWidget {
   const _LoadingTenantRentRow();
 
   @override
@@ -933,26 +758,21 @@ class _LoadingTenantRentRow
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: 7,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
           Icon(
             Icons.payments_outlined,
             size: 20,
-            color:
-            theme.colorScheme.onSurfaceVariant,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: 12),
           SizedBox(
             width: 90,
             child: Text(
               'Monthly Rent',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(
-                color: theme.colorScheme
-                    .onSurfaceVariant,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -960,9 +780,7 @@ class _LoadingTenantRentRow
           const SizedBox(
             height: 18,
             width: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2),
           ),
         ],
       ),
@@ -974,8 +792,7 @@ class _LoadingTenantRentRow
 // NO ACTIVE TENANCY
 // ============================================================================
 
-class _NoActiveTenancyCard
-    extends StatelessWidget {
+class _NoActiveTenancyCard extends StatelessWidget {
   final bool hasHistory;
   final bool hasPendingInvitation;
 
@@ -998,18 +815,15 @@ class _NoActiveTenancyCard
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: theme.colorScheme
-                    .secondaryContainer,
+                color: theme.colorScheme.secondaryContainer,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 hasPendingInvitation
-                    ? Icons
-                    .mark_email_unread_outlined
+                    ? Icons.mark_email_unread_outlined
                     : Icons.home_outlined,
                 size: 30,
-                color: theme.colorScheme
-                    .onSecondaryContainer,
+                color: theme.colorScheme.onSecondaryContainer,
               ),
             ),
             const SizedBox(height: 14),
@@ -1018,8 +832,7 @@ class _NoActiveTenancyCard
                   ? 'You have a new invitation'
                   : 'No active tenancy',
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge
-                  ?.copyWith(
+              style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1031,10 +844,8 @@ class _NoActiveTenancyCard
                   ? 'You currently do not have an active tenancy. Your previous tenancy records are still available below.'
                   : 'Your account is ready. When an owner sends you an invitation, it will appear here.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(
-                color: theme.colorScheme
-                    .onSurfaceVariant,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
                 height: 1.45,
               ),
             ),
@@ -1049,8 +860,7 @@ class _NoActiveTenancyCard
 // ACCOUNT OVERVIEW
 // ============================================================================
 
-class _AccountOverviewCard
-    extends StatelessWidget {
+class _AccountOverviewCard extends StatelessWidget {
   final TenantDashboardData dashboard;
   final VoidCallback onEditProfile;
 
@@ -1069,31 +879,22 @@ class _AccountOverviewCard
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'My Account',
-                    style: theme.textTheme
-                        .titleMedium
-                        ?.copyWith(
-                      fontWeight:
-                      FontWeight.w800,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
                 TextButton.icon(
                   onPressed: onEditProfile,
-                  icon: const Icon(
-                    Icons.edit_outlined,
-                    size: 18,
-                  ),
-                  label: const Text(
-                    'Edit Profile',
-                  ),
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Edit Profile'),
                 ),
               ],
             ),
@@ -1110,18 +911,13 @@ class _AccountOverviewCard
                 value: profile.name,
               ),
               if (profile.phoneNumber != null &&
-                  profile.phoneNumber!
-                      .trim()
-                      .isNotEmpty)
+                  profile.phoneNumber!.trim().isNotEmpty)
                 _InfoRow(
                   icon: Icons.phone_outlined,
                   label: 'Phone',
                   value: profile.phoneNumber!,
                 ),
-              if (profile.email != null &&
-                  profile.email!
-                      .trim()
-                      .isNotEmpty)
+              if (profile.email != null && profile.email!.trim().isNotEmpty)
                 _InfoRow(
                   icon: Icons.email_outlined,
                   label: 'Email',
@@ -1131,8 +927,7 @@ class _AccountOverviewCard
               _InfoRow(
                 icon: Icons.person_outline,
                 label: 'Profile',
-                value:
-                'Profile information unavailable',
+                value: 'Profile information unavailable',
               ),
           ],
         ),
@@ -1145,52 +940,38 @@ class _AccountOverviewCard
 // TENANCY HISTORY
 // ============================================================================
 
-class _TenancyHistoryPreview
-    extends StatelessWidget {
+class _TenancyHistoryPreview extends StatelessWidget {
   final List<TenancyHistory> history;
 
-  const _TenancyHistoryPreview({
-    required this.history,
-  });
+  const _TenancyHistoryPreview({required this.history});
 
   @override
   Widget build(BuildContext context) {
-    final preview =
-    history.take(3).toList();
+    final preview = history.take(3).toList();
 
     return Column(
       children: [
-        for (var index = 0;
-        index < preview.length;
-        index++) ...[
-          _HistoryItem(
-            history: preview[index],
-          ),
-          if (index != preview.length - 1)
-            const SizedBox(height: 8),
+        for (var index = 0; index < preview.length; index++) ...[
+          _HistoryItem(history: preview[index]),
+          if (index != preview.length - 1) const SizedBox(height: 8),
         ],
       ],
     );
   }
 }
 
-class _HistoryItem
-    extends StatelessWidget {
+class _HistoryItem extends StatelessWidget {
   final TenancyHistory history;
 
-  const _HistoryItem({
-    required this.history,
-  });
+  const _HistoryItem({required this.history});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final propertyName =
-    history.propertyName.trim();
+    final propertyName = history.propertyName.trim();
 
-    final unitNumber =
-    history.unitNumber.trim();
+    final unitNumber = history.unitNumber.trim();
 
     return Card(
       elevation: 0,
@@ -1199,32 +980,23 @@ class _HistoryItem
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: theme.colorScheme
-                  .surfaceContainerHighest,
+              backgroundColor: theme.colorScheme.surfaceContainerHighest,
               child: Icon(
                 Icons.history,
-                color: theme.colorScheme
-                    .onSurfaceVariant,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    propertyName.isNotEmpty
-                        ? propertyName
-                        : 'Previous tenancy',
+                    propertyName.isNotEmpty ? propertyName : 'Previous tenancy',
                     maxLines: 1,
-                    overflow:
-                    TextOverflow.ellipsis,
-                    style: theme.textTheme
-                        .titleSmall
-                        ?.copyWith(
-                      fontWeight:
-                      FontWeight.w700,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1232,11 +1004,8 @@ class _HistoryItem
                     unitNumber.isNotEmpty
                         ? 'Unit $unitNumber'
                         : 'Unit information unavailable',
-                    style: theme.textTheme
-                        .bodySmall
-                        ?.copyWith(
-                      color: theme.colorScheme
-                          .onSurfaceVariant,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -1244,28 +1013,19 @@ class _HistoryItem
             ),
             const SizedBox(width: 8),
             Column(
-              crossAxisAlignment:
-              CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  _formatDate(
-                    history.startedAt,
-                  ),
-                  style: theme.textTheme
-                      .bodySmall
-                      ?.copyWith(
-                    fontWeight:
-                    FontWeight.w600,
+                  _formatDate(history.startedAt),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   'to ${_formatDate(history.endedAt)}',
-                  style: theme.textTheme
-                      .bodySmall
-                      ?.copyWith(
-                    color: theme.colorScheme
-                        .onSurfaceVariant,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -1277,8 +1037,7 @@ class _HistoryItem
   }
 }
 
-class _EmptyHistoryCard
-    extends StatelessWidget {
+class _EmptyHistoryCard extends StatelessWidget {
   const _EmptyHistoryCard();
 
   @override
@@ -1293,18 +1052,14 @@ class _EmptyHistoryCard
           children: [
             Icon(
               Icons.history_outlined,
-              color: theme.colorScheme
-                  .onSurfaceVariant,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Your previous tenancy records will appear here.',
-                style: theme.textTheme
-                    .bodyMedium
-                    ?.copyWith(
-                  color: theme.colorScheme
-                      .onSurfaceVariant,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -1319,18 +1074,14 @@ class _EmptyHistoryCard
 // RECENT ACTIVITY
 // ============================================================================
 
-class _RecentActivityCard
-    extends StatelessWidget {
+class _RecentActivityCard extends StatelessWidget {
   final TenantDashboardData dashboard;
 
-  const _RecentActivityCard({
-    required this.dashboard,
-  });
+  const _RecentActivityCard({required this.dashboard});
 
   @override
   Widget build(BuildContext context) {
-    final activities =
-    _buildActivities(dashboard);
+    final activities = _buildActivities(dashboard);
 
     return Card(
       elevation: 0,
@@ -1338,14 +1089,9 @@ class _RecentActivityCard
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            for (var index = 0;
-            index < activities.length;
-            index++) ...[
-              _ActivityItem(
-                activity: activities[index],
-              ),
-              if (index != activities.length - 1)
-                const Divider(height: 24),
+            for (var index = 0; index < activities.length; index++) ...[
+              _ActivityItem(activity: activities[index]),
+              if (index != activities.length - 1) const Divider(height: 24),
             ],
           ],
         ),
@@ -1353,21 +1099,18 @@ class _RecentActivityCard
     );
   }
 
-  List<_ActivityData> _buildActivities(
-      TenantDashboardData dashboard,
-      ) {
+  List<_ActivityData> _buildActivities(TenantDashboardData dashboard) {
     final activities = <_ActivityData>[];
 
-    final invitation =
-        dashboard.pendingInvitation;
+    final invitation = dashboard.pendingInvitation;
 
-    if (invitation != null &&
-        invitation.isValid) {
+    if (invitation != null && invitation.isValid) {
       activities.add(
         _ActivityData(
           icon: Icons.mail_outline,
           title: 'New invitation received',
-          subtitle: invitation.propertyName ??
+          subtitle:
+              invitation.propertyName ??
               'A property owner sent you an invitation.',
           date: invitation.createdAt,
         ),
@@ -1383,22 +1126,18 @@ class _RecentActivityCard
         _ActivityData(
           icon: Icons.home_outlined,
           title: 'Current tenancy started',
-          subtitle:
-          'You currently have an active tenancy.',
+          subtitle: 'You currently have an active tenancy.',
           date: tenant.tenancyStartedAt!,
         ),
       );
     }
 
-    for (final history
-    in dashboard.tenancyHistory.take(3)) {
+    for (final history in dashboard.tenancyHistory.take(3)) {
       activities.add(
         _ActivityData(
           icon: Icons.history,
           title: 'Tenancy ended',
-          subtitle: history.propertyName
-              .trim()
-              .isNotEmpty
+          subtitle: history.propertyName.trim().isNotEmpty
               ? history.propertyName
               : 'Previous tenancy',
           date: history.endedAt,
@@ -1406,9 +1145,7 @@ class _RecentActivityCard
       );
     }
 
-    activities.sort(
-          (a, b) => b.date.compareTo(a.date),
-    );
+    activities.sort((a, b) => b.date.compareTo(a.date));
 
     if (activities.length > 5) {
       return activities.take(5).toList();
@@ -1419,11 +1156,10 @@ class _RecentActivityCard
         _ActivityData(
           icon: Icons.check_circle_outline,
           title: 'Account ready',
-          subtitle:
-          'Your Griho account is ready to use.',
-          date: dashboard.appUser?.createdAt ??
-              dashboard.firebaseUser?.metadata
-                  .creationTime ??
+          subtitle: 'Your Griho account is ready to use.',
+          date:
+              dashboard.appUser?.createdAt ??
+              dashboard.firebaseUser?.metadata.creationTime ??
               DateTime.now(),
         ),
       ];
@@ -1446,43 +1182,36 @@ class _ActivityData {
     required this.date,
   });
 }
+
 class _ActivityItem extends StatelessWidget {
   final _ActivityData activity;
 
-  const _ActivityItem({
-    required this.activity,
-  });
+  const _ActivityItem({required this.activity});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Row(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
           radius: 20,
-          backgroundColor: theme.colorScheme
-              .surfaceContainerHighest,
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
           child: Icon(
             activity.icon,
             size: 20,
-            color: theme.colorScheme
-                .onSurfaceVariant,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 activity.title,
-                style: theme.textTheme
-                    .titleSmall
-                    ?.copyWith(
+                style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1490,13 +1219,9 @@ class _ActivityItem extends StatelessWidget {
               Text(
                 activity.subtitle,
                 maxLines: 2,
-                overflow:
-                TextOverflow.ellipsis,
-                style: theme.textTheme
-                    .bodySmall
-                    ?.copyWith(
-                  color: theme.colorScheme
-                      .onSurfaceVariant,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -1505,10 +1230,8 @@ class _ActivityItem extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           _relativeDate(activity.date),
-          style: theme.textTheme.labelSmall
-              ?.copyWith(
-            color: theme.colorScheme
-                .onSurfaceVariant,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -1519,13 +1242,10 @@ class _ActivityItem extends StatelessWidget {
 // SECTION HEADER
 // ============================================================================
 
-class _SectionHeader
-    extends StatelessWidget {
+class _SectionHeader extends StatelessWidget {
   final String title;
 
-  const _SectionHeader({
-    required this.title,
-  });
+  const _SectionHeader({required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -1533,10 +1253,7 @@ class _SectionHeader
 
     return Text(
       title,
-      style: theme.textTheme.titleMedium
-          ?.copyWith(
-        fontWeight: FontWeight.w800,
-      ),
+      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
     );
   }
 }
@@ -1563,29 +1280,18 @@ class _InfoRow extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: 7,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            size: 20,
-            color: theme.colorScheme
-                .onSurfaceVariant,
-          ),
+          Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 12),
           SizedBox(
             width: 90,
             child: Text(
               label,
-              style: theme.textTheme
-                  .bodyMedium
-                  ?.copyWith(
-                color: theme.colorScheme
-                    .onSurfaceVariant,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -1594,12 +1300,8 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: theme.textTheme
-                  .bodyMedium
-                  ?.copyWith(
-                fontWeight: emphasized
-                    ? FontWeight.w800
-                    : FontWeight.w600,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
               ),
             ),
           ),
@@ -1613,15 +1315,11 @@ class _InfoRow extends StatelessWidget {
 // DASHBOARD ERROR
 // ============================================================================
 
-class _DashboardErrorView
-    extends StatelessWidget {
+class _DashboardErrorView extends StatelessWidget {
   final Object error;
   final VoidCallback onRetry;
 
-  const _DashboardErrorView({
-    required this.error,
-    required this.onRetry,
-  });
+  const _DashboardErrorView({required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1631,48 +1329,32 @@ class _DashboardErrorView
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment:
-          MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 56,
-              color: theme.colorScheme.error,
-            ),
+            Icon(Icons.error_outline, size: 56, color: theme.colorScheme.error),
             const SizedBox(height: 16),
             Text(
               'Could not load your dashboard',
               textAlign: TextAlign.center,
-              style: theme.textTheme
-                  .titleLarge
-                  ?.copyWith(
-                fontWeight:
-                FontWeight.w800,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               error.toString(),
               maxLines: 4,
-              overflow:
-              TextOverflow.ellipsis,
+              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: theme.textTheme
-                  .bodySmall
-                  ?.copyWith(
-                color: theme.colorScheme
-                    .onSurfaceVariant,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: onRetry,
-              icon: const Icon(
-                Icons.refresh,
-              ),
-              label: const Text(
-                'Try Again',
-              ),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
             ),
           ],
         ),
@@ -1686,11 +1368,9 @@ class _DashboardErrorView
 // ============================================================================
 
 String _formatDate(DateTime date) {
-  final day =
-  date.day.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
 
-  final month =
-  date.month.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
 
   final year = date.year.toString();
 

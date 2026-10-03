@@ -3,10 +3,10 @@ import '../entities/resolved_billing_rule.dart';
 import '../services/billing_rule_resolver.dart';
 
 class ResolveBillingRule {
-  final BillingRuleResolver _resolver;
+  final BillingRuleResolver resolver;
 
   const ResolveBillingRule({
-    required this._resolver,
+    required this.resolver,
   });
 
   ResolvedBillingRule? call({
@@ -16,14 +16,16 @@ class ResolveBillingRule {
     String? unitId,
     String? tenantId,
     required BillingChargeType chargeType,
+    required DateTime effectiveAt,
   }) {
-    return _resolver.resolve(
+    return resolver.resolve(
       rules: rules,
       propertyId: propertyId,
       floorId: floorId,
       unitId: unitId,
       tenantId: tenantId,
       chargeType: chargeType,
+      effectiveAt: effectiveAt,
     );
   }
 }

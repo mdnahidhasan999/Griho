@@ -53,6 +53,7 @@ class BillingRuleRepositoryImpl
       date: date,
     );
   }
+
   @override
   Future<BillingRule> updateBillingRule(
       UpdateBillingRuleRequest request,
@@ -72,5 +73,4 @@ class BillingRuleRepositoryImpl
       ownerId: ownerId,
     );
   }
-
 }
