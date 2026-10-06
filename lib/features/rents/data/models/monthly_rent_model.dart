@@ -11,9 +11,15 @@ class MonthlyRentModel extends MonthlyRent {
     required super.tenantId,
     super.tenantUserId,
     required super.rentRateId,
+    required super.monthlyRate,
     required super.amount,
+    required super.chargeableDays,
+    required super.daysInBillingPeriod,
+    required super.prorationFactor,
     required super.billingPeriodStart,
     required super.billingPeriodEnd,
+    required super.chargePeriodStart,
+    required super.chargePeriodEnd,
     required super.dueDate,
     required super.status,
     required super.createdAt,
@@ -39,7 +45,26 @@ class MonthlyRentModel extends MonthlyRent {
       tenantId: _readRequiredString(data, 'tenantId'),
       tenantUserId: _readOptionalString(data, 'tenantUserId'),
       rentRateId: _readRequiredString(data, 'rentRateId'),
-      amount: _readRequiredDouble(data, 'amount'),
+      monthlyRate: _readRequiredDouble(
+        data,
+        'monthlyRate',
+      ),
+      amount: _readRequiredDouble(
+        data,
+        'amount',
+      ),
+      chargeableDays: _readRequiredPositiveInt(
+        data,
+        'chargeableDays',
+      ),
+      daysInBillingPeriod: _readRequiredPositiveInt(
+        data,
+        'daysInBillingPeriod',
+      ),
+      prorationFactor: _readRequiredPositiveDouble(
+        data,
+        'prorationFactor',
+      ),
       billingPeriodStart: _readRequiredDateTime(
         data,
         'billingPeriodStart',
@@ -47,6 +72,14 @@ class MonthlyRentModel extends MonthlyRent {
       billingPeriodEnd: _readRequiredDateTime(
         data,
         'billingPeriodEnd',
+      ),
+      chargePeriodStart: _readRequiredDateTime(
+        data,
+        'chargePeriodStart',
+      ),
+      chargePeriodEnd: _readRequiredDateTime(
+        data,
+        'chargePeriodEnd',
       ),
       dueDate: _readRequiredDateTime(
         data,
@@ -72,11 +105,19 @@ class MonthlyRentModel extends MonthlyRent {
       'tenantId': tenantId,
       'tenantUserId': tenantUserId,
       'rentRateId': rentRateId,
+      'monthlyRate': monthlyRate,
       'amount': amount,
+      'chargeableDays': chargeableDays,
+      'daysInBillingPeriod': daysInBillingPeriod,
+      'prorationFactor': prorationFactor,
       'billingPeriodStart':
       Timestamp.fromDate(billingPeriodStart),
       'billingPeriodEnd':
       Timestamp.fromDate(billingPeriodEnd),
+      'chargePeriodStart':
+      Timestamp.fromDate(chargePeriodStart),
+      'chargePeriodEnd':
+      Timestamp.fromDate(chargePeriodEnd),
       'dueDate': Timestamp.fromDate(dueDate),
       'status': status.name,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -133,6 +174,52 @@ class MonthlyRentModel extends MonthlyRent {
     }
 
     final result = value.toDouble();
+
+    if (result <= 0) {
+      throw StateError(
+        'Monthly rent field "$field" must be greater than zero.',
+      );
+    }
+
+    return result;
+  }
+
+  static double _readRequiredPositiveDouble(
+      Map<String, dynamic> data,
+      String field,
+      ) {
+    final value = data[field];
+
+    if (value is! num) {
+      throw StateError(
+        'Monthly rent field "$field" is missing or invalid.',
+      );
+    }
+
+    final result = value.toDouble();
+
+    if (result <= 0) {
+      throw StateError(
+        'Monthly rent field "$field" must be greater than zero.',
+      );
+    }
+
+    return result;
+  }
+
+  static int _readRequiredPositiveInt(
+      Map<String, dynamic> data,
+      String field,
+      ) {
+    final value = data[field];
+
+    if (value is! num || value % 1 != 0) {
+      throw StateError(
+        'Monthly rent field "$field" is missing or invalid.',
+      );
+    }
+
+    final result = value.toInt();
 
     if (result <= 0) {
       throw StateError(

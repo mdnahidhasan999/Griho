@@ -8,7 +8,7 @@ class GetMonthlyRentByUnitAndPeriod {
     required this._repository,
   });
 
-  Future<MonthlyRent?> call({
+  Future<List<MonthlyRent>> call({
     required String unitId,
     required String ownerId,
     required DateTime billingPeriodStart,
@@ -28,7 +28,7 @@ class GetMonthlyRentByUnitAndPeriod {
       );
     }
 
-    return _repository.getMonthlyRentByUnitAndPeriod(
+    return _repository.getMonthlyRentsByUnitAndPeriod(
       unitId: normalizedUnitId,
       ownerId: normalizedOwnerId,
       billingPeriodStart: billingPeriodStart,

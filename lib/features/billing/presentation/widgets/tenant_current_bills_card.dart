@@ -6,45 +6,30 @@ import '../../domain/entities/monthly_bill.dart';
 import '../providers/monthly_bill_provider.dart';
 
 class TenantCurrentBillsCard extends ConsumerWidget {
-  const TenantCurrentBillsCard({
-    super.key,
-  });
+  const TenantCurrentBillsCard({super.key});
 
   @override
-  Widget build(
-      BuildContext context,
-      WidgetRef ref,
-      ) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final now = DateTime.now();
 
-    final billingPeriodStart = DateTime(
-      now.year,
-      now.month,
-      1,
-    );
+    final billingPeriodStart = DateTime(now.year, now.month, 1);
 
-    final tenantUserId =
-    FirebaseAuth.instance.currentUser?.uid.trim();
+    final tenantUserId = FirebaseAuth.instance.currentUser?.uid.trim();
 
     if (tenantUserId == null || tenantUserId.isEmpty) {
       return const Card(
         elevation: 0,
         child: Padding(
           padding: EdgeInsets.all(16),
-          child: _BillsErrorMessage(
-            message: 'You are not authenticated.',
-          ),
+          child: _BillsErrorMessage(message: 'You are not authenticated.'),
         ),
       );
     }
 
-    final billsProvider =
-    monthlyBillsByTenantAndPeriodProvider(
-      (
+    final billsProvider = monthlyBillsByTenantAndPeriodProvider((
       tenantUserId: tenantUserId,
       billingPeriodStart: billingPeriodStart,
-      ),
-    );
+    ));
 
     final billsAsync = ref.watch(billsProvider);
 
@@ -81,10 +66,7 @@ class _BillsContent extends StatelessWidget {
   final List<MonthlyBill> bills;
   final DateTime billingPeriodStart;
 
-  const _BillsContent({
-    required this.bills,
-    required this.billingPeriodStart,
-  });
+  const _BillsContent({required this.bills, required this.billingPeriodStart});
 
   @override
   Widget build(BuildContext context) {
@@ -92,24 +74,18 @@ class _BillsContent extends StatelessWidget {
 
     final totalAmount = bills.fold<double>(
       0,
-          (total, bill) => total + bill.amount,
+      (total, bill) => total + bill.amount,
     );
 
     if (bills.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _BillsHeader(
-            billingPeriodStart: billingPeriodStart,
-            totalAmount: 0,
-          ),
+          _BillsHeader(billingPeriodStart: billingPeriodStart, totalAmount: 0),
           const SizedBox(height: 14),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 20,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
@@ -152,11 +128,8 @@ class _BillsContent extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         for (var index = 0; index < bills.length; index++) ...[
-          _BillItem(
-            bill: bills[index],
-          ),
-          if (index != bills.length - 1)
-            const Divider(height: 20),
+          _BillItem(bill: bills[index]),
+          if (index != bills.length - 1) const Divider(height: 20),
         ],
       ],
     );
@@ -228,9 +201,7 @@ class _BillsHeader extends StatelessWidget {
 class _BillItem extends StatelessWidget {
   final MonthlyBill bill;
 
-  const _BillItem({
-    required this.bill,
-  });
+  const _BillItem({required this.bill});
 
   @override
   Widget build(BuildContext context) {
@@ -238,18 +209,14 @@ class _BillItem extends StatelessWidget {
 
     final typeLabel = _billTypeLabel(bill.type);
     final statusLabel = _billStatusLabel(bill.status);
-    final statusColor = _billStatusColor(
-      context,
-      bill.status,
-    );
+    final statusColor = _billStatusColor(context, bill.status);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
           radius: 20,
-          backgroundColor:
-          theme.colorScheme.surfaceContainerHighest,
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
           child: Icon(
             _billTypeIcon(bill.type),
             size: 20,
@@ -276,10 +243,7 @@ class _BillItem extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(20),
@@ -318,9 +282,7 @@ class _BillsLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     return const SizedBox(
       height: 90,
-      child: Center(
-        child: CircularProgressIndicator(),
-      ),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 }
@@ -332,9 +294,7 @@ class _BillsLoading extends StatelessWidget {
 class _BillsError extends StatelessWidget {
   final VoidCallback onRetry;
 
-  const _BillsError({
-    required this.onRetry,
-  });
+  const _BillsError({required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -372,9 +332,7 @@ class _BillsError extends StatelessWidget {
 class _BillsErrorMessage extends StatelessWidget {
   final String message;
 
-  const _BillsErrorMessage({
-    required this.message,
-  });
+  const _BillsErrorMessage({required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -382,17 +340,9 @@ class _BillsErrorMessage extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(
-          Icons.error_outline,
-          color: theme.colorScheme.error,
-        ),
+        Icon(Icons.error_outline, color: theme.colorScheme.error),
         const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            message,
-            style: theme.textTheme.bodyMedium,
-          ),
-        ),
+        Expanded(child: Text(message, style: theme.textTheme.bodyMedium)),
       ],
     );
   }
@@ -458,6 +408,9 @@ IconData _billTypeIcon(MonthlyBillType type) {
 
 String _billStatusLabel(MonthlyBillStatus status) {
   switch (status) {
+    case MonthlyBillStatus.pending:
+      return 'Amount Required';
+
     case MonthlyBillStatus.paid:
       return 'Paid';
 
@@ -475,13 +428,13 @@ String _billStatusLabel(MonthlyBillStatus status) {
   }
 }
 
-Color _billStatusColor(
-    BuildContext context,
-    MonthlyBillStatus status,
-    ) {
+Color _billStatusColor(BuildContext context, MonthlyBillStatus status) {
   final theme = Theme.of(context);
 
   switch (status) {
+    case MonthlyBillStatus.pending:
+      return theme.colorScheme.primary;
+
     case MonthlyBillStatus.paid:
       return Colors.green;
 

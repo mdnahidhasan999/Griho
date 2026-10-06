@@ -48,9 +48,33 @@ class MonthlyRentDataSource {
       throw ArgumentError('Rent rate ID cannot be empty.');
     }
 
+    if (request.monthlyRate <= 0) {
+      throw ArgumentError(
+        'Monthly rent rate must be greater than zero.',
+      );
+    }
+
     if (request.amount <= 0) {
       throw ArgumentError(
         'Rent amount must be greater than zero.',
+      );
+    }
+
+    if (request.chargeableDays <= 0) {
+      throw ArgumentError(
+        'Chargeable days must be greater than zero.',
+      );
+    }
+
+    if (request.daysInBillingPeriod <= 0) {
+      throw ArgumentError(
+        'Billing period days must be greater than zero.',
+      );
+    }
+
+    if (request.chargeableDays > request.daysInBillingPeriod) {
+      throw ArgumentError(
+        'Chargeable days cannot exceed billing period days.',
       );
     }
 
@@ -62,6 +86,30 @@ class MonthlyRentDataSource {
       );
     }
 
+    if (request.chargePeriodStart.isBefore(
+      request.billingPeriodStart,
+    )) {
+      throw ArgumentError(
+        'Charge period cannot start before billing period.',
+      );
+    }
+
+    if (request.chargePeriodEnd.isAfter(
+      request.billingPeriodEnd,
+    )) {
+      throw ArgumentError(
+        'Charge period cannot end after billing period.',
+      );
+    }
+
+    if (request.chargePeriodEnd.isBefore(
+      request.chargePeriodStart,
+    )) {
+      throw ArgumentError(
+        'Charge period end cannot be before charge period start.',
+      );
+    }
+
     if (request.dueDate.isBefore(
       request.billingPeriodStart,
     )) {
@@ -70,12 +118,37 @@ class MonthlyRentDataSource {
       );
     }
 
+    final expectedProrationFactor =
+        request.chargeableDays / request.daysInBillingPeriod;
+
+    final calculatedAmount =
+        request.monthlyRate * expectedProrationFactor;
+
+    const double tolerance = 0.01;
+
+    if ((request.amount - calculatedAmount).abs() > tolerance) {
+      throw ArgumentError(
+        'Rent amount does not match the expected '
+            'prorated rent calculation.',
+      );
+    }
+
     final periodKey = _formatPeriodKey(
       request.billingPeriodStart,
     );
 
-    final documentId =
-        '${ownerId}_${unitId}_$periodKey';
+    // Tenant-aware identity.
+    //
+    // This allows different tenants to have rent records
+    // in the same unit and calendar month when tenancy changes.
+    final documentId = _buildDocumentId(
+      ownerId: ownerId,
+      unitId: unitId,
+      tenantId: tenantId,
+      periodKey: periodKey,
+      chargePeriodStart: request.chargePeriodStart,
+      chargePeriodEnd: request.chargePeriodEnd,
+    );
 
     final document = _collection.doc(documentId);
 
@@ -89,9 +162,15 @@ class MonthlyRentDataSource {
       tenantId: tenantId,
       tenantUserId: request.tenantUserId,
       rentRateId: rentRateId,
+      monthlyRate: request.monthlyRate,
       amount: request.amount,
+      chargeableDays: request.chargeableDays,
+      daysInBillingPeriod: request.daysInBillingPeriod,
+      prorationFactor: expectedProrationFactor,
       billingPeriodStart: request.billingPeriodStart,
       billingPeriodEnd: request.billingPeriodEnd,
+      chargePeriodStart: request.chargePeriodStart,
+      chargePeriodEnd: request.chargePeriodEnd,
       dueDate: request.dueDate,
       status: request.status,
       createdAt: now,
@@ -100,12 +179,14 @@ class MonthlyRentDataSource {
 
     await _firestore.runTransaction(
           (transaction) async {
-        final existingSnapshot =
-        await transaction.get(document);
+        final existingSnapshot = await transaction.get(
+          document,
+        );
 
         if (existingSnapshot.exists) {
           throw StateError(
-            'Monthly rent already exists for this billing period.',
+            'Monthly rent already exists for this '
+                'tenant and charge period.',
           );
         }
 
@@ -145,11 +226,14 @@ class MonthlyRentDataSource {
     );
   }
 
+
+
   // ==========================================================================
-  // GET BY UNIT + BILLING PERIOD
+  // GET ALL RENTS FOR UNIT + BILLING PERIOD
   // ==========================================================================
 
-  Future<MonthlyRentModel?> getMonthlyRentByUnitAndPeriod({
+  Future<List<MonthlyRentModel>>
+  getMonthlyRentsByUnitAndPeriod({
     required String unitId,
     required String ownerId,
     required DateTime billingPeriodStart,
@@ -184,16 +268,15 @@ class MonthlyRentDataSource {
         billingPeriodStart,
       ),
     )
-        .limit(1)
+        .orderBy(
+      'chargePeriodStart',
+      descending: false,
+    )
         .get();
 
-    if (snapshot.docs.isEmpty) {
-      return null;
-    }
-
-    return MonthlyRentModel.fromFirestore(
-      snapshot.docs.first,
-    );
+    return snapshot.docs
+        .map(MonthlyRentModel.fromFirestore)
+        .toList();
   }
 
   // ==========================================================================
@@ -233,12 +316,14 @@ class MonthlyRentDataSource {
       'billingPeriodStart',
       descending: true,
     )
+        .orderBy(
+      'chargePeriodStart',
+      descending: true,
+    )
         .get();
 
     return snapshot.docs
-        .map(
-      MonthlyRentModel.fromFirestore,
-    )
+        .map(MonthlyRentModel.fromFirestore)
         .toList();
   }
 
@@ -279,12 +364,14 @@ class MonthlyRentDataSource {
       'billingPeriodStart',
       descending: true,
     )
+        .orderBy(
+      'chargePeriodStart',
+      descending: true,
+    )
         .get();
 
     return snapshot.docs
-        .map(
-      MonthlyRentModel.fromFirestore,
-    )
+        .map(MonthlyRentModel.fromFirestore)
         .toList();
   }
 
@@ -292,7 +379,8 @@ class MonthlyRentDataSource {
   // PERIOD
   // ==========================================================================
 
-  Future<List<MonthlyRentModel>> getMonthlyRentsByPeriod({
+  Future<List<MonthlyRentModel>>
+  getMonthlyRentsByPeriod({
     required String ownerId,
     required DateTime billingPeriodStart,
     required DateTime billingPeriodEnd,
@@ -333,13 +421,37 @@ class MonthlyRentDataSource {
         .orderBy(
       'unitId',
     )
+        .orderBy(
+      'chargePeriodStart',
+    )
         .get();
 
     return snapshot.docs
-        .map(
-      MonthlyRentModel.fromFirestore,
-    )
+        .map(MonthlyRentModel.fromFirestore)
         .toList();
+  }
+
+  // ==========================================================================
+  // DOCUMENT ID
+  // ==========================================================================
+
+  String _buildDocumentId({
+    required String ownerId,
+    required String unitId,
+    required String tenantId,
+    required String periodKey,
+    required DateTime chargePeriodStart,
+    required DateTime chargePeriodEnd,
+  }) {
+    final startKey = _formatDateKey(
+      chargePeriodStart,
+    );
+
+    final endKey = _formatDateKey(
+      chargePeriodEnd,
+    );
+
+    return '${ownerId}_${unitId}_${tenantId}_${periodKey}_${startKey}_$endKey';
   }
 
   // ==========================================================================
@@ -351,5 +463,17 @@ class MonthlyRentDataSource {
     final month = date.month.toString().padLeft(2, '0');
 
     return '$year-$month';
+  }
+
+  // ==========================================================================
+  // DATE KEY
+  // ==========================================================================
+
+  String _formatDateKey(DateTime date) {
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+
+    return '$year-$month-$day';
   }
 }

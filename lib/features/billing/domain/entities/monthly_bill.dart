@@ -1,6 +1,9 @@
 import 'package:griho/features/billing/domain/entities/billing_rule.dart';
 
 enum MonthlyBillStatus {
+  /// Variable bill has been created but the actual amount
+  /// has not been entered yet.
+  pending,
   unpaid,
   partiallyPaid,
   paid,
@@ -47,9 +50,11 @@ class MonthlyBill {
 
   /// Snapshot of the amount for this billing period.
   ///
-  /// Once a monthly bill is generated, this amount
-  /// should not change automatically when the original
-  /// billing rule changes later.
+  /// For a pending variable bill, this is temporarily 0
+  /// because the actual amount has not been entered yet.
+  ///
+  /// Once the actual amount is entered, it becomes the
+  /// historical amount for this billing period.
   final double amount;
 
   /// Total amount already paid against this bill.
@@ -90,8 +95,20 @@ class MonthlyBill {
     required this.updatedAt,
   });
 
+  /// Whether this variable bill still requires an actual amount.
+  bool get requiresAmountInput =>
+      valueType == BillingValueType.variable &&
+      status == MonthlyBillStatus.pending;
+
   /// Remaining amount that the tenant still needs to pay.
+  ///
+  /// A pending bill is not considered payable yet because
+  /// its actual amount has not been entered.
   double get remainingAmount {
+    if (status == MonthlyBillStatus.pending) {
+      return 0;
+    }
+
     final remaining = amount - paidAmount;
 
     if (remaining <= 0) {
@@ -102,14 +119,13 @@ class MonthlyBill {
   }
 
   bool get isFullyPaid =>
-      remainingAmount == 0;
+      status == MonthlyBillStatus.paid && remainingAmount == 0;
 
   bool get isPartiallyPaid =>
-      paidAmount > 0 &&
-          paidAmount < amount;
+      status == MonthlyBillStatus.partiallyPaid ||
+      (paidAmount > 0 && paidAmount < amount);
 
-  bool get isUnpaid =>
-      paidAmount == 0;
+  bool get isUnpaid => status == MonthlyBillStatus.unpaid;
 
   MonthlyBill copyWith({
     String? id,
@@ -130,7 +146,6 @@ class MonthlyBill {
     MonthlyBillStatus? status,
     DateTime? createdAt,
     DateTime? updatedAt,
-
     bool clearTenantUserId = false,
   }) {
     return MonthlyBill(
@@ -140,32 +155,20 @@ class MonthlyBill {
       floorId: floorId ?? this.floorId,
       unitId: unitId ?? this.unitId,
       tenantId: tenantId ?? this.tenantId,
-      tenantUserId:
-      clearTenantUserId
+      tenantUserId: clearTenantUserId
           ? null
           : tenantUserId ?? this.tenantUserId,
-      sourceRuleId:
-      sourceRuleId ?? this.sourceRuleId,
+      sourceRuleId: sourceRuleId ?? this.sourceRuleId,
       type: type ?? this.type,
-      valueType:
-      valueType ?? this.valueType,
+      valueType: valueType ?? this.valueType,
       amount: amount ?? this.amount,
-      paidAmount:
-      paidAmount ?? this.paidAmount,
-      billingPeriodStart:
-      billingPeriodStart ??
-          this.billingPeriodStart,
-      billingPeriodEnd:
-      billingPeriodEnd ??
-          this.billingPeriodEnd,
-      dueDate:
-      dueDate ?? this.dueDate,
-      status:
-      status ?? this.status,
-      createdAt:
-      createdAt ?? this.createdAt,
-      updatedAt:
-      updatedAt ?? this.updatedAt,
+      paidAmount: paidAmount ?? this.paidAmount,
+      billingPeriodStart: billingPeriodStart ?? this.billingPeriodStart,
+      billingPeriodEnd: billingPeriodEnd ?? this.billingPeriodEnd,
+      dueDate: dueDate ?? this.dueDate,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

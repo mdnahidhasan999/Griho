@@ -11,6 +11,10 @@ class MonthlyRentRepositoryImpl
     required this._dataSource,
   });
 
+  // ==========================================================================
+  // CREATE
+  // ==========================================================================
+
   @override
   Future<MonthlyRent> createMonthlyRent(
       CreateMonthlyRentRequest request,
@@ -19,6 +23,10 @@ class MonthlyRentRepositoryImpl
       request: request,
     );
   }
+
+  // ==========================================================================
+  // GET BY ID
+  // ==========================================================================
 
   @override
   Future<MonthlyRent?> getMonthlyRentById(
@@ -29,18 +37,26 @@ class MonthlyRentRepositoryImpl
     );
   }
 
+  // ==========================================================================
+  // GET BY UNIT + BILLING PERIOD
+  // ==========================================================================
+
   @override
-  Future<MonthlyRent?> getMonthlyRentByUnitAndPeriod({
+  Future<List<MonthlyRent>> getMonthlyRentsByUnitAndPeriod({
     required String unitId,
     required String ownerId,
     required DateTime billingPeriodStart,
   }) {
-    return _dataSource.getMonthlyRentByUnitAndPeriod(
+    return _dataSource.getMonthlyRentsByUnitAndPeriod(
       unitId: unitId,
       ownerId: ownerId,
       billingPeriodStart: billingPeriodStart,
     );
   }
+
+  // ==========================================================================
+  // UNIT HISTORY
+  // ==========================================================================
 
   @override
   Future<List<MonthlyRent>>
@@ -54,6 +70,10 @@ class MonthlyRentRepositoryImpl
     );
   }
 
+  // ==========================================================================
+  // TENANT HISTORY
+  // ==========================================================================
+
   @override
   Future<List<MonthlyRent>>
   getMonthlyRentHistoryByTenantId({
@@ -65,6 +85,10 @@ class MonthlyRentRepositoryImpl
       ownerId: ownerId,
     );
   }
+
+  // ==========================================================================
+  // GET BY BILLING PERIOD
+  // ==========================================================================
 
   @override
   Future<List<MonthlyRent>> getMonthlyRentsByPeriod({

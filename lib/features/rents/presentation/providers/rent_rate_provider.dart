@@ -224,11 +224,18 @@ FutureProvider.family<
 // The tenant's historical rent is obtained through the tenancy/unit
 // relationship rather than a tenantId stored inside RentRate.
 //
+// tenantId is still passed to the use case so the tenant-specific
+// use-case contract can validate the tenant context.
+//
 
 final tenantRentRateHistoryProvider =
 FutureProvider.family<
     List<RentRate>,
-    ({String unitId, String ownerId})>(
+    ({
+    String unitId,
+    String ownerId,
+    String tenantId,
+    })>(
       (ref, args) async {
     final getHistory = ref.read(
       getTenantRentRateHistoryProvider,
@@ -237,6 +244,7 @@ FutureProvider.family<
     return getHistory(
       unitId: args.unitId,
       ownerId: args.ownerId,
+      tenantId: args.tenantId,
     );
   },
 );

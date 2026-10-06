@@ -13,16 +13,20 @@ class GenerateMonthlyBills {
     required this._monthlyBillRepository,
   });
 
-  /// Generates monthly bills for all active tenants/units
-  /// that have applicable billing rules.
+  /// Generates non-rent monthly bills for all supplied targets.
   ///
-  /// Fixed rules:
-  ///   amount comes directly from the rule.
+  /// Rent is intentionally NOT generated here.
   ///
-  /// Variable rules:
-  ///   amount starts at 0 and can be updated later.
+  /// Rent has its own generation flow because rent depends on:
+  /// - tenancy period
+  /// - prorated days
+  /// - historical rent rates
+  /// - rent-rate changes inside a billing month
   ///
-  /// Existing monthly bills are skipped.
+  /// Fixed billing rules create a normal unpaid bill.
+  ///
+  /// Variable billing rules create a pending bill because the
+  /// actual amount is not known at generation time.
   Future<List<MonthlyBill>> call({
     required String ownerId,
     required String propertyId,
@@ -35,39 +39,28 @@ class GenerateMonthlyBills {
     final normalizedPropertyId = propertyId.trim();
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     if (normalizedPropertyId.isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
-    if (!billingPeriodEnd.isAfter(
-      billingPeriodStart,
-    )) {
+    if (!billingPeriodEnd.isAfter(billingPeriodStart)) {
       throw ArgumentError(
         'Billing period end must be after billing period start.',
       );
     }
 
-    if (dueDate.isBefore(
-      billingPeriodStart,
-    )) {
-      throw ArgumentError(
-        'Due date cannot be before billing period start.',
-      );
+    if (dueDate.isBefore(billingPeriodStart)) {
+      throw ArgumentError('Due date cannot be before billing period start.');
     }
 
     if (targets.isEmpty) {
       return const [];
     }
 
-    final rules =
-    await _billingRuleRepository.getBillingRulesForPeriod(
+    final rules = await _billingRuleRepository.getBillingRulesForPeriod(
       ownerId: normalizedOwnerId,
       propertyId: normalizedPropertyId,
       date: billingPeriodStart,
@@ -86,25 +79,38 @@ class GenerateMonthlyBills {
       );
 
       for (final rule in applicableRules) {
-        final existingBill =
-        await _monthlyBillRepository
-            .getMonthlyBillByUnitAndPeriodAndType(
-          ownerId: normalizedOwnerId,
-          unitId: target.unitId,
-          billingPeriodStart: billingPeriodStart,
-          type: _toMonthlyBillType(
-            rule.chargeType,
-          ),
-        );
+        final billType = _toMonthlyBillType(rule.chargeType);
 
+        // Rent is handled separately by GenerateMonthlyRent.
+        if (billType == MonthlyBillType.rent) {
+          continue;
+        }
+
+        final existingBill = await _monthlyBillRepository
+            .getMonthlyBillByUnitAndTenantAndPeriodAndType(
+              ownerId: normalizedOwnerId,
+              unitId: target.unitId,
+              tenantId: target.tenantId,
+              billingPeriodStart: billingPeriodStart,
+              type: billType,
+            );
+
+        // This is an optimization/readability check.
+        //
+        // The actual duplicate protection remains inside
+        // MonthlyBillDataSource.createMonthlyBill(), which
+        // uses a Firestore transaction.
         if (existingBill != null) {
           continue;
         }
 
-        final double amount = rule.valueType ==
-            BillingValueType.fixed
-            ? (rule.amount ?? 0.0)
-            : 0.0;
+        final isVariable = rule.valueType == BillingValueType.variable;
+
+        final amount = isVariable ? 0.0 : (rule.amount ?? 0.0);
+
+        final status = isVariable
+            ? MonthlyBillStatus.pending
+            : MonthlyBillStatus.unpaid;
 
         final request = CreateMonthlyBillRequest(
           ownerId: normalizedOwnerId,
@@ -114,26 +120,33 @@ class GenerateMonthlyBills {
           tenantId: target.tenantId,
           tenantUserId: target.tenantUserId,
           sourceRuleId: rule.id,
-          type: _toMonthlyBillType(
-            rule.chargeType,
-          ),
+          type: billType,
           valueType: rule.valueType,
           amount: amount,
-          billingPeriodStart:
-          billingPeriodStart,
-          billingPeriodEnd:
-          billingPeriodEnd,
+          billingPeriodStart: billingPeriodStart,
+          billingPeriodEnd: billingPeriodEnd,
           dueDate: dueDate,
-          status: amount > 0
-              ? MonthlyBillStatus.unpaid
-              : MonthlyBillStatus.unpaid,
+          status: status,
         );
 
-        final bill =
-        await _monthlyBillRepository
-            .createMonthlyBill(request);
+        try {
+          final bill = await _monthlyBillRepository.createMonthlyBill(
+            request: request,
+          );
 
-        generatedBills.add(bill);
+          generatedBills.add(bill);
+        } on StateError catch (error) {
+          // Another generation request may have created the
+          // same bill between our read check and the transaction.
+          //
+          // Do not create a second bill.
+          //
+          // We only ignore the known duplicate error. Other
+          // StateError values are rethrown.
+          if (!_isDuplicateBillError(error)) {
+            rethrow;
+          }
+        }
       }
     }
 
@@ -150,40 +163,25 @@ class GenerateMonthlyBills {
   }) {
     final result = <BillingRule>[];
 
-    final chargeTypes =
-        BillingChargeType.values;
+    for (final chargeType in BillingChargeType.values) {
+      final matchingRules = rules.where((rule) {
+        if (rule.chargeType != chargeType) {
+          return false;
+        }
 
-    for (final chargeType in chargeTypes) {
-      final matchingRules = rules.where(
-            (rule) {
-          if (rule.chargeType != chargeType) {
-            return false;
-          }
-
-          return _matchesScope(
-            rule: rule,
-            target: target,
-          );
-        },
-      ).toList();
+        return _matchesScope(rule: rule, target: target);
+      }).toList();
 
       if (matchingRules.isEmpty) {
         continue;
       }
 
       matchingRules.sort(
-            (a, b) => _scopePriority(
-          b.scopeType,
-        ).compareTo(
-          _scopePriority(
-            a.scopeType,
-          ),
-        ),
+        (a, b) =>
+            _scopePriority(b.scopeType).compareTo(_scopePriority(a.scopeType)),
       );
 
-      result.add(
-        matchingRules.first,
-      );
+      result.add(matchingRules.first);
     }
 
     return result;
@@ -212,9 +210,7 @@ class GenerateMonthlyBills {
     }
   }
 
-  int _scopePriority(
-      BillingScopeType scope,
-      ) {
+  int _scopePriority(BillingScopeType scope) {
     switch (scope) {
       case BillingScopeType.property:
         return 1;
@@ -234,9 +230,7 @@ class GenerateMonthlyBills {
   // BILL TYPE MAPPING
   // ==========================================================================
 
-  MonthlyBillType _toMonthlyBillType(
-      BillingChargeType type,
-      ) {
+  MonthlyBillType _toMonthlyBillType(BillingChargeType type) {
     switch (type) {
       case BillingChargeType.water:
         return MonthlyBillType.water;
@@ -256,6 +250,17 @@ class GenerateMonthlyBills {
       case BillingChargeType.other:
         return MonthlyBillType.other;
     }
+  }
+
+  // ==========================================================================
+  // DUPLICATE ERROR DETECTION
+  // ==========================================================================
+
+  bool _isDuplicateBillError(StateError error) {
+    return error.message.toString().contains(
+      'Monthly bill already exists for this '
+      'tenant, bill type and billing period.',
+    );
   }
 }
 

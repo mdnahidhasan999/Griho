@@ -6,28 +6,34 @@ import '../datasources/monthly_bill_datasource.dart';
 class MonthlyBillRepositoryImpl implements MonthlyBillRepository {
   final MonthlyBillDataSource _dataSource;
 
-  MonthlyBillRepositoryImpl({required this._dataSource});
+  const MonthlyBillRepositoryImpl({
+    required this._dataSource,
+  });
 
   @override
-  Future<MonthlyBill> createMonthlyBill(CreateMonthlyBillRequest request) {
-    return _dataSource.createMonthlyBill(request: request);
+  Future<MonthlyBill> createMonthlyBill({
+    required CreateMonthlyBillRequest request,
+  }) async {
+    return _dataSource.createMonthlyBill(
+      request: request,
+    );
   }
 
   @override
-  Future<MonthlyBill?> getMonthlyBillById(String billId) {
-    return _dataSource.getMonthlyBillById(billId);
+  Future<MonthlyBill?> getMonthlyBillById({
+    required String billId,
+  }) async {
+    return _dataSource.getMonthlyBillById(
+      billId,
+    );
   }
-
-  // ==========================================================================
-  // UNIT + PERIOD
-  // ==========================================================================
 
   @override
   Future<List<MonthlyBill>> getMonthlyBillsByUnitAndPeriod({
     required String ownerId,
     required String unitId,
     required DateTime billingPeriodStart,
-  }) {
+  }) async {
     return _dataSource.getMonthlyBillsByUnitAndPeriod(
       ownerId: ownerId,
       unitId: unitId,
@@ -35,20 +41,20 @@ class MonthlyBillRepositoryImpl implements MonthlyBillRepository {
     );
   }
 
-  // ==========================================================================
-  // UNIT + PERIOD + TYPE
-  // ==========================================================================
-
   @override
-  Future<MonthlyBill?> getMonthlyBillByUnitAndPeriodAndType({
+  Future<MonthlyBill?>
+  getMonthlyBillByUnitAndTenantAndPeriodAndType({
     required String ownerId,
     required String unitId,
+    required String tenantId,
     required DateTime billingPeriodStart,
     required MonthlyBillType type,
-  }) {
-    return _dataSource.getMonthlyBillByUnitAndPeriodAndType(
+  }) async {
+    return _dataSource
+        .getMonthlyBillByUnitAndTenantAndPeriodAndType(
       ownerId: ownerId,
       unitId: unitId,
+      tenantId: tenantId,
       billingPeriodStart: billingPeriodStart,
       type: type,
     );
@@ -58,7 +64,7 @@ class MonthlyBillRepositoryImpl implements MonthlyBillRepository {
   Future<List<MonthlyBill>> getMonthlyBillsByTenantAndPeriod({
     required String tenantUserId,
     required DateTime billingPeriodStart,
-  }) {
+  }) async {
     return _dataSource.getMonthlyBillsByTenantAndPeriod(
       tenantUserId: tenantUserId,
       billingPeriodStart: billingPeriodStart,
@@ -68,22 +74,18 @@ class MonthlyBillRepositoryImpl implements MonthlyBillRepository {
   @override
   Future<List<MonthlyBill>> getMonthlyBillHistoryByTenantUserId({
     required String tenantUserId,
-  }) {
+  }) async {
     return _dataSource.getMonthlyBillHistoryByTenantUserId(
       tenantUserId: tenantUserId,
     );
   }
-
-  // ==========================================================================
-  // PROPERTY + PERIOD
-  // ==========================================================================
 
   @override
   Future<List<MonthlyBill>> getMonthlyBillsByPropertyAndPeriod({
     required String ownerId,
     required String propertyId,
     required DateTime billingPeriodStart,
-  }) {
+  }) async {
     return _dataSource.getMonthlyBillsByPropertyAndPeriod(
       ownerId: ownerId,
       propertyId: propertyId,
@@ -91,39 +93,34 @@ class MonthlyBillRepositoryImpl implements MonthlyBillRepository {
     );
   }
 
-  // ==========================================================================
-  // PROPERTY HISTORY
-  // ==========================================================================
-
   @override
   Future<List<MonthlyBill>> getMonthlyBillHistoryByPropertyId({
     required String ownerId,
     required String propertyId,
-  }) {
+  }) async {
     return _dataSource.getMonthlyBillHistoryByPropertyId(
       ownerId: ownerId,
       propertyId: propertyId,
     );
   }
 
-  // ==========================================================================
-  // UPDATE AMOUNT
-  // ==========================================================================
-
   @override
   Future<MonthlyBill?> updateMonthlyBillAmount({
     required String billId,
     required double amount,
-  }) {
-    return _dataSource.updateMonthlyBillAmount(billId: billId, amount: amount);
+  }) async {
+    return _dataSource.updateMonthlyBillAmount(
+      billId: billId,
+      amount: amount,
+    );
   }
 
-  // ==========================================================================
-  // CANCEL
-  // ==========================================================================
-
   @override
-  Future<MonthlyBill?> cancelMonthlyBill(String billId) {
-    return _dataSource.cancelMonthlyBill(billId);
+  Future<MonthlyBill?> cancelMonthlyBill({
+    required String billId,
+  }) async {
+    return _dataSource.cancelMonthlyBill(
+      billId,
+    );
   }
 }

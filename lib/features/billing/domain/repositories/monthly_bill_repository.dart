@@ -1,94 +1,78 @@
 import '../entities/create_monthly_bill_request.dart';
 import '../entities/monthly_bill.dart';
 
-abstract interface class MonthlyBillRepository {
-  // ==========================================================================
-  // CREATE
-  // ==========================================================================
+abstract class MonthlyBillRepository {
+  /// Creates a new monthly bill.
+  ///
+  /// Duplicate protection is enforced by the data source.
+  Future<MonthlyBill> createMonthlyBill({
+    required CreateMonthlyBillRequest request,
+  });
 
-  Future<MonthlyBill> createMonthlyBill(
-      CreateMonthlyBillRequest request,
-      );
+  /// Gets a monthly bill by its document ID.
+  Future<MonthlyBill?> getMonthlyBillById({
+    required String billId,
+  });
 
-  // ==========================================================================
-  // BILL BY ID
-  // ==========================================================================
-
-  Future<MonthlyBill?> getMonthlyBillById(
-      String billId,
-      );
-
-  // ==========================================================================
-  // UNIT + PERIOD
-  // ==========================================================================
-
+  /// Gets all bills for a specific unit and billing period.
+  ///
+  /// Multiple bills can exist for the same unit/month because:
+  /// - different tenants may occupy the unit during the month;
+  /// - multiple billing types exist.
   Future<List<MonthlyBill>> getMonthlyBillsByUnitAndPeriod({
     required String ownerId,
     required String unitId,
     required DateTime billingPeriodStart,
   });
 
-  // ==========================================================================
-  // UNIT + PERIOD + TYPE
-  // ==========================================================================
-
-  Future<MonthlyBill?> getMonthlyBillByUnitAndPeriodAndType({
+  /// Gets one specific bill for:
+  /// tenant + unit + billing period + type.
+  ///
+  /// Tenant ID is part of the identity because the same unit
+  /// can have different tenants during the same calendar month.
+  Future<MonthlyBill?>
+  getMonthlyBillByUnitAndTenantAndPeriodAndType({
     required String ownerId,
     required String unitId,
+    required String tenantId,
     required DateTime billingPeriodStart,
     required MonthlyBillType type,
   });
 
-  // ==========================================================================
-  // TENANT + PERIOD
-  // ==========================================================================
-
+  /// Gets all bills for a tenant during a billing period.
   Future<List<MonthlyBill>> getMonthlyBillsByTenantAndPeriod({
     required String tenantUserId,
     required DateTime billingPeriodStart,
   });
 
-  // ==========================================================================
-  // TENANT HISTORY
-  // ==========================================================================
-
+  /// Gets the complete bill history for a tenant.
   Future<List<MonthlyBill>> getMonthlyBillHistoryByTenantUserId({
     required String tenantUserId,
   });
 
-  // ==========================================================================
-  // PROPERTY + PERIOD
-  // ==========================================================================
-
+  /// Gets all bills for a property during a billing period.
   Future<List<MonthlyBill>> getMonthlyBillsByPropertyAndPeriod({
     required String ownerId,
     required String propertyId,
     required DateTime billingPeriodStart,
   });
 
-  // ==========================================================================
-  // PROPERTY HISTORY
-  // ==========================================================================
-
+  /// Gets the complete bill history for a property.
   Future<List<MonthlyBill>> getMonthlyBillHistoryByPropertyId({
     required String ownerId,
     required String propertyId,
   });
 
-  // ==========================================================================
-  // UPDATE AMOUNT
-  // ==========================================================================
-
+  /// Updates the amount of a variable bill.
+  ///
+  /// Generated rent bills are immutable and must not be edited.
   Future<MonthlyBill?> updateMonthlyBillAmount({
     required String billId,
     required double amount,
   });
 
-  // ==========================================================================
-  // CANCEL
-  // ==========================================================================
-
-  Future<MonthlyBill?> cancelMonthlyBill(
-      String billId,
-      );
+  /// Cancels/voids a monthly bill.
+  Future<MonthlyBill?> cancelMonthlyBill({
+    required String billId,
+  });
 }

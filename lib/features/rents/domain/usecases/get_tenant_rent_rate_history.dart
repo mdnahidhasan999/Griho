@@ -9,17 +9,13 @@ class GetTenantRentRateHistory {
   });
 
   Future<List<RentRate>> call({
-    required String unitId,
     required String ownerId,
+    required String tenantId,
+    required String unitId,
   }) async {
-    final normalizedUnitId = unitId.trim();
     final normalizedOwnerId = ownerId.trim();
-
-    if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
-    }
+    final normalizedTenantId = tenantId.trim();
+    final normalizedUnitId = unitId.trim();
 
     if (normalizedOwnerId.isEmpty) {
       throw ArgumentError(
@@ -27,9 +23,26 @@ class GetTenantRentRateHistory {
       );
     }
 
+    if (normalizedTenantId.isEmpty) {
+      throw ArgumentError(
+        'Tenant ID cannot be empty.',
+      );
+    }
+
+    if (normalizedUnitId.isEmpty) {
+      throw ArgumentError(
+        'Unit ID cannot be empty.',
+      );
+    }
+
+    // Rent rates belong to a unit, not to a tenant.
+    //
+    // tenantId is intentionally validated here because this
+    // use case is called while generating a tenant's rent,
+    // but the historical rate source remains the unit history.
     return _repository.getRentRateHistoryByUnitId(
-      unitId: normalizedUnitId,
       ownerId: normalizedOwnerId,
+      unitId: normalizedUnitId,
     );
   }
 }

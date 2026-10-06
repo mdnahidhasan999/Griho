@@ -9,51 +9,82 @@ class CreateBillingRule {
     required this._repository,
   });
 
-  Future<BillingRule> call(
-      CreateBillingRuleRequest request,
-      ) async {
-    if (request.ownerId.trim().isEmpty) {
+  Future<BillingRule> call(CreateBillingRuleRequest request,) async {
+    final ownerId = request.ownerId.trim();
+    final propertyId = request.propertyId.trim();
+    final scopeId = request.scopeId.trim();
+    final title = request.title?.trim();
+
+    // =========================================================================
+    // BASIC VALIDATION
+    // =========================================================================
+
+    if (ownerId.isEmpty) {
       throw ArgumentError(
         'Owner ID cannot be empty.',
       );
     }
 
-    if (request.propertyId.trim().isEmpty) {
+    if (propertyId.isEmpty) {
       throw ArgumentError(
         'Property ID cannot be empty.',
       );
     }
 
-    if (request.scopeId.trim().isEmpty) {
+    if (scopeId.isEmpty) {
       throw ArgumentError(
         'Billing scope ID cannot be empty.',
       );
     }
 
-    if (request.valueType == BillingValueType.fixed) {
-      if (request.amount == null || request.amount! < 0) {
-        throw ArgumentError(
-          'Fixed billing amount must be zero or greater.',
-        );
-      }
-    }
+    // =========================================================================
+    // OTHER CHARGE TITLE
+    // =========================================================================
 
-    if (request.valueType == BillingValueType.variable &&
-        request.amount != null &&
-        request.amount! < 0) {
+    if (request.chargeType == BillingChargeType.other &&
+        (title == null || title.isEmpty)) {
       throw ArgumentError(
-        'Billing amount cannot be negative.',
+        'A title is required for the Other billing type.',
       );
     }
 
+    // =========================================================================
+    // FIXED / VARIABLE
+    // =========================================================================
+
+    switch (request.valueType) {
+      case BillingValueType.fixed:
+        if (request.amount == null) {
+          throw ArgumentError(
+            'Fixed billing amount is required.',
+          );
+        }
+
+        if (request.amount! < 0) {
+          throw ArgumentError(
+            'Fixed billing amount cannot be negative.',
+          );
+        }
+
+      case BillingValueType.variable:
+        if (request.amount != null) {
+          throw ArgumentError(
+            'Variable billing rules cannot contain a fixed amount.',
+          );
+        }
+    }
+
+
     if (request.effectiveTo != null &&
-        request.effectiveTo!.isBefore(
+        !request.effectiveTo!.isAfter(
           request.effectiveFrom,
         )) {
       throw ArgumentError(
-        'Effective end date cannot be before start date.',
+        'Effective end date must be after '
+            'the effective start date.',
       );
     }
+
 
     return _repository.createBillingRule(
       request,

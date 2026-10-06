@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/create_monthly_bill_request.dart';
 import '../../domain/entities/monthly_bill.dart';
 import '../models/monthly_bill_model.dart';
@@ -27,10 +28,7 @@ class MonthlyBillDataSource {
     final floorId = request.floorId.trim();
     final unitId = request.unitId.trim();
     final tenantId = request.tenantId.trim();
-
-    // tenantUserId may be nullable in CreateMonthlyBillRequest.
-    final tenantUserId = request.tenantUserId?.trim() ?? '';
-
+    final tenantUserId = request.tenantUserId?.trim();
     final sourceRuleId = request.sourceRuleId.trim();
 
     _validateRequiredId(ownerId, 'Owner ID');
@@ -38,7 +36,6 @@ class MonthlyBillDataSource {
     _validateRequiredId(floorId, 'Floor ID');
     _validateRequiredId(unitId, 'Unit ID');
     _validateRequiredId(tenantId, 'Tenant ID');
-    _validateRequiredId(tenantUserId, 'Tenant User ID');
     _validateRequiredId(sourceRuleId, 'Source rule ID');
 
     if (request.amount < 0) {
@@ -55,9 +52,27 @@ class MonthlyBillDataSource {
       throw ArgumentError('Due date cannot be before billing period start.');
     }
 
+    // Pending means the actual amount is not known yet.
+    // Therefore only variable bills may be pending.
+    if (request.status == MonthlyBillStatus.pending &&
+        request.valueType != BillingValueType.variable) {
+      throw ArgumentError('Only variable bills can have pending status.');
+    }
+
+    // Fixed bills must have a positive amount.
+    if (request.valueType == BillingValueType.fixed && request.amount <= 0) {
+      throw ArgumentError('Fixed bills must have an amount greater than zero.');
+    }
+
     final periodKey = _formatPeriodKey(request.billingPeriodStart);
 
-    final documentId = '${ownerId}_${unitId}_${request.type.name}_$periodKey';
+    // Tenant-aware document identity.
+    //
+    // Different tenants occupying the same unit during the same month
+    // must be able to have separate bills.
+    final documentId =
+        '${ownerId}_${unitId}_${tenantId}_'
+        '${request.type.name}_$periodKey';
 
     final document = _collection.doc(documentId);
 
@@ -84,13 +99,14 @@ class MonthlyBillDataSource {
       updatedAt: now,
     );
 
+    // Transaction is the authoritative duplicate-prevention layer.
     await _firestore.runTransaction((transaction) async {
       final existingSnapshot = await transaction.get(document);
 
       if (existingSnapshot.exists) {
         throw StateError(
-          'Monthly bill already exists for this unit, '
-          'bill type and billing period.',
+          'Monthly bill already exists for this '
+          'tenant, bill type and billing period.',
         );
       }
 
@@ -133,7 +149,6 @@ class MonthlyBillDataSource {
     final normalizedUnitId = unitId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
-
     _validateRequiredId(normalizedUnitId, 'Unit ID');
 
     final snapshot = await _collection
@@ -149,25 +164,28 @@ class MonthlyBillDataSource {
   }
 
   // ==========================================================================
-  // UNIT + PERIOD + TYPE
+  // UNIT + TENANT + PERIOD + TYPE
   // ==========================================================================
 
-  Future<MonthlyBillModel?> getMonthlyBillByUnitAndPeriodAndType({
+  Future<MonthlyBillModel?> getMonthlyBillByUnitAndTenantAndPeriodAndType({
     required String ownerId,
     required String unitId,
+    required String tenantId,
     required DateTime billingPeriodStart,
     required MonthlyBillType type,
   }) async {
     final normalizedOwnerId = ownerId.trim();
     final normalizedUnitId = unitId.trim();
+    final normalizedTenantId = tenantId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
-
     _validateRequiredId(normalizedUnitId, 'Unit ID');
+    _validateRequiredId(normalizedTenantId, 'Tenant ID');
 
     final snapshot = await _collection
         .where('ownerId', isEqualTo: normalizedOwnerId)
         .where('unitId', isEqualTo: normalizedUnitId)
+        .where('tenantId', isEqualTo: normalizedTenantId)
         .where(
           'billingPeriodStart',
           isEqualTo: Timestamp.fromDate(billingPeriodStart),
@@ -278,7 +296,7 @@ class MonthlyBillDataSource {
   }
 
   // ==========================================================================
-  // UPDATE AMOUNT
+  // UPDATE VARIABLE BILL AMOUNT
   // ==========================================================================
 
   Future<MonthlyBillModel?> updateMonthlyBillAmount({
@@ -289,6 +307,10 @@ class MonthlyBillDataSource {
 
     if (normalizedBillId.isEmpty) {
       throw ArgumentError('Bill ID cannot be empty.');
+    }
+
+    if (amount.isNaN || amount.isInfinite) {
+      throw ArgumentError('Bill amount must be a valid number.');
     }
 
     if (amount < 0) {
@@ -305,16 +327,69 @@ class MonthlyBillDataSource {
 
     final existing = MonthlyBillModel.fromFirestore(snapshot);
 
-    final now = DateTime.now();
+    // ------------------------------------------------------------------------
+    // RENT IMMUTABILITY
+    // ------------------------------------------------------------------------
+
+    if (existing.type == MonthlyBillType.rent) {
+      throw StateError(
+        'Generated rent bills cannot be edited. '
+        'Use a replacement or adjustment workflow.',
+      );
+    }
+
+    // ------------------------------------------------------------------------
+    // ONLY VARIABLE BILLS
+    // ------------------------------------------------------------------------
+
+    if (existing.valueType != BillingValueType.variable) {
+      throw StateError('Only variable bills can have their amount updated.');
+    }
+
+    // ------------------------------------------------------------------------
+    // STATUS VALIDATION
+    // ------------------------------------------------------------------------
+
+    if (existing.status != MonthlyBillStatus.pending &&
+        existing.status != MonthlyBillStatus.unpaid) {
+      throw StateError(
+        'Only pending or unpaid variable bills '
+        'can have their amount entered or updated.',
+      );
+    }
+
+    // ------------------------------------------------------------------------
+    // EXPLICIT AMOUNT
+    // ------------------------------------------------------------------------
+    //
+    // Important distinction:
+    //
+    // Generated variable bill:
+    //     amount = 0
+    //     status = pending
+    //
+    // Owner explicitly enters:
+    //     amount = 0
+    //
+    // That is a real finalized amount, so it becomes unpaid,
+    // rather than remaining pending.
+    //
+    // Therefore:
+    //     amount >= 0  → finalized
+    //     pending      → only when generated initially
+    //
+    // ------------------------------------------------------------------------
+
+    final newStatus = existing.paidAmount >= amount
+        ? MonthlyBillStatus.paid
+        : existing.paidAmount > 0
+        ? MonthlyBillStatus.partiallyPaid
+        : MonthlyBillStatus.unpaid;
 
     final updated = existing.copyWithModel(
       amount: amount,
-      status: existing.paidAmount >= amount
-          ? MonthlyBillStatus.paid
-          : existing.paidAmount > 0
-          ? MonthlyBillStatus.partiallyPaid
-          : MonthlyBillStatus.unpaid,
-      updatedAt: now,
+      status: newStatus,
+      updatedAt: DateTime.now(),
     );
 
     await document.update(updated.toFirestore());
@@ -365,7 +440,6 @@ class MonthlyBillDataSource {
 
   String _formatPeriodKey(DateTime date) {
     final year = date.year.toString().padLeft(4, '0');
-
     final month = date.month.toString().padLeft(2, '0');
 
     return '$year-$month';

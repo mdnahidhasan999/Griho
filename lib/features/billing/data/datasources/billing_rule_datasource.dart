@@ -10,8 +10,7 @@ class BillingRuleDataSource {
 
   BillingRuleDataSource({
     FirebaseFirestore? firestore,
-  }) : _firestore =
-      firestore ?? FirebaseFirestore.instance;
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'billingRules';
 
@@ -29,24 +28,18 @@ class BillingRuleDataSource {
     final propertyId = request.propertyId.trim();
     final scopeId = request.scopeId.trim();
 
-    _validateRequiredId(
-      ownerId,
-      'Owner ID',
-    );
-
-    _validateRequiredId(
-      propertyId,
-      'Property ID',
-    );
-
-    _validateRequiredId(
-      scopeId,
-      'Billing scope ID',
-    );
+    _validateRequiredId(ownerId, 'Owner ID');
+    _validateRequiredId(propertyId, 'Property ID');
+    _validateRequiredId(scopeId, 'Billing scope ID');
 
     _validateAmount(
       valueType: request.valueType,
       amount: request.amount,
+    );
+
+    _validateTitle(
+      chargeType: request.chargeType,
+      title: request.title,
     );
 
     _validateEffectiveDates(
@@ -54,12 +47,39 @@ class BillingRuleDataSource {
       effectiveTo: request.effectiveTo,
     );
 
-    final document = _collection.doc();
+    final relatedRulesSnapshot = await _getRelatedRules(
+      ownerId: ownerId,
+      propertyId: propertyId,
+      scopeType: request.scopeType,
+      scopeId: scopeId,
+      chargeType: request.chargeType,
+    );
+
+    final relatedRules = relatedRulesSnapshot.docs
+        .map(BillingRuleModel.fromFirestore)
+        .toList();
+
+    final previousRule = _findPreviousRule(
+      rules: relatedRules,
+      effectiveFrom: request.effectiveFrom,
+    );
+
+    final nextRule = _findNextRule(
+      rules: relatedRules,
+      effectiveFrom: request.effectiveFrom,
+    );
+
+    _validateNewRuleVersion(
+      rules: relatedRules,
+      effectiveFrom: request.effectiveFrom,
+      effectiveTo: request.effectiveTo,
+    );
 
     final now = DateTime.now();
+    final newDocument = _collection.doc();
 
-    final rule = BillingRuleModel(
-      id: document.id,
+    final newRule = BillingRuleModel(
+      id: newDocument.id,
       ownerId: ownerId,
       propertyId: propertyId,
       scopeType: request.scopeType,
@@ -67,9 +87,7 @@ class BillingRuleDataSource {
       chargeType: request.chargeType,
       valueType: request.valueType,
       amount: request.amount,
-      title: _normalizeNullableString(
-        request.title,
-      ),
+      title: _normalizeNullableString(request.title),
       effectiveFrom: request.effectiveFrom,
       effectiveTo: request.effectiveTo,
       isActive: request.isActive,
@@ -77,11 +95,84 @@ class BillingRuleDataSource {
       updatedAt: now,
     );
 
-    await document.set(
-      rule.toFirestore(),
+    await _firestore.runTransaction(
+          (transaction) async {
+        BillingRuleModel? currentPreviousRule;
+
+        if (previousRule != null &&
+            _shouldClosePreviousRule(
+              previousRule,
+              request.effectiveFrom,
+            )) {
+          final previousDocument = _collection.doc(previousRule.id);
+
+          final previousSnapshot = await transaction.get(
+            previousDocument,
+          );
+
+          if (!previousSnapshot.exists) {
+            throw StateError(
+              'The previous billing rule no longer exists.',
+            );
+          }
+
+          currentPreviousRule =
+              BillingRuleModel.fromFirestore(previousSnapshot);
+
+          _validatePreviousRuleStillMatches(
+            currentPreviousRule,
+            previousRule,
+            request.effectiveFrom,
+          );
+        }
+
+        if (nextRule != null) {
+          final nextDocument = _collection.doc(nextRule.id);
+
+          final nextSnapshot = await transaction.get(
+            nextDocument,
+          );
+
+          if (!nextSnapshot.exists) {
+            throw StateError(
+              'The future billing rule no longer exists.',
+            );
+          }
+
+          final currentNextRule =
+          BillingRuleModel.fromFirestore(nextSnapshot);
+
+          if (!currentNextRule.effectiveFrom.isAtSameMomentAs(
+            nextRule.effectiveFrom,
+          )) {
+            throw StateError(
+              'The future billing rule changed while '
+                  'the operation was being processed.',
+            );
+          }
+        }
+
+        if (currentPreviousRule != null) {
+          transaction.update(
+            _collection.doc(currentPreviousRule.id),
+            {
+              'effectiveTo': Timestamp.fromDate(
+                request.effectiveFrom,
+              ),
+              'isActive': false,
+              'updatedAt': Timestamp.fromDate(now),
+            },
+          );
+        }
+
+        transaction.set(
+          newDocument,
+          newRule.toFirestore(),
+        );
+      },
     );
 
-    return rule;
+    return newRule;
   }
 
   // ==========================================================================
@@ -95,17 +186,13 @@ class BillingRuleDataSource {
       return null;
     }
 
-    final document = await _collection
-        .doc(normalizedId)
-        .get();
+    final document = await _collection.doc(normalizedId).get();
 
     if (!document.exists) {
       return null;
     }
 
-    return BillingRuleModel.fromFirestore(
-      document,
-    );
+    return BillingRuleModel.fromFirestore(document);
   }
 
   // ==========================================================================
@@ -119,15 +206,8 @@ class BillingRuleDataSource {
     final normalizedOwnerId = ownerId.trim();
     final normalizedPropertyId = propertyId.trim();
 
-    _validateRequiredId(
-      normalizedOwnerId,
-      'Owner ID',
-    );
-
-    _validateRequiredId(
-      normalizedPropertyId,
-      'Property ID',
-    );
+    _validateRequiredId(normalizedOwnerId, 'Owner ID');
+    _validateRequiredId(normalizedPropertyId, 'Property ID');
 
     final snapshot = await _collection
         .where(
@@ -141,9 +221,7 @@ class BillingRuleDataSource {
         .get();
 
     final rules = snapshot.docs
-        .map(
-      BillingRuleModel.fromFirestore,
-    )
+        .map(BillingRuleModel.fromFirestore)
         .toList();
 
     rules.sort(
@@ -175,12 +253,14 @@ class BillingRuleDataSource {
         return false;
       }
 
+      // effectiveFrom = inclusive
       if (date.isBefore(rule.effectiveFrom)) {
         return false;
       }
 
+      // effectiveTo = exclusive
       if (rule.effectiveTo != null &&
-          date.isAfter(rule.effectiveTo!)) {
+          !date.isBefore(rule.effectiveTo!)) {
         return false;
       }
 
@@ -191,41 +271,6 @@ class BillingRuleDataSource {
   // ==========================================================================
   // UPDATE
   // ==========================================================================
-  //
-  // IMPORTANT:
-  //
-  // Billing rules are treated as versioned configuration.
-  //
-  // Example:
-  //
-  // Old:
-  //   effectiveFrom = 2026-01-01
-  //   effectiveTo   = null
-  //   amount        = 500
-  //
-  // Owner changes the bill from 500 -> 700
-  // effective from 2026-07-01.
-  //
-  // Result:
-  //
-  // Old version:
-  //   effectiveFrom = 2026-01-01
-  //   effectiveTo   = 2026-06-30
-  //   amount        = 500
-  //
-  // New version:
-  //   effectiveFrom = 2026-07-01
-  //   effectiveTo   = null
-  //   amount        = 700
-  //
-  // Therefore:
-  //
-  //   - Owner can see old and new billing rules.
-  //   - Tenant can see the applicable historical rule.
-  //   - Monthly bills already generated are NOT changed.
-  //   - New monthly bills use the new rule after effectiveFrom.
-  //
-  // ==========================================================================
 
   Future<BillingRuleModel> updateBillingRule({
     required UpdateBillingRuleRequest request,
@@ -233,19 +278,17 @@ class BillingRuleDataSource {
     final ruleId = request.ruleId.trim();
     final ownerId = request.ownerId.trim();
 
-    _validateRequiredId(
-      ruleId,
-      'Billing rule ID',
-    );
-
-    _validateRequiredId(
-      ownerId,
-      'Owner ID',
-    );
+    _validateRequiredId(ruleId, 'Billing rule ID');
+    _validateRequiredId(ownerId, 'Owner ID');
 
     _validateAmount(
       valueType: request.valueType,
       amount: request.amount,
+    );
+
+    _validateTitle(
+      chargeType: request.chargeType,
+      title: request.title,
     );
 
     _validateEffectiveDates(
@@ -254,17 +297,14 @@ class BillingRuleDataSource {
     );
 
     final document = _collection.doc(ruleId);
+    final existingSnapshot = await document.get();
 
-    final snapshot = await document.get();
-
-    if (!snapshot.exists) {
-      throw StateError(
-        'Billing rule not found.',
-      );
+    if (!existingSnapshot.exists) {
+      throw StateError('Billing rule not found.');
     }
 
     final existingRule =
-    BillingRuleModel.fromFirestore(snapshot);
+    BillingRuleModel.fromFirestore(existingSnapshot);
 
     if (existingRule.ownerId != ownerId) {
       throw StateError(
@@ -272,33 +312,33 @@ class BillingRuleDataSource {
       );
     }
 
-    final now = DateTime.now();
+    // ------------------------------------------------------------------------
+    // Same effectiveFrom = edit existing version.
+    // ------------------------------------------------------------------------
 
-    // =========================================================================
-    // CASE 1
-    // =========================================================================
-    //
-    // Same effectiveFrom.
-    //
-    // This means the owner is editing the same version rather than creating
-    // a new historical version.
-    //
-    // Example:
-    //
-    // 2026-07-01 -> 500
-    //
-    // changed to:
-    //
-    // 2026-07-01 -> 700
-    //
-    // We can safely update the existing document.
-    //
-    final isSameEffectiveStart =
-    existingRule.effectiveFrom.isAtSameMomentAs(
+    if (existingRule.effectiveFrom.isAtSameMomentAs(
       request.effectiveFrom,
-    );
+    )) {
+      final relatedRulesSnapshot = await _getRelatedRules(
+        ownerId: ownerId,
+        propertyId: existingRule.propertyId,
+        scopeType: existingRule.scopeType,
+        scopeId: existingRule.scopeId,
+        chargeType: existingRule.chargeType,
+      );
 
-    if (isSameEffectiveStart) {
+      final relatedRules = relatedRulesSnapshot.docs
+          .map(BillingRuleModel.fromFirestore)
+          .toList();
+
+      _validateSameVersionUpdate(
+        existingRule: existingRule,
+        request: request,
+        relatedRules: relatedRules,
+      );
+
+      final now = DateTime.now();
+
       final updatedRule = BillingRuleModel(
         id: existingRule.id,
         ownerId: existingRule.ownerId,
@@ -308,10 +348,8 @@ class BillingRuleDataSource {
         chargeType: request.chargeType,
         valueType: request.valueType,
         amount: request.amount,
-        title: _normalizeNullableString(
-          request.title,
-        ),
-        effectiveFrom: request.effectiveFrom,
+        title: _normalizeNullableString(request.title),
+        effectiveFrom: existingRule.effectiveFrom,
         effectiveTo: request.effectiveTo,
         isActive: request.isActive,
         createdAt: existingRule.createdAt,
@@ -325,251 +363,51 @@ class BillingRuleDataSource {
       return updatedRule;
     }
 
-    // =========================================================================
-    // CASE 2
-    // =========================================================================
-    //
-    // Effective date changed.
-    //
-    // We must preserve the existing rule as historical data.
-    //
-    // The new rule cannot start before the existing rule.
-    //
+    // ------------------------------------------------------------------------
+    // Moving effectiveFrom forward creates a new version.
+    // ------------------------------------------------------------------------
+
     if (request.effectiveFrom.isBefore(
       existingRule.effectiveFrom,
     )) {
       throw ArgumentError(
-        'New effective date cannot be before the existing '
-            'billing rule effective date.',
+        'New effective date cannot be before '
+            'the existing billing rule effective date.',
       );
     }
 
-    // =========================================================================
-    // Determine the end date of the old version.
-    // =========================================================================
-
-    final oldEffectiveTo = request.effectiveFrom.subtract(
-      const Duration(microseconds: 1),
+    final relatedRulesSnapshot = await _getRelatedRules(
+      ownerId: ownerId,
+      propertyId: existingRule.propertyId,
+      scopeType: existingRule.scopeType,
+      scopeId: existingRule.scopeId,
+      chargeType: existingRule.chargeType,
     );
 
-    if (oldEffectiveTo.isBefore(
-      existingRule.effectiveFrom,
-    )) {
-      throw ArgumentError(
-        'New effective date creates an invalid historical period.',
-      );
-    }
-
-    // =========================================================================
-    // Find all rules that belong to the same billing configuration.
-    //
-    // Same:
-    //   owner
-    //   property
-    //   scope
-    //   charge type
-    //
-    // These rules represent different versions of the same billing charge.
-    // =========================================================================
-
-    final snapshotRules = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: ownerId,
-    )
-        .where(
-      'propertyId',
-      isEqualTo: existingRule.propertyId,
-    )
-        .where(
-      'scopeType',
-      isEqualTo: existingRule.scopeType.name,
-    )
-        .where(
-      'scopeId',
-      isEqualTo: existingRule.scopeId,
-    )
-        .where(
-      'chargeType',
-      isEqualTo: existingRule.chargeType.name,
-    )
-        .get();
-
-    final relatedRules = snapshotRules.docs
-        .map(
-      BillingRuleModel.fromFirestore,
-    )
+    final relatedRules = relatedRulesSnapshot.docs
+        .map(BillingRuleModel.fromFirestore)
         .toList();
 
-    // =========================================================================
-    // Find the version that was active immediately before the new effective
-    // date.
-    //
-    // This prevents overlapping historical versions.
-    // =========================================================================
-
-    BillingRuleModel? previousRule;
-
-    for (final rule in relatedRules) {
-      if (rule.id == existingRule.id) {
-        continue;
-      }
-
-      if (rule.effectiveFrom.isAfter(
-        request.effectiveFrom,
-      )) {
-        continue;
-      }
-
-      if (previousRule == null ||
-          rule.effectiveFrom.isAfter(
-            previousRule.effectiveFrom,
-          )) {
-        previousRule = rule;
-      }
-    }
-
-    // =========================================================================
-    // Determine whether the current document is the latest version.
-    // =========================================================================
-
-    final latestRule = _findLatestRule(
-      relatedRules,
+    final previousRule = _findPreviousRule(
+      rules: relatedRules,
+      effectiveFrom: request.effectiveFrom,
+      ignoredRuleId: existingRule.id,
     );
 
-    // =========================================================================
-    // CASE 2A
-    // =========================================================================
-    //
-    // The edited rule is the latest version.
-    //
-    // Close it at the moment immediately before the new version begins.
-    //
-    // =========================================================================
+    final nextRule = _findNextRule(
+      rules: relatedRules,
+      effectiveFrom: request.effectiveFrom,
+      ignoredRuleId: existingRule.id,
+    );
 
-    final isLatestRule =
-        latestRule?.id == existingRule.id;
+    _validateNewRuleVersion(
+      rules: relatedRules,
+      effectiveFrom: request.effectiveFrom,
+      effectiveTo: request.effectiveTo,
+      ignoredRuleId: existingRule.id,
+    );
 
-    if (isLatestRule) {
-      await _firestore.runTransaction(
-            (transaction) async {
-          final currentSnapshot =
-          await transaction.get(document);
-
-          if (!currentSnapshot.exists) {
-            throw StateError(
-              'Billing rule no longer exists.',
-            );
-          }
-
-          transaction.update(
-            document,
-            {
-              'effectiveTo': Timestamp.fromDate(
-                oldEffectiveTo,
-              ),
-              'isActive': false,
-              'updatedAt': Timestamp.fromDate(
-                now,
-              ),
-            },
-          );
-
-          final newDocument = _collection.doc();
-
-          final newRule = BillingRuleModel(
-            id: newDocument.id,
-            ownerId: existingRule.ownerId,
-            propertyId: existingRule.propertyId,
-            scopeType: existingRule.scopeType,
-            scopeId: existingRule.scopeId,
-            chargeType: request.chargeType,
-            valueType: request.valueType,
-            amount: request.amount,
-            title: _normalizeNullableString(
-              request.title,
-            ),
-            effectiveFrom: request.effectiveFrom,
-            effectiveTo: request.effectiveTo,
-            isActive: request.isActive,
-            createdAt: now,
-            updatedAt: now,
-          );
-
-          transaction.set(
-            newDocument,
-            newRule.toFirestore(),
-          );
-        },
-      );
-
-      final latestSnapshot = await _collection
-          .where(
-        'ownerId',
-        isEqualTo: ownerId,
-      )
-          .where(
-        'propertyId',
-        isEqualTo: existingRule.propertyId,
-      )
-          .where(
-        'scopeType',
-        isEqualTo: existingRule.scopeType.name,
-      )
-          .where(
-        'scopeId',
-        isEqualTo: existingRule.scopeId,
-      )
-          .where(
-        'chargeType',
-        isEqualTo: request.chargeType.name,
-      )
-          .where(
-        'effectiveFrom',
-        isEqualTo: Timestamp.fromDate(
-          request.effectiveFrom,
-        ),
-      )
-          .get();
-
-      if (latestSnapshot.docs.isEmpty) {
-        throw StateError(
-          'New billing rule version could not be created.',
-        );
-      }
-
-      return BillingRuleModel.fromFirestore(
-        latestSnapshot.docs.first,
-      );
-    }
-
-    // =========================================================================
-    // CASE 2B
-    // =========================================================================
-    //
-    // The edited rule is historical.
-    //
-    // In this case we do NOT overwrite history.
-    //
-    // We create a new version for the requested effective date.
-    //
-    // =========================================================================
-
-    if (previousRule != null) {
-      final previousEnd =
-      request.effectiveFrom.subtract(
-        const Duration(microseconds: 1),
-      );
-
-      if (previousEnd.isBefore(
-        previousRule.effectiveFrom,
-      )) {
-        throw StateError(
-          'Billing rule versions would overlap.',
-        );
-      }
-    }
-
+    final now = DateTime.now();
     final newDocument = _collection.doc();
 
     final newRule = BillingRuleModel(
@@ -581,9 +419,7 @@ class BillingRuleDataSource {
       chargeType: request.chargeType,
       valueType: request.valueType,
       amount: request.amount,
-      title: _normalizeNullableString(
-        request.title,
-      ),
+      title: _normalizeNullableString(request.title),
       effectiveFrom: request.effectiveFrom,
       effectiveTo: request.effectiveTo,
       isActive: request.isActive,
@@ -591,8 +427,104 @@ class BillingRuleDataSource {
       updatedAt: now,
     );
 
-    await newDocument.set(
-      newRule.toFirestore(),
+    await _firestore.runTransaction(
+          (transaction) async {
+        final currentExistingSnapshot =
+        await transaction.get(document);
+
+        if (!currentExistingSnapshot.exists) {
+          throw StateError(
+            'Billing rule no longer exists.',
+          );
+        }
+
+        final currentExistingRule =
+        BillingRuleModel.fromFirestore(
+          currentExistingSnapshot,
+        );
+
+        if (currentExistingRule.ownerId != ownerId) {
+          throw StateError(
+            'You are not allowed to update this billing rule.',
+          );
+        }
+
+        if (previousRule != null &&
+            _shouldClosePreviousRule(
+              previousRule,
+              request.effectiveFrom,
+            )) {
+          final previousDocument = _collection.doc(previousRule.id);
+
+          final previousSnapshot = await transaction.get(
+            previousDocument,
+          );
+
+          if (!previousSnapshot.exists) {
+            throw StateError(
+              'The previous billing rule no longer exists.',
+            );
+          }
+
+          final currentPreviousRule =
+          BillingRuleModel.fromFirestore(previousSnapshot);
+
+          _validatePreviousRuleStillMatches(
+            currentPreviousRule,
+            previousRule,
+            request.effectiveFrom,
+          );
+
+          transaction.update(
+            previousDocument,
+            {
+              'effectiveTo': Timestamp.fromDate(
+                request.effectiveFrom,
+              ),
+              'isActive': false,
+              'updatedAt': Timestamp.fromDate(now),
+            },
+          );
+        }
+
+        if (nextRule != null) {
+          final nextDocument = _collection.doc(nextRule.id);
+
+          final nextSnapshot = await transaction.get(
+            nextDocument,
+          );
+
+          if (!nextSnapshot.exists) {
+            throw StateError(
+              'The future billing rule no longer exists.',
+            );
+          }
+        }
+
+        if (currentExistingRule.effectiveFrom.isBefore(
+          request.effectiveFrom,
+        ) &&
+            (currentExistingRule.effectiveTo == null ||
+                request.effectiveFrom.isBefore(
+                  currentExistingRule.effectiveTo!,
+                ))) {
+          transaction.update(
+            document,
+            {
+              'effectiveTo': Timestamp.fromDate(
+                request.effectiveFrom,
+              ),
+              'isActive': false,
+              'updatedAt': Timestamp.fromDate(now),
+            },
+          );
+        }
+
+        transaction.set(
+          newDocument,
+          newRule.toFirestore(),
+        );
+      },
     );
 
     return newRule;
@@ -600,12 +532,6 @@ class BillingRuleDataSource {
 
   // ==========================================================================
   // DEACTIVATE
-  // ==========================================================================
-  //
-  // Deactivation does NOT delete the rule.
-  //
-  // Historical data remains available.
-  //
   // ==========================================================================
 
   Future<void> deactivateBillingRule({
@@ -625,15 +551,11 @@ class BillingRuleDataSource {
       'Owner ID',
     );
 
-    final document =
-    _collection.doc(normalizedRuleId);
-
+    final document = _collection.doc(normalizedRuleId);
     final snapshot = await document.get();
 
     if (!snapshot.exists) {
-      throw StateError(
-        'Billing rule not found.',
-      );
+      throw StateError('Billing rule not found.');
     }
 
     final existingRule =
@@ -654,8 +576,283 @@ class BillingRuleDataSource {
   }
 
   // ==========================================================================
-  // HELPERS
+  // FIRESTORE QUERY
   // ==========================================================================
+
+  Query<Map<String, dynamic>> _relatedRulesQuery({
+    required String ownerId,
+    required String propertyId,
+    required BillingScopeType scopeType,
+    required String scopeId,
+    required BillingChargeType chargeType,
+  }) {
+    return _collection
+        .where(
+      'ownerId',
+      isEqualTo: ownerId,
+    )
+        .where(
+      'propertyId',
+      isEqualTo: propertyId,
+    )
+        .where(
+      'scopeType',
+      isEqualTo: scopeType.name,
+    )
+        .where(
+      'scopeId',
+      isEqualTo: scopeId,
+    )
+        .where(
+      'chargeType',
+      isEqualTo: chargeType.name,
+    );
+  }
+
+  Future<QuerySnapshot<Map<String, dynamic>>> _getRelatedRules({
+    required String ownerId,
+    required String propertyId,
+    required BillingScopeType scopeType,
+    required String scopeId,
+    required BillingChargeType chargeType,
+  }) {
+    return _relatedRulesQuery(
+      ownerId: ownerId,
+      propertyId: propertyId,
+      scopeType: scopeType,
+      scopeId: scopeId,
+      chargeType: chargeType,
+    ).get();
+  }
+
+  // ==========================================================================
+  // VERSION RESOLUTION
+  // ==========================================================================
+
+  BillingRuleModel? _findPreviousRule({
+    required List<BillingRuleModel> rules,
+    required DateTime effectiveFrom,
+    String? ignoredRuleId,
+  }) {
+    BillingRuleModel? previous;
+
+    for (final rule in rules) {
+      if (ignoredRuleId != null &&
+          rule.id == ignoredRuleId) {
+        continue;
+      }
+
+      if (!rule.effectiveFrom.isBefore(effectiveFrom)) {
+        continue;
+      }
+
+      if (previous == null ||
+          rule.effectiveFrom.isAfter(
+            previous.effectiveFrom,
+          )) {
+        previous = rule;
+      }
+    }
+
+    return previous;
+  }
+
+  BillingRuleModel? _findNextRule({
+    required List<BillingRuleModel> rules,
+    required DateTime effectiveFrom,
+    String? ignoredRuleId,
+  }) {
+    BillingRuleModel? next;
+
+    for (final rule in rules) {
+      if (ignoredRuleId != null &&
+          rule.id == ignoredRuleId) {
+        continue;
+      }
+
+      if (!rule.effectiveFrom.isAfter(effectiveFrom)) {
+        continue;
+      }
+
+      if (next == null ||
+          rule.effectiveFrom.isBefore(
+            next.effectiveFrom,
+          )) {
+        next = rule;
+      }
+    }
+
+    return next;
+  }
+
+  bool _shouldClosePreviousRule(BillingRuleModel previousRule,
+      DateTime newEffectiveFrom,) {
+    if (previousRule.effectiveTo == null) {
+      return true;
+    }
+
+    return newEffectiveFrom.isBefore(
+      previousRule.effectiveTo!,
+    );
+  }
+
+  // ==========================================================================
+  // VALIDATION
+  // ==========================================================================
+
+  void _validateNewRuleVersion({
+    required List<BillingRuleModel> rules,
+    required DateTime effectiveFrom,
+    required DateTime? effectiveTo,
+    String? ignoredRuleId,
+  }) {
+    for (final rule in rules) {
+      if (ignoredRuleId != null &&
+          rule.id == ignoredRuleId) {
+        continue;
+      }
+
+      // Same starting point is never allowed.
+      if (rule.effectiveFrom.isAtSameMomentAs(
+        effectiveFrom,
+      )) {
+        throw StateError(
+          'A billing rule version with the same '
+              'effective date already exists.',
+        );
+      }
+    }
+
+    final nextRule = _findNextRule(
+      rules: rules,
+      effectiveFrom: effectiveFrom,
+      ignoredRuleId: ignoredRuleId,
+    );
+
+    // A new version cannot extend beyond the next scheduled version.
+    if (nextRule != null) {
+      if (effectiveTo == null) {
+        throw StateError(
+          'The new billing rule must end before '
+              'the next scheduled billing rule.',
+        );
+      }
+
+      if (effectiveTo.isAfter(
+        nextRule.effectiveFrom,
+      )) {
+        throw StateError(
+          'The new billing rule overlaps a future '
+              'billing rule version.',
+        );
+      }
+    }
+
+    final previousRule = _findPreviousRule(
+      rules: rules,
+      effectiveFrom: effectiveFrom,
+      ignoredRuleId: ignoredRuleId,
+    );
+
+    // The previous rule is allowed to overlap because
+    // this operation will close it at the new effectiveFrom.
+    //
+    // Any other existing rule that overlaps the new
+    // interval is invalid.
+    for (final rule in rules) {
+      if (ignoredRuleId != null &&
+          rule.id == ignoredRuleId) {
+        continue;
+      }
+
+      if (previousRule != null &&
+          rule.id == previousRule.id) {
+        continue;
+      }
+
+      final existingStart = rule.effectiveFrom;
+      final existingEnd = rule.effectiveTo;
+
+      final startsBeforeExistingEnds =
+          existingEnd == null ||
+              effectiveFrom.isBefore(existingEnd);
+
+      final endsAfterExistingStarts =
+          effectiveTo == null ||
+              effectiveTo.isAfter(existingStart);
+
+      if (startsBeforeExistingEnds &&
+          endsAfterExistingStarts) {
+        throw StateError(
+          'The new billing rule overlaps an existing '
+              'billing rule version.',
+        );
+      }
+    }
+  }
+
+  void _validatePreviousRuleStillMatches(BillingRuleModel current,
+      BillingRuleModel expected,
+      DateTime newEffectiveFrom,) {
+    if (current.id != expected.id) {
+      throw StateError(
+        'Billing rule changed while the operation '
+            'was being processed.',
+      );
+    }
+
+    if (!current.effectiveFrom.isAtSameMomentAs(
+      expected.effectiveFrom,
+    )) {
+      throw StateError(
+        'Billing rule effective date changed while '
+            'the operation was being processed.',
+      );
+    }
+
+    if (current.effectiveTo != null &&
+        !newEffectiveFrom.isBefore(
+          current.effectiveTo!,
+        )) {
+      throw StateError(
+        'Billing rule versions would overlap.',
+      );
+    }
+  }
+
+  void _validateSameVersionUpdate({
+    required BillingRuleModel existingRule,
+    required UpdateBillingRuleRequest request,
+    required List<BillingRuleModel> relatedRules,
+  }) {
+    for (final rule in relatedRules) {
+      if (rule.id == existingRule.id) {
+        continue;
+      }
+
+      final existingStart = rule.effectiveFrom;
+      final existingEnd = rule.effectiveTo;
+
+      final updatedStart = existingRule.effectiveFrom;
+      final updatedEnd = request.effectiveTo;
+
+      final startsBeforeExistingEnds =
+          existingEnd == null ||
+              updatedStart.isBefore(existingEnd);
+
+      final endsAfterExistingStarts =
+          updatedEnd == null ||
+              updatedEnd.isAfter(existingStart);
+
+      if (startsBeforeExistingEnds &&
+          endsAfterExistingStarts) {
+        throw StateError(
+          'The updated billing rule would overlap '
+              'another billing rule version.',
+        );
+      }
+    }
+  }
 
   void _validateRequiredId(String value,
       String label,) {
@@ -672,20 +869,38 @@ class BillingRuleDataSource {
     required BillingValueType valueType,
     required double? amount,
   }) {
-    if (valueType == BillingValueType.fixed) {
-      if (amount == null || amount < 0) {
-        throw ArgumentError(
-          'Fixed billing amount must be zero or greater.',
-        );
-      }
+    switch (valueType) {
+      case BillingValueType.fixed:
+        if (amount == null || amount < 0) {
+          throw ArgumentError(
+            'Fixed billing amount must be zero or greater.',
+          );
+        }
+
+      case BillingValueType.variable:
+        if (amount != null) {
+          throw ArgumentError(
+            'Variable billing rules cannot contain '
+                'a fixed amount.',
+          );
+        }
+    }
+  }
+
+  void _validateTitle({
+    required BillingChargeType chargeType,
+    required String? title,
+  }) {
+    if (chargeType != BillingChargeType.other) {
+      return;
     }
 
-    if (valueType == BillingValueType.variable) {
-      if (amount != null && amount < 0) {
-        throw ArgumentError(
-          'Billing amount cannot be negative.',
-        );
-      }
+    if (title == null || title
+        .trim()
+        .isEmpty) {
+      throw ArgumentError(
+        'A title is required for the Other billing type.',
+      );
     }
   }
 
@@ -693,10 +908,14 @@ class BillingRuleDataSource {
     required DateTime effectiveFrom,
     required DateTime? effectiveTo,
   }) {
-    if (effectiveTo != null &&
-        effectiveTo.isBefore(effectiveFrom)) {
+    if (effectiveTo == null) {
+      return;
+    }
+
+    if (!effectiveTo.isAfter(effectiveFrom)) {
       throw ArgumentError(
-        'Effective end date cannot be before start date.',
+        'Effective end date must be after '
+            'the effective start date.',
       );
     }
   }
@@ -708,27 +927,6 @@ class BillingRuleDataSource {
 
     final normalized = value.trim();
 
-    return normalized.isEmpty
-        ? null
-        : normalized;
-  }
-
-  BillingRuleModel? _findLatestRule(List<BillingRuleModel> rules,) {
-    if (rules.isEmpty) {
-      return null;
-    }
-
-    BillingRuleModel? latest;
-
-    for (final rule in rules) {
-      if (latest == null ||
-          rule.effectiveFrom.isAfter(
-            latest.effectiveFrom,
-          )) {
-        latest = rule;
-      }
-    }
-
-    return latest;
+    return normalized.isEmpty ? null : normalized;
   }
 }

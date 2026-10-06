@@ -25,7 +25,7 @@ final monthlyBillByIdProvider = FutureProvider.family<MonthlyBill?, String>((
 ) async {
   final repository = ref.read(monthlyBillRepositoryProvider);
 
-  return repository.getMonthlyBillById(billId);
+  return repository.getMonthlyBillById(billId: billId);
 });
 
 // ============================================================================
@@ -48,15 +48,6 @@ final monthlyBillsByUnitAndPeriodProvider =
 
 // ============================================================================
 // TENANT + PERIOD
-// ============================================================================
-//
-// Tenant bill lookup uses Firebase Auth UID.
-//
-// tenantUserId
-//     ↓
-// monthlyBills.tenantUserId
-//
-// ownerId / tenantId are intentionally NOT required here.
 // ============================================================================
 
 final monthlyBillsByTenantAndPeriodProvider =
