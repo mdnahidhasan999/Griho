@@ -6,15 +6,14 @@ import '../../../../app/router/route_names.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../../../tenants/presentation/providers/property_tenants_provider.dart';
-import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
 
 import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/monthly_bill.dart';
-import '../../domain/usecases/generate_monthly_bills.dart';
-import '../controllers/generate_monthly_bills_controller.dart';
+import '../controllers/generate_monthly_charges_controller.dart';
 import '../providers/billing_rule_provider.dart';
 import '../providers/monthly_bill_provider.dart';
+import '../providers/tenancy_billing_target_provider.dart';
 import '../widgets/variable_bill_amount_dialog.dart';
 
 class OwnerBillingRulesScreen extends ConsumerStatefulWidget {
@@ -177,7 +176,7 @@ class _OwnerBillingRulesScreenState
                       });
                     },
                     onGenerateBills: () {
-                      _generateMonthlyBills(
+                      _generateMonthlyCharges(
                         ownerId: ownerId,
                         propertyId: selectedPropertyId,
                       );
@@ -228,10 +227,10 @@ class _OwnerBillingRulesScreenState
   }
 
   // ==========================================================================
-  // GENERATE MONTHLY BILLS
+  // GENERATE MONTHLY CHARGES
   // ==========================================================================
 
-  Future<void> _generateMonthlyBills({
+  Future<void> _generateMonthlyCharges({
     required String ownerId,
     required String propertyId,
   }) async {
@@ -261,7 +260,8 @@ class _OwnerBillingRulesScreenState
 
     // Billing period end is EXCLUSIVE.
     //
-    // October:
+    // Example:
+    // October 2026
     // 2026-10-01 → 2026-11-01
     final billingPeriodEnd = DateTime(
       selectedMonth.year,
@@ -298,113 +298,95 @@ class _OwnerBillingRulesScreenState
     }
 
     try {
-      _showMessage('Preparing active tenants and units...');
+      _showMessage('Preparing tenancy history and units...');
 
       // =======================================================================
-      // LOAD UNITS
+      // STEP 3 — LOAD UNITS
       // =======================================================================
 
       final units = await ref.read(propertyUnitsProvider(propertyId).future);
 
       // =======================================================================
-      // LOAD TENANTS
+      // STEP 4 — LOAD CURRENT TENANTS
       // =======================================================================
 
       final tenants = await ref.read(
         propertyTenantsProvider(propertyId).future,
       );
 
-      final unitsById = <String, Unit>{
-        for (final unit in units) unit.id.trim(): unit,
-      };
-
-      final targets = <MonthlyBillTarget>[];
-
       // =======================================================================
-      // BUILD TARGETS
+      // STEP 5 — RESOLVE HISTORICAL TENANCY TARGETS
       // =======================================================================
+      //
+      // The resolver combines:
+      //
+      // 1. Historical ended tenancies
+      // 2. Current active tenancies
+      //
+      // Example:
+      //
+      // Tenant A → 01 Oct to 14 Oct
+      // Tenant B → 15 Oct to 31 Oct
+      //
+      // Both become separate billing targets.
+      //
 
-      for (final tenant in tenants) {
-        if (tenant.status.name != 'active') {
-          continue;
-        }
+      final tenancyResolver = ref.read(tenancyBillingTargetResolverProvider);
 
-        if (tenant.propertyId.trim() != propertyId) {
-          continue;
-        }
-
-        final tenantId = tenant.id.trim();
-
-        if (tenantId.isEmpty) {
-          continue;
-        }
-
-        final unitId = tenant.unitId.trim();
-
-        if (unitId.isEmpty) {
-          continue;
-        }
-
-        final tenantUserId = tenant.userId?.trim();
-
-        if (tenantUserId == null || tenantUserId.isEmpty) {
-          continue;
-        }
-
-        final unit = unitsById[unitId];
-
-        if (unit == null) {
-          continue;
-        }
-
-        if (unit.propertyId.trim() != propertyId) {
-          continue;
-        }
-
-        if (unit.status != UnitStatus.occupied) {
-          continue;
-        }
-
-        if (unit.tenantUserId?.trim() != tenantUserId) {
-          continue;
-        }
-
-        targets.add(
-          MonthlyBillTarget(
-            floorId: unit.floorNumber.toString(),
-            unitId: unit.id.trim(),
-            tenantId: tenantId,
-            tenantUserId: tenantUserId,
-          ),
-        );
-      }
+      final tenancyTargets = await tenancyResolver.resolve(
+        ownerId: ownerId,
+        propertyId: propertyId,
+        billingPeriodStart: billingPeriodStart,
+        billingPeriodEnd: billingPeriodEnd,
+        currentTenants: tenants,
+        units: [
+          for (final unit in units)
+            (unitId: unit.id.trim(), floorId: unit.floorNumber.toString()),
+        ],
+      );
 
       if (!mounted) {
         return;
       }
 
-      if (targets.isEmpty) {
+      if (tenancyTargets.isEmpty) {
         _showMessage(
-          'No active tenant-unit relationship found '
-          'for this property.',
+          'No tenancy found for this property '
+          'during ${_formatMonth(billingPeriodStart)}.',
         );
         return;
       }
 
-      _showMessage('Generating monthly bills...');
-
       // =======================================================================
-      // GENERATE
+      // STEP 6 — GENERATE RENT + NON-RENT BILLS
       // =======================================================================
+      //
+      // The same historical tenancy targets are passed to the orchestration
+      // layer.
+      //
+      // Rent:
+      //   Uses tenancyStart / tenancyEnd
+      //   Uses rent-rate history
+      //   Uses calendar-day proration
+      //
+      // Non-rent:
+      //   Uses the same tenant/unit/floor targets
+      //   Uses applicable billing rules
+      //
 
-      final controller = ref.read(
-        generateMonthlyBillsControllerProvider.notifier,
+      _showMessage(
+        'Generating rent and monthly bills for '
+        '${tenancyTargets.length} tenancy segment(s)...',
       );
 
-      await controller.generate(
+      final controller = ref.read(
+        generateMonthlyChargesControllerProvider.notifier,
+      );
+
+      final result = await controller.generate(
         ownerId: ownerId,
         propertyId: propertyId,
-        targets: targets,
+        tenancyTargets: tenancyTargets,
         billingPeriodStart: billingPeriodStart,
         billingPeriodEnd: billingPeriodEnd,
         dueDate: dueDate,
@@ -414,42 +396,38 @@ class _OwnerBillingRulesScreenState
         return;
       }
 
-      final state = ref.read(generateMonthlyBillsControllerProvider);
+      // =======================================================================
+      // STEP 7 — REFRESH GENERATED BILL HISTORY
+      // =======================================================================
 
-      state.when(
-        loading: () {},
+      ref.invalidate(
+        propertyMonthlyBillHistoryProvider((
+          ownerId: ownerId,
+          propertyId: propertyId,
+        )),
+      );
 
-        error: (error, stackTrace) {
-          debugPrint('BILLING ERROR: $error');
+      final rentCount = result.generatedRents.length;
+      final billCount = result.generatedBills.length;
 
-          debugPrint('BILLING STACK: $stackTrace');
+      // =======================================================================
+      // STEP 8 — RESULT MESSAGE
+      // =======================================================================
 
-          _showMessage(_cleanErrorMessage(error));
-        },
+      if (rentCount == 0 && billCount == 0) {
+        _showMessage(
+          'No new rent or monthly bills were generated for '
+          '${_formatMonth(billingPeriodStart)}.',
+        );
+        return;
+      }
 
-        data: (bills) {
-          if (bills.isEmpty) {
-            _showMessage(
-              'No billing rules are applicable for '
-              '${_formatMonth(billingPeriodStart)}.',
-            );
-            return;
-          }
-
-          _showMessage(
-            '${bills.length} monthly bill(s) generated successfully.',
-          );
-
-          ref.invalidate(
-            propertyMonthlyBillHistoryProvider((
-              ownerId: ownerId,
-              propertyId: propertyId,
-            )),
-          );
-        },
+      _showMessage(
+        '$rentCount rent record(s) and '
+        '$billCount monthly bill(s) generated successfully.',
       );
     } catch (error, stackTrace) {
-      debugPrint('BILLING: Failed to generate monthly bills.');
+      debugPrint('BILLING: Failed to generate monthly charges.');
 
       debugPrint('BILLING ERROR: $error');
 
@@ -599,7 +577,7 @@ class _RulesTab extends ConsumerWidget {
             child: FilledButton.icon(
               onPressed: onGenerateBills,
               icon: const Icon(Icons.receipt_long_outlined),
-              label: const Text('Generate Monthly Bills'),
+              label: const Text('Generate Monthly Charges'),
             ),
           ),
           const SizedBox(height: 24),
@@ -911,6 +889,7 @@ class _BillingRuleCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+
     final status = _resolveRuleStatus(rule);
 
     final chargeName = _chargeTypeLabel(rule.chargeType);
@@ -1193,7 +1172,9 @@ class _BillingRuleCard extends ConsumerWidget {
       'Dec',
     ];
 
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+    return '${date.day} '
+        '${months[date.month - 1]} '
+        '${date.year}';
   }
 }
 
@@ -1344,7 +1325,8 @@ class _GeneratedBillCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Period: ${_formatMonth(bill.billingPeriodStart)}',
+                        'Period: '
+                        '${_formatMonth(bill.billingPeriodStart)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -1359,7 +1341,6 @@ class _GeneratedBillCard extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 16),
-
             if (isPendingVariableBill)
               _PendingVariableBillContent(
                 onEnterAmount: () {
@@ -1589,19 +1570,14 @@ class _BillStatusChip extends StatelessWidget {
     switch (status) {
       case MonthlyBillStatus.pending:
         return 'Amount Required';
-
       case MonthlyBillStatus.unpaid:
         return 'Unpaid';
-
       case MonthlyBillStatus.partiallyPaid:
         return 'Partially Paid';
-
       case MonthlyBillStatus.paid:
         return 'Paid';
-
       case MonthlyBillStatus.overdue:
         return 'Overdue';
-
       case MonthlyBillStatus.cancelled:
         return 'Cancelled';
     }

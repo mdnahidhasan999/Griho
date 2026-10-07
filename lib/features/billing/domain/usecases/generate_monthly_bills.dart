@@ -4,6 +4,11 @@ import '../entities/monthly_bill.dart';
 import '../repositories/billing_rule_repository.dart';
 import '../repositories/monthly_bill_repository.dart';
 
+/// Generates monthly bills for non-rent billing rules.
+///
+/// Rent is intentionally handled by the dedicated rent-generation flow
+/// because rent requires tenancy-period resolution, proration and
+/// historical rent-rate segmentation.
 class GenerateMonthlyBills {
   final BillingRuleRepository _billingRuleRepository;
   final MonthlyBillRepository _monthlyBillRepository;
@@ -13,20 +18,35 @@ class GenerateMonthlyBills {
     required this._monthlyBillRepository,
   });
 
-  /// Generates non-rent monthly bills for all supplied targets.
+  /// Generates applicable non-rent bills for the supplied tenancy targets.
   ///
-  /// Rent is intentionally NOT generated here.
+  /// Billing period:
   ///
-  /// Rent has its own generation flow because rent depends on:
-  /// - tenancy period
-  /// - prorated days
-  /// - historical rent rates
-  /// - rent-rate changes inside a billing month
+  /// [billingPeriodStart] is inclusive.
+  /// [billingPeriodEnd] is exclusive.
   ///
-  /// Fixed billing rules create a normal unpaid bill.
+  /// Example:
   ///
-  /// Variable billing rules create a pending bill because the
-  /// actual amount is not known at generation time.
+  /// October 2026:
+  /// 2026-10-01 → 2026-11-01
+  ///
+  /// Fixed rules:
+  /// - create an unpaid bill
+  /// - amount comes from the rule
+  ///
+  /// Variable rules:
+  /// - create a pending bill
+  /// - amount starts at 0
+  /// - owner must enter the actual amount later
+  ///
+  /// Rent:
+  /// - intentionally skipped
+  /// - generated separately by GenerateMonthlyRent
+  ///
+  /// Duplicate protection:
+  /// - first checks for an existing bill
+  /// - datasource transaction remains the final protection against
+  ///   concurrent generation requests
   Future<List<MonthlyBill>> call({
     required String ownerId,
     required String propertyId,
@@ -37,6 +57,10 @@ class GenerateMonthlyBills {
   }) async {
     final normalizedOwnerId = ownerId.trim();
     final normalizedPropertyId = propertyId.trim();
+
+    // =========================================================================
+    // VALIDATION
+    // =========================================================================
 
     if (normalizedOwnerId.isEmpty) {
       throw ArgumentError('Owner ID cannot be empty.');
@@ -52,6 +76,14 @@ class GenerateMonthlyBills {
       );
     }
 
+    // Due dates are allowed to fall after the billing period.
+    //
+    // Example:
+    // October billing:
+    // billing period = Oct 1 → Nov 1
+    // due date        = Nov 10
+    //
+    // Therefore we only reject a due date before the billing period starts.
     if (dueDate.isBefore(billingPeriodStart)) {
       throw ArgumentError('Due date cannot be before billing period start.');
     }
@@ -59,6 +91,10 @@ class GenerateMonthlyBills {
     if (targets.isEmpty) {
       return const [];
     }
+
+    // =========================================================================
+    // LOAD BILLING RULES
+    // =========================================================================
 
     final rules = await _billingRuleRepository.getBillingRulesForPeriod(
       ownerId: normalizedOwnerId,
@@ -70,39 +106,70 @@ class GenerateMonthlyBills {
       return const [];
     }
 
+    // =========================================================================
+    // GENERATE
+    // =========================================================================
+
     final generatedBills = <MonthlyBill>[];
 
     for (final target in targets) {
+      final normalizedTarget = target.normalized();
+
+      if (normalizedTarget == null) {
+        continue;
+      }
+
       final applicableRules = _resolveRulesForTarget(
         rules: rules,
-        target: target,
+        target: normalizedTarget,
       );
 
       for (final rule in applicableRules) {
         final billType = _toMonthlyBillType(rule.chargeType);
 
-        // Rent is handled separately by GenerateMonthlyRent.
+        // =====================================================================
+        // RENT IS NOT GENERATED HERE
+        // =====================================================================
+        //
+        // Rent requires:
+        //
+        // 1. tenancy start/end
+        // 2. calendar-month overlap
+        // 3. actual chargeable days
+        // 4. historical rent-rate segments
+        // 5. rent-rate effectiveFrom/effectiveTo boundaries
+        //
+        // Therefore rent remains in GenerateMonthlyRent.
+        //
+
         if (billType == MonthlyBillType.rent) {
           continue;
         }
 
+        // =====================================================================
+        // DUPLICATE READ CHECK
+        // =====================================================================
+
         final existingBill = await _monthlyBillRepository
             .getMonthlyBillByUnitAndTenantAndPeriodAndType(
               ownerId: normalizedOwnerId,
-              unitId: target.unitId,
-              tenantId: target.tenantId,
+              unitId: normalizedTarget.unitId,
+              tenantId: normalizedTarget.tenantId,
               billingPeriodStart: billingPeriodStart,
               type: billType,
             );
 
-        // This is an optimization/readability check.
-        //
-        // The actual duplicate protection remains inside
-        // MonthlyBillDataSource.createMonthlyBill(), which
-        // uses a Firestore transaction.
         if (existingBill != null) {
+          // Already generated.
+          //
+          // Do not modify the historical bill.
+          // Do not generate a replacement automatically.
           continue;
         }
+
+        // =====================================================================
+        // DETERMINE BILL VALUE
+        // =====================================================================
 
         final isVariable = rule.valueType == BillingValueType.variable;
 
@@ -112,13 +179,17 @@ class GenerateMonthlyBills {
             ? MonthlyBillStatus.pending
             : MonthlyBillStatus.unpaid;
 
+        // =====================================================================
+        // CREATE REQUEST
+        // =====================================================================
+
         final request = CreateMonthlyBillRequest(
           ownerId: normalizedOwnerId,
           propertyId: normalizedPropertyId,
-          floorId: target.floorId,
-          unitId: target.unitId,
-          tenantId: target.tenantId,
-          tenantUserId: target.tenantUserId,
+          floorId: normalizedTarget.floorId,
+          unitId: normalizedTarget.unitId,
+          tenantId: normalizedTarget.tenantId,
+          tenantUserId: normalizedTarget.tenantUserId,
           sourceRuleId: rule.id,
           type: billType,
           valueType: rule.valueType,
@@ -129,6 +200,10 @@ class GenerateMonthlyBills {
           status: status,
         );
 
+        // =====================================================================
+        // CREATE WITH TRANSACTION-SAFE DUPLICATE PROTECTION
+        // =====================================================================
+
         try {
           final bill = await _monthlyBillRepository.createMonthlyBill(
             request: request,
@@ -136,13 +211,12 @@ class GenerateMonthlyBills {
 
           generatedBills.add(bill);
         } on StateError catch (error) {
-          // Another generation request may have created the
-          // same bill between our read check and the transaction.
+          // Another generation request may have created the same
+          // bill after our read check but before this create.
           //
-          // Do not create a second bill.
+          // The datasource transaction is the final protection.
           //
-          // We only ignore the known duplicate error. Other
-          // StateError values are rethrown.
+          // Ignore only the known duplicate error.
           if (!_isDuplicateBillError(error)) {
             rethrow;
           }
@@ -157,6 +231,15 @@ class GenerateMonthlyBills {
   // RESOLVE RULES FOR TARGET
   // ==========================================================================
 
+  /// Resolves one applicable rule per charge type.
+  ///
+  /// Scope priority:
+  ///
+  /// Tenant > Unit > Floor > Property
+  ///
+  /// This means a tenant-specific rule overrides a unit rule,
+  /// a unit rule overrides a floor rule, and a floor rule overrides
+  /// a property-wide rule.
   List<BillingRule> _resolveRulesForTarget({
     required List<BillingRule> rules,
     required MonthlyBillTarget target,
@@ -176,10 +259,11 @@ class GenerateMonthlyBills {
         continue;
       }
 
-      matchingRules.sort(
-        (a, b) =>
-            _scopePriority(b.scopeType).compareTo(_scopePriority(a.scopeType)),
-      );
+      matchingRules.sort((a, b) {
+        return _scopePriority(
+          b.scopeType,
+        ).compareTo(_scopePriority(a.scopeType));
+      });
 
       result.add(matchingRules.first);
     }
@@ -209,6 +293,10 @@ class GenerateMonthlyBills {
         return rule.scopeId == target.tenantId;
     }
   }
+
+  // ==========================================================================
+  // SCOPE PRIORITY
+  // ==========================================================================
 
   int _scopePriority(BillingScopeType scope) {
     switch (scope) {
@@ -264,10 +352,17 @@ class GenerateMonthlyBills {
   }
 }
 
-// ==============================================================================
+// ============================================================================
 // MONTHLY BILL TARGET
-// ==============================================================================
+// ============================================================================
 
+/// A tenancy target used by the non-rent monthly billing engine.
+///
+/// This target intentionally contains only the identity information required
+/// by billing-rule resolution.
+///
+/// Tenancy dates are resolved separately by TenancyBillingTargetResolver and
+/// are required by the dedicated rent-generation engine.
 class MonthlyBillTarget {
   final String floorId;
   final String unitId;
@@ -280,4 +375,29 @@ class MonthlyBillTarget {
     required this.tenantId,
     this.tenantUserId,
   });
+
+  /// Returns a normalized target or null when a required ID is missing.
+  MonthlyBillTarget? normalized() {
+    final normalizedFloorId = floorId.trim();
+    final normalizedUnitId = unitId.trim();
+    final normalizedTenantId = tenantId.trim();
+
+    if (normalizedFloorId.isEmpty ||
+        normalizedUnitId.isEmpty ||
+        normalizedTenantId.isEmpty) {
+      return null;
+    }
+
+    final normalizedTenantUserId = tenantUserId?.trim();
+
+    return MonthlyBillTarget(
+      floorId: normalizedFloorId,
+      unitId: normalizedUnitId,
+      tenantId: normalizedTenantId,
+      tenantUserId:
+          normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
+          ? null
+          : normalizedTenantUserId,
+    );
+  }
 }

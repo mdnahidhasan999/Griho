@@ -15,11 +15,9 @@ class GenerateMonthlyRent {
     required this._monthlyRentRepository,
     required this._rentRateRepository,
     MonthlyRentGenerationCalculator? calculator,
-  }) : _calculator =
-      calculator ??
-          const MonthlyRentGenerationCalculator();
+  }) : _calculator = calculator ?? const MonthlyRentGenerationCalculator();
 
-  Future<List<MonthlyRent>> call(GenerateMonthlyRentRequest request,) async {
+  Future<List<MonthlyRent>> call(GenerateMonthlyRentRequest request) async {
     final ownerId = request.ownerId.trim();
     final propertyId = request.propertyId.trim();
     final unitId = request.unitId.trim();
@@ -30,45 +28,38 @@ class GenerateMonthlyRent {
     // ------------------------------------------------------------------------
 
     if (ownerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     if (propertyId.isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
     if (unitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
     if (tenantId.isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
-      );
+      throw ArgumentError('Tenant ID cannot be empty.');
     }
 
     // ------------------------------------------------------------------------
     // Billing period
     //
-    // billingPeriodEnd is EXCLUSIVE.
+    // billingPeriodStart = inclusive
+    // billingPeriodEnd   = exclusive
     //
     // Example:
+    //
     // 2026-09-01 -> 2026-10-01
+    //
     // means September 2026.
     // ------------------------------------------------------------------------
 
-    if (!request.billingPeriodEnd.isAfter(
-      request.billingPeriodStart,
-    )) {
+    if (!request.billingPeriodEnd.isAfter(request.billingPeriodStart)) {
       throw ArgumentError(
         'Billing period end must be after '
-            'billing period start.',
+        'billing period start.',
       );
     }
 
@@ -80,35 +71,32 @@ class GenerateMonthlyRent {
     // ------------------------------------------------------------------------
 
     if (request.tenancyEnd != null &&
-        request.tenancyEnd!.isBefore(
-          request.tenancyStart,
-        )) {
-      throw ArgumentError(
-        'Tenancy end cannot be before tenancy start.',
-      );
+        request.tenancyEnd!.isBefore(request.tenancyStart)) {
+      throw ArgumentError('Tenancy end cannot be before tenancy start.');
     }
 
     // ------------------------------------------------------------------------
     // Due date
     //
-    // Due date must be inside the billing period.
+    // The due date is NOT required to be inside the billing period.
+    //
+    // Example:
+    //
+    // October billing:
+    // billingPeriodStart = 2026-10-01
+    // billingPeriodEnd   = 2026-11-01
+    // dueDate            = 2026-11-10
+    //
+    // This is valid.
+    //
+    // The only invalid case here is a due date before the beginning
+    // of the billing period.
     // ------------------------------------------------------------------------
 
-    if (request.dueDate.isBefore(
-      request.billingPeriodStart,
-    )) {
+    if (request.dueDate.isBefore(request.billingPeriodStart)) {
       throw ArgumentError(
         'Due date cannot be before '
-            'the billing period starts.',
-      );
-    }
-
-    if (!request.dueDate.isBefore(
-      request.billingPeriodEnd,
-    )) {
-      throw ArgumentError(
-        'Due date must be within '
-            'the billing period.',
+        'the billing period starts.',
       );
     }
 
@@ -116,8 +104,7 @@ class GenerateMonthlyRent {
     // Load complete rent-rate history.
     // ------------------------------------------------------------------------
 
-    final rentRates =
-    await _rentRateRepository.getRentRateHistoryByUnitId(
+    final rentRates = await _rentRateRepository.getRentRateHistoryByUnitId(
       ownerId: ownerId,
       unitId: unitId,
     );
@@ -125,7 +112,7 @@ class GenerateMonthlyRent {
     if (rentRates.isEmpty) {
       throw StateError(
         'No rent rate history is available '
-            'for this unit.',
+        'for this unit.',
       );
     }
 
@@ -146,6 +133,23 @@ class GenerateMonthlyRent {
       return const <MonthlyRent>[];
     }
 
+    // ------------------------------------------------------------------------
+    // Load existing rents for this unit and billing period once.
+    //
+    // This makes generation idempotent:
+    //
+    // - Existing historical rent remains untouched.
+    // - Missing charge segments can still be generated.
+    // - Re-running the same generation does not create duplicates.
+    // ------------------------------------------------------------------------
+
+    final existingRents = await _monthlyRentRepository
+        .getMonthlyRentsByUnitAndPeriod(
+          ownerId: ownerId,
+          unitId: unitId,
+          billingPeriodStart: request.billingPeriodStart,
+        );
+
     final createdRents = <MonthlyRent>[];
 
     // ------------------------------------------------------------------------
@@ -155,41 +159,65 @@ class GenerateMonthlyRent {
     for (final calculation in result.calculations) {
       final matchingRate = _findMatchingRate(
         rentRates: rentRates,
-        chargePeriodStart:
-        calculation.chargePeriodStart,
-        chargePeriodEnd:
-        calculation.chargePeriodEnd,
+        chargePeriodStart: calculation.chargePeriodStart,
+        chargePeriodEnd: calculation.chargePeriodEnd,
       );
 
       if (matchingRate == null) {
         throw StateError(
           'Unable to resolve the rent rate for '
-              'charge period '
-              '${_formatDate(calculation.chargePeriodStart)} '
-              '- '
-              '${_formatDate(calculation.chargePeriodEnd)}.',
+          'charge period '
+          '${_formatDate(calculation.chargePeriodStart)} '
+          '- '
+          '${_formatDate(calculation.chargePeriodEnd)}.',
         );
       }
 
-      // Defensive validation.
+      // ----------------------------------------------------------------------
+      // Defensive rate validation
       //
-      // The rate used to create the MonthlyRent must match
-      // the rate used by the calculation.
-      if ((matchingRate.amount -
-          calculation.monthlyRate)
-          .abs() >
-          0.01) {
+      // The rent rate stored in MonthlyRent must be the same rate
+      // that was used by the calculator.
+      // ----------------------------------------------------------------------
+
+      if ((matchingRate.amount - calculation.monthlyRate).abs() > 0.01) {
         throw StateError(
           'Rent rate mismatch detected for '
-              'charge period '
-              '${_formatDate(calculation.chargePeriodStart)} '
-              '- '
-              '${_formatDate(calculation.chargePeriodEnd)}.',
+          'charge period '
+          '${_formatDate(calculation.chargePeriodStart)} '
+          '- '
+          '${_formatDate(calculation.chargePeriodEnd)}.',
         );
       }
 
-      final createRequest =
-      CreateMonthlyRentRequest(
+      // ----------------------------------------------------------------------
+      // Idempotency check
+      //
+      // A tenant may have multiple rent segments in the same billing month
+      // because of:
+      //
+      // 1. Mid-month tenancy changes.
+      // 2. Mid-month rent-rate changes.
+      //
+      // Therefore we identify an existing rent by:
+      //
+      // owner + unit + tenant + exact charge period.
+      //
+      // Existing records are historical and must never be modified.
+      // ----------------------------------------------------------------------
+
+      final alreadyExists = _hasExistingCharge(
+        existingRents: existingRents,
+        tenantId: tenantId,
+        chargePeriodStart: calculation.chargePeriodStart,
+        chargePeriodEnd: calculation.chargePeriodEnd,
+      );
+
+      if (alreadyExists) {
+        continue;
+      }
+
+      final createRequest = CreateMonthlyRentRequest(
         ownerId: ownerId,
         propertyId: propertyId,
         unitId: unitId,
@@ -198,32 +226,84 @@ class GenerateMonthlyRent {
         rentRateId: matchingRate.id,
         monthlyRate: calculation.monthlyRate,
         amount: calculation.amount,
-        chargeableDays:
-        calculation.chargeableDays,
-        daysInBillingPeriod:
-        calculation.daysInBillingPeriod,
-        chargePeriodStart:
-        calculation.chargePeriodStart,
-        chargePeriodEnd:
-        calculation.chargePeriodEnd,
-        billingPeriodStart:
-        request.billingPeriodStart,
-        billingPeriodEnd:
-        request.billingPeriodEnd,
+        chargeableDays: calculation.chargeableDays,
+        daysInBillingPeriod: calculation.daysInBillingPeriod,
+        chargePeriodStart: calculation.chargePeriodStart,
+        chargePeriodEnd: calculation.chargePeriodEnd,
+        billingPeriodStart: request.billingPeriodStart,
+        billingPeriodEnd: request.billingPeriodEnd,
         dueDate: request.dueDate,
         status: MonthlyRentStatus.unpaid,
       );
 
-      final monthlyRent =
-      await _monthlyRentRepository
-          .createMonthlyRent(
-        createRequest,
-      );
+      try {
+        final monthlyRent = await _monthlyRentRepository.createMonthlyRent(
+          createRequest,
+        );
 
-      createdRents.add(monthlyRent);
+        createdRents.add(monthlyRent);
+      } on StateError catch (error) {
+        // --------------------------------------------------------------------
+        // Race-condition protection
+        //
+        // Another generation request may have created this exact rent
+        // between our read/check above and this create operation.
+        //
+        // The datasource transaction is still the final duplicate guard.
+        //
+        // Only the known duplicate error is ignored.
+        // Any other StateError must still propagate.
+        // --------------------------------------------------------------------
+
+        if (!_isDuplicateError(error)) {
+          rethrow;
+        }
+      }
     }
 
     return createdRents;
+  }
+
+  // ==========================================================================
+  // EXISTING CHARGE CHECK
+  // ==========================================================================
+
+  bool _hasExistingCharge({
+    required List<MonthlyRent> existingRents,
+    required String tenantId,
+    required DateTime chargePeriodStart,
+    required DateTime chargePeriodEnd,
+  }) {
+    final normalizedTenantId = tenantId.trim();
+    final normalizedStart = _dateOnly(chargePeriodStart);
+    final normalizedEnd = _dateOnly(chargePeriodEnd);
+
+    for (final existingRent in existingRents) {
+      if (existingRent.tenantId.trim() != normalizedTenantId) {
+        continue;
+      }
+
+      if (!_isSameDate(existingRent.chargePeriodStart, normalizedStart)) {
+        continue;
+      }
+
+      if (!_isSameDate(existingRent.chargePeriodEnd, normalizedEnd)) {
+        continue;
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
+  // ==========================================================================
+  // DUPLICATE ERROR CHECK
+  // ==========================================================================
+
+  bool _isDuplicateError(StateError error) {
+    return error.message ==
+        'Monthly rent already exists for this tenant and charge period.';
   }
 
   // ==========================================================================
@@ -235,55 +315,60 @@ class GenerateMonthlyRent {
     required DateTime chargePeriodStart,
     required DateTime chargePeriodEnd,
   }) {
-    final start = _dateOnly(
-      chargePeriodStart,
-    );
-
-    final end = _dateOnly(
-      chargePeriodEnd,
-    );
+    final start = _dateOnly(chargePeriodStart);
+    final end = _dateOnly(chargePeriodEnd);
 
     RentRate? selectedRate;
 
     for (final rate in rentRates) {
-      final effectiveFrom = _dateOnly(
-        rate.effectiveFrom,
-      );
+      final effectiveFrom = _dateOnly(rate.effectiveFrom);
 
       final effectiveTo = rate.effectiveTo == null
           ? null
-          : _dateOnly(
-        rate.effectiveTo!,
-      );
+          : _dateOnly(rate.effectiveTo!);
 
-      // Rate must have started on or before
-      // the charge period.
+      // ----------------------------------------------------------------------
+      // effectiveFrom is inclusive.
+      //
+      // Example:
+      // effectiveFrom = 2026-10-10
+      //
+      // The rate can apply from October 10 onward.
+      // ----------------------------------------------------------------------
+
       if (effectiveFrom.isAfter(start)) {
         continue;
       }
 
+      // ----------------------------------------------------------------------
       // effectiveTo is EXCLUSIVE.
       //
       // Example:
+      //
       // effectiveTo = 2026-10-10
-      // means the rate applies through Oct 9.
-      if (effectiveTo != null &&
-          !start.isBefore(effectiveTo)) {
+      //
+      // means the rate applies through October 9.
+      // ----------------------------------------------------------------------
+
+      if (effectiveTo != null && !start.isBefore(effectiveTo)) {
         continue;
       }
 
-      // The rate must cover the charge period.
-      if (effectiveTo != null &&
-          !end.isBefore(effectiveTo)) {
+      // ----------------------------------------------------------------------
+      // The complete charge period must be covered by this rate.
+      // ----------------------------------------------------------------------
+
+      if (effectiveTo != null && !end.isBefore(effectiveTo)) {
         continue;
       }
 
-      // If multiple rates somehow match,
-      // select the latest effective rate.
+      // ----------------------------------------------------------------------
+      // If multiple rates somehow match, select the latest
+      // effective rate.
+      // ----------------------------------------------------------------------
+
       if (selectedRate == null ||
-          rate.effectiveFrom.isAfter(
-            selectedRate.effectiveFrom,
-          )) {
+          rate.effectiveFrom.isAfter(selectedRate.effectiveFrom)) {
         selectedRate = rate;
       }
     }
@@ -291,12 +376,21 @@ class GenerateMonthlyRent {
     return selectedRate;
   }
 
+  // ==========================================================================
+  // DATE HELPERS
+  // ==========================================================================
+
   DateTime _dateOnly(DateTime value) {
-    return DateTime(
-      value.year,
-      value.month,
-      value.day,
-    );
+    return DateTime(value.year, value.month, value.day);
+  }
+
+  bool _isSameDate(DateTime first, DateTime second) {
+    final firstDate = _dateOnly(first);
+    final secondDate = _dateOnly(second);
+
+    return firstDate.year == secondDate.year &&
+        firstDate.month == secondDate.month &&
+        firstDate.day == secondDate.day;
   }
 
   String _formatDate(DateTime date) {
