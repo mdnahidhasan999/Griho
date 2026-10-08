@@ -922,10 +922,9 @@ class BillingRuleDataSource {
         }
 
       case BillingValueType.variable:
-        if (amount != null) {
+        if (amount == null || amount < 0) {
           throw ArgumentError(
-            'Variable billing rules cannot contain '
-                'a fixed amount.',
+            'Variable billing amount must be zero or greater.',
           );
         }
     }

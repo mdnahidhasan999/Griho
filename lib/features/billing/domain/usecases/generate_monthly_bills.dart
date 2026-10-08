@@ -133,12 +133,12 @@ class GenerateMonthlyBills {
 
         final existingBill = await _monthlyBillRepository
             .getMonthlyBillByUnitAndTenantAndPeriodAndType(
-              ownerId: normalizedOwnerId,
-              unitId: normalizedTarget.unitId,
-              tenantId: normalizedTarget.tenantId,
-              billingPeriodStart: billingPeriodStart,
-              type: billType,
-            );
+          ownerId: normalizedOwnerId,
+          unitId: normalizedTarget.unitId,
+          tenantId: normalizedTarget.tenantId,
+          billingPeriodStart: billingPeriodStart,
+          type: billType,
+        );
 
         if (existingBill != null) {
           // Already generated.
@@ -151,13 +151,9 @@ class GenerateMonthlyBills {
         // DETERMINE BILL VALUE
         // =====================================================================
 
-        final isVariable = rule.valueType == BillingValueType.variable;
+        final amount = rule.amount ?? 0.0;
 
-        final amount = isVariable ? 0.0 : (rule.amount ?? 0.0);
-
-        final status = isVariable
-            ? MonthlyBillStatus.pending
-            : MonthlyBillStatus.unpaid;
+        final status = MonthlyBillStatus.unpaid;
 
         // =====================================================================
         // CREATE REQUEST
@@ -256,6 +252,8 @@ class GenerateMonthlyBills {
 
       matchingRules.sort((a, b) {
         // First: more specific scope wins.
+        //
+        // tenant > unit > floor > property
         final priorityComparison = _scopePriority(
           b.scopeType,
         ).compareTo(_scopePriority(a.scopeType));
@@ -266,9 +264,40 @@ class GenerateMonthlyBills {
 
         // Second: within the same scope, the most recent rule wins.
         //
-        // This allows a variable monthly rule to override a fixed rule
-        // without permanently replacing it.
-        return b.effectiveFrom.compareTo(a.effectiveFrom);
+        // This is important for fixed-rule history.
+        //
+        // Example:
+        // September fixed Water = ৳500
+        // October fixed Water = ৳700
+        //
+        // October must use the October version.
+        final effectiveFromComparison = b.effectiveFrom.compareTo(
+          a.effectiveFrom,
+        );
+
+        if (effectiveFromComparison != 0) {
+          return effectiveFromComparison;
+        }
+
+        // Third: when Fixed and Variable rules have the same scope
+        // and the same effectiveFrom, Variable must win.
+        //
+        // Example:
+        // Property Fixed Water = ৳500
+        // October Variable Water = actual amount
+        //
+        // Both may start at 2026-10-01.
+        // The variable monthly override must take precedence.
+        final valueTypeComparison = _valueTypePriority(
+          b.valueType,
+        ).compareTo(_valueTypePriority(a.valueType));
+
+        if (valueTypeComparison != 0) {
+          return valueTypeComparison;
+        }
+
+        // Final deterministic tie-breaker.
+        return a.id.compareTo(b.id);
       });
 
       result.add(matchingRules.first);
@@ -320,6 +349,16 @@ class GenerateMonthlyBills {
     }
   }
 
+  int _valueTypePriority(BillingValueType valueType) {
+    switch (valueType) {
+      case BillingValueType.fixed:
+        return 1;
+
+      case BillingValueType.variable:
+        return 2;
+    }
+  }
+
   // ===========================================================================
   // BILL TYPE MAPPING
   // ===========================================================================
@@ -353,7 +392,7 @@ class GenerateMonthlyBills {
   bool _isDuplicateBillError(StateError error) {
     return error.message.toString().contains(
       'Monthly bill already exists for this '
-      'tenant, bill type and billing period.',
+          'tenant, bill type and billing period.',
     );
   }
 }
@@ -401,7 +440,7 @@ class MonthlyBillTarget {
       unitId: normalizedUnitId,
       tenantId: normalizedTenantId,
       tenantUserId:
-          normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
+      normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
           ? null
           : normalizedTenantUserId,
     );

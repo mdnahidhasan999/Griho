@@ -234,15 +234,13 @@ class _OwnerBillingSetupScreenState
       return;
     }
 
-    double? amount;
+    double? amount = double.tryParse(
+      _amountController.text.trim(),
+    );
 
-    if (_valueType == BillingValueType.fixed) {
-      amount = double.tryParse(_amountController.text.trim());
-
-      if (amount == null || amount < 0) {
-        _showMessage('Please enter a valid amount.');
-        return;
-      }
+    if (amount == null || amount < 0) {
+      _showMessage('Please enter a valid amount.');
+      return;
     }
 
     final title = _titleController.text.trim();
@@ -737,7 +735,7 @@ class _OwnerBillingSetupScreenState
 
             TextFormField(
               controller: _amountController,
-              enabled: !_isSaving && _valueType == BillingValueType.fixed,
+              enabled: !_isSaving,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
@@ -749,10 +747,6 @@ class _OwnerBillingSetupScreenState
                 border: OutlineInputBorder(),
               ),
               validator: (value) {
-                if (_valueType == BillingValueType.variable) {
-                  return null;
-                }
-
                 final text = value?.trim() ?? '';
 
                 if (text.isEmpty) {
@@ -776,7 +770,7 @@ class _OwnerBillingSetupScreenState
             if (_valueType == BillingValueType.variable) ...[
               const SizedBox(height: 8),
               Text(
-                'Variable bills will use the actual amount when the monthly bill is generated.',
+                'This amount will apply only to the selected effective month.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
