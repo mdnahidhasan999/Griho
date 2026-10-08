@@ -122,7 +122,7 @@ class _OwnerBillingSetupScreenState
       _scopeType = value;
 
       _selectedScopeId = value == BillingScopeType.property
-          ? '__property__'
+          ? _selectedPropertyId
           : null;
     });
   }
@@ -138,7 +138,8 @@ class _OwnerBillingSetupScreenState
       floors.add(unit.floorNumber);
     }
 
-    final result = floors.toList()..sort();
+    final result = floors.toList()
+      ..sort();
 
     return result;
   }
@@ -184,7 +185,9 @@ class _OwnerBillingSetupScreenState
   String _tenantLabel(Tenant tenant) {
     final name = tenant.name.trim();
 
-    if (tenant.phone.trim().isNotEmpty) {
+    if (tenant.phone
+        .trim()
+        .isNotEmpty) {
       return '$name • ${tenant.phone.trim()}';
     }
 
@@ -282,8 +285,8 @@ class _OwnerBillingSetupScreenState
 
       ref.invalidate(
         propertyBillingRulesProvider((
-          ownerId: ownerId,
-          propertyId: _selectedPropertyId!.trim(),
+        ownerId: ownerId,
+        propertyId: _selectedPropertyId!.trim(),
         )),
       );
 
@@ -301,8 +304,8 @@ class _OwnerBillingSetupScreenState
 
       debugPrint(
         'BILLING: Effective Month = '
-        '${rule.effectiveFrom.year}-'
-        '${rule.effectiveFrom.month}',
+            '${rule.effectiveFrom.year}-'
+            '${rule.effectiveFrom.month}',
       );
 
       // Return the created rule to the previous screen.
@@ -518,9 +521,9 @@ class _OwnerBillingSetupScreenState
 
                 return DropdownButtonFormField<String>(
                   initialValue:
-                      properties.any(
+                  properties.any(
                         (property) => property.id == _selectedPropertyId,
-                      )
+                  )
                       ? _selectedPropertyId
                       : null,
                   decoration: const InputDecoration(
@@ -533,7 +536,7 @@ class _OwnerBillingSetupScreenState
                       DropdownMenuItem<String>(
                         value: property.id,
                         child: Text(
-                          property.name,
+                          '${property.name} • ${property.propertyCode}',
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -541,15 +544,15 @@ class _OwnerBillingSetupScreenState
                   onChanged: _isSaving
                       ? null
                       : (value) {
-                          setState(() {
-                            _selectedPropertyId = value;
+                    setState(() {
+                      _selectedPropertyId = value;
 
-                            _selectedScopeId =
-                                _scopeType == BillingScopeType.property
-                                ? '__property__'
-                                : null;
-                          });
-                        },
+                      _selectedScopeId =
+                      _scopeType == BillingScopeType.property
+                          ? value
+                          : null;
+                    });
+                  },
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please select a property.';
@@ -631,14 +634,14 @@ class _OwnerBillingSetupScreenState
               onChanged: _isSaving
                   ? null
                   : (value) {
-                      if (value == null) {
-                        return;
-                      }
+                if (value == null) {
+                  return;
+                }
 
-                      setState(() {
-                        _chargeType = value;
-                      });
-                    },
+                setState(() {
+                  _chargeType = value;
+                });
+              },
             ),
 
             const SizedBox(height: 24),
@@ -667,7 +670,9 @@ class _OwnerBillingSetupScreenState
               ),
               validator: (value) {
                 if (_chargeType == BillingChargeType.other &&
-                    (value == null || value.trim().isEmpty)) {
+                    (value == null || value
+                        .trim()
+                        .isEmpty)) {
                   return 'Please enter a title for this charge.';
                 }
 
@@ -706,14 +711,14 @@ class _OwnerBillingSetupScreenState
               onSelectionChanged: _isSaving
                   ? null
                   : (selection) {
-                      if (selection.isEmpty) {
-                        return;
-                      }
+                if (selection.isEmpty) {
+                  return;
+                }
 
-                      setState(() {
-                        _valueType = selection.first;
-                      });
-                    },
+                setState(() {
+                  _valueType = selection.first;
+                });
+              },
             ),
 
             const SizedBox(height: 24),
@@ -852,10 +857,10 @@ class _OwnerBillingSetupScreenState
                 onChanged: _isSaving
                     ? null
                     : (value) {
-                        setState(() {
-                          _isActive = value;
-                        });
-                      },
+                  setState(() {
+                    _isActive = value;
+                  });
+                },
               ),
             ),
 
@@ -870,10 +875,10 @@ class _OwnerBillingSetupScreenState
                 onPressed: _isSaving ? null : _save,
                 icon: _isSaving
                     ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
                     : const Icon(Icons.save_outlined),
                 label: Text(_isSaving ? 'Saving...' : 'Save Billing Rule'),
               ),
@@ -1016,10 +1021,10 @@ class _OwnerBillingSetupScreenState
           onChanged: _isSaving
               ? null
               : (value) {
-                  setState(() {
-                    _selectedScopeId = value?.toString();
-                  });
-                },
+            setState(() {
+              _selectedScopeId = value?.toString();
+            });
+          },
           validator: (value) {
             if (value == null) {
               return 'Please select a floor.';
@@ -1107,7 +1112,7 @@ class _OwnerBillingSetupScreenState
               value: unit.id,
               child: Text(
                 '${_unitLabel(unit)} • '
-                '${_floorLabel(unit.floorNumber)}',
+                    '${_floorLabel(unit.floorNumber)}',
                 overflow: TextOverflow.ellipsis,
               ),
             );
@@ -1115,10 +1120,10 @@ class _OwnerBillingSetupScreenState
           onChanged: _isSaving
               ? null
               : (value) {
-                  setState(() {
-                    _selectedScopeId = value;
-                  });
-                },
+            setState(() {
+              _selectedScopeId = value;
+            });
+          },
           validator: (value) {
             if (value == null || value.isEmpty) {
               return 'Please select a unit.';
@@ -1213,10 +1218,10 @@ class _OwnerBillingSetupScreenState
           onChanged: _isSaving
               ? null
               : (value) {
-                  setState(() {
-                    _selectedScopeId = value;
-                  });
-                },
+            setState(() {
+              _selectedScopeId = value;
+            });
+          },
           validator: (value) {
             if (value == null || value.isEmpty) {
               return 'Please select a tenant.';
