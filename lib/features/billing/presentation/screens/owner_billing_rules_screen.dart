@@ -14,7 +14,6 @@ import '../controllers/generate_monthly_charges_controller.dart';
 import '../providers/billing_rule_provider.dart';
 import '../providers/monthly_bill_provider.dart';
 import '../providers/tenancy_billing_target_provider.dart';
-import '../widgets/variable_bill_amount_dialog.dart';
 
 class OwnerBillingRulesScreen extends ConsumerStatefulWidget {
   const OwnerBillingRulesScreen({super.key});
@@ -79,7 +78,10 @@ class _OwnerBillingRulesScreenState
 
             if (propertyId != null && propertyId.isNotEmpty) {
               final ownerId =
-                  ref.read(currentUserProfileProvider).value?.uid ?? '';
+                  ref
+                      .read(currentUserProfileProvider)
+                      .value
+                      ?.uid ?? '';
 
               _invalidatePropertyBillingData(
                 ownerId: ownerId,
@@ -141,9 +143,9 @@ class _OwnerBillingRulesScreenState
               }
 
               final selectedPropertyId =
-                  properties.any(
+              properties.any(
                     (property) => property.id == _selectedPropertyId,
-                  )
+              )
                   ? _selectedPropertyId!
                   : properties.first.id;
 
@@ -220,8 +222,8 @@ class _OwnerBillingRulesScreenState
 
     ref.invalidate(
       propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
+      ownerId: ownerId,
+      propertyId: propertyId,
       )),
     );
   }
@@ -352,7 +354,7 @@ class _OwnerBillingRulesScreenState
       if (tenancyTargets.isEmpty) {
         _showMessage(
           'No tenancy found for this property '
-          'during ${_formatMonth(billingPeriodStart)}.',
+              'during ${_formatMonth(billingPeriodStart)}.',
         );
         return;
       }
@@ -376,7 +378,7 @@ class _OwnerBillingRulesScreenState
 
       _showMessage(
         'Generating rent and monthly bills for '
-        '${tenancyTargets.length} tenancy segment(s)...',
+            '${tenancyTargets.length} tenancy segment(s)...',
       );
 
       final controller = ref.read(
@@ -402,8 +404,8 @@ class _OwnerBillingRulesScreenState
 
       ref.invalidate(
         propertyMonthlyBillHistoryProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+        ownerId: ownerId,
+        propertyId: propertyId,
         )),
       );
 
@@ -417,14 +419,14 @@ class _OwnerBillingRulesScreenState
       if (rentCount == 0 && billCount == 0) {
         _showMessage(
           'No new rent or monthly bills were generated for '
-          '${_formatMonth(billingPeriodStart)}.',
+              '${_formatMonth(billingPeriodStart)}.',
         );
         return;
       }
 
       _showMessage(
         '$rentCount rent record(s) and '
-        '$billCount monthly bill(s) generated successfully.',
+            '$billCount monthly bill(s) generated successfully.',
       );
     } catch (error, stackTrace) {
       debugPrint('BILLING: Failed to generate monthly charges.');
@@ -514,21 +516,21 @@ class _RulesTab extends ConsumerWidget {
 
     final billHistoryAsync = ref.watch(
       propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
+      ownerId: ownerId,
+      propertyId: propertyId,
       )),
     );
 
     return RefreshIndicator(
       onRefresh: () async {
         final rulesProvider = propertyBillingRulesProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+        ownerId: ownerId,
+        propertyId: propertyId,
         ));
 
         final billsProvider = propertyMonthlyBillHistoryProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+        ownerId: ownerId,
+        propertyId: propertyId,
         ));
 
         ref.invalidate(rulesProvider);
@@ -594,8 +596,8 @@ class _RulesTab extends ConsumerWidget {
                 onRetry: () {
                   ref.invalidate(
                     propertyBillingRulesProvider((
-                      ownerId: ownerId,
-                      propertyId: propertyId,
+                    ownerId: ownerId,
+                    propertyId: propertyId,
                     )),
                   );
                 },
@@ -607,7 +609,7 @@ class _RulesTab extends ConsumerWidget {
                   icon: Icons.receipt_long_outlined,
                   title: 'No billing rules',
                   message:
-                      'No billing rules have been created '
+                  'No billing rules have been created '
                       'for this property yet.',
                 );
               }
@@ -735,16 +737,16 @@ class _GeneratedBillsTab extends ConsumerWidget {
 
     final billsAsync = ref.watch(
       propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
+      ownerId: ownerId,
+      propertyId: propertyId,
       )),
     );
 
     return RefreshIndicator(
       onRefresh: () async {
         final provider = propertyMonthlyBillHistoryProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+        ownerId: ownerId,
+        propertyId: propertyId,
         ));
 
         ref.invalidate(provider);
@@ -799,8 +801,8 @@ class _GeneratedBillsTab extends ConsumerWidget {
                 onRetry: () {
                   ref.invalidate(
                     propertyMonthlyBillHistoryProvider((
-                      ownerId: ownerId,
-                      propertyId: propertyId,
+                    ownerId: ownerId,
+                    propertyId: propertyId,
                     )),
                   );
                 },
@@ -812,7 +814,7 @@ class _GeneratedBillsTab extends ConsumerWidget {
                   icon: Icons.receipt_long_outlined,
                   title: 'No generated bills',
                   message:
-                      'No monthly bills have been generated '
+                  'No monthly bills have been generated '
                       'for this property yet.',
                 );
               }
@@ -853,8 +855,8 @@ class _GeneratedBillsTab extends ConsumerWidget {
                       onUpdated: () {
                         ref.invalidate(
                           propertyMonthlyBillHistoryProvider((
-                            ownerId: ownerId,
-                            propertyId: propertyId,
+                          ownerId: ownerId,
+                          propertyId: propertyId,
                           )),
                         );
                       },
@@ -926,7 +928,9 @@ class _BillingRuleCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        rule.title?.trim().isNotEmpty == true
+                        rule.title
+                            ?.trim()
+                            .isNotEmpty == true
                             ? rule.title!
                             : chargeName,
                         maxLines: 2,
@@ -969,15 +973,15 @@ class _BillingRuleCard extends ConsumerWidget {
                     if (result == true) {
                       ref.invalidate(
                         propertyBillingRulesProvider((
-                          ownerId: ownerId,
-                          propertyId: rule.propertyId,
+                        ownerId: ownerId,
+                        propertyId: rule.propertyId,
                         )),
                       );
 
                       ref.invalidate(
                         propertyMonthlyBillHistoryProvider((
-                          ownerId: ownerId,
-                          propertyId: rule.propertyId,
+                        ownerId: ownerId,
+                        propertyId: rule.propertyId,
                         )),
                       );
                     }
@@ -1251,38 +1255,11 @@ class _GeneratedBillCard extends StatelessWidget {
 
   const _GeneratedBillCard({required this.bill, this.onUpdated});
 
-  Future<void> _openAmountDialog(BuildContext context) async {
-    final updatedBill = await showDialog<MonthlyBill>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        return VariableBillAmountDialog(
-          billId: bill.id,
-          title: '${_billTypeLabel(bill.type)} Amount',
-        );
-      },
-    );
-
-    if (updatedBill == null || !context.mounted) {
-      return;
-    }
-
-    onUpdated?.call();
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Bill amount updated successfully.')),
-      );
-  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final isPendingVariableBill =
-        bill.status == MonthlyBillStatus.pending &&
-        bill.valueType == BillingValueType.variable;
 
     return Card(
       child: Padding(
@@ -1326,7 +1303,7 @@ class _GeneratedBillCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         'Period: '
-                        '${_formatMonth(bill.billingPeriodStart)}',
+                            '${_formatMonth(bill.billingPeriodStart)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -1341,14 +1318,7 @@ class _GeneratedBillCard extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 16),
-            if (isPendingVariableBill)
-              _PendingVariableBillContent(
-                onEnterAmount: () {
-                  _openAmountDialog(context);
-                },
-              )
-            else
-              _FinalizedBillContent(bill: bill),
+            _FinalizedBillContent(bill: bill),
           ],
         ),
       ),
@@ -1394,68 +1364,6 @@ class _GeneratedBillCard extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// PENDING VARIABLE BILL CONTENT
-// ============================================================================
-
-class _PendingVariableBillContent extends StatelessWidget {
-  final VoidCallback onEnterAmount;
-
-  const _PendingVariableBillContent({required this.onEnterAmount});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.edit_note_outlined,
-                color: theme.colorScheme.onPrimaryContainer,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Amount Required',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Enter the actual amount before the tenant can be charged.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onPrimaryContainer,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onEnterAmount,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Enter Amount'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ============================================================================
 // FINALIZED BILL CONTENT

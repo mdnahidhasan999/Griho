@@ -63,13 +63,6 @@ abstract class MonthlyBillRepository {
     required String propertyId,
   });
 
-  /// Updates the amount of a variable bill.
-  ///
-  /// Generated rent bills are immutable and must not be edited.
-  Future<MonthlyBill?> updateMonthlyBillAmount({
-    required String billId,
-    required double amount,
-  });
 
   /// Cancels/voids a monthly bill.
   Future<MonthlyBill?> cancelMonthlyBill({

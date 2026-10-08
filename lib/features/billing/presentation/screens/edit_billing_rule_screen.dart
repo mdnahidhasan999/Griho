@@ -166,9 +166,6 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                       setState(() {
                         _valueType = value;
 
-                        if (value == BillingValueType.variable) {
-                          _amountController.clear();
-                        }
                       });
                     },
             ),

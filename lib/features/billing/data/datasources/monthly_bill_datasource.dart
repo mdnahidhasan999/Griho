@@ -63,12 +63,7 @@ class MonthlyBillDataSource {
       throw ArgumentError('Due date cannot be before billing period start.');
     }
 
-    // Pending means the actual amount is not known yet.
-    // Therefore only variable bills may be pending.
-    if (request.status == MonthlyBillStatus.pending &&
-        request.valueType != BillingValueType.variable) {
-      throw ArgumentError('Only variable bills can have pending status.');
-    }
+
 
     // Variable bills are generated with amount 0.
     //
@@ -328,153 +323,7 @@ class MonthlyBillDataSource {
     return snapshot.docs.map(MonthlyBillModel.fromFirestore).toList();
   }
 
-  // ==========================================================================
-  // UPDATE VARIABLE BILL AMOUNT
-  // ==========================================================================
 
-  Future<MonthlyBillModel?> updateMonthlyBillAmount({
-    required String billId,
-    required double amount,
-  }) async {
-    final normalizedBillId = billId.trim();
-
-    if (normalizedBillId.isEmpty) {
-      throw ArgumentError('Bill ID cannot be empty.');
-    }
-
-    if (amount.isNaN || amount.isInfinite) {
-      throw ArgumentError('Bill amount must be a valid number.');
-    }
-
-    if (amount < 0) {
-      throw ArgumentError('Bill amount cannot be negative.');
-    }
-
-    final document = _collection.doc(normalizedBillId);
-
-    final snapshot = await document.get();
-
-    if (!snapshot.exists) {
-      return null;
-    }
-
-    final existing = MonthlyBillModel.fromFirestore(snapshot);
-
-    // ------------------------------------------------------------------------
-    // RENT IMMUTABILITY
-    // ------------------------------------------------------------------------
-
-    if (existing.type == MonthlyBillType.rent) {
-      throw StateError(
-        'Generated rent bills cannot be edited. '
-        'Use a replacement or adjustment workflow.',
-      );
-    }
-
-    // ------------------------------------------------------------------------
-    // ONLY VARIABLE BILLS
-    // ------------------------------------------------------------------------
-
-    if (existing.valueType != BillingValueType.variable) {
-      throw StateError('Only variable bills can have their amount updated.');
-    }
-
-    // ------------------------------------------------------------------------
-    // STATUS VALIDATION
-    // ------------------------------------------------------------------------
-
-    if (existing.status != MonthlyBillStatus.pending &&
-        existing.status != MonthlyBillStatus.unpaid) {
-      throw StateError(
-        'Only pending or unpaid variable bills '
-        'can have their amount entered or updated.',
-      );
-    }
-
-    // ------------------------------------------------------------------------
-    // PAID AMOUNT VALIDATION
-    // ------------------------------------------------------------------------
-    //
-    // The bill cannot be reduced below the amount already paid.
-    //
-    // Example:
-    //
-    // bill amount = 1000
-    // paid amount = 800
-    //
-    // New amount cannot be 500.
-    // ------------------------------------------------------------------------
-
-    if (existing.paidAmount > amount) {
-      throw StateError(
-        'Bill amount cannot be less than the amount already paid.',
-      );
-    }
-
-    // ------------------------------------------------------------------------
-    // TRANSACTION-SAFE UPDATE
-    // ------------------------------------------------------------------------
-
-    final updated = await _firestore.runTransaction<MonthlyBillModel?>((
-      transaction,
-    ) async {
-      final currentSnapshot = await transaction.get(document);
-
-      if (!currentSnapshot.exists) {
-        return null;
-      }
-
-      final current = MonthlyBillModel.fromFirestore(currentSnapshot);
-
-      // Prevent stale data from silently overwriting another update.
-      if (current.updatedAt.isAtSameMomentAs(existing.updatedAt) == false) {
-        throw StateError(
-          'This billing record was updated by another operation. '
-          'Please reload and try again.',
-        );
-      }
-
-      if (current.valueType != BillingValueType.variable) {
-        throw StateError('Only variable bills can have their amount updated.');
-      }
-
-      if (current.type == MonthlyBillType.rent) {
-        throw StateError(
-          'Generated rent bills cannot be edited. '
-          'Use a replacement or adjustment workflow.',
-        );
-      }
-
-      if (current.status != MonthlyBillStatus.pending &&
-          current.status != MonthlyBillStatus.unpaid) {
-        throw StateError(
-          'Only pending or unpaid variable bills '
-          'can have their amount entered or updated.',
-        );
-      }
-
-      if (current.paidAmount > amount) {
-        throw StateError(
-          'Bill amount cannot be less than the amount already paid.',
-        );
-      }
-
-      final updatedBill = current.copyWithModel(
-        amount: amount,
-        status: _resolveStatusAfterAmountUpdate(
-          paidAmount: current.paidAmount,
-          amount: amount,
-        ),
-        updatedAt: DateTime.now(),
-      );
-
-      transaction.update(document, updatedBill.toFirestore());
-
-      return updatedBill;
-    });
-
-    return updated;
-  }
 
   // ==========================================================================
   // CANCEL
@@ -515,28 +364,7 @@ class MonthlyBillDataSource {
     return updated;
   }
 
-  // ==========================================================================
-  // STATUS
-  // ==========================================================================
 
-  MonthlyBillStatus _resolveStatusAfterAmountUpdate({
-    required double paidAmount,
-    required double amount,
-  }) {
-    if (amount <= 0) {
-      return MonthlyBillStatus.unpaid;
-    }
-
-    if (paidAmount >= amount) {
-      return MonthlyBillStatus.paid;
-    }
-
-    if (paidAmount > 0) {
-      return MonthlyBillStatus.partiallyPaid;
-    }
-
-    return MonthlyBillStatus.unpaid;
-  }
 
   // ==========================================================================
   // DATE HELPERS

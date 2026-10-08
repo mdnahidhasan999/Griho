@@ -104,16 +104,7 @@ class MonthlyBillRepositoryImpl implements MonthlyBillRepository {
     );
   }
 
-  @override
-  Future<MonthlyBill?> updateMonthlyBillAmount({
-    required String billId,
-    required double amount,
-  }) async {
-    return _dataSource.updateMonthlyBillAmount(
-      billId: billId,
-      amount: amount,
-    );
-  }
+
 
   @override
   Future<MonthlyBill?> cancelMonthlyBill({
