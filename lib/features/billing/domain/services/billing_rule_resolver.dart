@@ -28,10 +28,6 @@ class BillingRuleResolver {
     final normalizedTenantId = _normalizeId(tenantId);
 
     final matchingRules = rules.where((rule) {
-      if (!rule.isActive) {
-        return false;
-      }
-
       if (rule.propertyId != normalizedPropertyId) {
         return false;
       }
@@ -41,6 +37,10 @@ class BillingRuleResolver {
       }
 
       if (!_isEffectiveAt(rule: rule, date: effectiveAt)) {
+        return false;
+      }
+
+      if (!rule.isActive && rule.effectiveTo == null) {
         return false;
       }
 
@@ -57,31 +57,6 @@ class BillingRuleResolver {
       return null;
     }
 
-    // =========================================================================
-    // RULE PRIORITY
-    // =========================================================================
-    //
-    // More specific scope always wins:
-    //
-    // tenant > unit > floor > property
-    //
-    // If two rules have the same scope, the latest effectiveFrom wins.
-    //
-    // This is important for monthly variable overrides:
-    //
-    // Fixed Water:
-    //   effectiveFrom = 2026-09-01
-    //
-    // Variable Water:
-    //   effectiveFrom = 2026-10-01
-    //   effectiveTo   = 2026-11-01
-    //
-    // During October both can be active.
-    // The October variable rule wins because it has the later effectiveFrom.
-    //
-    // On November 1 the variable rule is no longer effective, so the fixed
-    // rule becomes the selected rule again.
-    // =========================================================================
 
     matchingRules.sort((a, b) {
       final priorityComparison = _priority(
