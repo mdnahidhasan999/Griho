@@ -18,13 +18,13 @@ class BillingRuleResolver {
     final normalizedPropertyId = propertyId.trim();
 
     if (normalizedPropertyId.isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
     final normalizedFloorId = _normalizeId(floorId);
+
     final normalizedUnitId = _normalizeId(unitId);
+
     final normalizedTenantId = _normalizeId(tenantId);
 
     final matchingRules = rules.where((rule) {
@@ -40,10 +40,7 @@ class BillingRuleResolver {
         return false;
       }
 
-      if (!_isEffectiveAt(
-        rule: rule,
-        date: effectiveAt,
-      )) {
+      if (!_isEffectiveAt(rule: rule, date: effectiveAt)) {
         return false;
       }
 
@@ -60,51 +57,69 @@ class BillingRuleResolver {
       return null;
     }
 
-    // More specific scope always wins.
+    // =========================================================================
+    // RULE PRIORITY
+    // =========================================================================
+    //
+    // More specific scope always wins:
     //
     // tenant > unit > floor > property
-    matchingRules.sort(
-          (a, b) {
-        final priorityComparison =
-        _priority(b.scopeType)
-            .compareTo(
-          _priority(a.scopeType),
-        );
+    //
+    // If two rules have the same scope, the latest effectiveFrom wins.
+    //
+    // This is important for monthly variable overrides:
+    //
+    // Fixed Water:
+    //   effectiveFrom = 2026-09-01
+    //
+    // Variable Water:
+    //   effectiveFrom = 2026-10-01
+    //   effectiveTo   = 2026-11-01
+    //
+    // During October both can be active.
+    // The October variable rule wins because it has the later effectiveFrom.
+    //
+    // On November 1 the variable rule is no longer effective, so the fixed
+    // rule becomes the selected rule again.
+    // =========================================================================
 
-        if (priorityComparison != 0) {
-          return priorityComparison;
-        }
+    matchingRules.sort((a, b) {
+      final priorityComparison = _priority(
+        b.scopeType,
+      ).compareTo(_priority(a.scopeType));
 
-        // If multiple rules have the same scope,
-        // use the most recently effective rule.
-        return b.effectiveFrom.compareTo(
-          a.effectiveFrom,
-        );
-      },
-    );
+      if (priorityComparison != 0) {
+        return priorityComparison;
+      }
+
+      return b.effectiveFrom.compareTo(a.effectiveFrom);
+    });
 
     final selectedRule = matchingRules.first;
 
-    return ResolvedBillingRule(
-      rule: selectedRule,
-      amount: selectedRule.amount,
-    );
+    return ResolvedBillingRule(rule: selectedRule, amount: selectedRule.amount);
   }
 
   // ==========================================================================
   // EFFECTIVE DATE
   // ==========================================================================
 
-  bool _isEffectiveAt({
-    required BillingRule rule,
-    required DateTime date,
-  }) {
+  bool _isEffectiveAt({required BillingRule rule, required DateTime date}) {
     if (date.isBefore(rule.effectiveFrom)) {
       return false;
     }
 
-    if (rule.effectiveTo != null &&
-        date.isAfter(rule.effectiveTo!)) {
+    // effectiveTo is EXCLUSIVE.
+    //
+    // Example:
+    //
+    // effectiveFrom = 2026-10-01
+    // effectiveTo   = 2026-11-01
+    //
+    // 2026-10-01 → effective
+    // 2026-10-31 → effective
+    // 2026-11-01 → NOT effective
+    if (rule.effectiveTo != null && !date.isBefore(rule.effectiveTo!)) {
       return false;
     }
 
@@ -127,27 +142,17 @@ class BillingRuleResolver {
         return rule.scopeId == propertyId;
 
       case BillingScopeType.floor:
-        return _matchesId(
-          rule.scopeId,
-          floorId,
-        );
+        return _matchesId(rule.scopeId, floorId);
 
       case BillingScopeType.unit:
-        return _matchesId(
-          rule.scopeId,
-          unitId,
-        );
+        return _matchesId(rule.scopeId, unitId);
 
       case BillingScopeType.tenant:
-        return _matchesId(
-          rule.scopeId,
-          tenantId,
-        );
+        return _matchesId(rule.scopeId, tenantId);
     }
   }
 
-  bool _matchesId(String ruleId,
-      String? targetId,) {
+  bool _matchesId(String ruleId, String? targetId) {
     if (targetId == null) {
       return false;
     }
@@ -159,7 +164,7 @@ class BillingRuleResolver {
   // PRIORITY
   // ==========================================================================
 
-  int _priority(BillingScopeType scopeType,) {
+  int _priority(BillingScopeType scopeType) {
     switch (scopeType) {
       case BillingScopeType.property:
         return 1;
@@ -175,15 +180,17 @@ class BillingRuleResolver {
     }
   }
 
-  String? _normalizeId(String? value,) {
+  // ==========================================================================
+  // ID NORMALIZATION
+  // ==========================================================================
+
+  String? _normalizeId(String? value) {
     if (value == null) {
       return null;
     }
 
     final normalized = value.trim();
 
-    return normalized.isEmpty
-        ? null
-        : normalized;
+    return normalized.isEmpty ? null : normalized;
   }
 }

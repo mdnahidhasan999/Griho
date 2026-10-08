@@ -38,17 +38,28 @@ class MonthlyBillDataSource {
     _validateRequiredId(tenantId, 'Tenant ID');
     _validateRequiredId(sourceRuleId, 'Source rule ID');
 
+    if (request.amount.isNaN || request.amount.isInfinite) {
+      throw ArgumentError('Bill amount must be a valid number.');
+    }
+
     if (request.amount < 0) {
       throw ArgumentError('Bill amount cannot be negative.');
     }
 
-    if (!request.billingPeriodEnd.isAfter(request.billingPeriodStart)) {
+    // Monthly bills are always month-based.
+    final normalizedPeriodStart = _normalizeMonthStart(
+      request.billingPeriodStart,
+    );
+
+    final normalizedPeriodEnd = _normalizeMonthStart(request.billingPeriodEnd);
+
+    if (!normalizedPeriodEnd.isAfter(normalizedPeriodStart)) {
       throw ArgumentError(
         'Billing period end must be after billing period start.',
       );
     }
 
-    if (request.dueDate.isBefore(request.billingPeriodStart)) {
+    if (request.dueDate.isBefore(normalizedPeriodStart)) {
       throw ArgumentError('Due date cannot be before billing period start.');
     }
 
@@ -59,12 +70,23 @@ class MonthlyBillDataSource {
       throw ArgumentError('Only variable bills can have pending status.');
     }
 
-    // Fixed bills must have a positive amount.
+    // Variable bills are generated with amount 0.
+    //
+    // Fixed bills must have an amount greater than zero.
     if (request.valueType == BillingValueType.fixed && request.amount <= 0) {
       throw ArgumentError('Fixed bills must have an amount greater than zero.');
     }
 
-    final periodKey = _formatPeriodKey(request.billingPeriodStart);
+    // A variable bill may only start as pending with amount 0.
+    if (request.valueType == BillingValueType.variable &&
+        request.status == MonthlyBillStatus.pending &&
+        request.amount != 0) {
+      throw ArgumentError(
+        'Pending variable bills must start with amount zero.',
+      );
+    }
+
+    final periodKey = _formatPeriodKey(normalizedPeriodStart);
 
     // Tenant-aware document identity.
     //
@@ -91,8 +113,8 @@ class MonthlyBillDataSource {
       valueType: request.valueType,
       amount: request.amount,
       paidAmount: 0,
-      billingPeriodStart: request.billingPeriodStart,
-      billingPeriodEnd: request.billingPeriodEnd,
+      billingPeriodStart: normalizedPeriodStart,
+      billingPeriodEnd: normalizedPeriodEnd,
       dueDate: request.dueDate,
       status: request.status,
       createdAt: now,
@@ -149,14 +171,17 @@ class MonthlyBillDataSource {
     final normalizedUnitId = unitId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
+
     _validateRequiredId(normalizedUnitId, 'Unit ID');
+
+    final normalizedPeriodStart = _normalizeMonthStart(billingPeriodStart);
 
     final snapshot = await _collection
         .where('ownerId', isEqualTo: normalizedOwnerId)
         .where('unitId', isEqualTo: normalizedUnitId)
         .where(
           'billingPeriodStart',
-          isEqualTo: Timestamp.fromDate(billingPeriodStart),
+          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
         )
         .get();
 
@@ -179,8 +204,12 @@ class MonthlyBillDataSource {
     final normalizedTenantId = tenantId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
+
     _validateRequiredId(normalizedUnitId, 'Unit ID');
+
     _validateRequiredId(normalizedTenantId, 'Tenant ID');
+
+    final normalizedPeriodStart = _normalizeMonthStart(billingPeriodStart);
 
     final snapshot = await _collection
         .where('ownerId', isEqualTo: normalizedOwnerId)
@@ -188,7 +217,7 @@ class MonthlyBillDataSource {
         .where('tenantId', isEqualTo: normalizedTenantId)
         .where(
           'billingPeriodStart',
-          isEqualTo: Timestamp.fromDate(billingPeriodStart),
+          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
         )
         .where('type', isEqualTo: type.name)
         .limit(1)
@@ -213,11 +242,14 @@ class MonthlyBillDataSource {
 
     _validateRequiredId(normalizedTenantUserId, 'Tenant User ID');
 
-    final periodStart = Timestamp.fromDate(billingPeriodStart);
+    final normalizedPeriodStart = _normalizeMonthStart(billingPeriodStart);
 
     final snapshot = await _collection
         .where('tenantUserId', isEqualTo: normalizedTenantUserId)
-        .where('billingPeriodStart', isEqualTo: periodStart)
+        .where(
+          'billingPeriodStart',
+          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
+        )
         .get();
 
     return snapshot.docs.map(MonthlyBillModel.fromFirestore).toList();
@@ -258,12 +290,14 @@ class MonthlyBillDataSource {
 
     _validateRequiredId(normalizedPropertyId, 'Property ID');
 
+    final normalizedPeriodStart = _normalizeMonthStart(billingPeriodStart);
+
     final snapshot = await _collection
         .where('ownerId', isEqualTo: normalizedOwnerId)
         .where('propertyId', isEqualTo: normalizedPropertyId)
         .where(
           'billingPeriodStart',
-          isEqualTo: Timestamp.fromDate(billingPeriodStart),
+          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
         )
         .orderBy('unitId')
         .get();
@@ -288,7 +322,6 @@ class MonthlyBillDataSource {
 
     final snapshot = await _collection
         .where('ownerId', isEqualTo: normalizedOwnerId)
-        .where('propertyId', isEqualTo: normalizedPropertyId)
         .orderBy('billingPeriodStart', descending: true)
         .get();
 
@@ -359,40 +392,86 @@ class MonthlyBillDataSource {
     }
 
     // ------------------------------------------------------------------------
-    // EXPLICIT AMOUNT
+    // PAID AMOUNT VALIDATION
     // ------------------------------------------------------------------------
     //
-    // Important distinction:
+    // The bill cannot be reduced below the amount already paid.
     //
-    // Generated variable bill:
-    //     amount = 0
-    //     status = pending
+    // Example:
     //
-    // Owner explicitly enters:
-    //     amount = 0
+    // bill amount = 1000
+    // paid amount = 800
     //
-    // That is a real finalized amount, so it becomes unpaid,
-    // rather than remaining pending.
-    //
-    // Therefore:
-    //     amount >= 0  → finalized
-    //     pending      → only when generated initially
-    //
+    // New amount cannot be 500.
     // ------------------------------------------------------------------------
 
-    final newStatus = existing.paidAmount >= amount
-        ? MonthlyBillStatus.paid
-        : existing.paidAmount > 0
-        ? MonthlyBillStatus.partiallyPaid
-        : MonthlyBillStatus.unpaid;
+    if (existing.paidAmount > amount) {
+      throw StateError(
+        'Bill amount cannot be less than the amount already paid.',
+      );
+    }
 
-    final updated = existing.copyWithModel(
-      amount: amount,
-      status: newStatus,
-      updatedAt: DateTime.now(),
-    );
+    // ------------------------------------------------------------------------
+    // TRANSACTION-SAFE UPDATE
+    // ------------------------------------------------------------------------
 
-    await document.update(updated.toFirestore());
+    final updated = await _firestore.runTransaction<MonthlyBillModel?>((
+      transaction,
+    ) async {
+      final currentSnapshot = await transaction.get(document);
+
+      if (!currentSnapshot.exists) {
+        return null;
+      }
+
+      final current = MonthlyBillModel.fromFirestore(currentSnapshot);
+
+      // Prevent stale data from silently overwriting another update.
+      if (current.updatedAt.isAtSameMomentAs(existing.updatedAt) == false) {
+        throw StateError(
+          'This billing record was updated by another operation. '
+          'Please reload and try again.',
+        );
+      }
+
+      if (current.valueType != BillingValueType.variable) {
+        throw StateError('Only variable bills can have their amount updated.');
+      }
+
+      if (current.type == MonthlyBillType.rent) {
+        throw StateError(
+          'Generated rent bills cannot be edited. '
+          'Use a replacement or adjustment workflow.',
+        );
+      }
+
+      if (current.status != MonthlyBillStatus.pending &&
+          current.status != MonthlyBillStatus.unpaid) {
+        throw StateError(
+          'Only pending or unpaid variable bills '
+          'can have their amount entered or updated.',
+        );
+      }
+
+      if (current.paidAmount > amount) {
+        throw StateError(
+          'Bill amount cannot be less than the amount already paid.',
+        );
+      }
+
+      final updatedBill = current.copyWithModel(
+        amount: amount,
+        status: _resolveStatusAfterAmountUpdate(
+          paidAmount: current.paidAmount,
+          amount: amount,
+        ),
+        updatedAt: DateTime.now(),
+      );
+
+      transaction.update(document, updatedBill.toFirestore());
+
+      return updatedBill;
+    });
 
     return updated;
   }
@@ -418,6 +497,14 @@ class MonthlyBillDataSource {
 
     final existing = MonthlyBillModel.fromFirestore(snapshot);
 
+    if (existing.status == MonthlyBillStatus.paid) {
+      throw StateError('A paid billing record cannot be cancelled.');
+    }
+
+    if (existing.status == MonthlyBillStatus.cancelled) {
+      return existing;
+    }
+
     final updated = existing.copyWithModel(
       status: MonthlyBillStatus.cancelled,
       updatedAt: DateTime.now(),
@@ -429,19 +516,55 @@ class MonthlyBillDataSource {
   }
 
   // ==========================================================================
-  // HELPERS
+  // STATUS
+  // ==========================================================================
+
+  MonthlyBillStatus _resolveStatusAfterAmountUpdate({
+    required double paidAmount,
+    required double amount,
+  }) {
+    if (amount <= 0) {
+      return MonthlyBillStatus.unpaid;
+    }
+
+    if (paidAmount >= amount) {
+      return MonthlyBillStatus.paid;
+    }
+
+    if (paidAmount > 0) {
+      return MonthlyBillStatus.partiallyPaid;
+    }
+
+    return MonthlyBillStatus.unpaid;
+  }
+
+  // ==========================================================================
+  // DATE HELPERS
+  // ==========================================================================
+
+  DateTime _normalizeMonthStart(DateTime date) {
+    return DateTime(date.year, date.month, 1);
+  }
+
+  // ==========================================================================
+  // PERIOD KEY
+  // ==========================================================================
+
+  String _formatPeriodKey(DateTime date) {
+    final year = date.year.toString().padLeft(4, '0');
+
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$year-$month';
+  }
+
+  // ==========================================================================
+  // VALIDATION
   // ==========================================================================
 
   void _validateRequiredId(String value, String label) {
     if (value.isEmpty) {
       throw ArgumentError('$label cannot be empty.');
     }
-  }
-
-  String _formatPeriodKey(DateTime date) {
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-
-    return '$year-$month';
   }
 }

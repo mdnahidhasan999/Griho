@@ -76,14 +76,6 @@ class GenerateMonthlyBills {
       );
     }
 
-    // Due dates are allowed to fall after the billing period.
-    //
-    // Example:
-    // October billing:
-    // billing period = Oct 1 → Nov 1
-    // due date        = Nov 10
-    //
-    // Therefore we only reject a due date before the billing period starts.
     if (dueDate.isBefore(billingPeriodStart)) {
       throw ArgumentError('Due date cannot be before billing period start.');
     }
@@ -130,17 +122,6 @@ class GenerateMonthlyBills {
         // =====================================================================
         // RENT IS NOT GENERATED HERE
         // =====================================================================
-        //
-        // Rent requires:
-        //
-        // 1. tenancy start/end
-        // 2. calendar-month overlap
-        // 3. actual chargeable days
-        // 4. historical rent-rate segments
-        // 5. rent-rate effectiveFrom/effectiveTo boundaries
-        //
-        // Therefore rent remains in GenerateMonthlyRent.
-        //
 
         if (billType == MonthlyBillType.rent) {
           continue;
@@ -162,8 +143,7 @@ class GenerateMonthlyBills {
         if (existingBill != null) {
           // Already generated.
           //
-          // Do not modify the historical bill.
-          // Do not generate a replacement automatically.
+          // Historical bills must never be replaced automatically.
           continue;
         }
 
@@ -211,8 +191,8 @@ class GenerateMonthlyBills {
 
           generatedBills.add(bill);
         } on StateError catch (error) {
-          // Another generation request may have created the same
-          // bill after our read check but before this create.
+          // Another generation request may have created the same bill
+          // after our read check but before this create.
           //
           // The datasource transaction is the final protection.
           //
@@ -227,19 +207,34 @@ class GenerateMonthlyBills {
     return generatedBills;
   }
 
-  // ==========================================================================
-  // RESOLVE RULES FOR TARGET
-  // ==========================================================================
+  // ===========================================================================
+  // RULE RESOLUTION
+  // ===========================================================================
 
-  /// Resolves one applicable rule per charge type.
+  /// Resolves exactly one billing rule for each charge type.
   ///
-  /// Scope priority:
+  /// Scope precedence:
   ///
-  /// Tenant > Unit > Floor > Property
+  /// tenant > unit > floor > property
   ///
-  /// This means a tenant-specific rule overrides a unit rule,
-  /// a unit rule overrides a floor rule, and a floor rule overrides
-  /// a property-wide rule.
+  /// If multiple rules have the same scope, the rule with the latest
+  /// effectiveFrom wins.
+  ///
+  /// This is important for variable monthly overrides.
+  ///
+  /// Example:
+  ///
+  /// Fixed Water:
+  ///   Property = ৳500
+  ///
+  /// Variable Water:
+  ///   Property = October actual amount
+  ///
+  /// During October both rules may be active.
+  /// The variable rule has the later effectiveFrom, so it wins.
+  ///
+  /// During November the variable rule is no longer effective and the
+  /// fixed rule becomes applicable again.
   List<BillingRule> _resolveRulesForTarget({
     required List<BillingRule> rules,
     required MonthlyBillTarget target,
@@ -260,9 +255,20 @@ class GenerateMonthlyBills {
       }
 
       matchingRules.sort((a, b) {
-        return _scopePriority(
+        // First: more specific scope wins.
+        final priorityComparison = _scopePriority(
           b.scopeType,
         ).compareTo(_scopePriority(a.scopeType));
+
+        if (priorityComparison != 0) {
+          return priorityComparison;
+        }
+
+        // Second: within the same scope, the most recent rule wins.
+        //
+        // This allows a variable monthly rule to override a fixed rule
+        // without permanently replacing it.
+        return b.effectiveFrom.compareTo(a.effectiveFrom);
       });
 
       result.add(matchingRules.first);
@@ -271,9 +277,9 @@ class GenerateMonthlyBills {
     return result;
   }
 
-  // ==========================================================================
+  // ===========================================================================
   // SCOPE MATCHING
-  // ==========================================================================
+  // ===========================================================================
 
   bool _matchesScope({
     required BillingRule rule,
@@ -294,9 +300,9 @@ class GenerateMonthlyBills {
     }
   }
 
-  // ==========================================================================
+  // ===========================================================================
   // SCOPE PRIORITY
-  // ==========================================================================
+  // ===========================================================================
 
   int _scopePriority(BillingScopeType scope) {
     switch (scope) {
@@ -314,9 +320,9 @@ class GenerateMonthlyBills {
     }
   }
 
-  // ==========================================================================
+  // ===========================================================================
   // BILL TYPE MAPPING
-  // ==========================================================================
+  // ===========================================================================
 
   MonthlyBillType _toMonthlyBillType(BillingChargeType type) {
     switch (type) {
@@ -340,9 +346,9 @@ class GenerateMonthlyBills {
     }
   }
 
-  // ==========================================================================
+  // ===========================================================================
   // DUPLICATE ERROR DETECTION
-  // ==========================================================================
+  // ===========================================================================
 
   bool _isDuplicateBillError(StateError error) {
     return error.message.toString().contains(
