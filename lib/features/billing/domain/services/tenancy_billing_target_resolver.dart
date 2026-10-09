@@ -5,9 +5,7 @@ import '../../../tenants/domain/entities/tenant.dart';
 class TenancyBillingTargetResolver {
   final TenancyHistoryRepository _repository;
 
-  const TenancyBillingTargetResolver({
-    required this._repository,
-  });
+  const TenancyBillingTargetResolver({required this._repository});
 
   /// Resolves all tenancies that overlap the requested billing period.
   ///
@@ -101,6 +99,7 @@ class TenancyBillingTargetResolver {
             unitId: history.unitId,
             tenantId: history.tenantId,
             tenantUserId: history.tenantUserId,
+            tenancyHistoryId: history.id,
             tenancyStart: overlap.$1,
             tenancyEnd: overlap.$2,
           ),
@@ -165,6 +164,7 @@ class TenancyBillingTargetResolver {
           unitId: unitId,
           tenantId: tenant.id,
           tenantUserId: tenant.userId,
+          tenancyHistoryId: null,
           tenancyStart: overlapStart,
           tenancyEnd: overlapEnd,
         ),

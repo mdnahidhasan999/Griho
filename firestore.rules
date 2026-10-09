@@ -1571,7 +1571,13 @@ service cloud.firestore {
              'unit',
              'tenant'
            ]
-
+        // A property-level rule must reference the actual property ID.
+        && (
+          request.resource.data.scopeType != 'property'
+          ||
+          request.resource.data.scopeId
+             == request.resource.data.propertyId
+        )
 
         // ==========================================================
         // CHARGE TYPE
@@ -1750,7 +1756,13 @@ service cloud.firestore {
 
         && request.resource.data.chargeType
            == resource.data.chargeType
-
+        // A property-level rule must reference the actual property ID.
+        && (
+          request.resource.data.scopeType != 'property'
+          ||
+          request.resource.data.scopeId
+             == request.resource.data.propertyId
+        )
 
         // ==========================================================
         // VALUE TYPE
@@ -2017,7 +2029,29 @@ service cloud.firestore {
              < billingRule.effectiveTo
         )
 
+&& (
 
+          billingRule.isActive == true
+
+          ||
+
+          (
+
+            billingRule.valueType == 'fixed'
+
+            &&
+
+            billingRule.effectiveTo is timestamp
+
+            &&
+
+            request.resource.data.billingPeriodStart
+
+               < billingRule.effectiveTo
+
+          )
+
+        )
         // ==========================================================
         // BILLING RULE SCOPE
         // ==========================================================
@@ -2415,13 +2449,13 @@ service cloud.firestore {
         // ==========================================================
 
         && (
-          (
-            request.resource.data.status == 'unpaid'
+                  (
+                    request.resource.data.status == 'unpaid'
 
-            && request.resource.data.amount > 0
+                    && request.resource.data.amount >= 0
 
-            && request.resource.data.paidAmount == 0
-          )
+                    && request.resource.data.paidAmount == 0
+                  )
 
           ||
 

@@ -12,6 +12,7 @@ class MonthlyBillModel extends MonthlyBill {
     required super.unitId,
     required super.tenantId,
     super.tenantUserId,
+    super.tenancyHistoryId,
     required super.sourceRuleId,
     required super.type,
     required super.valueType,
@@ -46,6 +47,7 @@ class MonthlyBillModel extends MonthlyBill {
       unitId: _readRequiredString(data, 'unitId'),
       tenantId: _readRequiredString(data, 'tenantId'),
       tenantUserId: _readOptionalString(data, 'tenantUserId'),
+      tenancyHistoryId: _readOptionalString(data, 'tenancyHistoryId'),
       sourceRuleId: _readRequiredString(data, 'sourceRuleId'),
       type: _readBillType(data),
       valueType: _readBillValueType(data),
@@ -72,6 +74,7 @@ class MonthlyBillModel extends MonthlyBill {
       'unitId': unitId,
       'tenantId': tenantId,
       'tenantUserId': tenantUserId,
+      'tenancyHistoryId': tenancyHistoryId,
       'sourceRuleId': sourceRuleId,
       'type': type.name,
       'valueType': valueType.name,
@@ -98,6 +101,8 @@ class MonthlyBillModel extends MonthlyBill {
     String? unitId,
     String? tenantId,
     String? tenantUserId,
+    String? tenancyHistoryId,
+    bool clearTenancyHistoryId = false,
     String? sourceRuleId,
     MonthlyBillType? type,
     BillingValueType? valueType,
@@ -121,6 +126,9 @@ class MonthlyBillModel extends MonthlyBill {
       tenantUserId: clearTenantUserId
           ? null
           : tenantUserId ?? this.tenantUserId,
+      tenancyHistoryId: clearTenancyHistoryId
+          ? null
+          : tenancyHistoryId ?? this.tenancyHistoryId,
       sourceRuleId: sourceRuleId ?? this.sourceRuleId,
       type: type ?? this.type,
       valueType: valueType ?? this.valueType,

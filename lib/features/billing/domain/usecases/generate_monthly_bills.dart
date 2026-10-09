@@ -16,7 +16,8 @@ class GenerateMonthlyBills {
   const GenerateMonthlyBills({
     required this._billingRuleRepository,
     required this._monthlyBillRepository,
-  });
+
+    });
 
 
   Future<List<MonthlyBill>> call({
@@ -141,6 +142,7 @@ class GenerateMonthlyBills {
           unitId: normalizedTarget.unitId,
           tenantId: normalizedTarget.tenantId,
           tenantUserId: normalizedTarget.tenantUserId,
+          tenancyHistoryId: normalizedTarget.tenancyHistoryId,
           sourceRuleId: rule.id,
           type: billType,
           valueType: rule.valueType,
@@ -339,12 +341,14 @@ class MonthlyBillTarget {
   final String unitId;
   final String tenantId;
   final String? tenantUserId;
+  final String? tenancyHistoryId;
 
   const MonthlyBillTarget({
     required this.floorId,
     required this.unitId,
     required this.tenantId,
     this.tenantUserId,
+    this.tenancyHistoryId,
   });
 
   /// Returns a normalized target or null when a required ID is missing.
@@ -360,6 +364,7 @@ class MonthlyBillTarget {
     }
 
     final normalizedTenantUserId = tenantUserId?.trim();
+    final normalizedTenancyHistoryId = tenancyHistoryId?.trim();
 
     return MonthlyBillTarget(
       floorId: normalizedFloorId,
@@ -370,6 +375,11 @@ class MonthlyBillTarget {
           normalizedTenantUserId.isEmpty
           ? null
           : normalizedTenantUserId,
+      tenancyHistoryId:
+          normalizedTenancyHistoryId == null ||
+                  normalizedTenancyHistoryId.isEmpty
+              ? null
+              : normalizedTenancyHistoryId,
     );
   }
 }

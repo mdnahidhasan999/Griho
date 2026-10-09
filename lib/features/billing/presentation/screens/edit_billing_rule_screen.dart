@@ -22,46 +22,35 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _amountController;
 
-  late BillingChargeType _chargeType;
-  late BillingValueType _valueType;
-
-  /// Effective month is always normalized to the first day of the month.
   late DateTime _effectiveFrom;
-
-  /// Effective end month is also normalized to the first day of the month.
   DateTime? _effectiveTo;
 
-  bool _isActive = true;
+  late bool _isActive;
+
   bool _isSaving = false;
   bool _isDeactivating = false;
+
+  bool get _isBusy => _isSaving || _isDeactivating;
+
+  BillingRule get _rule => widget.rule;
+
+  bool get _isFixed => _rule.valueType == BillingValueType.fixed;
 
   @override
   void initState() {
     super.initState();
 
-    final rule = widget.rule;
+    _titleController = TextEditingController(text: _rule.title ?? '');
 
-    _titleController = TextEditingController(text: rule.title ?? '');
-    _amountController = TextEditingController(
-      text: rule.amount.toString(),
-    );
+    _amountController = TextEditingController(text: _rule.amount.toString());
 
-    _chargeType = rule.chargeType;
-    _valueType = rule.valueType;
+    _effectiveFrom = _normalizeMonth(_rule.effectiveFrom);
 
-    // Normalize existing effective date to month start.
-    _effectiveFrom = DateTime(
-      rule.effectiveFrom.year,
-      rule.effectiveFrom.month,
-      1,
-    );
-
-    // Normalize existing effective-to date to month start.
-    _effectiveTo = rule.effectiveTo == null
+    _effectiveTo = _rule.effectiveTo == null
         ? null
-        : DateTime(rule.effectiveTo!.year, rule.effectiveTo!.month, 1);
+        : _normalizeMonth(_rule.effectiveTo!);
 
-    _isActive = rule.isActive;
+    _isActive = _rule.isActive;
   }
 
   @override
@@ -91,12 +80,10 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
             const SizedBox(height: 24),
 
-            // ============================================================
             // TITLE
-            // ============================================================
             TextFormField(
               controller: _titleController,
-              enabled: !_isSaving && !_isDeactivating,
+              enabled: !_isBusy,
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'Title',
@@ -108,11 +95,12 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
             const SizedBox(height: 16),
 
-            // ============================================================
             // CHARGE TYPE
-            // ============================================================
+            //
+            // Charge type is immutable for an existing rule.
+            // Create a new billing rule to use another charge type.
             DropdownButtonFormField<BillingChargeType>(
-              initialValue: _chargeType,
+              initialValue: _rule.chargeType,
               decoration: const InputDecoration(
                 labelText: 'Charge Type',
                 prefixIcon: Icon(Icons.receipt_long_outlined),
@@ -124,26 +112,28 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                   child: Text(_chargeTypeLabel(type)),
                 );
               }).toList(),
-              onChanged: _isSaving || _isDeactivating
-                  ? null
-                  : (value) {
-                if (value == null) {
-                  return;
-                }
+              onChanged: null,
+            ),
 
-                setState(() {
-                  _chargeType = value;
-                });
-              },
+            const SizedBox(height: 8),
+
+            Text(
+              'Charge Type cannot be changed for an existing rule. '
+              'Create a new rule to use another charge type.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
 
             const SizedBox(height: 16),
 
-            // ============================================================
             // VALUE TYPE
-            // ============================================================
+            //
+            // Fixed and Variable are not interchangeable when editing
+            // an existing rule. This avoids a mismatch with Firestore
+            // validation and recurring-rule versioning.
             DropdownButtonFormField<BillingValueType>(
-              initialValue: _valueType,
+              initialValue: _rule.valueType,
               decoration: const InputDecoration(
                 labelText: 'Value Type',
                 prefixIcon: Icon(Icons.tune_outlined),
@@ -155,27 +145,28 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                   child: Text(_valueTypeLabel(type)),
                 );
               }).toList(),
-              onChanged: _isSaving || _isDeactivating
-                  ? null
-                  : (value) {
-                if (value == null) {
-                  return;
-                }
-
-                setState(() {
-                  _valueType = value;
-                });
-              },
+              onChanged: null,
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
-            // ============================================================
+            Text(
+              _isFixed
+                  ? 'Fixed rules recur according to their effective dates.'
+                  : 'Variable rules apply to one month only. '
+                        'Their amount is entered here and the rule expires '
+                        'automatically at the start of the next month.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
             // AMOUNT
-            // ============================================================
             TextFormField(
               controller: _amountController,
-              enabled: !_isSaving && !_isDeactivating,
+              enabled: !_isBusy,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
@@ -187,100 +178,74 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                 prefixIcon: Icon(Icons.payments_outlined),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                final text = value?.trim() ?? '';
-
-                if (text.isEmpty) {
-                  return 'Amount is required.';
-                }
-
-                final amount = double.tryParse(text);
-
-                if (amount == null) {
-                  return 'Enter a valid amount.';
-                }
-
-                if (amount.isNaN || amount.isInfinite) {
-                  return 'Enter a valid amount.';
-                }
-
-                if (amount < 0) {
-                  return 'Amount cannot be negative.';
-                }
-
-                return null;
-              },
+              validator: _validateAmount,
             ),
 
             const SizedBox(height: 24),
 
-            if (_valueType == BillingValueType.fixed)
-              const SizedBox(height: 24),
-
-            // ============================================================
             // EFFECTIVE MONTH
-            // ============================================================
             _MonthField(
               label: 'Effective Month',
               month: _effectiveFrom,
               icon: Icons.calendar_month_outlined,
-              enabled: !_isSaving && !_isDeactivating,
+              enabled: !_isBusy,
               onTap: () => _selectEffectiveMonth(context),
             ),
 
             const SizedBox(height: 16),
 
-            // ============================================================
             // END MONTH
-            // ============================================================
-            _MonthField(
-              label: 'End Month',
-              month: _effectiveTo,
-              icon: Icons.event_busy_outlined,
-              enabled: !_isSaving && !_isDeactivating,
-              emptyText: 'No end month',
-              onTap: () => _selectEffectiveTo(context),
-              onClear: _effectiveTo == null
-                  ? null
-                  : () {
-                setState(() {
-                  _effectiveTo = null;
-                });
-              },
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(
-              'End Month is optional. If selected, it cannot be before the Effective Month.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            //
+            // Only Fixed rules can have a manually selected end month.
+            // Variable rules always end at the next month's start.
+            if (_isFixed) ...[
+              _MonthField(
+                label: 'End Month',
+                month: _effectiveTo,
+                icon: Icons.event_busy_outlined,
+                enabled: !_isBusy,
+                emptyText: 'No end month',
+                onTap: () => _selectEffectiveTo(context),
+                onClear: _effectiveTo == null
+                    ? null
+                    : () {
+                        setState(() {
+                          _effectiveTo = null;
+                        });
+                      },
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                'End Month is optional. It represents the exclusive '
+                'end date of this rule. For example, an end date of '
+                'November 1 means the rule does not apply during November.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
 
             const SizedBox(height: 20),
 
-            // ============================================================
             // ACTIVE STATUS
-            // ============================================================
             Card(
               child: SwitchListTile(
                 value: _isActive,
-                onChanged: _isSaving || _isDeactivating
+                onChanged: _isBusy
                     ? null
                     : (value) {
-                  setState(() {
-                    _isActive = value;
-                  });
-                },
+                        setState(() {
+                          _isActive = value;
+                        });
+                      },
                 title: const Text(
                   'Active',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 subtitle: Text(
                   _isActive
-                      ? 'This billing rule is currently active.'
-                      : 'This billing rule is inactive.',
+                      ? 'This billing rule is marked active.'
+                      : 'This billing rule is marked inactive.',
                 ),
                 secondary: Icon(
                   _isActive
@@ -292,21 +257,17 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
             const SizedBox(height: 24),
 
-            // ============================================================
-            // UPDATE BUTTON
-            // ============================================================
+            // SAVE BUTTON
             SizedBox(
               height: 52,
               child: FilledButton.icon(
-                onPressed: _isSaving || _isDeactivating
-                    ? null
-                    : _updateBillingRule,
+                onPressed: _isBusy ? null : _updateBillingRule,
                 icon: _isSaving
                     ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.save_outlined),
                 label: Text(_isSaving ? 'Saving...' : 'Save Changes'),
               ),
@@ -314,22 +275,18 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
             const SizedBox(height: 12),
 
-            // ============================================================
             // DEACTIVATE BUTTON
-            // ============================================================
-            if (widget.rule.isActive)
+            if (_rule.isActive)
               SizedBox(
                 height: 52,
                 child: OutlinedButton.icon(
-                  onPressed: _isSaving || _isDeactivating
-                      ? null
-                      : _confirmDeactivate,
+                  onPressed: _isBusy ? null : _confirmDeactivate,
                   icon: _isDeactivating
                       ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Icon(Icons.pause_circle_outline),
                   label: Text(
                     _isDeactivating ? 'Deactivating...' : 'Deactivate Rule',
@@ -347,7 +304,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
   // ========================================================================
 
   Widget _buildHeader(ThemeData theme) {
-    final title = widget.rule.title?.trim();
+    final title = _rule.title?.trim();
 
     return Card(
       child: Padding(
@@ -362,7 +319,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                _chargeTypeIcon(_chargeType),
+                _chargeTypeIcon(_rule.chargeType),
                 color: theme.colorScheme.onPrimaryContainer,
               ),
             ),
@@ -374,14 +331,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                   Text(
                     title?.isNotEmpty == true
                         ? title!
-                        : _chargeTypeLabel(_chargeType),
+                        : _chargeTypeLabel(_rule.chargeType),
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Edit billing rule details',
+                    '${_valueTypeLabel(_rule.valueType)} billing rule',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -396,7 +353,31 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
   }
 
   // ========================================================================
-  // UPDATE
+  // AMOUNT VALIDATION
+  // ========================================================================
+
+  String? _validateAmount(String? value) {
+    final text = value?.trim() ?? '';
+
+    if (text.isEmpty) {
+      return 'Amount is required.';
+    }
+
+    final amount = double.tryParse(text);
+
+    if (amount == null || amount.isNaN || amount.isInfinite) {
+      return 'Enter a valid amount.';
+    }
+
+    if (amount < 0) {
+      return 'Amount cannot be negative.';
+    }
+
+    return null;
+  }
+
+  // ========================================================================
+  // UPDATE BILLING RULE
   // ========================================================================
 
   Future<void> _updateBillingRule() async {
@@ -404,25 +385,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
       return;
     }
 
-    // End month cannot be before effective month.
-    if (_effectiveTo != null &&
-        _effectiveTo!.isBefore(_effectiveFrom)) {
-      _showError(
-        'End Month cannot be before Effective Month.',
-      );
+    if (_effectiveTo != null && !_effectiveTo!.isAfter(_effectiveFrom)) {
+      _showError('End Month must be after Effective Month.');
       return;
     }
 
-    final amount = double.tryParse(
-      _amountController.text.trim(),
-    );
+    final amount = double.tryParse(_amountController.text.trim());
 
-    if (amount == null) {
-      _showError('Please enter a valid amount.');
-      return;
-    }
-
-    if (amount.isNaN || amount.isInfinite) {
+    if (amount == null || amount.isNaN || amount.isInfinite) {
       _showError('Please enter a valid amount.');
       return;
     }
@@ -438,22 +408,22 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
     try {
       final request = UpdateBillingRuleRequest(
-        ruleId: widget.rule.id,
-        ownerId: widget.rule.ownerId,
-        chargeType: _chargeType,
-        valueType: _valueType,
+        ruleId: _rule.id,
+        ownerId: _rule.ownerId,
+
+        // Immutable fields retain their existing values.
+        chargeType: _rule.chargeType,
+        valueType: _rule.valueType,
+
         amount: amount,
         title: _normalizedTitle,
+        effectiveFrom: _normalizeMonth(_effectiveFrom),
 
-        effectiveFrom: _normalizeMonth(
-          _effectiveFrom,
-        ),
-
-        effectiveTo: _effectiveTo == null
-            ? null
-            : _normalizeMonth(
-          _effectiveTo!,
-        ),
+        // Fixed rules can have an optional end date.
+        // Variable rules automatically end next month in the datasource.
+        effectiveTo: _isFixed && _effectiveTo != null
+            ? _normalizeMonth(_effectiveTo!)
+            : null,
 
         isActive: _isActive,
       );
@@ -465,11 +435,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Billing rule updated successfully.',
-          ),
-        ),
+        const SnackBar(content: Text('Billing rule updated successfully.')),
       );
 
       context.pop(true);
@@ -478,9 +444,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
         return;
       }
 
-      _showError(
-        _cleanErrorMessage(error),
-      );
+      _showError(_cleanErrorMessage(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -491,7 +455,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
   }
 
   // ========================================================================
-  // DEACTIVATE
+  // DEACTIVATE BILLING RULE
   // ========================================================================
 
   Future<void> _confirmDeactivate() async {
@@ -501,8 +465,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
         return AlertDialog(
           title: const Text('Deactivate Billing Rule?'),
           content: const Text(
-            'This billing rule will no longer be active. '
-                'You can keep its record for historical purposes.',
+            'This billing rule will be marked inactive. '
+            'Its record will be retained for historical purposes.',
           ),
           actions: [
             TextButton(
@@ -536,8 +500,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
     try {
       await ref.read(deactivateBillingRuleProvider)(
-        ruleId: widget.rule.id,
-        ownerId: widget.rule.ownerId,
+        ruleId: _rule.id,
+        ownerId: _rule.ownerId,
       );
 
       if (!mounted) {
@@ -572,8 +536,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     final selected = await _showMonthPicker(
       context: context,
       initialMonth: _effectiveFrom,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      firstDate: DateTime(2000, 1),
+      lastDate: DateTime(2100, 12),
       title: 'Select Effective Month',
     );
 
@@ -583,10 +547,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
     final normalized = _normalizeMonth(selected);
 
-    // If End Month already exists, Effective Month
-    // cannot move after it.
-    if (_effectiveTo != null && normalized.isAfter(_effectiveTo!)) {
-      _showError('Effective Month cannot be after End Month.');
+    if (_effectiveTo != null && !normalized.isBefore(_effectiveTo!)) {
+      _showError('Effective Month must be before End Month.');
       return;
     }
 
@@ -602,9 +564,9 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
   Future<void> _selectEffectiveTo(BuildContext context) async {
     final selected = await _showMonthPicker(
       context: context,
-      initialMonth: _effectiveTo ?? _effectiveFrom,
-      firstDate: _effectiveFrom,
-      lastDate: DateTime(2100),
+      initialMonth: _effectiveTo ?? _nextMonth(_effectiveFrom),
+      firstDate: _nextMonth(_effectiveFrom),
+      lastDate: DateTime(2100, 12),
       title: 'Select End Month',
     );
 
@@ -614,8 +576,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
     final normalized = _normalizeMonth(selected);
 
-    if (normalized.isBefore(_effectiveFrom)) {
-      _showError('End Month cannot be before Effective Month.');
+    if (!normalized.isAfter(_effectiveFrom)) {
+      _showError('End Month must be after Effective Month.');
       return;
     }
 
@@ -635,10 +597,18 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     required DateTime lastDate,
     required String title,
   }) async {
-    DateTime selectedMonth = _normalizeMonth(initialMonth);
-
     final firstMonth = _normalizeMonth(firstDate);
     final lastMonth = _normalizeMonth(lastDate);
+
+    var selectedMonth = _normalizeMonth(initialMonth);
+
+    if (selectedMonth.isBefore(firstMonth)) {
+      selectedMonth = firstMonth;
+    }
+
+    if (selectedMonth.isAfter(lastMonth)) {
+      selectedMonth = lastMonth;
+    }
 
     return showDialog<DateTime>(
       context: context,
@@ -654,9 +624,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ======================================================
                     // YEAR NAVIGATION
-                    // ======================================================
                     Row(
                       children: [
                         IconButton(
@@ -664,18 +632,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           onPressed: selectedMonth.year <= firstMonth.year
                               ? null
                               : () {
-                            final newYear = selectedMonth.year - 1;
-
-                            final newMonth = DateTime(
-                              newYear,
-                              selectedMonth.month,
-                              1,
-                            );
-
-                            setDialogState(() {
-                              selectedMonth = newMonth;
-                            });
-                          },
+                                  setDialogState(() {
+                                    selectedMonth = DateTime(
+                                      selectedMonth.year - 1,
+                                      selectedMonth.month,
+                                      1,
+                                    );
+                                  });
+                                },
                           icon: const Icon(Icons.chevron_left),
                         ),
                         Expanded(
@@ -693,18 +657,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           onPressed: selectedMonth.year >= lastMonth.year
                               ? null
                               : () {
-                            final newYear = selectedMonth.year + 1;
-
-                            final newMonth = DateTime(
-                              newYear,
-                              selectedMonth.month,
-                              1,
-                            );
-
-                            setDialogState(() {
-                              selectedMonth = newMonth;
-                            });
-                          },
+                                  setDialogState(() {
+                                    selectedMonth = DateTime(
+                                      selectedMonth.year + 1,
+                                      selectedMonth.month,
+                                      1,
+                                    );
+                                  });
+                                },
                           icon: const Icon(Icons.chevron_right),
                         ),
                       ],
@@ -712,19 +672,17 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
                     const SizedBox(height: 8),
 
-                    // ======================================================
                     // MONTH GRID
-                    // ======================================================
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        childAspectRatio: 1.8,
-                      ),
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 8,
+                            childAspectRatio: 1.8,
+                          ),
                       itemCount: 12,
                       itemBuilder: (context, index) {
                         final monthNumber = index + 1;
@@ -740,7 +698,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
                         final isSelected =
                             month.year == selectedMonth.year &&
-                                month.month == selectedMonth.month;
+                            month.month == selectedMonth.month;
 
                         final enabled = !isBefore && !isAfter;
 
@@ -748,8 +706,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           onPressed: !enabled
                               ? null
                               : () {
-                            Navigator.of(dialogContext).pop(month);
-                          },
+                                  Navigator.of(dialogContext).pop(month);
+                                },
                           style: OutlinedButton.styleFrom(
                             backgroundColor: isSelected
                                 ? theme.colorScheme.primaryContainer
@@ -793,6 +751,10 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     return DateTime(date.year, date.month, 1);
   }
 
+  DateTime _nextMonth(DateTime date) {
+    return DateTime(date.year, date.month + 1, 1);
+  }
+
   String? get _normalizedTitle {
     final value = _titleController.text.trim();
 
@@ -819,19 +781,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     switch (type) {
       case BillingChargeType.water:
         return 'Water';
-
       case BillingChargeType.gas:
         return 'Gas';
-
       case BillingChargeType.garbage:
         return 'Garbage';
-
       case BillingChargeType.serviceCharge:
         return 'Service Charge';
-
       case BillingChargeType.electricity:
         return 'Electricity';
-
       case BillingChargeType.other:
         return 'Other';
     }
@@ -841,19 +798,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     switch (type) {
       case BillingChargeType.water:
         return Icons.water_drop_outlined;
-
       case BillingChargeType.gas:
         return Icons.local_fire_department_outlined;
-
       case BillingChargeType.garbage:
         return Icons.delete_outline;
-
       case BillingChargeType.serviceCharge:
         return Icons.build_outlined;
-
       case BillingChargeType.electricity:
         return Icons.bolt_outlined;
-
       case BillingChargeType.other:
         return Icons.receipt_long_outlined;
     }
@@ -863,7 +815,6 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     switch (type) {
       case BillingValueType.fixed:
         return 'Fixed';
-
       case BillingValueType.variable:
         return 'Variable';
     }
@@ -926,10 +877,10 @@ class _MonthField extends StatelessWidget {
           suffixIcon: onClear == null
               ? const Icon(Icons.arrow_drop_down)
               : IconButton(
-            tooltip: 'Clear',
-            onPressed: enabled ? onClear : null,
-            icon: const Icon(Icons.clear),
-          ),
+                  tooltip: 'Clear end month',
+                  onPressed: enabled ? onClear : null,
+                  icon: const Icon(Icons.clear),
+                ),
           border: const OutlineInputBorder(),
         ),
         child: Text(

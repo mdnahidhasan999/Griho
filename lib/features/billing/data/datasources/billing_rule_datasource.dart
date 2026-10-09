@@ -9,7 +9,7 @@ class BillingRuleDataSource {
   final FirebaseFirestore _firestore;
 
   BillingRuleDataSource({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'billingRules';
 
@@ -35,24 +35,19 @@ class BillingRuleDataSource {
 
     _validateTitle(chargeType: request.chargeType, title: request.title);
 
-    // All billing rules are month-based.
-    final normalizedEffectiveFrom = _normalizeMonthStart(request.effectiveFrom);
+    final effectiveFrom = _normalizeMonthStart(request.effectiveFrom);
 
-    // Variable rules are automatically valid for exactly one month.
-    //
-    // Example:
-    // October variable rule:
-    // effectiveFrom = 2026-10-01
-    // effectiveTo   = 2026-11-01
-    //
-    // The fixed rule remains active underneath it.
-    final normalizedEffectiveTo = request.valueType == BillingValueType.variable
-        ? _nextMonthStart(normalizedEffectiveFrom)
-        : request.effectiveTo;
+    // A variable rule is a one-month override.
+    // Its effectiveTo is exclusive and always points to the next month.
+    final effectiveTo = request.valueType == BillingValueType.variable
+        ? _nextMonthStart(effectiveFrom)
+        : request.effectiveTo == null
+        ? null
+        : _normalizeMonthStart(request.effectiveTo!);
 
     _validateEffectiveDates(
-      effectiveFrom: normalizedEffectiveFrom,
-      effectiveTo: normalizedEffectiveTo,
+      effectiveFrom: effectiveFrom,
+      effectiveTo: effectiveTo,
     );
 
     final relatedRulesSnapshot = await _getRelatedRules(
@@ -69,29 +64,27 @@ class BillingRuleDataSource {
 
     _validateNewRuleVersion(
       rules: relatedRules,
-      effectiveFrom: normalizedEffectiveFrom,
-      effectiveTo: normalizedEffectiveTo,
+      effectiveFrom: effectiveFrom,
+      effectiveTo: effectiveTo,
       valueType: request.valueType,
     );
 
-    // Only fixed rules participate in fixed-rule version closing.
-    //
-    // A variable rule is a monthly override and must NEVER become the
-    // previous fixed version that gets closed.
-    final previousRule = request.valueType == BillingValueType.fixed
+    // Only a new Fixed rule can close an earlier Fixed version.
+    // A Variable rule must never close the recurring Fixed rule.
+    final previousFixedRule = request.valueType == BillingValueType.fixed
         ? _findPreviousRule(
-      rules: relatedRules,
-      effectiveFrom: normalizedEffectiveFrom,
-      valueType: BillingValueType.fixed,
-    )
+            rules: relatedRules,
+            effectiveFrom: effectiveFrom,
+            valueType: BillingValueType.fixed,
+          )
         : null;
 
-    final nextRule = request.valueType == BillingValueType.fixed
+    final nextFixedRule = request.valueType == BillingValueType.fixed
         ? _findNextRule(
-      rules: relatedRules,
-      effectiveFrom: normalizedEffectiveFrom,
-      valueType: BillingValueType.fixed,
-    )
+            rules: relatedRules,
+            effectiveFrom: effectiveFrom,
+            valueType: BillingValueType.fixed,
+          )
         : null;
 
     final now = DateTime.now();
@@ -107,19 +100,23 @@ class BillingRuleDataSource {
       valueType: request.valueType,
       amount: request.amount,
       title: _normalizeNullableString(request.title),
-      effectiveFrom: normalizedEffectiveFrom,
-      effectiveTo: normalizedEffectiveTo,
+      effectiveFrom: effectiveFrom,
+      effectiveTo: effectiveTo,
       isActive: request.isActive,
       createdAt: now,
       updatedAt: now,
     );
 
     await _firestore.runTransaction((transaction) async {
-      if (previousRule != null &&
-          _shouldClosePreviousRule(previousRule, normalizedEffectiveFrom)) {
-        final previousDocument = _collection.doc(previousRule.id);
+      // Firestore transactions must complete all reads before writes.
+      DocumentSnapshot<Map<String, dynamic>>? previousSnapshot;
+      DocumentSnapshot<Map<String, dynamic>>? nextSnapshot;
 
-        final previousSnapshot = await transaction.get(previousDocument);
+      if (previousFixedRule != null &&
+          _shouldClosePreviousRule(previousFixedRule, effectiveFrom)) {
+        previousSnapshot = await transaction.get(
+          _collection.doc(previousFixedRule.id),
+        );
 
         if (!previousSnapshot.exists) {
           throw StateError('The previous billing rule no longer exists.');
@@ -131,21 +128,13 @@ class BillingRuleDataSource {
 
         _validatePreviousRuleStillMatches(
           currentPreviousRule,
-          previousRule,
-          normalizedEffectiveFrom,
+          previousFixedRule,
+          effectiveFrom,
         );
-
-        transaction.update(previousDocument, {
-          'effectiveTo': Timestamp.fromDate(normalizedEffectiveFrom),
-          'isActive': false,
-          'updatedAt': Timestamp.fromDate(now),
-        });
       }
 
-      if (nextRule != null) {
-        final nextDocument = _collection.doc(nextRule.id);
-
-        final nextSnapshot = await transaction.get(nextDocument);
+      if (nextFixedRule != null) {
+        nextSnapshot = await transaction.get(_collection.doc(nextFixedRule.id));
 
         if (!nextSnapshot.exists) {
           throw StateError('The future billing rule no longer exists.');
@@ -154,13 +143,22 @@ class BillingRuleDataSource {
         final currentNextRule = BillingRuleModel.fromFirestore(nextSnapshot);
 
         if (!currentNextRule.effectiveFrom.isAtSameMomentAs(
-          nextRule.effectiveFrom,
+          nextFixedRule.effectiveFrom,
         )) {
           throw StateError(
             'The future billing rule changed while '
-                'the operation was being processed.',
+            'the operation was being processed.',
           );
         }
+      }
+
+      // All reads are complete. Writes start here.
+      if (previousSnapshot != null && previousFixedRule != null) {
+        transaction.update(_collection.doc(previousFixedRule.id), {
+          'effectiveTo': Timestamp.fromDate(effectiveFrom),
+          'isActive': false,
+          'updatedAt': Timestamp.fromDate(now),
+        });
       }
 
       transaction.set(newDocument, newRule.toFirestore());
@@ -197,7 +195,6 @@ class BillingRuleDataSource {
     final normalizedPropertyId = propertyId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
-
     _validateRequiredId(normalizedPropertyId, 'Property ID');
 
     final snapshot = await _collection
@@ -217,23 +214,38 @@ class BillingRuleDataSource {
     required String propertyId,
     required DateTime date,
   }) async {
+    final periodStart = _normalizeMonthStart(date);
+
     final rules = await getPropertyBillingRules(
       ownerId: ownerId,
       propertyId: propertyId,
     );
 
     return rules.where((rule) {
-      if (date.isBefore(rule.effectiveFrom)) {
+      // The rule cannot apply before its effective start.
+      if (periodStart.isBefore(rule.effectiveFrom)) {
         return false;
       }
 
-
-      if (rule.effectiveTo != null && !date.isBefore(rule.effectiveTo!)) {
+      // effectiveTo is exclusive.
+      if (rule.effectiveTo != null &&
+          !periodStart.isBefore(rule.effectiveTo!)) {
         return false;
       }
 
+      // Inactive Variable rules must never generate new monthly bills.
+      // Variable rules are month-specific overrides.
+      if (!rule.isActive && rule.valueType == BillingValueType.variable) {
+        return false;
+      }
 
-      if (!rule.isActive && rule.effectiveTo == null) {
+      // An inactive Fixed rule with an effectiveTo can represent
+      // a historical version that was superseded by a newer Fixed rule.
+      //
+      // An inactive Fixed rule without an effectiveTo is not applicable.
+      if (!rule.isActive &&
+          rule.valueType == BillingValueType.fixed &&
+          rule.effectiveTo == null) {
         return false;
       }
 
@@ -252,15 +264,9 @@ class BillingRuleDataSource {
     final ownerId = request.ownerId.trim();
 
     _validateRequiredId(ruleId, 'Billing rule ID');
-
     _validateRequiredId(ownerId, 'Owner ID');
 
-    _validateAmount(valueType: request.valueType, amount: request.amount);
-
-    _validateTitle(chargeType: request.chargeType, title: request.title);
-
     final existingDocument = _collection.doc(ruleId);
-
     final existingSnapshot = await existingDocument.get();
 
     if (!existingSnapshot.exists) {
@@ -273,24 +279,44 @@ class BillingRuleDataSource {
       throw StateError('You are not allowed to update this billing rule.');
     }
 
-    // Month-based effective start.
-    final normalizedEffectiveFrom = _normalizeMonthStart(request.effectiveFrom);
+    // The current Firestore Rules treat these fields as immutable.
+    // Changing either field here would create a client/server mismatch.
+    if (request.chargeType != existingRule.chargeType) {
+      throw StateError(
+        'Charge Type cannot be changed on an existing billing rule. '
+        'Create a new billing rule instead.',
+      );
+    }
 
-    // Variable rules always represent exactly one month.
-    final normalizedEffectiveTo = request.valueType == BillingValueType.variable
-        ? _nextMonthStart(normalizedEffectiveFrom)
-        : request.effectiveTo;
+    if (request.valueType != existingRule.valueType) {
+      throw StateError(
+        'Value Type cannot be changed on an existing billing rule. '
+        'Create a new billing rule instead.',
+      );
+    }
+
+    _validateAmount(valueType: request.valueType, amount: request.amount);
+
+    _validateTitle(chargeType: request.chargeType, title: request.title);
+
+    final effectiveFrom = _normalizeMonthStart(request.effectiveFrom);
+
+    final effectiveTo = request.valueType == BillingValueType.variable
+        ? _nextMonthStart(effectiveFrom)
+        : request.effectiveTo == null
+        ? null
+        : _normalizeMonthStart(request.effectiveTo!);
 
     _validateEffectiveDates(
-      effectiveFrom: normalizedEffectiveFrom,
-      effectiveTo: normalizedEffectiveTo,
+      effectiveFrom: effectiveFrom,
+      effectiveTo: effectiveTo,
     );
 
     // -------------------------------------------------------------------------
     // SAME VERSION UPDATE
     // -------------------------------------------------------------------------
 
-    if (existingRule.effectiveFrom.isAtSameMomentAs(normalizedEffectiveFrom)) {
+    if (existingRule.effectiveFrom.isAtSameMomentAs(effectiveFrom)) {
       final relatedRulesSnapshot = await _getRelatedRules(
         ownerId: ownerId,
         propertyId: existingRule.propertyId,
@@ -305,9 +331,8 @@ class BillingRuleDataSource {
 
       _validateSameVersionUpdate(
         existingRule: existingRule,
-        request: request,
-        effectiveFrom: normalizedEffectiveFrom,
-        effectiveTo: normalizedEffectiveTo,
+        effectiveFrom: effectiveFrom,
+        effectiveTo: effectiveTo,
         relatedRules: relatedRules,
       );
 
@@ -319,18 +344,20 @@ class BillingRuleDataSource {
         propertyId: existingRule.propertyId,
         scopeType: existingRule.scopeType,
         scopeId: existingRule.scopeId,
-        chargeType: request.chargeType,
-        valueType: request.valueType,
+        chargeType: existingRule.chargeType,
+        valueType: existingRule.valueType,
         amount: request.amount,
         title: _normalizeNullableString(request.title),
-        effectiveFrom: normalizedEffectiveFrom,
-        effectiveTo: normalizedEffectiveTo,
+        effectiveFrom: effectiveFrom,
+        effectiveTo: effectiveTo,
         isActive: request.isActive,
         createdAt: existingRule.createdAt,
         updatedAt: now,
       );
 
-      await existingDocument.set(updatedRule.toFirestore());
+      // Update only this rule document. Previously generated monthly bills
+      // retain their own amount snapshots.
+      await existingDocument.update(updatedRule.toFirestore());
 
       return updatedRule;
     }
@@ -339,10 +366,10 @@ class BillingRuleDataSource {
     // NEW VERSION UPDATE
     // -------------------------------------------------------------------------
 
-    if (normalizedEffectiveFrom.isBefore(existingRule.effectiveFrom)) {
+    if (effectiveFrom.isBefore(existingRule.effectiveFrom)) {
       throw ArgumentError(
         'New effective date cannot be before '
-            'the existing billing rule effective date.',
+        'the existing billing rule effective date.',
       );
     }
 
@@ -360,29 +387,28 @@ class BillingRuleDataSource {
 
     _validateNewRuleVersion(
       rules: relatedRules,
-      effectiveFrom: normalizedEffectiveFrom,
-      effectiveTo: normalizedEffectiveTo,
-      valueType: request.valueType,
+      effectiveFrom: effectiveFrom,
+      effectiveTo: effectiveTo,
+      valueType: existingRule.valueType,
       ignoredRuleId: existingRule.id,
     );
 
-    // Only fixed rules can close a previous fixed version.
-    final previousRule = request.valueType == BillingValueType.fixed
+    final previousFixedRule = existingRule.valueType == BillingValueType.fixed
         ? _findPreviousRule(
-      rules: relatedRules,
-      effectiveFrom: normalizedEffectiveFrom,
-      ignoredRuleId: existingRule.id,
-      valueType: BillingValueType.fixed,
-    )
+            rules: relatedRules,
+            effectiveFrom: effectiveFrom,
+            valueType: BillingValueType.fixed,
+            ignoredRuleId: existingRule.id,
+          )
         : null;
 
-    final nextRule = request.valueType == BillingValueType.fixed
+    final nextFixedRule = existingRule.valueType == BillingValueType.fixed
         ? _findNextRule(
-      rules: relatedRules,
-      effectiveFrom: normalizedEffectiveFrom,
-      ignoredRuleId: existingRule.id,
-      valueType: BillingValueType.fixed,
-    )
+            rules: relatedRules,
+            effectiveFrom: effectiveFrom,
+            valueType: BillingValueType.fixed,
+            ignoredRuleId: existingRule.id,
+          )
         : null;
 
     final now = DateTime.now();
@@ -394,18 +420,19 @@ class BillingRuleDataSource {
       propertyId: existingRule.propertyId,
       scopeType: existingRule.scopeType,
       scopeId: existingRule.scopeId,
-      chargeType: request.chargeType,
-      valueType: request.valueType,
+      chargeType: existingRule.chargeType,
+      valueType: existingRule.valueType,
       amount: request.amount,
       title: _normalizeNullableString(request.title),
-      effectiveFrom: normalizedEffectiveFrom,
-      effectiveTo: normalizedEffectiveTo,
+      effectiveFrom: effectiveFrom,
+      effectiveTo: effectiveTo,
       isActive: request.isActive,
       createdAt: now,
       updatedAt: now,
     );
 
     await _firestore.runTransaction((transaction) async {
+      // Read every required document before performing any write.
       final currentExistingSnapshot = await transaction.get(existingDocument);
 
       if (!currentExistingSnapshot.exists) {
@@ -420,11 +447,25 @@ class BillingRuleDataSource {
         throw StateError('You are not allowed to update this billing rule.');
       }
 
-      if (previousRule != null &&
-          _shouldClosePreviousRule(previousRule, normalizedEffectiveFrom)) {
-        final previousDocument = _collection.doc(previousRule.id);
+      if (currentExistingRule.chargeType != existingRule.chargeType ||
+          currentExistingRule.valueType != existingRule.valueType ||
+          !currentExistingRule.effectiveFrom.isAtSameMomentAs(
+            existingRule.effectiveFrom,
+          )) {
+        throw StateError(
+          'The billing rule changed while the operation '
+          'was being processed. Reload it and try again.',
+        );
+      }
 
-        final previousSnapshot = await transaction.get(previousDocument);
+      DocumentSnapshot<Map<String, dynamic>>? previousSnapshot;
+      DocumentSnapshot<Map<String, dynamic>>? nextSnapshot;
+
+      if (previousFixedRule != null &&
+          _shouldClosePreviousRule(previousFixedRule, effectiveFrom)) {
+        previousSnapshot = await transaction.get(
+          _collection.doc(previousFixedRule.id),
+        );
 
         if (!previousSnapshot.exists) {
           throw StateError('The previous billing rule no longer exists.');
@@ -436,21 +477,13 @@ class BillingRuleDataSource {
 
         _validatePreviousRuleStillMatches(
           currentPreviousRule,
-          previousRule,
-          normalizedEffectiveFrom,
+          previousFixedRule,
+          effectiveFrom,
         );
-
-        transaction.update(previousDocument, {
-          'effectiveTo': Timestamp.fromDate(normalizedEffectiveFrom),
-          'isActive': false,
-          'updatedAt': Timestamp.fromDate(now),
-        });
       }
 
-      if (nextRule != null) {
-        final nextDocument = _collection.doc(nextRule.id);
-
-        final nextSnapshot = await transaction.get(nextDocument);
+      if (nextFixedRule != null) {
+        nextSnapshot = await transaction.get(_collection.doc(nextFixedRule.id));
 
         if (!nextSnapshot.exists) {
           throw StateError('The future billing rule no longer exists.');
@@ -459,29 +492,35 @@ class BillingRuleDataSource {
         final currentNextRule = BillingRuleModel.fromFirestore(nextSnapshot);
 
         if (!currentNextRule.effectiveFrom.isAtSameMomentAs(
-          nextRule.effectiveFrom,
+          nextFixedRule.effectiveFrom,
         )) {
           throw StateError(
             'The future billing rule changed while '
-                'the operation was being processed.',
+            'the operation was being processed.',
           );
         }
       }
 
-      // The existing rule is replaced only when the new version
-      // starts after the existing version.
+      // All transaction reads are complete. Writes start here.
+      if (previousSnapshot != null && previousFixedRule != null) {
+        transaction.update(_collection.doc(previousFixedRule.id), {
+          'effectiveTo': Timestamp.fromDate(effectiveFrom),
+          'isActive': false,
+          'updatedAt': Timestamp.fromDate(now),
+        });
+      }
+
+      // When this is a new Fixed version, close the edited Fixed rule if
+      // the new version starts during its current effective period.
       //
-      // Variable rules should not normally close the existing fixed
-      // rule because variable rules are monthly overrides.
-      if (request.valueType == BillingValueType.fixed &&
-          currentExistingRule.valueType == BillingValueType.fixed &&
-          currentExistingRule.effectiveFrom.isBefore(normalizedEffectiveFrom) &&
+      // A Variable rule is a one-month override and must not close a Fixed
+      // rule. The old Variable version remains available for its own period.
+      if (currentExistingRule.valueType == BillingValueType.fixed &&
+          currentExistingRule.effectiveFrom.isBefore(effectiveFrom) &&
           (currentExistingRule.effectiveTo == null ||
-              normalizedEffectiveFrom.isBefore(
-                currentExistingRule.effectiveTo!,
-              ))) {
+              effectiveFrom.isBefore(currentExistingRule.effectiveTo!))) {
         transaction.update(existingDocument, {
-          'effectiveTo': Timestamp.fromDate(normalizedEffectiveFrom),
+          'effectiveTo': Timestamp.fromDate(effectiveFrom),
           'isActive': false,
           'updatedAt': Timestamp.fromDate(now),
         });
@@ -505,11 +544,9 @@ class BillingRuleDataSource {
     final normalizedOwnerId = ownerId.trim();
 
     _validateRequiredId(normalizedRuleId, 'Billing rule ID');
-
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
 
     final document = _collection.doc(normalizedRuleId);
-
     final snapshot = await document.get();
 
     if (!snapshot.exists) {
@@ -520,6 +557,10 @@ class BillingRuleDataSource {
 
     if (existingRule.ownerId != normalizedOwnerId) {
       throw StateError('You are not allowed to deactivate this billing rule.');
+    }
+
+    if (!existingRule.isActive) {
+      return;
     }
 
     await document.update({
@@ -626,10 +667,10 @@ class BillingRuleDataSource {
     return next;
   }
 
-  bool _shouldClosePreviousRule(BillingRuleModel previousRule,
-      DateTime newEffectiveFrom,) {
-    // Variable rules are monthly overrides.
-    // They must never close the recurring fixed rule.
+  bool _shouldClosePreviousRule(
+    BillingRuleModel previousRule,
+    DateTime newEffectiveFrom,
+  ) {
     if (previousRule.valueType != BillingValueType.fixed) {
       return false;
     }
@@ -659,48 +700,27 @@ class BillingRuleDataSource {
 
       final sameStart = rule.effectiveFrom.isAtSameMomentAs(effectiveFrom);
 
-      // Two variable rules cannot start in the same month.
-      if (sameStart &&
-          valueType == BillingValueType.variable &&
-          rule.valueType == BillingValueType.variable) {
-        throw StateError(
-          'A variable billing rule already exists '
-              'for this month.',
-        );
-      }
+      if (sameStart && rule.valueType == valueType) {
+        if (valueType == BillingValueType.variable) {
+          throw StateError(
+            'A variable billing rule already exists for this month.',
+          );
+        }
 
-      // Two fixed versions cannot start in the same month.
-      if (sameStart &&
-          valueType == BillingValueType.fixed &&
-          rule.valueType == BillingValueType.fixed) {
         throw StateError(
           'A fixed billing rule version with the same '
-              'effective date already exists.',
+          'effective date already exists.',
         );
       }
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // VARIABLE RULE
-    // =========================================================================
+    // -------------------------------------------------------------------------
     //
-    // Variable rules are monthly overrides.
-    //
-    // Example:
-    //
-    // Fixed Water    = 500
-    // October Variable Water = actual 600
-    //
-    // October:
-    //   Variable 600 wins.
-    //
-    // November:
-    //   Variable has expired.
-    //   Fixed 500 becomes effective again.
-    //
-    // Therefore variable rules are allowed to overlap fixed rules.
-    // They must only be prevented from overlapping another variable rule.
-    // =========================================================================
+    // Variable rules are one-month overrides.
+    // They may overlap Fixed rules but not another Variable rule.
+    // -------------------------------------------------------------------------
 
     if (valueType == BillingValueType.variable) {
       for (final rule in rules) {
@@ -712,19 +732,15 @@ class BillingRuleDataSource {
           continue;
         }
 
-        final existingStart = rule.effectiveFrom;
-        final existingEnd = rule.effectiveTo;
-
-        final newEnd = effectiveTo;
-
-        final overlaps =
-            (existingEnd == null || effectiveFrom.isBefore(existingEnd)) &&
-                (newEnd == null || newEnd.isAfter(existingStart));
-
-        if (overlaps) {
+        if (_periodsOverlap(
+          firstStart: effectiveFrom,
+          firstEnd: effectiveTo,
+          secondStart: rule.effectiveFrom,
+          secondEnd: rule.effectiveTo,
+        )) {
           throw StateError(
             'The variable billing rule overlaps another '
-                'variable billing rule.',
+            'variable billing rule.',
           );
         }
       }
@@ -732,59 +748,69 @@ class BillingRuleDataSource {
       return;
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // FIXED RULE
-    // =========================================================================
+    // -------------------------------------------------------------------------
     //
-    // Fixed rules are recurring versions.
-    //
-    // Variable rules are ignored here because they are temporary monthly
-    // overrides and are allowed to coexist with fixed rules.
-    // =========================================================================
+    // Fixed versions cannot overlap one another.
+    // Variable overrides are deliberately excluded from this validation.
+    // -------------------------------------------------------------------------
 
-    final fixedRules = rules.where(
+    final fixedRules = rules
+        .where(
           (rule) =>
-      rule.valueType == BillingValueType.fixed &&
-          (ignoredRuleId == null || rule.id != ignoredRuleId),
-    );
+              rule.valueType == BillingValueType.fixed &&
+              (ignoredRuleId == null || rule.id != ignoredRuleId),
+        )
+        .toList();
 
-    final nextFixedRule = _findNextRule(
-      rules: fixedRules.toList(),
+    final previousFixedRule = _findPreviousRule(
+      rules: fixedRules,
       effectiveFrom: effectiveFrom,
       valueType: BillingValueType.fixed,
       ignoredRuleId: ignoredRuleId,
     );
 
+    final nextFixedRule = _findNextRule(
+      rules: fixedRules,
+      effectiveFrom: effectiveFrom,
+      valueType: BillingValueType.fixed,
+      ignoredRuleId: ignoredRuleId,
+    );
+
+    // A new fixed version must end no later than the next scheduled version.
     if (nextFixedRule != null) {
       if (effectiveTo == null) {
         throw StateError(
           'The new fixed billing rule must end before '
-              'the next scheduled fixed billing rule.',
+          'the next scheduled fixed billing rule.',
         );
       }
 
       if (effectiveTo.isAfter(nextFixedRule.effectiveFrom)) {
         throw StateError(
           'The new fixed billing rule overlaps a future '
-              'fixed billing rule version.',
+          'fixed billing rule version.',
         );
       }
     }
 
     for (final rule in fixedRules) {
-      final existingStart = rule.effectiveFrom;
-      final existingEnd = rule.effectiveTo;
+      // The previous version is closed atomically when the new Fixed
+      // version is created.
+      if (previousFixedRule != null && rule.id == previousFixedRule.id) {
+        continue;
+      }
 
-      final startsBeforeExistingEnds =
-          existingEnd == null || effectiveFrom.isBefore(existingEnd);
-
-      final endsAfterExistingStarts =
-          effectiveTo == null || effectiveTo.isAfter(existingStart);
-
-      if (startsBeforeExistingEnds && endsAfterExistingStarts) {
+      if (_periodsOverlap(
+        firstStart: effectiveFrom,
+        firstEnd: effectiveTo,
+        secondStart: rule.effectiveFrom,
+        secondEnd: rule.effectiveTo,
+      )) {
         throw StateError(
           'The new fixed billing rule overlaps an existing '
-              'fixed billing rule version.',
+          'fixed billing rule version.',
         );
       }
     }
@@ -794,25 +820,22 @@ class BillingRuleDataSource {
   // CONCURRENT UPDATE VALIDATION
   // ===========================================================================
 
-  void _validatePreviousRuleStillMatches(BillingRuleModel current,
-      BillingRuleModel expected,
-      DateTime newEffectiveFrom,) {
-    if (current.id != expected.id) {
+  void _validatePreviousRuleStillMatches(
+    BillingRuleModel current,
+    BillingRuleModel expected,
+    DateTime newEffectiveFrom,
+  ) {
+    if (current.id != expected.id ||
+        !current.effectiveFrom.isAtSameMomentAs(expected.effectiveFrom)) {
       throw StateError(
         'Billing rule changed while the operation '
-            'was being processed.',
+        'was being processed. Reload and try again.',
       );
     }
 
-    if (!current.effectiveFrom.isAtSameMomentAs(expected.effectiveFrom)) {
-      throw StateError(
-        'Billing rule effective date changed while '
-            'the operation was being processed.',
-      );
-    }
-
-    if (current.effectiveTo != null &&
-        !newEffectiveFrom.isBefore(current.effectiveTo!)) {
+    if (current.valueType != BillingValueType.fixed ||
+        (current.effectiveTo != null &&
+            !newEffectiveFrom.isBefore(current.effectiveTo!))) {
       throw StateError('Billing rule versions would overlap.');
     }
   }
@@ -823,80 +846,54 @@ class BillingRuleDataSource {
 
   void _validateSameVersionUpdate({
     required BillingRuleModel existingRule,
-    required UpdateBillingRuleRequest request,
     required DateTime effectiveFrom,
     required DateTime? effectiveTo,
     required List<BillingRuleModel> relatedRules,
   }) {
-    // -------------------------------------------------------------------------
-    // VARIABLE UPDATE
-    // -------------------------------------------------------------------------
-    //
-    // A variable rule may coexist with fixed rules.
-    // It must not overlap another variable rule.
-    // -------------------------------------------------------------------------
+    for (final rule in relatedRules) {
+      if (rule.id == existingRule.id ||
+          rule.valueType != existingRule.valueType) {
+        continue;
+      }
 
-    if (request.valueType == BillingValueType.variable) {
-      for (final rule in relatedRules) {
-        if (rule.id == existingRule.id) {
-          continue;
-        }
-
-        if (rule.valueType != BillingValueType.variable) {
-          continue;
-        }
-
-        final existingStart = rule.effectiveFrom;
-        final existingEnd = rule.effectiveTo;
-
-        final overlaps =
-            (existingEnd == null || effectiveFrom.isBefore(existingEnd)) &&
-                (effectiveTo == null || effectiveTo.isAfter(existingStart));
-
-        if (overlaps) {
+      if (_periodsOverlap(
+        firstStart: effectiveFrom,
+        firstEnd: effectiveTo,
+        secondStart: rule.effectiveFrom,
+        secondEnd: rule.effectiveTo,
+      )) {
+        if (existingRule.valueType == BillingValueType.variable) {
           throw StateError(
             'The updated variable billing rule overlaps '
-                'another variable billing rule.',
+            'another variable billing rule.',
           );
         }
-      }
 
-      return;
-    }
-
-    // -------------------------------------------------------------------------
-    // FIXED UPDATE
-    // -------------------------------------------------------------------------
-    //
-    // A fixed rule may coexist with variable rules.
-    // Only fixed rules participate in fixed-version overlap validation.
-    // -------------------------------------------------------------------------
-
-    for (final rule in relatedRules) {
-      if (rule.id == existingRule.id) {
-        continue;
-      }
-
-      if (rule.valueType != BillingValueType.fixed) {
-        continue;
-      }
-
-      final existingStart = rule.effectiveFrom;
-      final existingEnd = rule.effectiveTo;
-
-      final startsBeforeExistingEnds =
-          existingEnd == null || effectiveFrom.isBefore(existingEnd);
-
-      final endsAfterExistingStarts =
-          effectiveTo == null || effectiveTo.isAfter(existingStart);
-
-      if (startsBeforeExistingEnds && endsAfterExistingStarts) {
         throw StateError(
           'The updated fixed billing rule would overlap '
-              'another fixed billing rule version.',
+          'another fixed billing rule version.',
         );
       }
     }
+  }
+
+  // ===========================================================================
+  // PERIOD HELPERS
+  // ===========================================================================
+
+  bool _periodsOverlap({
+    required DateTime firstStart,
+    required DateTime? firstEnd,
+    required DateTime secondStart,
+    required DateTime? secondEnd,
+  }) {
+    final firstStartsBeforeSecondEnds =
+        secondEnd == null || firstStart.isBefore(secondEnd);
+
+    final firstEndsAfterSecondStarts =
+        firstEnd == null || firstEnd.isAfter(secondStart);
+
+    return firstStartsBeforeSecondEnds && firstEndsAfterSecondStarts;
   }
 
   // ===========================================================================
@@ -904,9 +901,7 @@ class BillingRuleDataSource {
   // ===========================================================================
 
   void _validateRequiredId(String value, String label) {
-    if (value
-        .trim()
-        .isEmpty) {
+    if (value.trim().isEmpty) {
       throw ArgumentError('$label cannot be empty.');
     }
   }
@@ -917,14 +912,18 @@ class BillingRuleDataSource {
   }) {
     switch (valueType) {
       case BillingValueType.fixed:
-        if (amount == null || amount < 0) {
-          throw ArgumentError('Fixed billing amount must be zero or greater.');
+        if (amount == null || amount.isNaN || amount.isInfinite || amount < 0) {
+          throw ArgumentError(
+            'Fixed billing amount must be a valid number '
+            'that is zero or greater.',
+          );
         }
 
       case BillingValueType.variable:
-        if (amount == null || amount < 0) {
+        if (amount == null || amount.isNaN || amount.isInfinite || amount < 0) {
           throw ArgumentError(
-            'Variable billing amount must be zero or greater.',
+            'Variable billing amount must be a valid number '
+            'that is zero or greater.',
           );
         }
     }
@@ -938,9 +937,7 @@ class BillingRuleDataSource {
       return;
     }
 
-    if (title == null || title
-        .trim()
-        .isEmpty) {
+    if (title == null || title.trim().isEmpty) {
       throw ArgumentError('A title is required for the Other billing type.');
     }
   }
@@ -955,8 +952,7 @@ class BillingRuleDataSource {
 
     if (!effectiveTo.isAfter(effectiveFrom)) {
       throw ArgumentError(
-        'Effective end date must be after '
-            'the effective start date.',
+        'Effective end date must be after the effective start date.',
       );
     }
   }

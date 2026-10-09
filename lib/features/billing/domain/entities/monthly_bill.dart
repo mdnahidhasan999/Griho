@@ -44,6 +44,7 @@ class MonthlyBill {
   /// Whether this bill was generated from a fixed
   /// recurring rule or a variable monthly override.
   final BillingValueType valueType;
+  final String? tenancyHistoryId;
 
   /// Snapshot of the amount for this billing period.
   ///
@@ -77,6 +78,7 @@ class MonthlyBill {
     this.tenantUserId,
     required this.sourceRuleId,
     required this.type,
+    this.tenancyHistoryId,
     required this.valueType,
     required this.amount,
     required this.paidAmount,
@@ -120,6 +122,8 @@ class MonthlyBill {
     String? tenantUserId,
     String? sourceRuleId,
     MonthlyBillType? type,
+    String? tenancyHistoryId,
+    bool clearTenancyHistoryId = false,
     BillingValueType? valueType,
     double? amount,
     double? paidAmount,
@@ -144,6 +148,9 @@ class MonthlyBill {
       sourceRuleId: sourceRuleId ?? this.sourceRuleId,
       type: type ?? this.type,
       valueType: valueType ?? this.valueType,
+      tenancyHistoryId: clearTenancyHistoryId
+          ? null
+          : tenancyHistoryId ?? this.tenancyHistoryId,
       amount: amount ?? this.amount,
       paidAmount: paidAmount ?? this.paidAmount,
       billingPeriodStart:

@@ -88,6 +88,7 @@ class GenerateMonthlyCharges {
           unitId: target.unitId.trim(),
           tenantId: target.tenantId.trim(),
           tenantUserId: target.tenantUserId?.trim(),
+          tenancyHistoryId: target.tenancyHistoryId,
         ),
     ];
 

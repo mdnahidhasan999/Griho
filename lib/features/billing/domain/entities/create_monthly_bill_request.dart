@@ -8,6 +8,7 @@ class CreateMonthlyBillRequest {
   final String unitId;
   final String tenantId;
   final String? tenantUserId;
+  final String? tenancyHistoryId;
 
   final String sourceRuleId;
 
@@ -29,6 +30,7 @@ class CreateMonthlyBillRequest {
     required this.unitId,
     required this.tenantId,
     this.tenantUserId,
+    this.tenancyHistoryId,
     required this.sourceRuleId,
     required this.type,
     required this.valueType,

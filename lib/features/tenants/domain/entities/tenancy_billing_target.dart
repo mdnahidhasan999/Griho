@@ -3,6 +3,7 @@ class TenancyBillingTarget {
   final String unitId;
   final String tenantId;
   final String? tenantUserId;
+  final String? tenancyHistoryId;
 
   /// Inclusive start date of this tenancy inside the billing period.
   final DateTime tenancyStart;
@@ -15,6 +16,7 @@ class TenancyBillingTarget {
     required this.unitId,
     required this.tenantId,
     required this.tenantUserId,
+    this.tenancyHistoryId,
     required this.tenancyStart,
     required this.tenancyEnd,
   });
@@ -24,6 +26,7 @@ class TenancyBillingTarget {
     String? unitId,
     String? tenantId,
     Object? tenantUserId = _keep,
+    Object? tenancyHistoryId = _keep,
     DateTime? tenancyStart,
     DateTime? tenancyEnd,
   }) {
@@ -34,6 +37,9 @@ class TenancyBillingTarget {
       tenantUserId: identical(tenantUserId, _keep)
           ? this.tenantUserId
           : tenantUserId as String?,
+      tenancyHistoryId: identical(tenancyHistoryId, _keep)
+          ? this.tenancyHistoryId
+          : tenancyHistoryId as String?,
       tenancyStart: tenancyStart ?? this.tenancyStart,
       tenancyEnd: tenancyEnd ?? this.tenancyEnd,
     );

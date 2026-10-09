@@ -29,6 +29,7 @@ class MonthlyBillDataSource {
     final tenantId = request.tenantId.trim();
     final tenantUserId = request.tenantUserId?.trim();
     final sourceRuleId = request.sourceRuleId.trim();
+    final tenancyHistoryId = request.tenancyHistoryId?.trim();
 
     _validateRequiredId(ownerId, 'Owner ID');
     _validateRequiredId(propertyId, 'Property ID');
@@ -85,6 +86,7 @@ class MonthlyBillDataSource {
       unitId: unitId,
       tenantId: tenantId,
       tenantUserId: tenantUserId,
+      tenancyHistoryId: tenancyHistoryId,
       sourceRuleId: sourceRuleId,
       type: request.type,
       valueType: request.valueType,
