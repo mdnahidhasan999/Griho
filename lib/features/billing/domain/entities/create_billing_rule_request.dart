@@ -10,7 +10,7 @@ class CreateBillingRuleRequest {
   final BillingChargeType chargeType;
   final BillingValueType valueType;
 
-  final double? amount;
+  final double amount;
 
   final String? title;
 

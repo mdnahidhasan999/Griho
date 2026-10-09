@@ -21,8 +21,7 @@ class BillingRuleModel extends BillingRule {
   });
 
   factory BillingRuleModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc,
-      ) {
+      DocumentSnapshot<Map<String, dynamic>> doc,) {
     final data = doc.data();
 
     if (data == null) {
@@ -39,7 +38,7 @@ class BillingRuleModel extends BillingRule {
       scopeId: _readRequiredString(data, 'scopeId'),
       chargeType: _readChargeType(data),
       valueType: _readValueType(data),
-      amount: _readOptionalDouble(data, 'amount'),
+      amount: _readRequiredDouble(data, 'amount'),
       title: _readOptionalString(data, 'title'),
       effectiveFrom: _readRequiredDateTime(
         data,
@@ -49,7 +48,10 @@ class BillingRuleModel extends BillingRule {
         data,
         'effectiveTo',
       ),
-      isActive: _readRequiredBool(data, 'isActive'),
+      isActive: _readRequiredBool(
+        data,
+        'isActive',
+      ),
       createdAt: _readRequiredDateTime(
         data,
         'createdAt',
@@ -89,13 +91,13 @@ class BillingRuleModel extends BillingRule {
     };
   }
 
-  static String _readRequiredString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String _readRequiredString(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
-    if (value is! String || value.trim().isEmpty) {
+    if (value is! String || value
+        .trim()
+        .isEmpty) {
       throw StateError(
         'Billing rule field "$field" is missing or invalid.',
       );
@@ -104,10 +106,8 @@ class BillingRuleModel extends BillingRule {
     return value.trim();
   }
 
-  static String? _readOptionalString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String? _readOptionalString(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value == null) {
@@ -125,23 +125,23 @@ class BillingRuleModel extends BillingRule {
     return normalized.isEmpty ? null : normalized;
   }
 
-  static double? _readOptionalDouble(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static double _readRequiredDouble(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
-
-    if (value == null) {
-      return null;
-    }
 
     if (value is! num) {
       throw StateError(
-        'Billing rule field "$field" is invalid.',
+        'Billing rule field "$field" is missing or invalid.',
       );
     }
 
     final result = value.toDouble();
+
+    if (result.isNaN || result.isInfinite) {
+      throw StateError(
+        'Billing rule field "$field" is invalid.',
+      );
+    }
 
     if (result < 0) {
       throw StateError(
@@ -152,10 +152,8 @@ class BillingRuleModel extends BillingRule {
     return result;
   }
 
-  static bool _readRequiredBool(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static bool _readRequiredBool(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value is! bool) {
@@ -167,10 +165,8 @@ class BillingRuleModel extends BillingRule {
     return value;
   }
 
-  static DateTime _readRequiredDateTime(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime _readRequiredDateTime(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value is Timestamp) {
@@ -182,10 +178,8 @@ class BillingRuleModel extends BillingRule {
     );
   }
 
-  static DateTime? _readOptionalDateTime(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime? _readOptionalDateTime(Map<String, dynamic> data,
+      String field,) {
     final value = data[field];
 
     if (value == null) {
@@ -201,9 +195,7 @@ class BillingRuleModel extends BillingRule {
     );
   }
 
-  static BillingScopeType _readScopeType(
-      Map<String, dynamic> data,
-      ) {
+  static BillingScopeType _readScopeType(Map<String, dynamic> data,) {
     final value = data['scopeType'];
 
     if (value is! String) {
@@ -222,9 +214,7 @@ class BillingRuleModel extends BillingRule {
     );
   }
 
-  static BillingChargeType _readChargeType(
-      Map<String, dynamic> data,
-      ) {
+  static BillingChargeType _readChargeType(Map<String, dynamic> data,) {
     final value = data['chargeType'];
 
     if (value is! String) {
@@ -243,9 +233,7 @@ class BillingRuleModel extends BillingRule {
     );
   }
 
-  static BillingValueType _readValueType(
-      Map<String, dynamic> data,
-      ) {
+  static BillingValueType _readValueType(Map<String, dynamic> data,) {
     final value = data['valueType'];
 
     if (value is! String) {

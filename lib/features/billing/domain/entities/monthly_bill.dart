@@ -1,9 +1,6 @@
 import 'package:griho/features/billing/domain/entities/billing_rule.dart';
 
 enum MonthlyBillStatus {
-  /// Variable bill has been created but the actual amount
-  /// has not been entered yet.
-  pending,
   unpaid,
   partiallyPaid,
   paid,
@@ -45,16 +42,12 @@ class MonthlyBill {
   final MonthlyBillType type;
 
   /// Whether this bill was generated from a fixed
-  /// recurring rule or requires a variable amount.
+  /// recurring rule or a variable monthly override.
   final BillingValueType valueType;
 
   /// Snapshot of the amount for this billing period.
   ///
-  /// For a pending variable bill, this is temporarily 0
-  /// because the actual amount has not been entered yet.
-  ///
-  /// Once the actual amount is entered, it becomes the
-  /// historical amount for this billing period.
+  /// The amount is already known when the bill is generated.
   final double amount;
 
   /// Total amount already paid against this bill.
@@ -95,20 +88,8 @@ class MonthlyBill {
     required this.updatedAt,
   });
 
-  /// Whether this variable bill still requires an actual amount.
-  bool get requiresAmountInput =>
-      valueType == BillingValueType.variable &&
-      status == MonthlyBillStatus.pending;
-
   /// Remaining amount that the tenant still needs to pay.
-  ///
-  /// A pending bill is not considered payable yet because
-  /// its actual amount has not been entered.
   double get remainingAmount {
-    if (status == MonthlyBillStatus.pending) {
-      return 0;
-    }
-
     final remaining = amount - paidAmount;
 
     if (remaining <= 0) {
@@ -119,13 +100,15 @@ class MonthlyBill {
   }
 
   bool get isFullyPaid =>
-      status == MonthlyBillStatus.paid && remainingAmount == 0;
+      status == MonthlyBillStatus.paid &&
+          remainingAmount == 0;
 
   bool get isPartiallyPaid =>
       status == MonthlyBillStatus.partiallyPaid ||
-      (paidAmount > 0 && paidAmount < amount);
+          (paidAmount > 0 && paidAmount < amount);
 
-  bool get isUnpaid => status == MonthlyBillStatus.unpaid;
+  bool get isUnpaid =>
+      status == MonthlyBillStatus.unpaid;
 
   MonthlyBill copyWith({
     String? id,
@@ -163,8 +146,10 @@ class MonthlyBill {
       valueType: valueType ?? this.valueType,
       amount: amount ?? this.amount,
       paidAmount: paidAmount ?? this.paidAmount,
-      billingPeriodStart: billingPeriodStart ?? this.billingPeriodStart,
-      billingPeriodEnd: billingPeriodEnd ?? this.billingPeriodEnd,
+      billingPeriodStart:
+      billingPeriodStart ?? this.billingPeriodStart,
+      billingPeriodEnd:
+      billingPeriodEnd ?? this.billingPeriodEnd,
       dueDate: dueDate ?? this.dueDate,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,

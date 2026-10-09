@@ -18,35 +18,7 @@ class GenerateMonthlyBills {
     required this._monthlyBillRepository,
   });
 
-  /// Generates applicable non-rent bills for the supplied tenancy targets.
-  ///
-  /// Billing period:
-  ///
-  /// [billingPeriodStart] is inclusive.
-  /// [billingPeriodEnd] is exclusive.
-  ///
-  /// Example:
-  ///
-  /// October 2026:
-  /// 2026-10-01 → 2026-11-01
-  ///
-  /// Fixed rules:
-  /// - create an unpaid bill
-  /// - amount comes from the rule
-  ///
-  /// Variable rules:
-  /// - create a pending bill
-  /// - amount starts at 0
-  /// - owner must enter the actual amount later
-  ///
-  /// Rent:
-  /// - intentionally skipped
-  /// - generated separately by GenerateMonthlyRent
-  ///
-  /// Duplicate protection:
-  /// - first checks for an existing bill
-  /// - datasource transaction remains the final protection against
-  ///   concurrent generation requests
+
   Future<List<MonthlyBill>> call({
     required String ownerId,
     required String propertyId,
@@ -77,7 +49,9 @@ class GenerateMonthlyBills {
     }
 
     if (dueDate.isBefore(billingPeriodStart)) {
-      throw ArgumentError('Due date cannot be before billing period start.');
+      throw ArgumentError(
+        'Due date cannot be before billing period start.',
+      );
     }
 
     if (targets.isEmpty) {
@@ -117,7 +91,9 @@ class GenerateMonthlyBills {
       );
 
       for (final rule in applicableRules) {
-        final billType = _toMonthlyBillType(rule.chargeType);
+        final billType = _toMonthlyBillType(
+          rule.chargeType,
+        );
 
         // =====================================================================
         // RENT IS NOT GENERATED HERE
@@ -141,8 +117,6 @@ class GenerateMonthlyBills {
         );
 
         if (existingBill != null) {
-          // Already generated.
-          //
           // Historical bills must never be replaced automatically.
           continue;
         }
@@ -151,8 +125,9 @@ class GenerateMonthlyBills {
         // DETERMINE BILL VALUE
         // =====================================================================
 
-        final amount = rule.amount ?? 0.0;
+        final amount = rule.amount;
 
+        // Both Fixed and Variable bills are immediately payable.
         final status = MonthlyBillStatus.unpaid;
 
         // =====================================================================
@@ -203,34 +178,6 @@ class GenerateMonthlyBills {
     return generatedBills;
   }
 
-  // ===========================================================================
-  // RULE RESOLUTION
-  // ===========================================================================
-
-  /// Resolves exactly one billing rule for each charge type.
-  ///
-  /// Scope precedence:
-  ///
-  /// tenant > unit > floor > property
-  ///
-  /// If multiple rules have the same scope, the rule with the latest
-  /// effectiveFrom wins.
-  ///
-  /// This is important for variable monthly overrides.
-  ///
-  /// Example:
-  ///
-  /// Fixed Water:
-  ///   Property = ৳500
-  ///
-  /// Variable Water:
-  ///   Property = October actual amount
-  ///
-  /// During October both rules may be active.
-  /// The variable rule has the later effectiveFrom, so it wins.
-  ///
-  /// During November the variable rule is no longer effective and the
-  /// fixed rule becomes applicable again.
   List<BillingRule> _resolveRulesForTarget({
     required List<BillingRule> rules,
     required MonthlyBillTarget target,
@@ -243,7 +190,10 @@ class GenerateMonthlyBills {
           return false;
         }
 
-        return _matchesScope(rule: rule, target: target);
+        return _matchesScope(
+          rule: rule,
+          target: target,
+        );
       }).toList();
 
       if (matchingRules.isEmpty) {
@@ -252,25 +202,17 @@ class GenerateMonthlyBills {
 
       matchingRules.sort((a, b) {
         // First: more specific scope wins.
-        //
-        // tenant > unit > floor > property
         final priorityComparison = _scopePriority(
           b.scopeType,
-        ).compareTo(_scopePriority(a.scopeType));
+        ).compareTo(
+          _scopePriority(a.scopeType),
+        );
 
         if (priorityComparison != 0) {
           return priorityComparison;
         }
 
-        // Second: within the same scope, the most recent rule wins.
-        //
-        // This is important for fixed-rule history.
-        //
-        // Example:
-        // September fixed Water = ৳500
-        // October fixed Water = ৳700
-        //
-        // October must use the October version.
+        // Second: latest effectiveFrom wins.
         final effectiveFromComparison = b.effectiveFrom.compareTo(
           a.effectiveFrom,
         );
@@ -279,18 +221,13 @@ class GenerateMonthlyBills {
           return effectiveFromComparison;
         }
 
-        // Third: when Fixed and Variable rules have the same scope
-        // and the same effectiveFrom, Variable must win.
-        //
-        // Example:
-        // Property Fixed Water = ৳500
-        // October Variable Water = actual amount
-        //
-        // Both may start at 2026-10-01.
-        // The variable monthly override must take precedence.
+        // Third: Variable wins over Fixed when both start
+        // in the same month and have the same scope.
         final valueTypeComparison = _valueTypePriority(
           b.valueType,
-        ).compareTo(_valueTypePriority(a.valueType));
+        ).compareTo(
+          _valueTypePriority(a.valueType),
+        );
 
         if (valueTypeComparison != 0) {
           return valueTypeComparison;
@@ -333,7 +270,7 @@ class GenerateMonthlyBills {
   // SCOPE PRIORITY
   // ===========================================================================
 
-  int _scopePriority(BillingScopeType scope) {
+  int _scopePriority(BillingScopeType scope,) {
     switch (scope) {
       case BillingScopeType.property:
         return 1;
@@ -349,7 +286,7 @@ class GenerateMonthlyBills {
     }
   }
 
-  int _valueTypePriority(BillingValueType valueType) {
+  int _valueTypePriority(BillingValueType valueType,) {
     switch (valueType) {
       case BillingValueType.fixed:
         return 1;
@@ -363,7 +300,7 @@ class GenerateMonthlyBills {
   // BILL TYPE MAPPING
   // ===========================================================================
 
-  MonthlyBillType _toMonthlyBillType(BillingChargeType type) {
+  MonthlyBillType _toMonthlyBillType(BillingChargeType type,) {
     switch (type) {
       case BillingChargeType.water:
         return MonthlyBillType.water;
@@ -389,7 +326,7 @@ class GenerateMonthlyBills {
   // DUPLICATE ERROR DETECTION
   // ===========================================================================
 
-  bool _isDuplicateBillError(StateError error) {
+  bool _isDuplicateBillError(StateError error,) {
     return error.message.toString().contains(
       'Monthly bill already exists for this '
           'tenant, bill type and billing period.',
@@ -397,17 +334,6 @@ class GenerateMonthlyBills {
   }
 }
 
-// ============================================================================
-// MONTHLY BILL TARGET
-// ============================================================================
-
-/// A tenancy target used by the non-rent monthly billing engine.
-///
-/// This target intentionally contains only the identity information required
-/// by billing-rule resolution.
-///
-/// Tenancy dates are resolved separately by TenancyBillingTargetResolver and
-/// are required by the dedicated rent-generation engine.
 class MonthlyBillTarget {
   final String floorId;
   final String unitId;
@@ -440,7 +366,8 @@ class MonthlyBillTarget {
       unitId: normalizedUnitId,
       tenantId: normalizedTenantId,
       tenantUserId:
-      normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
+      normalizedTenantUserId == null ||
+          normalizedTenantUserId.isEmpty
           ? null
           : normalizedTenantUserId,
     );

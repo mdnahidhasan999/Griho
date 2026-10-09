@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/create_monthly_bill_request.dart';
 import '../../domain/entities/monthly_bill.dart';
 import '../models/monthly_bill_model.dart';
@@ -9,7 +8,7 @@ class MonthlyBillDataSource {
   final FirebaseFirestore _firestore;
 
   MonthlyBillDataSource({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'monthlyBills';
 
@@ -46,12 +45,13 @@ class MonthlyBillDataSource {
       throw ArgumentError('Bill amount cannot be negative.');
     }
 
-    // Monthly bills are always month-based.
     final normalizedPeriodStart = _normalizeMonthStart(
       request.billingPeriodStart,
     );
 
-    final normalizedPeriodEnd = _normalizeMonthStart(request.billingPeriodEnd);
+    final normalizedPeriodEnd = _normalizeMonthStart(
+      request.billingPeriodEnd,
+    );
 
     if (!normalizedPeriodEnd.isAfter(normalizedPeriodStart)) {
       throw ArgumentError(
@@ -60,33 +60,15 @@ class MonthlyBillDataSource {
     }
 
     if (request.dueDate.isBefore(normalizedPeriodStart)) {
-      throw ArgumentError('Due date cannot be before billing period start.');
-    }
-
-
-
-    // Variable bills are generated with amount 0.
-    //
-    // Fixed bills must have an amount greater than zero.
-    if (request.valueType == BillingValueType.fixed && request.amount <= 0) {
-      throw ArgumentError('Fixed bills must have an amount greater than zero.');
-    }
-
-    // A variable bill may only start as pending with amount 0.
-    if (request.valueType == BillingValueType.variable &&
-        request.status == MonthlyBillStatus.pending &&
-        request.amount != 0) {
       throw ArgumentError(
-        'Pending variable bills must start with amount zero.',
+        'Due date cannot be before billing period start.',
       );
     }
 
     final periodKey = _formatPeriodKey(normalizedPeriodStart);
 
-    // Tenant-aware document identity.
-    //
-    // Different tenants occupying the same unit during the same month
-    // must be able to have separate bills.
+    // Different tenants occupying the same unit during
+    // the same month must have separate bills.
     final documentId =
         '${ownerId}_${unitId}_${tenantId}_'
         '${request.type.name}_$periodKey';
@@ -123,11 +105,14 @@ class MonthlyBillDataSource {
       if (existingSnapshot.exists) {
         throw StateError(
           'Monthly bill already exists for this '
-          'tenant, bill type and billing period.',
+              'tenant, bill type and billing period.',
         );
       }
 
-      transaction.set(document, monthlyBill.toFirestore());
+      transaction.set(
+        document,
+        monthlyBill.toFirestore(),
+      );
     });
 
     return monthlyBill;
@@ -166,28 +151,40 @@ class MonthlyBillDataSource {
     final normalizedUnitId = unitId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
-
     _validateRequiredId(normalizedUnitId, 'Unit ID');
 
-    final normalizedPeriodStart = _normalizeMonthStart(billingPeriodStart);
+    final normalizedPeriodStart = _normalizeMonthStart(
+      billingPeriodStart,
+    );
 
     final snapshot = await _collection
-        .where('ownerId', isEqualTo: normalizedOwnerId)
-        .where('unitId', isEqualTo: normalizedUnitId)
         .where(
-          'billingPeriodStart',
-          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
-        )
+      'ownerId',
+      isEqualTo: normalizedOwnerId,
+    )
+        .where(
+      'unitId',
+      isEqualTo: normalizedUnitId,
+    )
+        .where(
+      'billingPeriodStart',
+      isEqualTo: Timestamp.fromDate(
+        normalizedPeriodStart,
+      ),
+    )
         .get();
 
-    return snapshot.docs.map(MonthlyBillModel.fromFirestore).toList();
+    return snapshot.docs
+        .map(MonthlyBillModel.fromFirestore)
+        .toList();
   }
 
   // ==========================================================================
   // UNIT + TENANT + PERIOD + TYPE
   // ==========================================================================
 
-  Future<MonthlyBillModel?> getMonthlyBillByUnitAndTenantAndPeriodAndType({
+  Future<MonthlyBillModel?>
+  getMonthlyBillByUnitAndTenantAndPeriodAndType({
     required String ownerId,
     required String unitId,
     required String tenantId,
@@ -199,22 +196,36 @@ class MonthlyBillDataSource {
     final normalizedTenantId = tenantId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
-
     _validateRequiredId(normalizedUnitId, 'Unit ID');
-
     _validateRequiredId(normalizedTenantId, 'Tenant ID');
 
-    final normalizedPeriodStart = _normalizeMonthStart(billingPeriodStart);
+    final normalizedPeriodStart = _normalizeMonthStart(
+      billingPeriodStart,
+    );
 
     final snapshot = await _collection
-        .where('ownerId', isEqualTo: normalizedOwnerId)
-        .where('unitId', isEqualTo: normalizedUnitId)
-        .where('tenantId', isEqualTo: normalizedTenantId)
         .where(
-          'billingPeriodStart',
-          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
-        )
-        .where('type', isEqualTo: type.name)
+      'ownerId',
+      isEqualTo: normalizedOwnerId,
+    )
+        .where(
+      'unitId',
+      isEqualTo: normalizedUnitId,
+    )
+        .where(
+      'tenantId',
+      isEqualTo: normalizedTenantId,
+    )
+        .where(
+      'billingPeriodStart',
+      isEqualTo: Timestamp.fromDate(
+        normalizedPeriodStart,
+      ),
+    )
+        .where(
+      'type',
+      isEqualTo: type.name,
+    )
         .limit(1)
         .get();
 
@@ -222,7 +233,9 @@ class MonthlyBillDataSource {
       return null;
     }
 
-    return MonthlyBillModel.fromFirestore(snapshot.docs.first);
+    return MonthlyBillModel.fromFirestore(
+      snapshot.docs.first,
+    );
   }
 
   // ==========================================================================
@@ -235,38 +248,62 @@ class MonthlyBillDataSource {
   }) async {
     final normalizedTenantUserId = tenantUserId.trim();
 
-    _validateRequiredId(normalizedTenantUserId, 'Tenant User ID');
+    _validateRequiredId(
+      normalizedTenantUserId,
+      'Tenant User ID',
+    );
 
-    final normalizedPeriodStart = _normalizeMonthStart(billingPeriodStart);
+    final normalizedPeriodStart = _normalizeMonthStart(
+      billingPeriodStart,
+    );
 
     final snapshot = await _collection
-        .where('tenantUserId', isEqualTo: normalizedTenantUserId)
         .where(
-          'billingPeriodStart',
-          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
-        )
+      'tenantUserId',
+      isEqualTo: normalizedTenantUserId,
+    )
+        .where(
+      'billingPeriodStart',
+      isEqualTo: Timestamp.fromDate(
+        normalizedPeriodStart,
+      ),
+    )
         .get();
 
-    return snapshot.docs.map(MonthlyBillModel.fromFirestore).toList();
+    return snapshot.docs
+        .map(MonthlyBillModel.fromFirestore)
+        .toList();
   }
 
   // ==========================================================================
   // TENANT HISTORY
   // ==========================================================================
 
-  Future<List<MonthlyBillModel>> getMonthlyBillHistoryByTenantUserId({
+  Future<List<MonthlyBillModel>>
+  getMonthlyBillHistoryByTenantUserId({
     required String tenantUserId,
   }) async {
     final normalizedTenantUserId = tenantUserId.trim();
 
-    _validateRequiredId(normalizedTenantUserId, 'Tenant User ID');
+    _validateRequiredId(
+      normalizedTenantUserId,
+      'Tenant User ID',
+    );
 
     final snapshot = await _collection
-        .where('tenantUserId', isEqualTo: normalizedTenantUserId)
-        .orderBy('billingPeriodStart', descending: true)
+        .where(
+      'tenantUserId',
+      isEqualTo: normalizedTenantUserId,
+    )
+        .orderBy(
+      'billingPeriodStart',
+      descending: true,
+    )
         .get();
 
-    return snapshot.docs.map(MonthlyBillModel.fromFirestore).toList();
+    return snapshot.docs
+        .map(MonthlyBillModel.fromFirestore)
+        .toList();
   }
 
   // ==========================================================================
@@ -282,29 +319,41 @@ class MonthlyBillDataSource {
     final normalizedPropertyId = propertyId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
-
     _validateRequiredId(normalizedPropertyId, 'Property ID');
 
-    final normalizedPeriodStart = _normalizeMonthStart(billingPeriodStart);
+    final normalizedPeriodStart = _normalizeMonthStart(
+      billingPeriodStart,
+    );
 
     final snapshot = await _collection
-        .where('ownerId', isEqualTo: normalizedOwnerId)
-        .where('propertyId', isEqualTo: normalizedPropertyId)
         .where(
-          'billingPeriodStart',
-          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
-        )
+      'ownerId',
+      isEqualTo: normalizedOwnerId,
+    )
+        .where(
+      'propertyId',
+      isEqualTo: normalizedPropertyId,
+    )
+        .where(
+      'billingPeriodStart',
+      isEqualTo: Timestamp.fromDate(
+        normalizedPeriodStart,
+      ),
+    )
         .orderBy('unitId')
         .get();
 
-    return snapshot.docs.map(MonthlyBillModel.fromFirestore).toList();
+    return snapshot.docs
+        .map(MonthlyBillModel.fromFirestore)
+        .toList();
   }
 
   // ==========================================================================
   // PROPERTY HISTORY
   // ==========================================================================
 
-  Future<List<MonthlyBillModel>> getMonthlyBillHistoryByPropertyId({
+  Future<List<MonthlyBillModel>>
+  getMonthlyBillHistoryByPropertyId({
     required String ownerId,
     required String propertyId,
   }) async {
@@ -312,24 +361,33 @@ class MonthlyBillDataSource {
     final normalizedPropertyId = propertyId.trim();
 
     _validateRequiredId(normalizedOwnerId, 'Owner ID');
-
     _validateRequiredId(normalizedPropertyId, 'Property ID');
 
     final snapshot = await _collection
-        .where('ownerId', isEqualTo: normalizedOwnerId)
-        .orderBy('billingPeriodStart', descending: true)
+        .where(
+      'ownerId',
+      isEqualTo: normalizedOwnerId,
+    )
+        .where(
+      'propertyId',
+      isEqualTo: normalizedPropertyId,
+    )
+        .orderBy(
+      'billingPeriodStart',
+      descending: true,
+    )
         .get();
 
-    return snapshot.docs.map(MonthlyBillModel.fromFirestore).toList();
+    return snapshot.docs
+        .map(MonthlyBillModel.fromFirestore)
+        .toList();
   }
-
-
 
   // ==========================================================================
   // CANCEL
   // ==========================================================================
 
-  Future<MonthlyBillModel?> cancelMonthlyBill(String billId) async {
+  Future<MonthlyBillModel?> cancelMonthlyBill(String billId,) async {
     final normalizedBillId = billId.trim();
 
     if (normalizedBillId.isEmpty) {
@@ -347,7 +405,9 @@ class MonthlyBillDataSource {
     final existing = MonthlyBillModel.fromFirestore(snapshot);
 
     if (existing.status == MonthlyBillStatus.paid) {
-      throw StateError('A paid billing record cannot be cancelled.');
+      throw StateError(
+        'A paid billing record cannot be cancelled.',
+      );
     }
 
     if (existing.status == MonthlyBillStatus.cancelled) {
@@ -359,19 +419,23 @@ class MonthlyBillDataSource {
       updatedAt: DateTime.now(),
     );
 
-    await document.update(updated.toFirestore());
+    await document.update(
+      updated.toFirestore(),
+    );
 
     return updated;
   }
-
-
 
   // ==========================================================================
   // DATE HELPERS
   // ==========================================================================
 
   DateTime _normalizeMonthStart(DateTime date) {
-    return DateTime(date.year, date.month, 1);
+    return DateTime(
+      date.year,
+      date.month,
+      1,
+    );
   }
 
   // ==========================================================================
@@ -380,7 +444,6 @@ class MonthlyBillDataSource {
 
   String _formatPeriodKey(DateTime date) {
     final year = date.year.toString().padLeft(4, '0');
-
     final month = date.month.toString().padLeft(2, '0');
 
     return '$year-$month';
@@ -390,9 +453,12 @@ class MonthlyBillDataSource {
   // VALIDATION
   // ==========================================================================
 
-  void _validateRequiredId(String value, String label) {
+  void _validateRequiredId(String value,
+      String label,) {
     if (value.isEmpty) {
-      throw ArgumentError('$label cannot be empty.');
+      throw ArgumentError(
+        '$label cannot be empty.',
+      );
     }
   }
 }

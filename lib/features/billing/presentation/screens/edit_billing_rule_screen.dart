@@ -42,9 +42,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     final rule = widget.rule;
 
     _titleController = TextEditingController(text: rule.title ?? '');
-
     _amountController = TextEditingController(
-      text: rule.amount?.toString() ?? '',
+      text: rule.amount.toString(),
     );
 
     _chargeType = rule.chargeType;
@@ -128,14 +127,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
               onChanged: _isSaving || _isDeactivating
                   ? null
                   : (value) {
-                      if (value == null) {
-                        return;
-                      }
+                if (value == null) {
+                  return;
+                }
 
-                      setState(() {
-                        _chargeType = value;
-                      });
-                    },
+                setState(() {
+                  _chargeType = value;
+                });
+              },
             ),
 
             const SizedBox(height: 16),
@@ -159,15 +158,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
               onChanged: _isSaving || _isDeactivating
                   ? null
                   : (value) {
-                      if (value == null) {
-                        return;
-                      }
+                if (value == null) {
+                  return;
+                }
 
-                      setState(() {
-                        _valueType = value;
-
-                      });
-                    },
+                setState(() {
+                  _valueType = value;
+                });
+              },
             ),
 
             const SizedBox(height: 16),
@@ -175,45 +173,46 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
             // ============================================================
             // AMOUNT
             // ============================================================
-            if (_valueType == BillingValueType.fixed)
-              TextFormField(
-                controller: _amountController,
-                enabled: !_isSaving && !_isDeactivating,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Amount',
-                  hintText: '0.00',
-                  prefixText: '৳ ',
-                  prefixIcon: Icon(Icons.payments_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (_valueType == BillingValueType.variable) {
-                    return null;
-                  }
-
-                  final text = value?.trim() ?? '';
-
-                  if (text.isEmpty) {
-                    return 'Amount is required.';
-                  }
-
-                  final amount = double.tryParse(text);
-
-                  if (amount == null) {
-                    return 'Enter a valid amount.';
-                  }
-
-                  if (amount < 0) {
-                    return 'Amount cannot be negative.';
-                  }
-
-                  return null;
-                },
+            TextFormField(
+              controller: _amountController,
+              enabled: !_isSaving && !_isDeactivating,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
               ),
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Amount',
+                hintText: '0.00',
+                prefixText: '৳ ',
+                prefixIcon: Icon(Icons.payments_outlined),
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                final text = value?.trim() ?? '';
+
+                if (text.isEmpty) {
+                  return 'Amount is required.';
+                }
+
+                final amount = double.tryParse(text);
+
+                if (amount == null) {
+                  return 'Enter a valid amount.';
+                }
+
+                if (amount.isNaN || amount.isInfinite) {
+                  return 'Enter a valid amount.';
+                }
+
+                if (amount < 0) {
+                  return 'Amount cannot be negative.';
+                }
+
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 24),
 
             if (_valueType == BillingValueType.fixed)
               const SizedBox(height: 24),
@@ -244,10 +243,10 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
               onClear: _effectiveTo == null
                   ? null
                   : () {
-                      setState(() {
-                        _effectiveTo = null;
-                      });
-                    },
+                setState(() {
+                  _effectiveTo = null;
+                });
+              },
             ),
 
             const SizedBox(height: 8),
@@ -270,10 +269,10 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                 onChanged: _isSaving || _isDeactivating
                     ? null
                     : (value) {
-                        setState(() {
-                          _isActive = value;
-                        });
-                      },
+                  setState(() {
+                    _isActive = value;
+                  });
+                },
                 title: const Text(
                   'Active',
                   style: TextStyle(fontWeight: FontWeight.w600),
@@ -304,10 +303,10 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                     : _updateBillingRule,
                 icon: _isSaving
                     ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
                     : const Icon(Icons.save_outlined),
                 label: Text(_isSaving ? 'Saving...' : 'Save Changes'),
               ),
@@ -327,10 +326,10 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                       : _confirmDeactivate,
                   icon: _isDeactivating
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                       : const Icon(Icons.pause_circle_outline),
                   label: Text(
                     _isDeactivating ? 'Deactivating...' : 'Deactivate Rule',
@@ -406,25 +405,31 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     }
 
     // End month cannot be before effective month.
-    if (_effectiveTo != null && _effectiveTo!.isBefore(_effectiveFrom)) {
-      _showError('End Month cannot be before Effective Month.');
+    if (_effectiveTo != null &&
+        _effectiveTo!.isBefore(_effectiveFrom)) {
+      _showError(
+        'End Month cannot be before Effective Month.',
+      );
       return;
     }
 
-    double? amount;
+    final amount = double.tryParse(
+      _amountController.text.trim(),
+    );
 
-    if (_valueType == BillingValueType.fixed) {
-      amount = double.tryParse(_amountController.text.trim());
+    if (amount == null) {
+      _showError('Please enter a valid amount.');
+      return;
+    }
 
-      if (amount == null) {
-        _showError('Please enter a valid amount.');
-        return;
-      }
+    if (amount.isNaN || amount.isInfinite) {
+      _showError('Please enter a valid amount.');
+      return;
+    }
 
-      if (amount < 0) {
-        _showError('Amount cannot be negative.');
-        return;
-      }
+    if (amount < 0) {
+      _showError('Amount cannot be negative.');
+      return;
     }
 
     setState(() {
@@ -440,12 +445,15 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
         amount: amount,
         title: _normalizedTitle,
 
-        // Always stores month-start.
-        effectiveFrom: _normalizeMonth(_effectiveFrom),
+        effectiveFrom: _normalizeMonth(
+          _effectiveFrom,
+        ),
 
         effectiveTo: _effectiveTo == null
             ? null
-            : _normalizeMonth(_effectiveTo!),
+            : _normalizeMonth(
+          _effectiveTo!,
+        ),
 
         isActive: _isActive,
       );
@@ -457,7 +465,11 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Billing rule updated successfully.')),
+        const SnackBar(
+          content: Text(
+            'Billing rule updated successfully.',
+          ),
+        ),
       );
 
       context.pop(true);
@@ -466,7 +478,9 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
         return;
       }
 
-      _showError(_cleanErrorMessage(error));
+      _showError(
+        _cleanErrorMessage(error),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -488,7 +502,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
           title: const Text('Deactivate Billing Rule?'),
           content: const Text(
             'This billing rule will no longer be active. '
-            'You can keep its record for historical purposes.',
+                'You can keep its record for historical purposes.',
           ),
           actions: [
             TextButton(
@@ -650,18 +664,18 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           onPressed: selectedMonth.year <= firstMonth.year
                               ? null
                               : () {
-                                  final newYear = selectedMonth.year - 1;
+                            final newYear = selectedMonth.year - 1;
 
-                                  final newMonth = DateTime(
-                                    newYear,
-                                    selectedMonth.month,
-                                    1,
-                                  );
+                            final newMonth = DateTime(
+                              newYear,
+                              selectedMonth.month,
+                              1,
+                            );
 
-                                  setDialogState(() {
-                                    selectedMonth = newMonth;
-                                  });
-                                },
+                            setDialogState(() {
+                              selectedMonth = newMonth;
+                            });
+                          },
                           icon: const Icon(Icons.chevron_left),
                         ),
                         Expanded(
@@ -679,18 +693,18 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           onPressed: selectedMonth.year >= lastMonth.year
                               ? null
                               : () {
-                                  final newYear = selectedMonth.year + 1;
+                            final newYear = selectedMonth.year + 1;
 
-                                  final newMonth = DateTime(
-                                    newYear,
-                                    selectedMonth.month,
-                                    1,
-                                  );
+                            final newMonth = DateTime(
+                              newYear,
+                              selectedMonth.month,
+                              1,
+                            );
 
-                                  setDialogState(() {
-                                    selectedMonth = newMonth;
-                                  });
-                                },
+                            setDialogState(() {
+                              selectedMonth = newMonth;
+                            });
+                          },
                           icon: const Icon(Icons.chevron_right),
                         ),
                       ],
@@ -705,12 +719,12 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8,
-                            childAspectRatio: 1.8,
-                          ),
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        childAspectRatio: 1.8,
+                      ),
                       itemCount: 12,
                       itemBuilder: (context, index) {
                         final monthNumber = index + 1;
@@ -726,7 +740,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
                         final isSelected =
                             month.year == selectedMonth.year &&
-                            month.month == selectedMonth.month;
+                                month.month == selectedMonth.month;
 
                         final enabled = !isBefore && !isAfter;
 
@@ -734,8 +748,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           onPressed: !enabled
                               ? null
                               : () {
-                                  Navigator.of(dialogContext).pop(month);
-                                },
+                            Navigator.of(dialogContext).pop(month);
+                          },
                           style: OutlinedButton.styleFrom(
                             backgroundColor: isSelected
                                 ? theme.colorScheme.primaryContainer
@@ -912,10 +926,10 @@ class _MonthField extends StatelessWidget {
           suffixIcon: onClear == null
               ? const Icon(Icons.arrow_drop_down)
               : IconButton(
-                  tooltip: 'Clear',
-                  onPressed: enabled ? onClear : null,
-                  icon: const Icon(Icons.clear),
-                ),
+            tooltip: 'Clear',
+            onPressed: enabled ? onClear : null,
+            icon: const Icon(Icons.clear),
+          ),
           border: const OutlineInputBorder(),
         ),
         child: Text(

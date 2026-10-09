@@ -35,17 +35,26 @@ class BillingRule {
   final BillingChargeType chargeType;
   final BillingValueType valueType;
 
-  /// Required for fixed charges.
+  /// Amount assigned to this billing rule.
   ///
-  /// For variable charges this is null.
-  final double? amount;
+  /// Fixed:
+  /// The amount recurs according to the rule's effective period.
+  ///
+  /// Variable:
+  /// The amount applies only to the selected effective month.
+  final double amount;
 
   /// Optional custom title.
   ///
   /// Required by the UI for [BillingChargeType.other].
   final String? title;
 
+  /// Start of the rule's effective period.
   final DateTime effectiveFrom;
+
+  /// End of the rule's effective period.
+  ///
+  /// This is exclusive.
   final DateTime? effectiveTo;
 
   final bool isActive;
@@ -85,14 +94,7 @@ class BillingRule {
     bool? isActive,
     DateTime? createdAt,
     DateTime? updatedAt,
-
-    /// Explicitly clears [amount].
-    bool clearAmount = false,
-
-    /// Explicitly clears [title].
     bool clearTitle = false,
-
-    /// Explicitly clears [effectiveTo].
     bool clearEffectiveTo = false,
   }) {
     return BillingRule(
@@ -103,9 +105,7 @@ class BillingRule {
       scopeId: scopeId ?? this.scopeId,
       chargeType: chargeType ?? this.chargeType,
       valueType: valueType ?? this.valueType,
-      amount: clearAmount
-          ? null
-          : amount ?? this.amount,
+      amount: amount ?? this.amount,
       title: clearTitle
           ? null
           : title ?? this.title,

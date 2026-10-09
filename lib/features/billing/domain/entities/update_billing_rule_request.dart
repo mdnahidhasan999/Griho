@@ -7,7 +7,8 @@ class UpdateBillingRuleRequest {
   final BillingChargeType chargeType;
   final BillingValueType valueType;
 
-  final double? amount;
+  final double amount;
+
   final String? title;
 
   final DateTime effectiveFrom;

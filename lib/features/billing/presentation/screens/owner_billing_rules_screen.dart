@@ -57,7 +57,10 @@ class _OwnerBillingRulesScreenState
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(icon: Icon(Icons.rule_outlined), text: 'Rules'),
+            Tab(
+              icon: Icon(Icons.rule_outlined),
+              text: 'Rules',
+            ),
             Tab(
               icon: Icon(Icons.receipt_long_outlined),
               text: 'Generated Bills',
@@ -67,7 +70,9 @@ class _OwnerBillingRulesScreenState
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          final result = await context.push(RouteNames.ownerBillingSetup);
+          final result = await context.push(
+            RouteNames.ownerBillingSetup,
+          );
 
           if (!context.mounted) {
             return;
@@ -95,7 +100,9 @@ class _OwnerBillingRulesScreenState
       ),
       body: profileAsync.when(
         loading: () {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
         },
         error: (error, stackTrace) {
           return _ErrorView(
@@ -118,12 +125,16 @@ class _OwnerBillingRulesScreenState
           final ownerId = profile.uid.trim();
 
           if (ownerId.isEmpty) {
-            return const _ErrorView(message: 'Unable to determine owner ID.');
+            return const _ErrorView(
+              message: 'Unable to determine owner ID.',
+            );
           }
 
           return propertiesAsync.when(
             loading: () {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
             },
             error: (error, stackTrace) {
               return _ErrorView(
@@ -138,12 +149,12 @@ class _OwnerBillingRulesScreenState
                 return const _EmptyState(
                   icon: Icons.home_work_outlined,
                   title: 'No properties found',
-                  message: 'Add a property before creating billing rules.',
+                  message:
+                  'Add a property before creating billing rules.',
                 );
               }
 
-              final selectedPropertyId =
-              properties.any(
+              final selectedPropertyId = properties.any(
                     (property) => property.id == _selectedPropertyId,
               )
                   ? _selectedPropertyId!
@@ -217,14 +228,21 @@ class _OwnerBillingRulesScreenState
     required String propertyId,
   }) {
     ref.invalidate(
-      propertyBillingRulesProvider((ownerId: ownerId, propertyId: propertyId)),
+      propertyBillingRulesProvider(
+        (
+        ownerId: ownerId,
+        propertyId: propertyId,
+        ),
+      ),
     );
 
     ref.invalidate(
-      propertyMonthlyBillHistoryProvider((
-      ownerId: ownerId,
-      propertyId: propertyId,
-      )),
+      propertyMonthlyBillHistoryProvider(
+        (
+        ownerId: ownerId,
+        propertyId: propertyId,
+        ),
+      ),
     );
   }
 
@@ -279,17 +297,32 @@ class _OwnerBillingRulesScreenState
         ? selectedMonth.year + 1
         : selectedMonth.year;
 
-    final dueMonth = selectedMonth.month == 12 ? 1 : selectedMonth.month + 1;
+    final dueMonth = selectedMonth.month == 12
+        ? 1
+        : selectedMonth.month + 1;
 
-    final dueMonthStart = DateTime(dueYear, dueMonth, 1);
+    final dueMonthStart = DateTime(
+      dueYear,
+      dueMonth,
+      1,
+    );
 
-    final dueMonthEnd = DateTime(dueYear, dueMonth + 1, 0);
+    final dueMonthEnd = DateTime(
+      dueYear,
+      dueMonth + 1,
+      0,
+    );
 
-    final defaultDueDateDay = dueMonthEnd.day >= 10 ? 10 : dueMonthEnd.day;
+    final defaultDueDateDay =
+    dueMonthEnd.day >= 10 ? 10 : dueMonthEnd.day;
 
     final dueDate = await showDatePicker(
       context: context,
-      initialDate: DateTime(dueYear, dueMonth, defaultDueDateDay),
+      initialDate: DateTime(
+        dueYear,
+        dueMonth,
+        defaultDueDateDay,
+      ),
       firstDate: dueMonthStart,
       lastDate: dueMonthEnd,
       helpText: 'Select bill due date',
@@ -300,13 +333,17 @@ class _OwnerBillingRulesScreenState
     }
 
     try {
-      _showMessage('Preparing tenancy history and units...');
+      _showMessage(
+        'Preparing tenancy history and units...',
+      );
 
       // =======================================================================
       // STEP 3 — LOAD UNITS
       // =======================================================================
 
-      final units = await ref.read(propertyUnitsProvider(propertyId).future);
+      final units = await ref.read(
+        propertyUnitsProvider(propertyId).future,
+      );
 
       // =======================================================================
       // STEP 4 — LOAD CURRENT TENANTS
@@ -319,21 +356,10 @@ class _OwnerBillingRulesScreenState
       // =======================================================================
       // STEP 5 — RESOLVE HISTORICAL TENANCY TARGETS
       // =======================================================================
-      //
-      // The resolver combines:
-      //
-      // 1. Historical ended tenancies
-      // 2. Current active tenancies
-      //
-      // Example:
-      //
-      // Tenant A → 01 Oct to 14 Oct
-      // Tenant B → 15 Oct to 31 Oct
-      //
-      // Both become separate billing targets.
-      //
 
-      final tenancyResolver = ref.read(tenancyBillingTargetResolverProvider);
+      final tenancyResolver = ref.read(
+        tenancyBillingTargetResolverProvider,
+      );
 
       final tenancyTargets = await tenancyResolver.resolve(
         ownerId: ownerId,
@@ -343,7 +369,10 @@ class _OwnerBillingRulesScreenState
         currentTenants: tenants,
         units: [
           for (final unit in units)
-            (unitId: unit.id.trim(), floorId: unit.floorNumber.toString()),
+            (
+            unitId: unit.id.trim(),
+            floorId: unit.floorNumber.toString(),
+            ),
         ],
       );
 
@@ -362,19 +391,6 @@ class _OwnerBillingRulesScreenState
       // =======================================================================
       // STEP 6 — GENERATE RENT + NON-RENT BILLS
       // =======================================================================
-      //
-      // The same historical tenancy targets are passed to the orchestration
-      // layer.
-      //
-      // Rent:
-      //   Uses tenancyStart / tenancyEnd
-      //   Uses rent-rate history
-      //   Uses calendar-day proration
-      //
-      // Non-rent:
-      //   Uses the same tenant/unit/floor targets
-      //   Uses applicable billing rules
-      //
 
       _showMessage(
         'Generating rent and monthly bills for '
@@ -403,10 +419,12 @@ class _OwnerBillingRulesScreenState
       // =======================================================================
 
       ref.invalidate(
-        propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
-        )),
+        propertyMonthlyBillHistoryProvider(
+          (
+          ownerId: ownerId,
+          propertyId: propertyId,
+          ),
+        ),
       );
 
       final rentCount = result.generatedRents.length;
@@ -429,17 +447,25 @@ class _OwnerBillingRulesScreenState
             '$billCount monthly bill(s) generated successfully.',
       );
     } catch (error, stackTrace) {
-      debugPrint('BILLING: Failed to generate monthly charges.');
+      debugPrint(
+        'BILLING: Failed to generate monthly charges.',
+      );
 
-      debugPrint('BILLING ERROR: $error');
+      debugPrint(
+        'BILLING ERROR: $error',
+      );
 
-      debugPrint('BILLING STACK: $stackTrace');
+      debugPrint(
+        'BILLING STACK: $stackTrace',
+      );
 
       if (!mounted) {
         return;
       }
 
-      _showMessage(_cleanErrorMessage(error));
+      _showMessage(
+        _cleanErrorMessage(error),
+      );
     }
   }
 
@@ -470,7 +496,9 @@ class _OwnerBillingRulesScreenState
     final message = error.toString();
 
     if (message.startsWith('Exception: ')) {
-      return message.substring('Exception: '.length);
+      return message.substring(
+        'Exception: '.length,
+      );
     }
 
     return message;
@@ -483,7 +511,11 @@ class _OwnerBillingRulesScreenState
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
   }
 }
 
@@ -507,31 +539,43 @@ class _RulesTab extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context,
+      WidgetRef ref,) {
     final theme = Theme.of(context);
 
     final rulesAsync = ref.watch(
-      propertyBillingRulesProvider((ownerId: ownerId, propertyId: propertyId)),
+      propertyBillingRulesProvider(
+        (
+        ownerId: ownerId,
+        propertyId: propertyId,
+        ),
+      ),
     );
 
     final billHistoryAsync = ref.watch(
-      propertyMonthlyBillHistoryProvider((
-      ownerId: ownerId,
-      propertyId: propertyId,
-      )),
+      propertyMonthlyBillHistoryProvider(
+        (
+        ownerId: ownerId,
+        propertyId: propertyId,
+        ),
+      ),
     );
 
     return RefreshIndicator(
       onRefresh: () async {
-        final rulesProvider = propertyBillingRulesProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
-        ));
+        final rulesProvider = propertyBillingRulesProvider(
+          (
+          ownerId: ownerId,
+          propertyId: propertyId,
+          ),
+        );
 
-        final billsProvider = propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
-        ));
+        final billsProvider = propertyMonthlyBillHistoryProvider(
+          (
+          ownerId: ownerId,
+          propertyId: propertyId,
+          ),
+        );
 
         ref.invalidate(rulesProvider);
         ref.invalidate(billsProvider);
@@ -541,7 +585,12 @@ class _RulesTab extends ConsumerWidget {
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          100,
+        ),
         children: [
           Text(
             'Billing Management',
@@ -561,14 +610,19 @@ class _RulesTab extends ConsumerWidget {
             initialValue: propertyId,
             decoration: const InputDecoration(
               labelText: 'Property',
-              prefixIcon: Icon(Icons.apartment_outlined),
+              prefixIcon: Icon(
+                Icons.apartment_outlined,
+              ),
               border: OutlineInputBorder(),
             ),
             items: [
               for (final property in properties)
                 DropdownMenuItem<String>(
                   value: property.id,
-                  child: Text(property.name, overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    property.name,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             onChanged: onPropertyChanged,
@@ -578,8 +632,12 @@ class _RulesTab extends ConsumerWidget {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: onGenerateBills,
-              icon: const Icon(Icons.receipt_long_outlined),
-              label: const Text('Generate Monthly Charges'),
+              icon: const Icon(
+                Icons.receipt_long_outlined,
+              ),
+              label: const Text(
+                'Generate Monthly Charges',
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -587,7 +645,9 @@ class _RulesTab extends ConsumerWidget {
             loading: () {
               return const Padding(
                 padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
               );
             },
             error: (error, stackTrace) {
@@ -595,10 +655,12 @@ class _RulesTab extends ConsumerWidget {
                 message: 'Unable to load billing rules.',
                 onRetry: () {
                   ref.invalidate(
-                    propertyBillingRulesProvider((
-                    ownerId: ownerId,
-                    propertyId: propertyId,
-                    )),
+                    propertyBillingRulesProvider(
+                      (
+                      ownerId: ownerId,
+                      propertyId: propertyId,
+                      ),
+                    ),
                   );
                 },
               );
@@ -682,7 +744,10 @@ class _RulesList extends StatelessWidget {
             ),
             const Spacer(),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 4,
+              ),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(20),
@@ -702,7 +767,9 @@ class _RulesList extends StatelessWidget {
             rule: rule,
             ownerId: ownerId,
             generatedBillCount: bills
-                .where((bill) => bill.sourceRuleId == rule.id)
+                .where(
+                  (bill) => bill.sourceRuleId == rule.id,
+            )
                 .length,
           ),
           const SizedBox(height: 12),
@@ -732,22 +799,27 @@ class _GeneratedBillsTab extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context,
+      WidgetRef ref,) {
     final theme = Theme.of(context);
 
     final billsAsync = ref.watch(
-      propertyMonthlyBillHistoryProvider((
-      ownerId: ownerId,
-      propertyId: propertyId,
-      )),
+      propertyMonthlyBillHistoryProvider(
+        (
+        ownerId: ownerId,
+        propertyId: propertyId,
+        ),
+      ),
     );
 
     return RefreshIndicator(
       onRefresh: () async {
-        final provider = propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
-        ));
+        final provider = propertyMonthlyBillHistoryProvider(
+          (
+          ownerId: ownerId,
+          propertyId: propertyId,
+          ),
+        );
 
         ref.invalidate(provider);
 
@@ -755,7 +827,12 @@ class _GeneratedBillsTab extends ConsumerWidget {
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          100,
+        ),
         children: [
           Text(
             'Generated Bills',
@@ -775,14 +852,19 @@ class _GeneratedBillsTab extends ConsumerWidget {
             initialValue: selectedPropertyId,
             decoration: const InputDecoration(
               labelText: 'Property',
-              prefixIcon: Icon(Icons.apartment_outlined),
+              prefixIcon: Icon(
+                Icons.apartment_outlined,
+              ),
               border: OutlineInputBorder(),
             ),
             items: [
               for (final property in properties)
                 DropdownMenuItem<String>(
                   value: property.id,
-                  child: Text(property.name, overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    property.name,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             onChanged: onPropertyChanged,
@@ -792,7 +874,9 @@ class _GeneratedBillsTab extends ConsumerWidget {
             loading: () {
               return const Padding(
                 padding: EdgeInsets.all(40),
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
               );
             },
             error: (error, stackTrace) {
@@ -800,10 +884,12 @@ class _GeneratedBillsTab extends ConsumerWidget {
                 message: 'Unable to load generated bills.',
                 onRetry: () {
                   ref.invalidate(
-                    propertyMonthlyBillHistoryProvider((
-                    ownerId: ownerId,
-                    propertyId: propertyId,
-                    )),
+                    propertyMonthlyBillHistoryProvider(
+                      (
+                      ownerId: ownerId,
+                      propertyId: propertyId,
+                      ),
+                    ),
                   );
                 },
               );
@@ -836,7 +922,8 @@ class _GeneratedBillsTab extends ConsumerWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
+                          color:
+                          theme.colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -854,10 +941,12 @@ class _GeneratedBillsTab extends ConsumerWidget {
                       bill: bill,
                       onUpdated: () {
                         ref.invalidate(
-                          propertyMonthlyBillHistoryProvider((
-                          ownerId: ownerId,
-                          propertyId: propertyId,
-                          )),
+                          propertyMonthlyBillHistoryProvider(
+                            (
+                            ownerId: ownerId,
+                            propertyId: propertyId,
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -889,16 +978,16 @@ class _BillingRuleCard extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context,
+      WidgetRef ref,) {
     final theme = Theme.of(context);
 
     final status = _resolveRuleStatus(rule);
-
     final chargeName = _chargeTypeLabel(rule.chargeType);
 
-    final amountText = rule.valueType == BillingValueType.variable
-        ? 'Variable'
-        : '৳${rule.amount?.toStringAsFixed(2) ?? '0.00'}';
+    // Variable rules also have a configured amount.
+    final amountText =
+        '৳${rule.amount.toStringAsFixed(2)}';
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -925,7 +1014,8 @@ class _BillingRuleCard extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
                     children: [
                       Text(
                         rule.title
@@ -935,15 +1025,18 @@ class _BillingRuleCard extends ConsumerWidget {
                             : chargeName,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
+                        style:
+                        theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         chargeName,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style:
+                        theme.textTheme.bodySmall?.copyWith(
+                          color:
+                          theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -972,17 +1065,21 @@ class _BillingRuleCard extends ConsumerWidget {
 
                     if (result == true) {
                       ref.invalidate(
-                        propertyBillingRulesProvider((
-                        ownerId: ownerId,
-                        propertyId: rule.propertyId,
-                        )),
+                        propertyBillingRulesProvider(
+                          (
+                          ownerId: ownerId,
+                          propertyId: rule.propertyId,
+                          ),
+                        ),
                       );
 
                       ref.invalidate(
-                        propertyMonthlyBillHistoryProvider((
-                        ownerId: ownerId,
-                        propertyId: rule.propertyId,
-                        )),
+                        propertyMonthlyBillHistoryProvider(
+                          (
+                          ownerId: ownerId,
+                          propertyId: rule.propertyId,
+                          ),
+                        ),
                       );
                     }
                   },
@@ -1019,7 +1116,9 @@ class _BillingRuleCard extends ConsumerWidget {
                   child: _InfoItem(
                     icon: Icons.tune_outlined,
                     label: 'Type',
-                    value: _valueTypeLabel(rule.valueType),
+                    value: _valueTypeLabel(
+                      rule.valueType,
+                    ),
                   ),
                 ),
               ],
@@ -1031,14 +1130,18 @@ class _BillingRuleCard extends ConsumerWidget {
                   child: _InfoItem(
                     icon: Icons.account_tree_outlined,
                     label: 'Scope',
-                    value: _scopeTypeLabel(rule.scopeType),
+                    value: _scopeTypeLabel(
+                      rule.scopeType,
+                    ),
                   ),
                 ),
                 Expanded(
                   child: _InfoItem(
                     icon: Icons.calendar_month_outlined,
                     label: 'Effective',
-                    value: _formatDate(rule.effectiveFrom),
+                    value: _formatDate(
+                      rule.effectiveFrom,
+                    ),
                   ),
                 ),
               ],
@@ -1048,15 +1151,21 @@ class _BillingRuleCard extends ConsumerWidget {
               _InfoItem(
                 icon: Icons.event_busy_outlined,
                 label: 'Ends',
-                value: _formatDate(rule.effectiveTo!),
+                value: _formatDate(
+                  rule.effectiveTo!,
+                ),
               ),
             ],
             const SizedBox(height: 14),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
+                color:
+                theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -1064,7 +1173,8 @@ class _BillingRuleCard extends ConsumerWidget {
                   Icon(
                     Icons.receipt_long_outlined,
                     size: 20,
-                    color: theme.colorScheme.onSurfaceVariant,
+                    color:
+                    theme.colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -1072,7 +1182,8 @@ class _BillingRuleCard extends ConsumerWidget {
                       generatedBillCount == 0
                           ? 'No bills generated from this rule yet'
                           : '$generatedBillCount bill(s) generated from this rule',
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      style:
+                      theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1086,7 +1197,7 @@ class _BillingRuleCard extends ConsumerWidget {
     );
   }
 
-  static _RuleStatus _resolveRuleStatus(BillingRule rule) {
+  static _RuleStatus _resolveRuleStatus(BillingRule rule,) {
     if (!rule.isActive) {
       return _RuleStatus.inactive;
     }
@@ -1097,14 +1208,15 @@ class _BillingRuleCard extends ConsumerWidget {
       return _RuleStatus.scheduled;
     }
 
-    if (rule.effectiveTo != null && !now.isBefore(rule.effectiveTo!)) {
+    if (rule.effectiveTo != null &&
+        !now.isBefore(rule.effectiveTo!)) {
       return _RuleStatus.historical;
     }
 
     return _RuleStatus.active;
   }
 
-  static String _chargeTypeLabel(BillingChargeType type) {
+  static String _chargeTypeLabel(BillingChargeType type,) {
     switch (type) {
       case BillingChargeType.water:
         return 'Water';
@@ -1121,7 +1233,7 @@ class _BillingRuleCard extends ConsumerWidget {
     }
   }
 
-  static IconData _chargeTypeIcon(BillingChargeType type) {
+  static IconData _chargeTypeIcon(BillingChargeType type,) {
     switch (type) {
       case BillingChargeType.water:
         return Icons.water_drop_outlined;
@@ -1138,7 +1250,7 @@ class _BillingRuleCard extends ConsumerWidget {
     }
   }
 
-  static String _valueTypeLabel(BillingValueType type) {
+  static String _valueTypeLabel(BillingValueType type,) {
     switch (type) {
       case BillingValueType.fixed:
         return 'Fixed';
@@ -1147,7 +1259,7 @@ class _BillingRuleCard extends ConsumerWidget {
     }
   }
 
-  static String _scopeTypeLabel(BillingScopeType type) {
+  static String _scopeTypeLabel(BillingScopeType type,) {
     switch (type) {
       case BillingScopeType.property:
         return 'Property';
@@ -1186,7 +1298,12 @@ class _BillingRuleCard extends ConsumerWidget {
 // RULE STATUS
 // ============================================================================
 
-enum _RuleStatus { active, scheduled, historical, inactive }
+enum _RuleStatus {
+  active,
+  scheduled,
+  historical,
+  inactive,
+}
 
 // ============================================================================
 // RULE STATUS CHIP
@@ -1195,7 +1312,9 @@ enum _RuleStatus { active, scheduled, historical, inactive }
 class _RuleStatusChip extends StatelessWidget {
   final _RuleStatus status;
 
-  const _RuleStatusChip({required this.status});
+  const _RuleStatusChip({
+    required this.status,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1223,7 +1342,10 @@ class _RuleStatusChip extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(20),
@@ -1231,7 +1353,10 @@ class _RuleStatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15),
+          Icon(
+            icon,
+            size: 15,
+          ),
           const SizedBox(width: 4),
           Text(
             label,
@@ -1253,79 +1378,95 @@ class _GeneratedBillCard extends StatelessWidget {
   final MonthlyBill bill;
   final VoidCallback? onUpdated;
 
-  const _GeneratedBillCard({required this.bill, this.onUpdated});
-
+  const _GeneratedBillCard({
+    required this.bill,
+    this.onUpdated,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+          CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
               children: [
                 Container(
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(12),
+                    color:
+                    theme.colorScheme.secondaryContainer,
+                    borderRadius:
+                    BorderRadius.circular(12),
                   ),
                   child: Icon(
                     Icons.receipt_long_outlined,
-                    color: theme.colorScheme.onSecondaryContainer,
+                    color: theme.colorScheme
+                        .onSecondaryContainer,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
                     children: [
                       Text(
                         _billTypeLabel(bill.type),
-                        style: theme.textTheme.titleMedium?.copyWith(
+                        style:
+                        theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Unit: ${bill.unitId}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style:
+                        theme.textTheme.bodySmall?.copyWith(
+                          color:
+                          theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Period: '
                             '${_formatMonth(bill.billingPeriodStart)}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style:
+                        theme.textTheme.bodySmall?.copyWith(
+                          color:
+                          theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 12),
-                _BillStatusChip(status: bill.status),
+                _BillStatusChip(
+                  status: bill.status,
+                ),
               ],
             ),
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 16),
-            _FinalizedBillContent(bill: bill),
+            _FinalizedBillContent(
+              bill: bill,
+            ),
           ],
         ),
       ),
     );
   }
 
-  static String _billTypeLabel(MonthlyBillType type) {
+  static String _billTypeLabel(MonthlyBillType type,) {
     switch (type) {
       case MonthlyBillType.rent:
         return 'Rent';
@@ -1364,7 +1505,6 @@ class _GeneratedBillCard extends StatelessWidget {
   }
 }
 
-
 // ============================================================================
 // FINALIZED BILL CONTENT
 // ============================================================================
@@ -1372,7 +1512,9 @@ class _GeneratedBillCard extends StatelessWidget {
 class _FinalizedBillContent extends StatelessWidget {
   final MonthlyBill bill;
 
-  const _FinalizedBillContent({required this.bill});
+  const _FinalizedBillContent({
+    required this.bill,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1382,27 +1524,34 @@ class _FinalizedBillContent extends StatelessWidget {
       children: [
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+            CrossAxisAlignment.start,
             children: [
               Text(
                 'Amount',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                style:
+                theme.textTheme.bodySmall?.copyWith(
+                  color:
+                  theme.colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 '৳${bill.amount.toStringAsFixed(2)}',
-                style: theme.textTheme.titleMedium?.copyWith(
+                style:
+                theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              if (bill.valueType == BillingValueType.variable) ...[
+              if (bill.valueType ==
+                  BillingValueType.variable) ...[
                 const SizedBox(height: 2),
                 Text(
-                  'Variable',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  'Variable • Configured for this month',
+                  style:
+                  theme.textTheme.bodySmall?.copyWith(
+                    color:
+                    theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -1410,7 +1559,9 @@ class _FinalizedBillContent extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        _BillStatusChip(status: bill.status),
+        _BillStatusChip(
+          status: bill.status,
+        ),
       ],
     );
   }
@@ -1423,7 +1574,9 @@ class _FinalizedBillContent extends StatelessWidget {
 class _BillStatusChip extends StatelessWidget {
   final MonthlyBillStatus status;
 
-  const _BillStatusChip({required this.status});
+  const _BillStatusChip({
+    required this.status,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1433,33 +1586,42 @@ class _BillStatusChip extends StatelessWidget {
     final Color foregroundColor;
 
     switch (status) {
-      case MonthlyBillStatus.pending:
-        backgroundColor = theme.colorScheme.primaryContainer;
-        foregroundColor = theme.colorScheme.onPrimaryContainer;
-
       case MonthlyBillStatus.unpaid:
-        backgroundColor = theme.colorScheme.errorContainer;
-        foregroundColor = theme.colorScheme.onErrorContainer;
+        backgroundColor =
+            theme.colorScheme.errorContainer;
+        foregroundColor =
+            theme.colorScheme.onErrorContainer;
 
       case MonthlyBillStatus.partiallyPaid:
-        backgroundColor = theme.colorScheme.secondaryContainer;
-        foregroundColor = theme.colorScheme.onSecondaryContainer;
+        backgroundColor =
+            theme.colorScheme.secondaryContainer;
+        foregroundColor =
+            theme.colorScheme.onSecondaryContainer;
 
       case MonthlyBillStatus.paid:
-        backgroundColor = theme.colorScheme.tertiaryContainer;
-        foregroundColor = theme.colorScheme.onTertiaryContainer;
+        backgroundColor =
+            theme.colorScheme.tertiaryContainer;
+        foregroundColor =
+            theme.colorScheme.onTertiaryContainer;
 
       case MonthlyBillStatus.overdue:
-        backgroundColor = theme.colorScheme.errorContainer;
-        foregroundColor = theme.colorScheme.onErrorContainer;
+        backgroundColor =
+            theme.colorScheme.errorContainer;
+        foregroundColor =
+            theme.colorScheme.onErrorContainer;
 
       case MonthlyBillStatus.cancelled:
-        backgroundColor = theme.colorScheme.surfaceContainerHighest;
-        foregroundColor = theme.colorScheme.onSurfaceVariant;
+        backgroundColor =
+            theme.colorScheme.surfaceContainerHighest;
+        foregroundColor =
+            theme.colorScheme.onSurfaceVariant;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 5,
+      ),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(20),
@@ -1474,18 +1636,20 @@ class _BillStatusChip extends StatelessWidget {
     );
   }
 
-  String _statusLabel(MonthlyBillStatus status) {
+  String _statusLabel(MonthlyBillStatus status,) {
     switch (status) {
-      case MonthlyBillStatus.pending:
-        return 'Amount Required';
       case MonthlyBillStatus.unpaid:
         return 'Unpaid';
+
       case MonthlyBillStatus.partiallyPaid:
         return 'Partially Paid';
+
       case MonthlyBillStatus.paid:
         return 'Paid';
+
       case MonthlyBillStatus.overdue:
         return 'Overdue';
+
       case MonthlyBillStatus.cancelled:
         return 'Cancelled';
     }
@@ -1512,18 +1676,26 @@ class _InfoItem extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+      CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+        Icon(
+          icon,
+          size: 20,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+            CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                style:
+                theme.textTheme.bodySmall?.copyWith(
+                  color:
+                  theme.colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1531,7 +1703,8 @@ class _InfoItem extends StatelessWidget {
                 value,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
+                style:
+                theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1563,14 +1736,21 @@ class _EmptyState extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
+      padding: const EdgeInsets.symmetric(
+        vertical: 48,
+      ),
       child: Column(
         children: [
-          Icon(icon, size: 56, color: theme.colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 56,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(height: 16),
           Text(
             title,
-            style: theme.textTheme.titleMedium?.copyWith(
+            style:
+            theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1578,7 +1758,8 @@ class _EmptyState extends StatelessWidget {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
+            style:
+            theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
@@ -1596,7 +1777,10 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
 
-  const _ErrorView({required this.message, this.onRetry});
+  const _ErrorView({
+    required this.message,
+    this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1606,12 +1790,21 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+            ),
             const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+            ),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
-              FilledButton(onPressed: onRetry, child: const Text('Retry')),
+              FilledButton(
+                onPressed: onRetry,
+                child: const Text('Retry'),
+              ),
             ],
           ],
         ),
@@ -1628,7 +1821,10 @@ class _ErrorCard extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorCard({required this.message, required this.onRetry});
+  const _ErrorCard({
+    required this.message,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1637,9 +1833,15 @@ class _ErrorCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Icon(Icons.error_outline, size: 40),
+            const Icon(
+              Icons.error_outline,
+              size: 40,
+            ),
             const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: onRetry,
