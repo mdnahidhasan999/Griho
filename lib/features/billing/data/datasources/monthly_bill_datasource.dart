@@ -68,14 +68,13 @@ class MonthlyBillDataSource {
 
     final periodKey = _formatPeriodKey(normalizedPeriodStart);
 
-    // Different tenants occupying the same unit during
-    // the same month must have separate bills.
+    // ডিটারমিনিস্টিক ও ইউনিক ডকুমেন্ট আইডি:
+    // একই ওনার, প্রোপার্টি, ইউনিট, টেন্যান্ট, বিলের ধরন এবং মাসের জন্য শুধু একটি বিল তৈরি হতে পারবে
     final documentId =
-        '${ownerId}_${unitId}_${tenantId}_'
-        '${request.type.name}_$periodKey';
+        '${ownerId}_${propertyId}_${unitId}_${tenantId}_${request.type
+        .name}_$periodKey';
 
     final document = _collection.doc(documentId);
-
     final now = DateTime.now();
 
     final monthlyBill = MonthlyBillModel(
@@ -100,14 +99,13 @@ class MonthlyBillDataSource {
       updatedAt: now,
     );
 
-    // Transaction is the authoritative duplicate-prevention layer.
+    // ট্রানজ্যাকশনের মাধ্যমে ডুপ্লিকেট রোধ
     await _firestore.runTransaction((transaction) async {
       final existingSnapshot = await transaction.get(document);
 
       if (existingSnapshot.exists) {
         throw StateError(
-          'Monthly bill already exists for this '
-              'tenant, bill type and billing period.',
+          'Monthly bill already exists for this tenant, bill type and billing period.',
         );
       }
 
@@ -160,19 +158,11 @@ class MonthlyBillDataSource {
     );
 
     final snapshot = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'unitId',
-      isEqualTo: normalizedUnitId,
-    )
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('unitId', isEqualTo: normalizedUnitId)
         .where(
       'billingPeriodStart',
-      isEqualTo: Timestamp.fromDate(
-        normalizedPeriodStart,
-      ),
+      isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
     )
         .get();
 
@@ -206,28 +196,14 @@ class MonthlyBillDataSource {
     );
 
     final snapshot = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'unitId',
-      isEqualTo: normalizedUnitId,
-    )
-        .where(
-      'tenantId',
-      isEqualTo: normalizedTenantId,
-    )
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('unitId', isEqualTo: normalizedUnitId)
+        .where('tenantId', isEqualTo: normalizedTenantId)
         .where(
       'billingPeriodStart',
-      isEqualTo: Timestamp.fromDate(
-        normalizedPeriodStart,
-      ),
+      isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
     )
-        .where(
-      'type',
-      isEqualTo: type.name,
-    )
+        .where('type', isEqualTo: type.name)
         .limit(1)
         .get();
 
@@ -260,15 +236,10 @@ class MonthlyBillDataSource {
     );
 
     final snapshot = await _collection
-        .where(
-      'tenantUserId',
-      isEqualTo: normalizedTenantUserId,
-    )
+        .where('tenantUserId', isEqualTo: normalizedTenantUserId)
         .where(
       'billingPeriodStart',
-      isEqualTo: Timestamp.fromDate(
-        normalizedPeriodStart,
-      ),
+      isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
     )
         .get();
 
@@ -293,14 +264,8 @@ class MonthlyBillDataSource {
     );
 
     final snapshot = await _collection
-        .where(
-      'tenantUserId',
-      isEqualTo: normalizedTenantUserId,
-    )
-        .orderBy(
-      'billingPeriodStart',
-      descending: true,
-    )
+        .where('tenantUserId', isEqualTo: normalizedTenantUserId)
+        .orderBy('billingPeriodStart', descending: true)
         .get();
 
     return snapshot.docs
@@ -328,19 +293,11 @@ class MonthlyBillDataSource {
     );
 
     final snapshot = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'propertyId',
-      isEqualTo: normalizedPropertyId,
-    )
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('propertyId', isEqualTo: normalizedPropertyId)
         .where(
       'billingPeriodStart',
-      isEqualTo: Timestamp.fromDate(
-        normalizedPeriodStart,
-      ),
+      isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
     )
         .orderBy('unitId')
         .get();
@@ -366,18 +323,9 @@ class MonthlyBillDataSource {
     _validateRequiredId(normalizedPropertyId, 'Property ID');
 
     final snapshot = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'propertyId',
-      isEqualTo: normalizedPropertyId,
-    )
-        .orderBy(
-      'billingPeriodStart',
-      descending: true,
-    )
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('propertyId', isEqualTo: normalizedPropertyId)
+        .orderBy('billingPeriodStart', descending: true)
         .get();
 
     return snapshot.docs
@@ -389,7 +337,7 @@ class MonthlyBillDataSource {
   // CANCEL
   // ==========================================================================
 
-  Future<MonthlyBillModel?> cancelMonthlyBill(String billId,) async {
+  Future<MonthlyBillModel?> cancelMonthlyBill(String billId) async {
     final normalizedBillId = billId.trim();
 
     if (normalizedBillId.isEmpty) {
@@ -397,7 +345,6 @@ class MonthlyBillDataSource {
     }
 
     final document = _collection.doc(normalizedBillId);
-
     final snapshot = await document.get();
 
     if (!snapshot.exists) {
@@ -440,10 +387,6 @@ class MonthlyBillDataSource {
     );
   }
 
-  // ==========================================================================
-  // PERIOD KEY
-  // ==========================================================================
-
   String _formatPeriodKey(DateTime date) {
     final year = date.year.toString().padLeft(4, '0');
     final month = date.month.toString().padLeft(2, '0');
@@ -455,8 +398,7 @@ class MonthlyBillDataSource {
   // VALIDATION
   // ==========================================================================
 
-  void _validateRequiredId(String value,
-      String label,) {
+  void _validateRequiredId(String value, String label) {
     if (value.isEmpty) {
       throw ArgumentError(
         '$label cannot be empty.',

@@ -1024,19 +1024,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-
     // ============================================================
     // MONTHLY RENTS
     // ============================================================
 
     match /monthlyRents/{monthlyRentId} {
 
+      // resource == null চেক দেওয়া হয়েছে যাতে নতুন ডকুমেন্ট চেক করার সময় পারমিশন ফেইল না করে
       allow read: if isAuthenticated()
                   && (
-                    resource.data.ownerId == request.auth.uid
-
+                    resource == null
                     ||
-
+                    resource.data.ownerId == request.auth.uid
+                    ||
                     (
                       resource.data.tenantUserId is string
                       &&
@@ -1044,70 +1044,27 @@ service cloud.firestore {
                     )
                   );
 
-
       allow create: if isAuthenticated()
                     && isValidMonthlyRentCreate();
 
-
       allow update: if isAuthenticated()
-
                     && resource.data.ownerId == request.auth.uid
-
-                    && request.resource.data.ownerId
-                       == resource.data.ownerId
-
-                    && request.resource.data.propertyId
-                       == resource.data.propertyId
-
-                    && request.resource.data.unitId
-                       == resource.data.unitId
-
-                    && request.resource.data.tenantId
-                       == resource.data.tenantId
-
-                    && request.resource.data.tenantUserId
-                       == resource.data.tenantUserId
-
-                    && request.resource.data.rentRateId
-                       == resource.data.rentRateId
-
-                    && request.resource.data.amount
-                       == resource.data.amount
-
-                    && request.resource.data.billingPeriodStart
-                       == resource.data.billingPeriodStart
-
-                    && request.resource.data.billingPeriodEnd
-                       == resource.data.billingPeriodEnd
-
-                    && request.resource.data.dueDate
-                       == resource.data.dueDate
-
-                    && request.resource.data.createdAt
-                       == resource.data.createdAt
-
-                    && request.resource.data.status is string
-
-                    && request.resource.data.status
-                       in [
-                         'unpaid',
-                         'partiallyPaid',
-                         'paid',
-                         'overdue',
-                         'cancelled'
-                       ]
-
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.propertyId == resource.data.propertyId
+                    && request.resource.data.unitId == resource.data.unitId
+                    && request.resource.data.tenantId == resource.data.tenantId
+                    && request.resource.data.rentRateId == resource.data.rentRateId
+                    && request.resource.data.billingPeriodStart == resource.data.billingPeriodStart
+                    && request.resource.data.billingPeriodEnd == resource.data.billingPeriodEnd
+                    && request.resource.data.dueDate == resource.data.dueDate
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.status in ['unpaid', 'partiallyPaid', 'paid', 'overdue', 'cancelled']
                     && request.resource.data.updatedAt is timestamp
-
-                    && request.resource.data.updatedAt
-                       >= resource.data.updatedAt
-
-                    && request.resource.data.updatedAt
-                       <= request.time;
-
+                    && request.resource.data.updatedAt <= request.time;
 
       allow delete: if false;
     }
+
 
 
     // ============================================================
@@ -1143,61 +1100,45 @@ service cloud.firestore {
     // TENANT INVITATIONS
     // ============================================================
 
-    match /tenantInvitations/{invitationId} {
+  match /tenantInvitations/{invitationId} {
 
-      allow create: if isAuthenticated()
-
-                    && request.resource.data.ownerId
-                       == request.auth.uid
-
-                    && request.resource.data.rentAmount
-                       is number
-
-                    && request.resource.data.rentAmount > 0
-
-                    && exists(
-                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-                    )
-
-                    && get(
-                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-                    ).data.ownerId == request.auth.uid
-
-                    && get(
-                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-                    ).data.propertyId
-                       == request.resource.data.propertyId
-
-                    && get(
-                      /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-                    ).data.unitId
-                       == request.resource.data.unitId;
+       allow create: if isAuthenticated()
+                     && request.resource.data.ownerId == request.auth.uid
+                     && request.resource.data.rentAmount is number
+                     && request.resource.data.rentAmount > 0
+                     && exists(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId))
+                     && get(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.ownerId == request.auth.uid
+                     && get(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.propertyId == request.resource.data.propertyId
+                     && get(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.unitId == request.resource.data.unitId;
 
 
-      allow read: if isAuthenticated()
-                  && (
-                    resource.data.ownerId == request.auth.uid
+       allow read: if isAuthenticated()
+                   && (
+                     // ১. বাড়িওয়ালা পড়তে পারবেন
+                     resource.data.ownerId == request.auth.uid
 
-                    ||
+                     ||
 
-                    (
-                      resource.data.tenantId is string
-                      &&
-                      resource.data.tenantId != ''
+                     // ২. লগইন করা ভাড়াটিয়া নিজের ফোন নম্বরের ইনভাইটেশন পড়তে পারবেন (এটি মিসিং ছিল)
+                     (
+                       request.auth.token.phone_number != null
+                       &&
+                       resource.data.phone == request.auth.token.phone_number
+                     )
 
-                      &&
+                     ||
 
-                      exists(
-                        /databases/$(database)/documents/tenants/$(resource.data.tenantId)
-                      )
-
-                      &&
-
-                      get(
-                        /databases/$(database)/documents/tenants/$(resource.data.tenantId)
-                      ).data.userId == request.auth.uid
-                    )
-                  );
+                     // ৩. অলরেডি লিংকড হওয়া ভাড়াটিয়া
+                     (
+                       resource.data.tenantId is string
+                       &&
+                       resource.data.tenantId != ''
+                       &&
+                       exists(/databases/$(database)/documents/tenants/$(resource.data.tenantId))
+                       &&
+                       get(/databases/$(database)/documents/tenants/$(resource.data.tenantId)).data.userId == request.auth.uid
+                     )
+                   );
 
 
       allow update: if isAuthenticated()
@@ -1447,7 +1388,6 @@ service cloud.firestore {
                     );
     }
 
-
     // ============================================================
     // MONTHLY BILLS
     // ============================================================
@@ -1456,10 +1396,10 @@ service cloud.firestore {
 
       allow read: if isAuthenticated()
                   && (
-                    resource.data.ownerId == request.auth.uid
-
+                    resource == null
                     ||
-
+                    resource.data.ownerId == request.auth.uid
+                    ||
                     (
                       resource.data.tenantUserId is string
                       &&
@@ -3674,123 +3614,91 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
-    // MONTHLY RENT — CREATE VALIDATION
-    // ============================================================
+     // ============================================================
+     // MONTHLY RENT — CREATE VALIDATION
+     // ============================================================
 
-    function isValidMonthlyRentCreate() {
+     function isValidMonthlyRentCreate() {
 
-      let property =
-        get(
-          /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
-        ).data;
+       let property =
+         get(
+           /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+         ).data;
 
-      let unit =
-        get(
-          /databases/$(database)/documents/units/$(request.resource.data.unitId)
-        ).data;
+       let unit =
+         get(
+           /databases/$(database)/documents/units/$(request.resource.data.unitId)
+         ).data;
 
-      let tenant =
-        get(
-          /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-        ).data;
+       let tenant =
+         get(
+           /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+         ).data;
 
-      let rentRate =
-        get(
-          /databases/$(database)/documents/rentRates/$(request.resource.data.rentRateId)
-        ).data;
+       let rentRate =
+         get(
+           /databases/$(database)/documents/rentRates/$(request.resource.data.rentRateId)
+         ).data;
 
-      return
+       return
 
-        request.resource.data.ownerId
-           == request.auth.uid
+         request.resource.data.ownerId == request.auth.uid
+         && property.ownerId == request.auth.uid
+         && tenant.ownerId == request.auth.uid
+         && rentRate.ownerId == request.auth.uid
 
-        && property.ownerId
-           == request.auth.uid
+         && tenant.propertyId == request.resource.data.propertyId
+         && unit.propertyId == request.resource.data.propertyId
+         && rentRate.propertyId == request.resource.data.propertyId
+         && tenant.unitId == request.resource.data.unitId
+         && rentRate.unitId == request.resource.data.unitId
 
-        && tenant.ownerId
-           == request.auth.uid
+         && unit.status == 'occupied'
+         && tenant.status == 'active'
 
-        && rentRate.ownerId
-           == request.auth.uid
+         // tenantUserId হ্যান্ডলিং (লিঙ্কড বা আনলিঙ্কড উভয় টেন্যান্টের জন্য)
+         && (
+           (
+             tenant.userId is string
+             && tenant.userId != ''
+             && unit.tenantUserId == tenant.userId
+             && request.resource.data.tenantUserId == tenant.userId
+           )
+           ||
+           (
+             (!tenant.keys().hasAny(['userId']) || tenant.userId == null || tenant.userId == '')
+             && request.resource.data.tenantUserId == null
+           )
+         )
 
-        && tenant.propertyId
-           == request.resource.data.propertyId
+         && rentRate.effectiveFrom <= request.resource.data.billingPeriodStart
+         && (
+           rentRate.effectiveTo == null
+           ||
+           request.resource.data.billingPeriodStart < rentRate.effectiveTo
+         )
 
-        && unit.propertyId
-           == request.resource.data.propertyId
+         && request.resource.data.rentRateId is string
+         && request.resource.data.rentRateId != ''
 
-        && rentRate.propertyId
-           == request.resource.data.propertyId
+         && request.resource.data.amount is number
+         && request.resource.data.amount > 0
+         // প্রোরোটেড ভাড়ার ক্ষেত্রে amount যেন সর্বোচ্চ rentRate.amount এর সমান বা কম হয়
+         && request.resource.data.amount <= rentRate.amount
 
-        && tenant.unitId
-           == request.resource.data.unitId
+         && request.resource.data.billingPeriodStart is timestamp
+         && request.resource.data.billingPeriodEnd is timestamp
+         && request.resource.data.billingPeriodEnd > request.resource.data.billingPeriodStart
 
-        && rentRate.unitId
-           == request.resource.data.unitId
+         && request.resource.data.dueDate is timestamp
+         && request.resource.data.dueDate >= request.resource.data.billingPeriodStart
 
-        && unit.status == 'occupied'
-
-        && tenant.status == 'active'
-
-        && tenant.userId is string
-
-        && tenant.userId != ''
-
-        && unit.tenantUserId
-           == tenant.userId
-
-        && request.resource.data.tenantUserId
-           == tenant.userId
-
-        && rentRate.effectiveFrom
-           <= request.resource.data.billingPeriodStart
-
-        && (
-          rentRate.effectiveTo == null
-
-          ||
-
-          request.resource.data.billingPeriodStart
-             < rentRate.effectiveTo
-        )
-
-        && request.resource.data.rentRateId is string
-
-        && request.resource.data.rentRateId != ''
-
-        && request.resource.data.amount is number
-
-        && request.resource.data.amount > 0
-
-        && request.resource.data.amount
-           == rentRate.amount
-
-        && request.resource.data.billingPeriodStart is timestamp
-
-        && request.resource.data.billingPeriodEnd is timestamp
-
-        && request.resource.data.billingPeriodEnd
-           > request.resource.data.billingPeriodStart
-
-        && request.resource.data.dueDate is timestamp
-
-        && request.resource.data.dueDate
-           >= request.resource.data.billingPeriodStart
-
-        && request.resource.data.status == 'unpaid'
-
-        && request.resource.data.createdAt is timestamp
-
-        && request.resource.data.updatedAt is timestamp
-
-        && request.resource.data.updatedAt
-           == request.resource.data.createdAt
-
-        && request.resource.data.createdAt <= request.time
-
-        && request.resource.data.updatedAt <= request.time;
-    }
+         && request.resource.data.status == 'unpaid'
+         && request.resource.data.createdAt is timestamp
+         && request.resource.data.updatedAt is timestamp
+         && request.resource.data.updatedAt == request.resource.data.createdAt
+         && request.resource.data.createdAt <= request.time;
+     }
 
 
     // ============================================================

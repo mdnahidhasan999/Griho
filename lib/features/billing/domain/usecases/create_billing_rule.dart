@@ -5,11 +5,9 @@ import '../repositories/billing_rule_repository.dart';
 class CreateBillingRule {
   final BillingRuleRepository _repository;
 
-  const CreateBillingRule({
-    required this._repository,
-  });
+  const CreateBillingRule({required this._repository});
 
-  Future<BillingRule> call(CreateBillingRuleRequest request,) async {
+  Future<BillingRule> call(CreateBillingRuleRequest request) async {
     final ownerId = request.ownerId.trim();
     final propertyId = request.propertyId.trim();
     final scopeId = request.scopeId.trim();
@@ -20,21 +18,15 @@ class CreateBillingRule {
     // =========================================================================
 
     if (ownerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     if (propertyId.isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
     if (scopeId.isEmpty) {
-      throw ArgumentError(
-        'Billing scope ID cannot be empty.',
-      );
+      throw ArgumentError('Billing scope ID cannot be empty.');
     }
 
     // =========================================================================
@@ -43,51 +35,37 @@ class CreateBillingRule {
 
     if (request.chargeType == BillingChargeType.other &&
         (title == null || title.isEmpty)) {
+      throw ArgumentError('A title is required for the Other billing type.');
+    }
+
+    // =========================================================================
+    // FIXED / VARIABLE AMOUNT VALIDATION
+    // =========================================================================
+
+    if (request.amount < 0) {
+      throw ArgumentError('Billing amount cannot be negative.');
+    }
+
+    // Variable বিল নির্দিষ্ট একটি মাসের জন্য হওয়ায় এর শেষ মেয়াদ (effectiveTo) থাকা আবশ্যক
+    if (request.valueType == BillingValueType.variable &&
+        request.effectiveTo == null) {
       throw ArgumentError(
-        'A title is required for the Other billing type.',
+        'Variable billing rules must have an end date (effectiveTo).',
       );
     }
 
     // =========================================================================
-    // FIXED / VARIABLE
+    // DATE VALIDATION
     // =========================================================================
-
-    switch (request.valueType) {
-      case BillingValueType.fixed:
-        if (request.amount == null) {
-          throw ArgumentError(
-            'Fixed billing amount is required.',
-          );
-        }
-
-        if (request.amount! < 0) {
-          throw ArgumentError(
-            'Fixed billing amount cannot be negative.',
-          );
-        }
-
-      case BillingValueType.variable:
-        if (request.amount != null) {
-          throw ArgumentError(
-            'Variable billing rules cannot contain a fixed amount.',
-          );
-        }
-    }
-
 
     if (request.effectiveTo != null &&
-        !request.effectiveTo!.isAfter(
-          request.effectiveFrom,
-        )) {
+        !request.effectiveTo!.isAfter(request.effectiveFrom)) {
       throw ArgumentError(
         'Effective end date must be after '
-            'the effective start date.',
+        'the effective start date.',
       );
     }
 
-
-    return _repository.createBillingRule(
-      request,
-    );
+    return _repository.createBillingRule(request);
   }
 }
