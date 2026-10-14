@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -10,6 +11,7 @@ import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/domain/entities/tenant_invitation.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
+import '../../../tenants/presentation/screens/tenant_tenancy_history_screen.dart';
 
 class TenantHomeScreen extends ConsumerStatefulWidget {
   const TenantHomeScreen({super.key});
@@ -27,18 +29,26 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
   Future<void> _logout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Logout'),
-          content: const Text('Are you sure you want to logout?'),
+          title: const Text('Sign out of Griho?'),
+          content: const Text(
+            'Are you sure you want to sign out of your resident account?',
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Logout'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme
+                    .of(dialogContext)
+                    .colorScheme
+                    .error,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Sign Out'),
             ),
           ],
         );
@@ -60,19 +70,34 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     context.push(RouteNames.tenantInvitations);
   }
 
+  void _openTenancyHistory() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const TenantTenancyHistoryScreen(),
+      ),
+    );
+  }
+
   Future<void> _openEditProfile(TenantDashboardData dashboard) async {
     final user = dashboard.appUser;
 
     if (user == null) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile information is not available.')),
+        const SnackBar(
+          content: Text('Profile information is not currently available.'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
 
     final result = await context.push(RouteNames.editProfile, extra: user);
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     if (result != null) {
       ref.invalidate(tenantDashboardProvider);
@@ -90,36 +115,91 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(
+                  colors: [
+                    theme.colorScheme.primary,
+                    theme.colorScheme.tertiary,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.apartment_rounded,
                 size: 20,
-                color: theme.colorScheme.onPrimaryContainer,
+                color: Colors.white,
               ),
             ),
-            const SizedBox(width: 10),
-            const Text(
-              'Griho',
-              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Griho',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  'Resident Portal',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         centerTitle: false,
         actions: [
-          IconButton(
-            tooltip: 'All Invitations',
-            onPressed: _openInvitations,
-            icon: const Icon(Icons.mail_outline_rounded),
+          // Invitation Inbox Button with Active Badge
+          dashboardAsync.maybeWhen(
+            data: (dashboard) {
+              final hasPending = dashboard.hasPendingInvitation;
+              return IconButton(
+                tooltip: 'All Invitations',
+                onPressed: _openInvitations,
+                icon: Badge(
+                  isLabelVisible: hasPending,
+                  backgroundColor: theme.colorScheme.error,
+                  smallSize: 8,
+                  child: const Icon(Icons.mail_outline_rounded),
+                ),
+              );
+            },
+            orElse: () =>
+                IconButton(
+                  tooltip: 'All Invitations',
+                  onPressed: _openInvitations,
+                  icon: const Icon(Icons.mail_outline_rounded),
+                ),
           ),
+
+          // User Profile Menu
           PopupMenuButton<String>(
-            tooltip: 'Account',
+            tooltip: 'Account Settings',
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             onSelected: (value) {
               if (value == 'edit_profile') {
                 dashboardAsync.maybeWhen(
@@ -131,31 +211,65 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                 _logout();
               }
             },
-            itemBuilder: (context) {
-              return const [
-                PopupMenuItem<String>(
-                  value: 'edit_profile',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_outline),
-                      SizedBox(width: 12),
-                      Text('My Profile'),
-                    ],
-                  ),
+            itemBuilder: (context) =>
+            const [
+              PopupMenuItem<String>(
+                value: 'edit_profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.person_outline_rounded, size: 20),
+                    SizedBox(width: 12),
+                    Text('My Profile'),
+                  ],
                 ),
-                PopupMenuDivider(),
-                PopupMenuItem<String>(
-                  value: 'logout',
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout, color: Colors.redAccent),
-                      SizedBox(width: 12),
-                      Text('Logout', style: TextStyle(color: Colors.redAccent)),
-                    ],
-                  ),
+              ),
+              PopupMenuDivider(),
+              PopupMenuItem<String>(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.logout_rounded,
+                      size: 20,
+                      color: Colors.redAccent,
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-              ];
-            },
+              ),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: dashboardAsync.maybeWhen(
+                data: (dashboard) =>
+                    CircleAvatar(
+                      radius: 19,
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      child: Text(
+                        dashboard.displayName.isNotEmpty
+                            ? dashboard.displayName[0].toUpperCase()
+                            : 'T',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                orElse: () =>
+                const CircleAvatar(
+                  radius: 19,
+                  child: Icon(Icons.person_outline_rounded, size: 18),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -170,6 +284,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
               dashboard: dashboard,
               onOpenInvitation: _openInvitation,
               onOpenInvitations: _openInvitations,
+              onOpenTenancyHistory: _openTenancyHistory,
             ),
           );
         },
@@ -186,65 +301,103 @@ class _TenantDashboardContent extends StatelessWidget {
   final TenantDashboardData dashboard;
   final ValueChanged<TenantInvitation> onOpenInvitation;
   final VoidCallback onOpenInvitations;
+  final VoidCallback onOpenTenancyHistory;
 
   const _TenantDashboardContent({
     required this.dashboard,
     required this.onOpenInvitation,
     required this.onOpenInvitations,
+    required this.onOpenTenancyHistory,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
       children: [
+        // 1. Personalized Header & Quick Copy ID
         _HeaderSection(dashboard: dashboard),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
 
+        // 2. Urgent Action: Pending Invitation Banner
         if (dashboard.hasPendingInvitation) ...[
           _PendingInvitationCard(
             invitation: dashboard.pendingInvitation!,
             onReview: () => onOpenInvitation(dashboard.pendingInvitation!),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
         ],
 
+        // 3. Digital Residency Pass or Unassigned Passport
         if (dashboard.hasActiveTenancy) ...[
-          _HeroTenancyCard(dashboard: dashboard),
+          _DigitalResidencyPass(dashboard: dashboard),
+        ] else
+          ...[
+            _NoActiveTenancyPassport(
+              userPublicId: dashboard.appUser?.publicId ?? '',
+              hasPendingInvitation: dashboard.hasPendingInvitation,
+              onOpenInvitations: onOpenInvitations,
+            ),
+          ],
 
-          const SizedBox(height: 24),
+        const SizedBox(height: 24),
 
+        // 4. Resident Quick Command Actions
+        const _SectionHeader(
+          title: 'Resident Shortcuts',
+          subtitle: 'Direct management and tenancy utilities',
+        ),
+        const SizedBox(height: 12),
+        _TenantCommandGrid(
+          userPublicId: dashboard.appUser?.publicId ?? '',
+          onOpenInvitations: onOpenInvitations,
+          onOpenTenancyHistory: onOpenTenancyHistory,
+        ),
+
+        const SizedBox(height: 24),
+
+        // 5. Billing & Invoices Section
+        if (dashboard.hasActiveTenancy) ...[
           const _SectionHeader(
-            title: 'My Bills & Dues',
-            subtitle: 'Review monthly rent and utility charges',
+            title: 'Invoices & Current Dues',
+            subtitle: 'Real-time rent statements and utility tariff rates',
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           const TenantCurrentBillsCard(),
-        ] else ...[
-          _NoActiveTenancyCard(
-            hasPendingInvitation: dashboard.hasPendingInvitation,
-          ),
+          const SizedBox(height: 24),
         ],
 
-        const SizedBox(height: 28),
-
+        // 6. Recent Operational Activity
         const _SectionHeader(
           title: 'Recent Activity',
-          subtitle: 'Latest updates and tenancy events',
+          subtitle: 'Milestones, invitations, and occupancy updates',
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         _RecentActivityCard(dashboard: dashboard),
 
+        // 7. Previous Stays Section
         if (dashboard.hasTenancyHistory) ...[
-          const SizedBox(height: 28),
-          const _SectionHeader(
-            title: 'Previous Homes',
-            subtitle: 'Records from past tenancies',
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const _SectionHeader(
+                title: 'Past Residences',
+                subtitle: 'Completed lease agreements and stay records',
+              ),
+              TextButton(
+                onPressed: onOpenTenancyHistory,
+                child: const Text('View All'),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
-          _TenancyHistoryPreview(history: dashboard.tenancyHistory),
+          _TenancyHistoryPreview(
+            history: dashboard.tenancyHistory,
+            onViewItem: onOpenTenancyHistory,
+          ),
         ],
       ],
     );
@@ -252,7 +405,7 @@ class _TenantDashboardContent extends StatelessWidget {
 }
 
 // ============================================================================
-// HEADER SECTION
+// 1. EXECUTIVE HEADER
 // ============================================================================
 
 class _HeaderSection extends StatelessWidget {
@@ -260,101 +413,125 @@ class _HeaderSection extends StatelessWidget {
 
   const _HeaderSection({required this.dashboard});
 
+  String _greetingText() {
+    final hour = DateTime
+        .now()
+        .hour;
+    if (hour < 12) {
+      return 'Good Morning';
+    }
+    if (hour < 17) {
+      return 'Good Afternoon';
+    }
+    return 'Good Evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final user = dashboard.appUser;
+    final publicId = user?.publicId ?? '';
 
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        CircleAvatar(
-          radius: 24,
-          backgroundColor: theme.colorScheme.primaryContainer,
-          child: Text(
-            dashboard.displayName.isNotEmpty
-                ? dashboard.displayName[0].toUpperCase()
-                : 'T',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onPrimaryContainer,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${_greeting()},',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              Row(
+                children: [
+                  Text(
+                    _greetingText(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: dashboard.hasActiveTenancy
+                          ? Colors.green
+                          : Colors.amber.shade800,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 2),
               Text(
                 dashboard.displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
                 ),
               ),
             ],
           ),
         ),
-        if (user != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.badge_outlined,
-                  size: 14,
-                  color: theme.colorScheme.onSurfaceVariant,
+        if (publicId.isNotEmpty)
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: publicId));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Griho Tenant ID copied to clipboard.'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
                 ),
-                const SizedBox(width: 5),
-                Text(
-                  user.publicId,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.badge_outlined,
+                    size: 15,
+                    color: theme.colorScheme.primary,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Text(
+                    publicId,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],
     );
   }
-
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
 }
 
 // ============================================================================
-// HERO TENANCY CARD
+// 2. HERO DIGITAL RESIDENCY PASS (KEYCARD)
 // ============================================================================
 
-class _HeroTenancyCard extends ConsumerWidget {
+class _DigitalResidencyPass extends ConsumerWidget {
   final TenantDashboardData dashboard;
 
-  const _HeroTenancyCard({required this.dashboard});
+  const _DigitalResidencyPass({required this.dashboard});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final propertyName = dashboard.currentPropertyName ?? 'Property Details';
+    final propertyName = dashboard.currentPropertyName ?? 'Assigned Property';
     final unitDisplayName = dashboard.currentUnitDisplayName ?? 'Unit';
     final tenant = dashboard.tenant;
     final unitId = tenant?.unitId.trim();
@@ -365,130 +542,226 @@ class _HeroTenancyCard extends ConsumerWidget {
 
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
           colors: [
-            theme.colorScheme.primaryContainer.withValues(alpha: 0.7),
-            theme.colorScheme.surfaceContainerHighest,
+            Color(0xFF1B2232),
+            Color(0xFF131722),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircleAvatar(radius: 4, backgroundColor: Colors.green),
-                    SizedBox(width: 6),
-                    Text(
-                      'Currently Staying',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.home_rounded, color: theme.colorScheme.primary),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
-          const SizedBox(height: 16),
-          Text(
-            propertyName,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Ambient Glow Element
+          Positioned(
+            right: -24,
+            top: -24,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+              ),
             ),
           ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(
-                Icons.door_front_door_outlined,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                unitDisplayName,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Agreed Monthly Rent',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  rentAsync == null
-                      ? const Text('—')
-                      : rentAsync.when(
-                          loading: () => const Text('Loading...'),
-                          error: (_, _) => const Text('Not available'),
-                          data: (rent) => Text(
-                            rent != null
-                                ? '৳ ${_formatAmount(rent.amount)}'
-                                : 'Not Set',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: theme.colorScheme.primary,
-                            ),
+
+          Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Badge Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.key_rounded,
+                            size: 16,
+                            color: Colors.white70,
                           ),
                         ),
-                ],
-              ),
-              if (tenant?.tenancyStartedAt != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Moved In',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'DIGITAL RESIDENCY PASS',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.75),
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.0,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _formatDate(tenant!.tenancyStartedAt!),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 3.5,
+                            backgroundColor: Colors.greenAccent,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Active Stay',
+                            style: TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-            ],
+
+                const SizedBox(height: 18),
+
+                // Property & Unit Title
+                Text(
+                  propertyName,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.door_front_door_outlined,
+                      size: 16,
+                      color: Colors.white60,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      unitDisplayName,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 18),
+                Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
+                const SizedBox(height: 14),
+
+                // Financial & Occupancy Sub-Metrics
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Agreed Monthly Rent',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        rentAsync == null
+                            ? const Text(
+                          '—',
+                          style: TextStyle(color: Colors.white),
+                        )
+                            : rentAsync.when(
+                          loading: () =>
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          error: (_, _) =>
+                          const Text(
+                            'Not set',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          data: (rent) =>
+                              Text(
+                                rent != null
+                                    ? '৳ ${_formatAmount(rent.amount)}'
+                                    : 'Not Set',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      width: 1,
+                      height: 28,
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Moved In',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          tenant?.tenancyStartedAt != null
+                              ? _formatDate(tenant!.tenancyStartedAt!)
+                              : 'Recent',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -497,7 +770,7 @@ class _HeroTenancyCard extends ConsumerWidget {
 }
 
 // ============================================================================
-// PENDING INVITATION BANNER
+// 3. PENDING INVITATION BANNER
 // ============================================================================
 
 class _PendingInvitationCard extends StatelessWidget {
@@ -512,37 +785,64 @@ class _PendingInvitationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final propertyName = invitation.propertyName?.trim() ?? 'a property';
-    final unitName = invitation.unitNumber?.trim() ?? 'Assigned Unit';
+    final propertyName = invitation.propertyName?.trim() ?? 'Assigned Property';
+    final unitName = invitation.unitNumber?.trim() ?? 'Designated Unit';
 
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: theme.colorScheme.tertiary.withValues(alpha: 0.3),
+          color: theme.colorScheme.tertiary.withValues(alpha: 0.4),
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.tertiary.withValues(alpha: 0.15),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: theme.colorScheme.onTertiaryContainer,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onTertiaryContainer,
+                  shape: BoxShape.circle,
+                ),
                 child: Icon(
-                  Icons.mail_outline_rounded,
-                  size: 20,
+                  Icons.mail_rounded,
+                  size: 18,
                   color: theme.colorScheme.tertiaryContainer,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'New Tenancy Invitation!',
+                  'New Tenancy Invitation Received',
                   style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: theme.colorScheme.onTertiaryContainer,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onTertiaryContainer
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'Action Required',
+                  style: TextStyle(
+                    fontSize: 10,
                     fontWeight: FontWeight.w800,
                     color: theme.colorScheme.onTertiaryContainer,
                   ),
@@ -550,17 +850,19 @@ class _PendingInvitationCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
-            'You have been invited to stay at "$propertyName" ($unitName) with monthly rent of ৳ ${_formatAmount(invitation.rentAmount)}.',
+            'You are invited to finalize lease terms for "$propertyName" ($unitName) with agreed monthly rent of ৳ ${_formatAmount(
+                invitation.rentAmount)}.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onTertiaryContainer,
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
+            height: 46,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: theme.colorScheme.onTertiaryContainer,
@@ -569,7 +871,7 @@ class _PendingInvitationCard extends StatelessWidget {
               onPressed: onReview,
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
               label: const Text(
-                'Review & Accept',
+                'Review & Accept Invitation',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -581,63 +883,263 @@ class _PendingInvitationCard extends StatelessWidget {
 }
 
 // ============================================================================
-// NO ACTIVE TENANCY CARD
+// 4. DIGITAL TENANT PASSPORT (EMPTY RESIDENCY STATE)
 // ============================================================================
 
-class _NoActiveTenancyCard extends StatelessWidget {
+class _NoActiveTenancyPassport extends StatelessWidget {
+  final String userPublicId;
   final bool hasPendingInvitation;
+  final VoidCallback onOpenInvitations;
 
-  const _NoActiveTenancyCard({required this.hasPendingInvitation});
+  const _NoActiveTenancyPassport({
+    required this.userPublicId,
+    required this.hasPendingInvitation,
+    required this.onOpenInvitations,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
-      child: Column(
-        children: [
-          Icon(
-            hasPendingInvitation
-                ? Icons.mark_email_unread_outlined
-                : Icons.home_work_outlined,
-            size: 52,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(height: 14),
-          Text(
-            hasPendingInvitation
-                ? 'Action Required: New Invitation'
-                : 'No Active Tenancy',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color:
+                theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                hasPendingInvitation
+                    ? Icons.mark_email_unread_rounded
+                    : Icons.home_work_outlined,
+                size: 40,
+                color: theme.colorScheme.primary,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            hasPendingInvitation
-                ? 'Please check the invitation banner above to confirm your tenancy.'
-                : 'You are currently not registered under any property. Share your Griho ID or verified phone number with your landlord to get started.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              height: 1.5,
+            const SizedBox(height: 16),
+            Text(
+              hasPendingInvitation
+                  ? 'Awaiting Tenancy Acceptance'
+                  : 'Ready to Move In?',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              hasPendingInvitation
+                  ? 'You have received a new tenancy offer. Review the details above to activate your tenancy.'
+                  : 'Share your Griho Public ID with your property manager or landlord to receive your unit onboarding invitation.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.45,
+              ),
+            ),
+            if (userPublicId.isNotEmpty && !hasPendingInvitation) ...[
+              const SizedBox(height: 18),
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'YOUR GRIHO ID',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          userPublicId,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: userPublicId));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Griho ID copied to clipboard.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy ID'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 }
 
 // ============================================================================
-// RECENT ACTIVITY CARD
+// 5. RESIDENT COMMAND GRID (SHORTCUTS)
+// ============================================================================
+
+class _TenantCommandGrid extends StatelessWidget {
+  final String userPublicId;
+  final VoidCallback onOpenInvitations;
+  final VoidCallback onOpenTenancyHistory;
+
+  const _TenantCommandGrid({
+    required this.userPublicId,
+    required this.onOpenInvitations,
+    required this.onOpenTenancyHistory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _CommandTile(
+            icon: Icons.mark_email_read_outlined,
+            title: 'Invitations',
+            subtitle: 'Lease Offers',
+            color: Colors.blueAccent,
+            onTap: onOpenInvitations,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _CommandTile(
+            icon: Icons.history_rounded,
+            title: 'History',
+            subtitle: 'Past Stays',
+            color: Colors.teal,
+            onTap: onOpenTenancyHistory,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _CommandTile(
+            icon: Icons.share_rounded,
+            title: 'Share ID',
+            subtitle: 'Fast Link',
+            color: Colors.deepPurpleAccent,
+            onTap: () {
+              if (userPublicId.isNotEmpty) {
+                Clipboard.setData(ClipboardData(text: userPublicId));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Griho ID copied to clipboard.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CommandTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _CommandTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 20, color: color),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 6. RECENT ACTIVITY TIMELINE
 // ============================================================================
 
 class _RecentActivityCard extends StatelessWidget {
@@ -650,12 +1152,13 @@ class _RecentActivityCard extends StatelessWidget {
     final theme = Theme.of(context);
     final activities = _buildActivities(dashboard);
 
-    return Card(
-      elevation: 0,
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -677,9 +1180,9 @@ class _RecentActivityCard extends StatelessWidget {
     if (invitation != null && invitation.isValid) {
       activities.add(
         _ActivityData(
-          icon: Icons.mail_outline,
-          title: 'Invitation received',
-          subtitle: invitation.propertyName ?? 'Property invitation waiting',
+          icon: Icons.mail_outline_rounded,
+          title: 'Invitation Received',
+          subtitle: invitation.propertyName ?? 'New unit tenancy offered',
           date: invitation.createdAt,
         ),
       );
@@ -692,7 +1195,7 @@ class _RecentActivityCard extends StatelessWidget {
       activities.add(
         _ActivityData(
           icon: Icons.key_rounded,
-          title: 'Moved in to new home',
+          title: 'Moved in to New Space',
           subtitle: dashboard.currentPropertyName ?? 'Tenancy active',
           date: tenant.tenancyStartedAt!,
         ),
@@ -703,7 +1206,7 @@ class _RecentActivityCard extends StatelessWidget {
       activities.add(
         _ActivityData(
           icon: Icons.history_rounded,
-          title: 'Tenancy completed',
+          title: 'Tenancy Concluded',
           subtitle: history.propertyName,
           date: history.endedAt,
         ),
@@ -715,9 +1218,9 @@ class _RecentActivityCard extends StatelessWidget {
     if (activities.isEmpty) {
       return [
         _ActivityData(
-          icon: Icons.check_circle_outline,
-          title: 'Account active',
-          subtitle: 'Welcome to Griho system',
+          icon: Icons.check_circle_outline_rounded,
+          title: 'Griho Account Active',
+          subtitle: 'Welcome to your verified resident portal',
           date: dashboard.appUser?.createdAt ?? DateTime.now(),
         ),
       ];
@@ -753,12 +1256,15 @@ class _ActivityItem extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: Icon(
             activity.icon,
-            size: 18,
+            size: 16,
             color: theme.colorScheme.primary,
           ),
         ),
@@ -771,6 +1277,7 @@ class _ActivityItem extends StatelessWidget {
                 activity.title,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
+                  fontSize: 13,
                 ),
               ),
               const SizedBox(height: 2),
@@ -790,6 +1297,7 @@ class _ActivityItem extends StatelessWidget {
           _relativeDate(activity.date),
           style: theme.textTheme.labelSmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
+            fontSize: 10,
           ),
         ),
       ],
@@ -798,13 +1306,17 @@ class _ActivityItem extends StatelessWidget {
 }
 
 // ============================================================================
-// TENANCY HISTORY PREVIEW
+// 7. PREVIOUS RESIDENCES PREVIEW
 // ============================================================================
 
 class _TenancyHistoryPreview extends StatelessWidget {
   final List<TenancyHistory> history;
+  final VoidCallback onViewItem;
 
-  const _TenancyHistoryPreview({required this.history});
+  const _TenancyHistoryPreview({
+    required this.history,
+    required this.onViewItem,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -814,28 +1326,62 @@ class _TenancyHistoryPreview extends StatelessWidget {
     return Column(
       children: [
         for (final item in preview)
-          Card(
-            elevation: 0,
-            margin: const EdgeInsets.only(bottom: 8),
+          Material(
+            color: theme.colorScheme.surfaceContainerLow,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               side: BorderSide(color: theme.colorScheme.outlineVariant),
             ),
-            child: ListTile(
-              leading: const CircleAvatar(
-                child: Icon(Icons.home_outlined, size: 20),
-              ),
-              title: Text(
-                item.propertyName,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(
-                'Unit: ${item.unitNumber} • ৳ ${_formatAmount(item.monthlyRent)}',
-              ),
-              trailing: Text(
-                _formatDate(item.endedAt),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onViewItem,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.apartment_rounded,
+                        size: 20,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.propertyName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Unit ${item.unitNumber} • ৳ ${_formatAmount(
+                                item.monthlyRent)} / mo',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      _formatDate(item.endedAt),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -874,6 +1420,7 @@ class _SectionHeader extends StatelessWidget {
             subtitle!,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
+              fontSize: 11,
             ),
           ),
         ],
@@ -900,12 +1447,17 @@ class _DashboardErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 56, color: theme.colorScheme.error),
+            Icon(
+              Icons.error_outline_rounded,
+              size: 56,
+              color: theme.colorScheme.error,
+            ),
             const SizedBox(height: 16),
             Text(
-              'Could not load your dashboard',
+              'Could not load resident portal',
               textAlign: TextAlign.center,
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
@@ -924,7 +1476,7 @@ class _DashboardErrorView extends StatelessWidget {
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Try Again'),
             ),
           ],
@@ -944,7 +1496,6 @@ String _formatDate(DateTime date) {
   return '$day/$month/${date.year}';
 }
 
-/// নালেবল `num?` সাপোর্ট করায় double? পাস করলেও কোনো এরর আসবে না
 String _formatAmount(num? amount) {
   if (amount == null) {
     return '0.00';
