@@ -40,6 +40,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a valid international phone number.'),
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
@@ -48,25 +49,36 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     await ref.read(authControllerProvider.notifier).sendOtp(cleanPhone);
   }
 
-  void _handleAuthState(AuthControllerState? previous,
-      AuthControllerState next,) {
+  void _handleAuthState(
+    AuthControllerState? previous,
+    AuthControllerState next,
+  ) {
     if (!mounted) {
       return;
     }
 
     if (next.errorMessage != null &&
         next.errorMessage != previous?.errorMessage) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(next.errorMessage!)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(next.errorMessage!),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
 
     if (next.otpSent &&
         next.verificationId != null &&
         previous?.otpSent != true) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('OTP sent successfully.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verification code sent.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      final cleanPhone = PhoneNumberUtils.clean(_completePhoneNumber);
 
       final encodedInvitationId = widget.invitationId == null
           ? null
@@ -76,80 +88,185 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
           ? RouteNames.otpVerification
           : '${RouteNames.otpVerification}?invitationId=$encodedInvitationId';
 
-      context.push(location, extra: _completePhoneNumber);
+      context.push(location, extra: cleanPhone);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final authState = ref.watch(authControllerProvider);
 
     ref.listen<AuthControllerState>(authControllerProvider, _handleAuthState);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign in')),
+      backgroundColor: theme.colorScheme.surface,
+      appBar: AppBar(elevation: 0, backgroundColor: Colors.transparent),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 36),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 40),
+                // ১. ব্র্যান্ডিং আইকন
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.phone_android_rounded,
+                    size: 32,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // ২. শিরোনাম
                 Text(
                   'Welcome to Griho',
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .headlineMedium,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
+
                 const SizedBox(height: 8),
+
                 Text(
-                  widget.invitationId != null
-                      ? 'Sign in with the phone number that received this invitation.'
-                      : 'Enter your phone number to continue.',
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .bodyMedium,
+                  'Enter your mobile number to receive a secure one-time verification code.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.45,
+                  ),
                 ),
+
+                // ৩. ইনভাইটেশন নোটিশ (যদি লিংক থেকে আসে)
+                if (widget.invitationId != null) ...[
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.tertiaryContainer.withValues(
+                        alpha: 0.6,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: theme.colorScheme.tertiary.withValues(
+                          alpha: 0.3,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.mail_lock_outlined,
+                          size: 20,
+                          color: theme.colorScheme.onTertiaryContainer,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Please sign in with the specific phone number where your tenancy invitation was received.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onTertiaryContainer,
+                              fontWeight: FontWeight.w600,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 32),
+
+                // ৪. কান্ট্রি কোড সহ ফোন নম্বর ফিল্ড
+                Text(
+                  'Phone Number',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
                 IntlPhoneField(
                   controller: _phoneController,
                   initialCountryCode: 'BD',
+                  disableLengthCheck: false,
+                  enabled: !authState.isLoading,
                   decoration: const InputDecoration(
-                    labelText: 'Phone Number',
+                    hintText: 'Phone number',
                     border: OutlineInputBorder(),
                   ),
                   onChanged: (phone) {
                     _completePhoneNumber = phone.completeNumber;
                   },
                   validator: (phone) {
-                    if (phone == null || phone.number
-                        .trim()
-                        .isEmpty) {
-                      return 'Please enter phone number.';
+                    if (phone == null || phone.number.trim().isEmpty) {
+                      return 'Please enter your phone number.';
                     }
                     if (!PhoneNumberUtils.isValid(phone.completeNumber)) {
-                      return 'Invalid international number.';
+                      return 'Please enter a valid international phone number.';
                     }
                     return null;
                   },
                 ),
+
                 const SizedBox(height: 24),
+
+                // ৫. কনটিনিউ বাটন
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 52,
                   child: FilledButton(
                     onPressed: authState.isLoading ? null : _sendOtp,
                     child: authState.isLoading
                         ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                        : const Text('Continue'),
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Send Verification Code',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // ৬. সিকিউরিটি নোট
+                Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.verified_user_outlined,
+                        size: 14,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Standard operator SMS rates may apply.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

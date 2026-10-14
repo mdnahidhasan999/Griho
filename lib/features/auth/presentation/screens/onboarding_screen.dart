@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
-
 import '../../domain/entities/app_user.dart';
 import '../../domain/entities/registration_intent.dart';
-
 import '../providers/auth_controller.dart';
 
 // ================================================================
@@ -14,25 +12,17 @@ import '../providers/auth_controller.dart';
 // ================================================================
 
 class OnboardingScreen extends ConsumerStatefulWidget {
-  const OnboardingScreen({
-    super.key,
-  });
+  const OnboardingScreen({super.key});
 
   @override
-  ConsumerState<OnboardingScreen>
-  createState() =>
-      _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  final _formKey =
-  GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
 
-  final _nameController =
-  TextEditingController();
-
-  RegistrationIntent?
-  _selectedIntent;
+  RegistrationIntent? _selectedIntent;
 
   @override
   void dispose() {
@@ -41,121 +31,69 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   // ============================================================
-  // CONTINUE
+  // CONTINUE ACTION
   // ============================================================
 
   Future<void> _continue() async {
-    if (!_formKey.currentState!
-        .validate()) {
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final intent =
-        _selectedIntent;
+    final intent = _selectedIntent;
 
     if (intent == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Please select an account type.',
-          ),
+          content: Text('Please choose whether you are an Owner or a Tenant.'),
+          behavior: SnackBarBehavior.floating,
         ),
       );
-
       return;
     }
 
-    final result =
-    await ref
-        .read(
-      authControllerProvider
-          .notifier,
-    )
-        .register(
-      intent: intent,
-      name:
-      _nameController.text
-          .trim(),
-    );
+    final result = await ref
+        .read(authControllerProvider.notifier)
+        .register(intent: intent, name: _nameController.text.trim());
 
-    if (!mounted ||
-        result == null) {
+    if (!mounted || result == null) {
       return;
     }
 
-    final user =
-        result.user;
+    final user = result.user;
 
-    // ==========================================================
-    // OWNER
-    // ==========================================================
-
-    if (user.role ==
-        UserRole.owner) {
-      context.go(
-        RouteNames.ownerHome,
-      );
-
+    // ----------------------------------------------------------
+    // OWNER REDIRECT
+    // ----------------------------------------------------------
+    if (user.role == UserRole.owner) {
+      context.go(RouteNames.ownerHome);
       return;
     }
 
-    // ==========================================================
-    // TENANT
-    // ==========================================================
+    // ----------------------------------------------------------
+    // TENANT REDIRECT
+    // ----------------------------------------------------------
+    if (user.role == UserRole.tenant) {
+      final invitationId = result.invitationId;
 
-    if (user.role ==
-        UserRole.tenant) {
-      final invitationId =
-          result.invitationId;
-
-      // --------------------------------------------------------
-      // PENDING INVITATION FOUND
-      // --------------------------------------------------------
-
-      if (invitationId != null &&
-          invitationId
-              .trim()
-              .isNotEmpty) {
-        context.go(
-          RouteNames
-              .tenantInvitationPath(
-            invitationId,
-          ),
-        );
-
+      if (invitationId != null && invitationId.trim().isNotEmpty) {
+        context.go(RouteNames.tenantInvitationPath(invitationId));
         return;
       }
 
-      // --------------------------------------------------------
-      // NO INVITATION
-      // --------------------------------------------------------
-
-      context.go(
-        RouteNames.tenantHome,
-      );
-
+      context.go(RouteNames.tenantHome);
       return;
     }
 
-    // ==========================================================
+    // ----------------------------------------------------------
     // OTHER ROLES
-    // ==========================================================
-
+    // ----------------------------------------------------------
     switch (user.role) {
       case UserRole.manager:
-        context.go(
-          RouteNames.managerHome,
-        );
+        context.go(RouteNames.managerHome);
         return;
-
       case UserRole.caretaker:
-        context.go(
-          RouteNames.caretakerHome,
-        );
+        context.go(RouteNames.caretakerHome);
         return;
-
       case UserRole.owner:
       case UserRole.tenant:
         return;
@@ -167,238 +105,201 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   // ============================================================
 
   @override
-  Widget build(BuildContext context,) {
-    final authState =
-    ref.watch(
-      authControllerProvider,
-    );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final authState = ref.watch(authControllerProvider);
 
-    ref.listen(
-      authControllerProvider,
-          (previous, next) {
-        if (!mounted) {
-          return;
-        }
+    ref.listen(authControllerProvider, (previous, next) {
+      if (!mounted) {
+        return;
+      }
 
-        if (next.errorMessage != null &&
-            next.errorMessage !=
-                previous?.errorMessage) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(
-            SnackBar(
-              content: Text(
-                next.errorMessage!,
-              ),
-            ),
-          );
-        }
-      },
-    );
+      if (next.errorMessage != null &&
+          next.errorMessage != previous?.errorMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.errorMessage!),
+            backgroundColor: theme.colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text(
-          'Create your Griho account',
+          'Profile Setup',
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       body: SafeArea(
-        child:
-        SingleChildScrollView(
-          padding:
-          const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment:
-              CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(
-                  height: 24,
+                // ============================================================
+                // ১. ওয়েলকাম হেডার
+                // ============================================================
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withValues(
+                      alpha: 0.6,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    Icons.waving_hand_rounded,
+                    size: 28,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
                 ),
-
-                // ==================================================
-                // TITLE
-                // ==================================================
-
+                const SizedBox(height: 16),
                 Text(
                   'Welcome to Griho',
-                  style:
-                  Theme
-                      .of(
-                    context,
-                  )
-                      .textTheme
-                      .headlineMedium,
-                ),
-
-                const SizedBox(
-                  height: 8,
-                ),
-
-                Text(
-                  'Tell us a little about yourself to get started.',
-                  style:
-                  Theme
-                      .of(
-                    context,
-                  )
-                      .textTheme
-                      .bodyMedium,
-                ),
-
-                const SizedBox(
-                  height: 32,
-                ),
-
-                // ==================================================
-                // NAME
-                // ==================================================
-
-                TextFormField(
-                  controller:
-                  _nameController,
-                  textCapitalization:
-                  TextCapitalization
-                      .words,
-                  decoration:
-                  const InputDecoration(
-                    labelText:
-                    'Full Name',
-                    hintText:
-                    'Enter your full name',
-                    border:
-                    OutlineInputBorder(),
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
-                  validator: (value,) {
-                    final name =
-                        value?.trim() ??
-                            '';
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Complete your profile setup to personalize your property and tenancy experience.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
 
+                const SizedBox(height: 28),
+
+                // ============================================================
+                // ২. পুরো নাম ইনপুট
+                // ============================================================
+                Text(
+                  'Full Name',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
+                  enabled: !authState.isLoading,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: 'Your Name',
+                    hintText: 'e.g. Md Nahid Hasan',
+                    prefixIcon: Icon(Icons.person_outline_rounded),
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    final name = value?.trim() ?? '';
                     if (name.isEmpty) {
                       return 'Please enter your name.';
                     }
-
-                    if (name.length <
-                        2) {
+                    if (name.length < 2) {
                       return 'Name must be at least 2 characters.';
                     }
-
                     return null;
                   },
                 ),
 
-                const SizedBox(
-                  height: 32,
-                ),
+                const SizedBox(height: 28),
 
-                // ==================================================
-                // ACCOUNT TYPE
-                // ==================================================
-
+                // ============================================================
+                // ৩. একাউন্ট টাইপ নির্বাচন
+                // ============================================================
                 Text(
                   'How will you use Griho?',
-                  style:
-                  Theme
-                      .of(
-                    context,
-                  )
-                      .textTheme
-                      .titleMedium,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-
-                const SizedBox(
-                  height: 12,
+                const SizedBox(height: 4),
+                Text(
+                  'Choose the role that fits your current requirements.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
+                const SizedBox(height: 14),
 
-                // ==================================================
-                // OWNER
-                // ==================================================
-
-                _AccountTypeCard(
-                  title:
-                  'Property Owner',
+                // Property Owner Card
+                _RoleSelectionCard(
+                  title: 'Property Owner',
                   description:
-                  'Manage your properties, tenants and bills.',
-                  icon:
-                  Icons
-                      .home_work_outlined,
-                  selected:
-                  _selectedIntent ==
-                      RegistrationIntent
-                          .owner,
-                  onTap: () {
-                    setState(() {
-                      _selectedIntent =
-                          RegistrationIntent
-                              .owner;
-                    });
-                  },
+                      'Manage properties, list units, track utility bills and monitor tenant rents.',
+                  icon: Icons.apartment_rounded,
+                  selected: _selectedIntent == RegistrationIntent.owner,
+                  onTap: authState.isLoading
+                      ? () {}
+                      : () {
+                          setState(() {
+                            _selectedIntent = RegistrationIntent.owner;
+                          });
+                        },
                 ),
 
-                const SizedBox(
-                  height: 12,
-                ),
+                const SizedBox(height: 12),
 
-                // ==================================================
-                // TENANT
-                // ==================================================
-
-                _AccountTypeCard(
-                  title:
-                  'Tenant',
+                // Tenant Card
+                _RoleSelectionCard(
+                  title: 'Tenant (ভাড়াটিয়া)',
                   description:
-                  'Manage your rent, bills and payments.',
-                  icon:
-                  Icons
-                      .person_outline,
-                  selected:
-                  _selectedIntent ==
-                      RegistrationIntent
-                          .tenant,
-                  onTap: () {
-                    setState(() {
-                      _selectedIntent =
-                          RegistrationIntent
-                              .tenant;
-                    });
-                  },
+                      'View monthly rent, electricity & water bills, and manage ongoing tenancy.',
+                  icon: Icons.key_rounded,
+                  selected: _selectedIntent == RegistrationIntent.tenant,
+                  onTap: authState.isLoading
+                      ? () {}
+                      : () {
+                          setState(() {
+                            _selectedIntent = RegistrationIntent.tenant;
+                          });
+                        },
                 ),
 
-                const SizedBox(
-                  height: 32,
-                ),
+                const SizedBox(height: 36),
 
-                // ==================================================
-                // CONTINUE
-                // ==================================================
-
+                // ============================================================
+                // ৪. সাবমিট বাটন
+                // ============================================================
                 SizedBox(
-                  width:
-                  double.infinity,
-                  child:
-                  FilledButton(
-                    onPressed:
-                    authState
-                        .isLoading
-                        ? null
-                        : _continue,
-                    child:
-                    authState
-                        .isLoading
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: authState.isLoading ? null : _continue,
+                    child: authState.isLoading
                         ? const SizedBox(
-                      height:
-                      20,
-                      width:
-                      20,
-                      child:
-                      CircularProgressIndicator(
-                        strokeWidth:
-                        2,
-                      ),
-                    )
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Text(
-                      'Continue',
+                            'Complete & Continue',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Center(
+                  child: Text(
+                    'Your verified phone number will be securely linked to this account.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 11,
                     ),
                   ),
                 ),
@@ -411,18 +312,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 }
 
-// ================================================================
-// ACCOUNT TYPE CARD
-// ================================================================
+// ============================================================================
+// ROLE SELECTION CARD WIDGET
+// ============================================================================
 
-class _AccountTypeCard extends StatelessWidget {
+class _RoleSelectionCard extends StatelessWidget {
   final String title;
   final String description;
   final IconData icon;
   final bool selected;
   final VoidCallback onTap;
 
-  const _AccountTypeCard({
+  const _RoleSelectionCard({
     required this.title,
     required this.description,
     required this.icon,
@@ -431,74 +332,82 @@ class _AccountTypeCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context,) {
-    return Card(
-      clipBehavior:
-      Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding:
-          const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 32,
-              ),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
 
-              const SizedBox(
-                width: 16,
-              ),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment
-                      .start,
-                  children: [
-                    Text(
-                      title,
-                      style:
-                      Theme
-                          .of(
-                        context,
-                      )
-                          .textTheme
-                          .titleMedium,
-                    ),
-
-                    const SizedBox(
-                      height: 4,
-                    ),
-
-                    Text(
-                      description,
-                      style:
-                      Theme
-                          .of(
-                        context,
-                      )
-                          .textTheme
-                          .bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(
-                width: 12,
-              ),
-
-              Icon(
-                selected
-                    ? Icons
-                    .radio_button_checked
-                    : Icons
-                    .radio_button_unchecked,
-              ),
-            ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+              : theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.outlineVariant,
+            width: selected ? 2 : 1,
           ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                size: 24,
+                color: selected
+                    ? theme.colorScheme.onPrimary
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: selected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              selected
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.outlineVariant,
+              size: 22,
+            ),
+          ],
         ),
       ),
     );

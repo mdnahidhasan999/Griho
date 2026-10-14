@@ -3,17 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
-
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
-
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
-
 import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/controllers/tenant_controller.dart';
 import '../../../tenants/presentation/providers/tenancy_history_provider.dart';
-
 import '../../domain/entities/unit.dart';
 import '../controllers/unit_controller.dart';
 import '../providers/property_units_provider.dart';
@@ -28,18 +24,15 @@ class UnitDetailsScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<UnitDetailsScreen> createState() =>
-      _UnitDetailsScreenState();
+  ConsumerState<UnitDetailsScreen> createState() => _UnitDetailsScreenState();
 }
 
 class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
   Unit? _unit;
-
   List<Tenant> _activeTenants = [];
 
   bool _isLoading = true;
   bool _isDeleting = false;
-
   String? _errorMessage;
 
   @override
@@ -55,7 +48,6 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
   Future<void> _loadUnit() async {
     try {
       final getUnit = ref.read(getUnitProvider);
-
       final getActiveTenantsByUnitId = ref.read(
         getActiveTenantsByUnitIdProvider,
       );
@@ -140,9 +132,9 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
         return AlertDialog(
           title: const Text('Delete Unit?'),
           content: Text(
-            'Are you sure you want to delete '
-                '"${unit.unitNumber}"?\n\n'
-                'This action cannot be undone.',
+            'Are you sure you want to permanently delete "${unit
+                .unitNumber}"?\n\n'
+                'Associated billing rules and past tenancy references will be affected. This action cannot be undone.',
           ),
           actions: [
             TextButton(
@@ -152,6 +144,12 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme
+                    .of(context)
+                    .colorScheme
+                    .error,
+              ),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
               },
@@ -171,7 +169,6 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     });
 
     final controller = ref.read(unitControllerProvider.notifier);
-
     final success = await controller.deleteUnit(
       unitId: unit.id,
     );
@@ -182,9 +179,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
     if (success) {
       ref.invalidate(propertyUnitsProvider(unit.propertyId));
-
       context.pop();
-
       return;
     }
 
@@ -192,14 +187,20 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       _isDeleting = false;
     });
 
-    final errorMessage =
-        ref.read(unitControllerProvider).errorMessage;
+    final errorMessage = ref
+        .read(unitControllerProvider)
+        .errorMessage;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           errorMessage ?? 'Unable to delete unit.',
         ),
+        backgroundColor: Theme
+            .of(context)
+            .colorScheme
+            .error,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -210,6 +211,8 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
@@ -249,8 +252,12 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     );
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text('Unit Details'),
+        title: const Text(
+          'Unit Details',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
         actions: [
           IconButton(
             tooltip: 'Edit Unit',
@@ -259,7 +266,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
           ),
           IconButton(
             tooltip: 'Delete Unit',
-            icon: const Icon(Icons.delete_outline),
+            icon: const Icon(Icons.delete_outline_rounded),
             onPressed: _isDeleting ? null : _deleteUnit,
           ),
         ],
@@ -273,6 +280,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
                 activeTenants: _activeTenants,
                 property: null,
                 historyAsync: null,
+                onReload: _loadUnit,
               );
             },
             error: (_, _) {
@@ -282,6 +290,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
                 property: null,
                 historyAsync: null,
                 propertyLoadError: true,
+                onReload: _loadUnit,
               );
             },
             data: (Property? property) {
@@ -292,6 +301,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
                   property: null,
                   historyAsync: null,
                   propertyLoadError: true,
+                  onReload: _loadUnit,
                 );
               }
 
@@ -307,14 +317,15 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
                 activeTenants: _activeTenants,
                 property: property,
                 historyAsync: historyAsync,
+                onReload: _loadUnit,
               );
             },
           ),
           if (_isDeleting)
-            const Positioned.fill(
+            Positioned.fill(
               child: ColoredBox(
-                color: Color(0x66000000),
-                child: Center(
+                color: Colors.black.withValues(alpha: 0.45),
+                child: const Center(
                   child: Card(
                     child: Padding(
                       padding: EdgeInsets.all(24),
@@ -338,161 +349,357 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 }
 
 // ============================================================================
-// UNIT DETAILS
+// UNIT DETAILS VIEW
 // ============================================================================
 
-class _UnitDetails extends StatelessWidget {
+class _UnitDetails extends ConsumerWidget {
   final Unit unit;
   final List<Tenant> activeTenants;
   final Property? property;
   final AsyncValue<List<TenancyHistory>>? historyAsync;
   final bool propertyLoadError;
+  final VoidCallback onReload;
 
   const _UnitDetails({
     required this.unit,
     required this.activeTenants,
     required this.property,
     required this.historyAsync,
+    required this.onReload,
     this.propertyLoadError = false,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context, WidgetRef ref) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(propertyByIdProvider(unit.propertyId));
+        if (property != null) {
+          ref.invalidate(
+            unitHistoryProvider((
+            unitId: unit.id,
+            ownerId: property!.ownerId,
+            )),
+          );
+          ref.invalidate(
+            currentRentRateProvider((
+            unitId: unit.id,
+            ownerId: property!.ownerId,
+            )),
+          );
+        }
+        onReload();
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+        children: [
+          // 1. Hero Unit Header
+          _HeroUnitHeader(
+            unit: unit,
+            property: property,
+          ),
+
+          const SizedBox(height: 16),
+
+          // 2. Unit Information Specifications
+          _buildSectionCard(
+            context,
+            title: 'Unit Specifications',
+            subtitle: 'Location and space identifiers',
+            icon: Icons.meeting_room_outlined,
+            children: [
+              _InfoRow(
+                label: 'Unit Number',
+                value: unit.unitNumber,
+              ),
+              const SizedBox(height: 10),
+              _InfoRow(
+                label: 'Floor Level',
+                value: _floorLabel(unit.floorNumber),
+              ),
+              const SizedBox(height: 10),
+              _InfoRow(
+                label: 'Custom Name',
+                value: unit.name
+                    ?.trim()
+                    .isNotEmpty == true
+                    ? unit.name!
+                    : 'Not provided',
+              ),
+              const SizedBox(height: 10),
+              _InfoRow(
+                label: 'Status',
+                value: _statusLabel(unit.status),
+              ),
+              const SizedBox(height: 10),
+              if (property != null)
+                _CurrentRentInfo(
+                  unitId: unit.id,
+                  ownerId: property!.ownerId,
+                )
+              else
+                const _InfoRow(
+                  label: 'Current Rent',
+                  value: 'Unavailable',
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 18),
+
+          // 3. Current Occupants Section
+          _TenantSection(
+            unit: unit,
+            tenants: activeTenants,
+          ),
+
+          const SizedBox(height: 18),
+
+          // 4. Rent Rate Management Card
+          _ManageRentCard(
+            unit: unit,
+          ),
+
+          const SizedBox(height: 18),
+
+          // 5. Tenancy History Section
+          _UnitHistorySection(
+            historyAsync: historyAsync,
+            propertyLoadError: propertyLoadError,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionCard(BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                const Icon(
-                  Icons.apartment_outlined,
-                  size: 52,
-                ),
-                const SizedBox(height: 16),
+                Icon(icon, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
                 Text(
-                  unit.unitNumber,
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  unit.name?.trim().isNotEmpty == true
-                      ? unit.name!
-                      : 'Unit',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium,
-                ),
-                if (property != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    property!.name,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium,
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
-                ],
+                ),
               ],
             ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // ==========================================================
-        // UNIT INFORMATION
-        // ==========================================================
-
-        _InfoCard(
-          title: 'Unit Information',
-          children: [
-            _InfoRow(
-              label: 'Floor',
-              value: unit.floorNumber.toString(),
-            ),
-            _InfoRow(
-              label: 'Unit Number',
-              value: unit.unitNumber,
-            ),
-            _InfoRow(
-              label: 'Status',
-              value: _statusLabel(unit.status),
-            ),
-            _InfoRow(
-              label: 'Unit Name',
-              value: unit.name?.trim().isNotEmpty == true
-                  ? unit.name!
-                  : 'Not provided',
-            ),
-
-            // ------------------------------------------------------
-            // CURRENT RENT
-            // ------------------------------------------------------
-            if (property != null)
-              _CurrentRentInfo(
-                unitId: unit.id,
-                ownerId: property!.ownerId,
-              )
-            else
-              const _InfoRow(
-                label: 'Current Rent',
-                value: 'Unavailable',
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
+            ),
+            const SizedBox(height: 16),
+            ...children,
           ],
         ),
-
-        const SizedBox(height: 20),
-
-        // ==========================================================
-        // CURRENT TENANTS
-        // ==========================================================
-
-        _TenantSection(
-          tenants: activeTenants,
-        ),
-
-        const SizedBox(height: 20),
-
-        // ==========================================================
-        // MANAGE RENT
-        // ==========================================================
-
-        _ManageRentCard(
-          unit: unit,
-        ),
-
-        const SizedBox(height: 20),
-
-        // ==========================================================
-        // TENANCY HISTORY
-        // ==========================================================
-
-        _UnitHistorySection(
-          historyAsync: historyAsync,
-          propertyLoadError: propertyLoadError,
-        ),
-      ],
+      ),
     );
+  }
+
+  String _floorLabel(int floor) {
+    if (floor == 0) {
+      return 'Ground Floor';
+    }
+    if (floor == 1) {
+      return '1st Floor';
+    }
+    if (floor == 2) {
+      return '2nd Floor';
+    }
+    if (floor == 3) {
+      return '3rd Floor';
+    }
+    return '$floor-th Floor';
   }
 
   String _statusLabel(UnitStatus status) {
     switch (status) {
       case UnitStatus.available:
-        return 'Available';
-
+        return 'Available / Vacant';
       case UnitStatus.occupied:
         return 'Occupied';
-
       case UnitStatus.reserved:
         return 'Reserved';
-
       case UnitStatus.inactive:
-        return 'Inactive';
+        return 'Inactive / Maintenance';
     }
+  }
+}
+
+// ============================================================================
+// HERO UNIT HEADER CARD
+// ============================================================================
+
+class _HeroUnitHeader extends StatelessWidget {
+  final Unit unit;
+  final Property? property;
+
+  const _HeroUnitHeader({
+    required this.unit,
+    required this.property,
+  });
+
+  String _floorLabel(int floor) {
+    if (floor == 0) {
+      return 'Ground Floor';
+    }
+    if (floor == 1) {
+      return '1st Floor';
+    }
+    if (floor == 2) {
+      return '2nd Floor';
+    }
+    if (floor == 3) {
+      return '3rd Floor';
+    }
+    return '$floor-th Floor';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final (label, color) = switch (unit.status) {
+      UnitStatus.available => ('Available', Colors.blue.shade800),
+      UnitStatus.occupied => ('Occupied', Colors.green.shade800),
+      UnitStatus.reserved => ('Reserved', Colors.amber.shade900),
+      UnitStatus.inactive => ('Inactive', Colors.grey.shade800),
+    };
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  Icons.door_front_door_rounded,
+                  size: 28,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Unit ${unit.unitNumber}',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      unit.name
+                          ?.trim()
+                          .isNotEmpty == true
+                          ? unit.name!
+                          : 'Residential Unit Space',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                Icons.apartment_rounded,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  property != null
+                      ? '${property!.name} (${property!.propertyCode})'
+                      : 'Property Building Loading...',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _floorLabel(unit.floorNumber),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -511,6 +718,7 @@ class _CurrentRentInfo extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final rentAsync = ref.watch(
       currentRentRateProvider((
       unitId: unitId,
@@ -519,30 +727,26 @@ class _CurrentRentInfo extends ConsumerWidget {
     );
 
     return rentAsync.when(
-      loading: () {
-        return const _LoadingInfoRow(
-          label: 'Current Rent',
-        );
-      },
-      error: (error, _) {
-        return const _InfoRow(
-          label: 'Current Rent',
-          value: 'Unable to load',
-        );
-      },
+      loading: () => const _LoadingInfoRow(label: 'Current Rent'),
+      error: (error, _) =>
+      const _InfoRow(
+        label: 'Current Rent',
+        value: 'Unable to load rent rate',
+      ),
       data: (rentRate) {
         if (rentRate == null) {
           return const _InfoRow(
             label: 'Current Rent',
-            value: 'Not set',
+            value: 'Not configured',
           );
         }
 
         return _InfoRow(
           label: 'Current Rent',
           value: '৳ ${_formatRent(rentRate.amount)} / month',
-          valueStyle: const TextStyle(
-            fontWeight: FontWeight.w800,
+          valueStyle: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w900,
+            color: theme.colorScheme.primary,
           ),
         );
       },
@@ -553,8 +757,307 @@ class _CurrentRentInfo extends ConsumerWidget {
     if (value == value.roundToDouble()) {
       return value.toStringAsFixed(0);
     }
-
     return value.toStringAsFixed(2);
+  }
+}
+
+// ============================================================================
+// TENANT SECTION
+// ============================================================================
+
+class _TenantSection extends StatelessWidget {
+  final Unit unit;
+  final List<Tenant> tenants;
+
+  const _TenantSection({
+    required this.unit,
+    required this.tenants,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.people_alt_outlined,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Current Residents',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                if (tenants.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${tenants.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Active tenants linked to this residential unit',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (tenants.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.4),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.person_off_outlined,
+                      size: 22,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'This unit is currently vacant with no active tenants assigned.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              for (var i = 0; i < tenants.length; i++) ...[
+                _TenantTile(tenant: tenants[i]),
+                if (i != tenants.length - 1) ...[
+                  const SizedBox(height: 10),
+                ],
+              ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TenantTile extends StatelessWidget {
+  final Tenant tenant;
+
+  const _TenantTile({
+    required this.tenant,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          context.push(
+            RouteNames.tenantDetails.replaceFirst(
+              ':tenantId',
+              tenant.id,
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Text(
+                  _initial(tenant.name),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tenant.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      tenant.phone,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        _TenantStatusChip(status: tenant.status),
+                        const SizedBox(width: 6),
+                        _AccountStatusChip(
+                          label: tenant.userId != null
+                              ? 'Registered'
+                              : 'Not registered',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _initial(String name) {
+    final value = name.trim();
+    if (value.isEmpty) {
+      return '?';
+    }
+    return value.characters.first.toUpperCase();
+  }
+}
+
+// ============================================================================
+// MANAGE RENT CARD
+// ============================================================================
+
+class _ManageRentCard extends StatelessWidget {
+  final Unit unit;
+
+  const _ManageRentCard({
+    required this.unit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.payments_outlined,
+                    size: 20,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Rent Rate Management',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Update current rent terms, set scheduled adjustments, and view complete historical rental rates for this unit.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: () {
+                  context.push(
+                    RouteNames.unitRentManagement.replaceFirst(
+                      ':unitId',
+                      unit.id,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.tune_rounded, size: 18),
+                label: const Text(
+                  'Configure Rent Rates',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -573,135 +1076,144 @@ class _UnitHistorySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     if (propertyLoadError) {
-      return const _InfoCard(
-        title: 'Tenancy History',
-        children: [
-          _InfoRow(
-            label: 'History',
-            value: 'Unable to load property information.',
-          ),
+      return _buildHistoryContainer(
+        context,
+        children: const [
+          Text('Unable to load property information for historical records.'),
         ],
       );
     }
 
     if (historyAsync == null) {
-      return const _InfoCard(
-        title: 'Tenancy History',
-        children: [
-          _LoadingInfoRow(
-            label: 'Previous tenants',
-          ),
+      return _buildHistoryContainer(
+        context,
+        children: const [
+          LinearProgressIndicator(),
         ],
       );
     }
 
     return historyAsync!.when(
-      loading: () {
-        return const _InfoCard(
-          title: 'Tenancy History',
-          children: [
-            _LoadingInfoRow(
-              label: 'Previous tenants',
-            ),
-          ],
-        );
-      },
-      error: (_, _) {
-        return const _InfoCard(
-          title: 'Tenancy History',
-          children: [
-            _InfoRow(
-              label: 'History',
-              value: 'Unable to load.',
-            ),
-          ],
-        );
-      },
+      loading: () =>
+          _buildHistoryContainer(
+            context,
+            children: const [
+              LinearProgressIndicator(),
+            ],
+          ),
+      error: (_, _) =>
+          _buildHistoryContainer(
+            context,
+            children: const [
+              Text('Unable to load historical tenancy records.'),
+            ],
+          ),
       data: (histories) {
         if (histories.isEmpty) {
-          return const _InfoCard(
-            title: 'Tenancy History',
+          return _buildHistoryContainer(
+            context,
             children: [
-              _InfoRow(
-                label: 'History',
-                value: 'No previous tenant.',
+              Text(
+                'No previous completed tenancies recorded for this unit.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           );
         }
 
-        return _UnitHistoryCard(
-          histories: histories,
+        return _buildHistoryContainer(
+          context,
+          count: histories.length,
+          children: [
+            for (var index = 0; index < histories.length; index++) ...[
+              _UnitHistoryItem(
+                history: histories[index],
+              ),
+              if (index != histories.length - 1) ...[
+                const Divider(height: 24),
+              ],
+            ],
+          ],
         );
       },
     );
   }
-}
 
-// ============================================================================
-// UNIT HISTORY CARD
-// ============================================================================
+  Widget _buildHistoryContainer(BuildContext context, {
+    int? count,
+    required List<Widget> children,
+  }) {
+    final theme = Theme.of(context);
 
-class _UnitHistoryCard extends StatelessWidget {
-  final List<TenancyHistory> histories;
-
-  const _UnitHistoryCard({
-    required this.histories,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Tenancy History',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${histories.length} previous '
-                  '${histories.length == 1 ? 'tenancy' : 'tenancies'}',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall,
-            ),
-            const SizedBox(height: 16),
-            ...List.generate(
-              histories.length,
-                  (index) {
-                final history = histories[index];
-
-                return Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   children: [
-                    if (index > 0)
-                      const Divider(height: 28),
-                    _UnitHistoryItem(
-                      history: history,
+                    Icon(
+                      Icons.history_rounded,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Tenancy History',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ],
-                );
-              },
+                ),
+                if (count != null)
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
             ),
+            const SizedBox(height: 2),
+            Text(
+              'Past lease agreements and previous residents',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...children,
           ],
         ),
       ),
     );
   }
 }
-
-// ============================================================================
-// UNIT HISTORY ITEM
-// ============================================================================
 
 class _UnitHistoryItem extends StatelessWidget {
   final TenancyHistory history;
@@ -712,98 +1224,69 @@ class _UnitHistoryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Column(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            CircleAvatar(
-              radius: 22,
-              child: Text(
-                _initial(history.tenantName),
-              ),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  child: Text(
+                    _initial(history.tenantName),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  history.tenantName,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    history.tenantName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    history.propertyName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall,
-                  ),
-                ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: theme.colorScheme.surfaceContainerHighest,
+              ),
+              child: Text(
+                'Ended Lease',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 14),
-        _HistoryDetailRow(
-          label: 'Property Code',
-          value: history.propertyCode,
-        ),
-        _HistoryDetailRow(
-          label: 'Unit',
-          value: history.unitName?.trim().isNotEmpty == true
-              ? history.unitName!
-              : history.unitNumber,
-        ),
-        _HistoryDetailRow(
-          label: 'Floor',
-          value: history.floorNumber.toString(),
-        ),
+        const SizedBox(height: 12),
         _HistoryDetailRow(
           label: 'Monthly Rent',
           value: history.monthlyRent == null
-              ? 'Not provided'
-              : '৳ ${_formatRent(history.monthlyRent!)}',
-        ),
-        _HistoryDetailRow(
-          label: 'Started',
-          value: _formatDate(history.startedAt),
-        ),
-        _HistoryDetailRow(
-          label: 'Ended',
-          value: _formatDate(history.endedAt),
+              ? 'Not recorded'
+              : '৳ ${_formatRent(history.monthlyRent!)} / mo',
         ),
         _HistoryDetailRow(
           label: 'Duration',
-          value: _formatDuration(
-            history.startedAt,
-            history.endedAt,
-          ),
+          value: _formatDuration(history.startedAt, history.endedAt),
         ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 5,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest,
-          ),
-          child: Text(
-            'Ended',
-            style: Theme.of(context)
-                .textTheme
-                .labelMedium,
-          ),
+        _HistoryDetailRow(
+          label: 'Stayed',
+          value:
+          '${_formatDate(history.startedAt)} – ${_formatDate(history.endedAt)}',
         ),
       ],
     );
@@ -811,26 +1294,20 @@ class _UnitHistoryItem extends StatelessWidget {
 
   String _initial(String name) {
     final value = name.trim();
-
     if (value.isEmpty) {
       return '?';
     }
-
     return value.characters.first.toUpperCase();
   }
 
   String _formatDate(DateTime dateTime) {
     final local = dateTime.toLocal();
-
-    return '${local.day.toString().padLeft(2, '0')}/'
-        '${local.month.toString().padLeft(2, '0')}/'
-        '${local.year}';
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    return '$day/$month/${local.year}';
   }
 
-  String _formatDuration(
-      DateTime startedAt,
-      DateTime endedAt,
-      ) {
+  String _formatDuration(DateTime startedAt, DateTime endedAt) {
     final difference = endedAt.difference(startedAt);
     final days = difference.inDays;
 
@@ -845,244 +1322,12 @@ class _UnitHistoryItem extends StatelessWidget {
     if (value == value.roundToDouble()) {
       return value.toStringAsFixed(0);
     }
-
     return value.toStringAsFixed(2);
   }
 }
 
 // ============================================================================
-// INFO CARD
-// ============================================================================
-
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _InfoCard({
-    required this.title,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium,
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// TENANT SECTION
-// ============================================================================
-
-class _TenantSection extends StatelessWidget {
-  final List<Tenant> tenants;
-
-  const _TenantSection({
-    required this.tenants,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (tenants.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Current Tenants',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(
-                    Icons.person_off_outlined,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'No active tenant assigned to this unit.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Current Tenants',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium,
-                  ),
-                ),
-                Text(
-                  tenants.length.toString(),
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelLarge,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ...tenants.map(
-                  (tenant) => Padding(
-                padding:
-                const EdgeInsets.only(bottom: 12),
-                child: _TenantTile(
-                  tenant: tenant,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// TENANT TILE
-// ============================================================================
-
-class _TenantTile extends StatelessWidget {
-  final Tenant tenant;
-
-  const _TenantTile({
-    required this.tenant,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          context.push(
-            RouteNames.tenantDetails.replaceFirst(
-              ':tenantId',
-              tenant.id,
-            ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                child: Text(
-                  _initial(tenant.name),
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tenant.name,
-                      maxLines: 1,
-                      overflow:
-                      TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium,
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      tenant.phone,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        _TenantStatusChip(
-                          status: tenant.status,
-                        ),
-                        const SizedBox(width: 8),
-                        if (tenant.userId == null)
-                          const _AccountStatusChip(
-                            label: 'Not registered',
-                          )
-                        else
-                          const _AccountStatusChip(
-                            label: 'Registered',
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _initial(String name) {
-    final value = name.trim();
-
-    if (value.isEmpty) {
-      return '?';
-    }
-
-    return value.characters.first.toUpperCase();
-  }
-}
-
-// ============================================================================
-// TENANT STATUS CHIP
+// STATUS & ACCOUNT CHIPS
 // ============================================================================
 
 class _TenantStatusChip extends StatelessWidget {
@@ -1094,45 +1339,27 @@ class _TenantStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme.of(context).colorScheme;
-
-    final isActive =
-        status == TenantStatus.active;
+    final isActive = status == TenantStatus.active;
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        borderRadius:
-        BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(10),
         color: isActive
-            ? colorScheme.primaryContainer
-            : colorScheme.surfaceContainerHighest,
+            ? Colors.green.withValues(alpha: 0.12)
+            : Colors.orange.withValues(alpha: 0.12),
       ),
       child: Text(
         isActive ? 'Active' : 'Inactive',
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(
-          color: isActive
-              ? colorScheme
-              .onPrimaryContainer
-              : colorScheme
-              .onSurfaceVariant,
-          fontWeight: FontWeight.w600,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: isActive ? Colors.green.shade800 : Colors.orange.shade800,
         ),
       ),
     );
   }
 }
-
-// ============================================================================
-// ACCOUNT STATUS CHIP
-// ============================================================================
 
 class _AccountStatusChip extends StatelessWidget {
   final String label;
@@ -1143,29 +1370,31 @@ class _AccountStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme =
-        Theme.of(context).colorScheme;
+    final isRegistered = label.toLowerCase().contains('registered') &&
+        !label.toLowerCase().contains('not');
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        borderRadius:
-        BorderRadius.circular(20),
-        color: colorScheme
+        borderRadius: BorderRadius.circular(10),
+        color: isRegistered
+            ? Colors.teal.withValues(alpha: 0.12)
+            : Theme
+            .of(context)
+            .colorScheme
             .surfaceContainerHighest,
       ),
       child: Text(
         label,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(
-          color:
-          colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: isRegistered
+              ? Colors.teal.shade800
+              : Theme
+              .of(context)
+              .colorScheme
+              .onSurfaceVariant,
         ),
       ),
     );
@@ -1173,7 +1402,7 @@ class _AccountStatusChip extends StatelessWidget {
 }
 
 // ============================================================================
-// INFO ROW
+// DETAIL & HELPER ROWS
 // ============================================================================
 
 class _InfoRow extends StatelessWidget {
@@ -1189,43 +1418,36 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 14,
-      ),
-      child: Row(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelMedium,
+    final theme = Theme.of(context);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: valueStyle ??
-                  Theme.of(context)
-                      .textTheme
-                      .bodyMedium,
-            ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: valueStyle ??
+                theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
-
-// ============================================================================
-// HISTORY DETAIL ROW
-// ============================================================================
 
 class _HistoryDetailRow extends StatelessWidget {
   final String label;
@@ -1238,29 +1460,23 @@ class _HistoryDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 8,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Row(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelMedium,
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium,
+          Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -1268,10 +1484,6 @@ class _HistoryDetailRow extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// LOADING INFO
-// ============================================================================
 
 class _LoadingInfoRow extends StatelessWidget {
   final String label;
@@ -1282,108 +1494,33 @@ class _LoadingInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 14,
-      ),
-      child: Row(
-        crossAxisAlignment:
-        CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelMedium,
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(width: 12),
-          const SizedBox(
-            height: 18,
-            width: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// MANAGE RENT CARD
-// ============================================================================
-
-class _ManageRentCard extends StatelessWidget {
-  final Unit unit;
-
-  const _ManageRentCard({
-    required this.unit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.payments_outlined,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Rent Management',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Change the unit rent and view the complete '
-                  'rent rate history.',
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () {
-                  context.push(
-                    RouteNames.unitRentManagement
-                        .replaceFirst(
-                      ':unitId',
-                      unit.id,
-                    ),
-                  );
-                },
-                icon: const Icon(
-                  Icons.payments_outlined,
-                ),
-                label: const Text(
-                  'Manage Rent',
-                ),
-              ),
-            ),
-          ],
         ),
-      ),
+        const Spacer(),
+        const SizedBox(
+          height: 12,
+          width: 12,
+          child: CircularProgressIndicator(strokeWidth: 1.5),
+        ),
+      ],
     );
   }
 }
 
 // ============================================================================
-// ERROR VIEW
+// ERROR & NOT FOUND VIEWS
 // ============================================================================
 
 class _ErrorView extends StatelessWidget {
@@ -1404,13 +1541,15 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.error_outline,
+              Icons.error_outline_rounded,
               size: 48,
+              color: Colors.redAccent,
             ),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -1424,21 +1563,40 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// NOT FOUND VIEW
-// ============================================================================
-
 class _NotFoundView extends StatelessWidget {
   const _NotFoundView();
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final theme = Theme.of(context);
+
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
-          'Unit not found.',
-          textAlign: TextAlign.center,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.door_sliding_outlined,
+              size: 56,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Unit Not Found',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The requested unit record does not exist or may have been deleted.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -21,7 +21,6 @@ class TenantHomeScreen extends ConsumerStatefulWidget {
 class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
   Future<void> _refresh() async {
     ref.invalidate(tenantDashboardProvider);
-
     await ref.read(tenantDashboardProvider.future);
   }
 
@@ -65,84 +64,69 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     final user = dashboard.appUser;
 
     if (user == null) {
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile information is not available.')),
       );
-
       return;
     }
 
     final result = await context.push(RouteNames.editProfile, extra: user);
-
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     if (result != null) {
       ref.invalidate(tenantDashboardProvider);
-
       try {
         await ref.read(tenantDashboardProvider.future);
-      } catch (_) {
-        // Dashboard displays its own error state.
-      }
+      } catch (_) {}
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final dashboardAsync = ref.watch(tenantDashboardProvider);
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text(
-          'Griho',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.apartment_rounded,
+                size: 20,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Griho',
+              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5),
+            ),
+          ],
         ),
         centerTitle: false,
         actions: [
-          dashboardAsync.maybeWhen(
-            data: (dashboard) {
-              if (!dashboard.hasPendingInvitation) {
-                return const SizedBox.shrink();
-              }
-
-              final invitation = dashboard.pendingInvitation;
-
-              if (invitation == null) {
-                return const SizedBox.shrink();
-              }
-
-              return IconButton(
-                tooltip: 'New invitation',
-                onPressed: () {
-                  _openInvitation(invitation);
-                },
-                icon: Badge(
-                  smallSize: 9,
-                  child: const Icon(Icons.notifications_outlined),
-                ),
-              );
-            },
-            orElse: () => const SizedBox.shrink(),
+          IconButton(
+            tooltip: 'All Invitations',
+            onPressed: _openInvitations,
+            icon: const Icon(Icons.mail_outline_rounded),
           ),
           PopupMenuButton<String>(
             tooltip: 'Account',
             onSelected: (value) {
               if (value == 'edit_profile') {
                 dashboardAsync.maybeWhen(
-                  data: (dashboard) {
-                    _openEditProfile(dashboard);
-                  },
+                  data: (dashboard) => _openEditProfile(dashboard),
                   orElse: () {},
                 );
               }
-
               if (value == 'logout') {
                 _logout();
               }
@@ -153,9 +137,9 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                   value: 'edit_profile',
                   child: Row(
                     children: [
-                      Icon(Icons.edit_outlined),
+                      Icon(Icons.person_outline),
                       SizedBox(width: 12),
-                      Text('Edit Profile'),
+                      Text('My Profile'),
                     ],
                   ),
                 ),
@@ -164,9 +148,9 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                   value: 'logout',
                   child: Row(
                     children: [
-                      Icon(Icons.logout),
+                      Icon(Icons.logout, color: Colors.redAccent),
                       SizedBox(width: 12),
-                      Text('Logout'),
+                      Text('Logout', style: TextStyle(color: Colors.redAccent)),
                     ],
                   ),
                 ),
@@ -176,12 +160,9 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
         ],
       ),
       body: dashboardAsync.when(
-        loading: () {
-          return const Center(child: CircularProgressIndicator());
-        },
-        error: (error, stackTrace) {
-          return _DashboardErrorView(error: error, onRetry: _refresh);
-        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) =>
+            _DashboardErrorView(error: error, onRetry: _refresh),
         data: (dashboard) {
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -189,9 +170,6 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
               dashboard: dashboard,
               onOpenInvitation: _openInvitation,
               onOpenInvitations: _openInvitations,
-              onEditProfile: () {
-                _openEditProfile(dashboard);
-              },
             ),
           );
         },
@@ -206,278 +184,320 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
 
 class _TenantDashboardContent extends StatelessWidget {
   final TenantDashboardData dashboard;
-
   final ValueChanged<TenantInvitation> onOpenInvitation;
-
   final VoidCallback onOpenInvitations;
-
-  final VoidCallback onEditProfile;
 
   const _TenantDashboardContent({
     required this.dashboard,
     required this.onOpenInvitation,
     required this.onOpenInvitations,
-    required this.onEditProfile,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
       children: [
-        _WelcomeHeader(
-          name: dashboard.displayName,
-          hasActiveTenancy: dashboard.hasActiveTenancy,
-        ),
+        _HeaderSection(dashboard: dashboard),
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
-        // ========================================================
-        // PENDING INVITATION
-        // ========================================================
         if (dashboard.hasPendingInvitation) ...[
           _PendingInvitationCard(
             invitation: dashboard.pendingInvitation!,
-            onReview: () {
-              onOpenInvitation(dashboard.pendingInvitation!);
-            },
+            onReview: () => onOpenInvitation(dashboard.pendingInvitation!),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
 
-        // ========================================================
-        // INVITATIONS
-        // ========================================================
-        _InvitationsCard(
-          hasPendingInvitation: dashboard.hasPendingInvitation,
-          onOpen: onOpenInvitations,
-        ),
-
-        const SizedBox(height: 20),
-
-        // ========================================================
-        // CURRENT TENANCY
-        // ========================================================
         if (dashboard.hasActiveTenancy) ...[
-          _CurrentTenancyCard(dashboard: dashboard),
+          _HeroTenancyCard(dashboard: dashboard),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
-          const _SectionHeader(title: 'My Bills'),
-
+          const _SectionHeader(
+            title: 'My Bills & Dues',
+            subtitle: 'Review monthly rent and utility charges',
+          ),
           const SizedBox(height: 10),
-
-          TenantCurrentBillsCard(),
-
-          const SizedBox(height: 20),
+          const TenantCurrentBillsCard(),
         ] else ...[
           _NoActiveTenancyCard(
-            hasHistory: dashboard.hasTenancyHistory,
             hasPendingInvitation: dashboard.hasPendingInvitation,
           ),
-          const SizedBox(height: 20),
         ],
 
-        // ========================================================
-        // ACCOUNT
-        // ========================================================
-        _AccountOverviewCard(
-          dashboard: dashboard,
-          onEditProfile: onEditProfile,
+        const SizedBox(height: 28),
+
+        const _SectionHeader(
+          title: 'Recent Activity',
+          subtitle: 'Latest updates and tenancy events',
         ),
-
-        const SizedBox(height: 20),
-
-        const _SectionHeader(title: 'Tenancy History'),
-
         const SizedBox(height: 10),
-
-        if (dashboard.hasTenancyHistory)
-          _TenancyHistoryPreview(history: dashboard.tenancyHistory)
-        else
-          const _EmptyHistoryCard(),
-
-        const SizedBox(height: 20),
-
-        const _SectionHeader(title: 'Recent Activity'),
-
-        const SizedBox(height: 10),
-
         _RecentActivityCard(dashboard: dashboard),
+
+        if (dashboard.hasTenancyHistory) ...[
+          const SizedBox(height: 28),
+          const _SectionHeader(
+            title: 'Previous Homes',
+            subtitle: 'Records from past tenancies',
+          ),
+          const SizedBox(height: 10),
+          _TenancyHistoryPreview(history: dashboard.tenancyHistory),
+        ],
       ],
     );
   }
 }
 
 // ============================================================================
-// INVITATIONS CARD
+// HEADER SECTION
 // ============================================================================
 
-class _InvitationsCard extends StatelessWidget {
-  final bool hasPendingInvitation;
-  final VoidCallback onOpen;
+class _HeaderSection extends StatelessWidget {
+  final TenantDashboardData dashboard;
 
-  const _InvitationsCard({
-    required this.hasPendingInvitation,
-    required this.onOpen,
-  });
+  const _HeaderSection({required this.dashboard});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final user = dashboard.appUser;
 
-    return Card(
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 24,
+          backgroundColor: theme.colorScheme.primaryContainer,
+          child: Text(
+            dashboard.displayName.isNotEmpty
+                ? dashboard.displayName[0].toUpperCase()
+                : 'T',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onPrimaryContainer,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                backgroundColor: hasPendingInvitation
-                    ? theme.colorScheme.primaryContainer
-                    : theme.colorScheme.surfaceContainerHighest,
-                child: Icon(
-                  hasPendingInvitation
-                      ? Icons.mark_email_unread_outlined
-                      : Icons.mail_outline,
-                  color: hasPendingInvitation
-                      ? theme.colorScheme.onPrimaryContainer
-                      : theme.colorScheme.onSurfaceVariant,
+              Text(
+                '${_greeting()},',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-
-              const SizedBox(width: 12),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Invitations',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-
-                        if (hasPendingInvitation)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'Pending',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    Text(
-                      hasPendingInvitation
-                          ? 'You have a new tenancy invitation.'
-                          : 'View your tenancy invitation history.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+              Text(
+                dashboard.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
-              ),
-
-              const SizedBox(width: 8),
-
-              Icon(
-                Icons.chevron_right,
-                color: theme.colorScheme.onSurfaceVariant,
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// WELCOME HEADER
-// ============================================================================
-
-class _WelcomeHeader extends StatelessWidget {
-  final String name;
-  final bool hasActiveTenancy;
-
-  const _WelcomeHeader({required this.name, required this.hasActiveTenancy});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          _greeting(),
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        if (user != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.badge_outlined,
+                  size: 14,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  user.publicId,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$name 👋',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          hasActiveTenancy
-              ? 'Here is an overview of your current home.'
-              : 'Manage your Griho account and tenancy from here.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
       ],
     );
   }
 
   String _greeting() {
     final hour = DateTime.now().hour;
-
-    if (hour < 12) {
-      return 'Good morning';
-    }
-
-    if (hour < 17) {
-      return 'Good afternoon';
-    }
-
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
     return 'Good evening';
   }
 }
 
 // ============================================================================
-// PENDING INVITATION
+// HERO TENANCY CARD
+// ============================================================================
+
+class _HeroTenancyCard extends ConsumerWidget {
+  final TenantDashboardData dashboard;
+
+  const _HeroTenancyCard({required this.dashboard});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final propertyName = dashboard.currentPropertyName ?? 'Property Details';
+    final unitDisplayName = dashboard.currentUnitDisplayName ?? 'Unit';
+    final tenant = dashboard.tenant;
+    final unitId = tenant?.unitId.trim();
+    final hasValidUnitId = unitId != null && unitId.isNotEmpty;
+    final rentAsync = hasValidUnitId
+        ? ref.watch(currentTenantRentRateProvider(unitId))
+        : null;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.primaryContainer.withValues(alpha: 0.7),
+            theme.colorScheme.surfaceContainerHighest,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircleAvatar(radius: 4, backgroundColor: Colors.green),
+                    SizedBox(width: 6),
+                    Text(
+                      'Currently Staying',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.home_rounded, color: theme.colorScheme.primary),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            propertyName,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(
+                Icons.door_front_door_outlined,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                unitDisplayName,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Agreed Monthly Rent',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  rentAsync == null
+                      ? const Text('—')
+                      : rentAsync.when(
+                          loading: () => const Text('Loading...'),
+                          error: (_, _) => const Text('Not available'),
+                          data: (rent) => Text(
+                            rent != null
+                                ? '৳ ${_formatAmount(rent.amount)}'
+                                : 'Not Set',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                ],
+              ),
+              if (tenant?.tenancyStartedAt != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Moved In',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _formatDate(tenant!.tenancyStartedAt!),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// PENDING INVITATION BANNER
 // ============================================================================
 
 class _PendingInvitationCard extends StatelessWidget {
@@ -492,295 +512,67 @@ class _PendingInvitationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final propertyName = invitation.propertyName?.trim() ?? 'a property';
+    final unitName = invitation.unitNumber?.trim() ?? 'Assigned Unit';
 
-    final propertyName = invitation.propertyName?.trim();
-
-    final unitName = invitation.unitNumber?.trim();
-
-    return Card(
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: theme.colorScheme.primary.withValues(alpha: 0.35),
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Icon(
-                    Icons.mail_outline,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'New tenancy invitation',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'An owner has invited you to a property.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 12),
-            if (propertyName != null && propertyName.isNotEmpty)
-              _InfoRow(
-                icon: Icons.apartment_outlined,
-                label: 'Property',
-                value: propertyName,
-              ),
-            if (unitName != null && unitName.isNotEmpty)
-              _InfoRow(
-                icon: Icons.home_work_outlined,
-                label: 'Unit',
-                value: unitName,
-              ),
-            _InfoRow(
-              icon: Icons.payments_outlined,
-              label: 'Monthly rent',
-              value: '৳ ${_formatAmount(invitation.rentAmount)}',
-            ),
-            _InfoRow(
-              icon: Icons.event_outlined,
-              label: 'Expires',
-              value: _formatDate(invitation.expiresAt),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onReview,
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text('Review Invitation'),
-              ),
-            ),
-          ],
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.tertiary.withValues(alpha: 0.3),
         ),
       ),
-    );
-  }
-}
-
-// ============================================================================
-// CURRENT TENANCY
-// ============================================================================
-
-class _CurrentTenancyCard extends ConsumerWidget {
-  final TenantDashboardData dashboard;
-
-  const _CurrentTenancyCard({required this.dashboard});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
-    final propertyName = dashboard.currentPropertyName;
-
-    final unitDisplayName = dashboard.currentUnitDisplayName;
-
-    final tenant = dashboard.tenant;
-
-    final unitId = tenant?.unitId.trim();
-
-    final hasValidUnitId = unitId != null && unitId.isNotEmpty;
-
-    final rentAsync = hasValidUnitId
-        ? ref.watch(currentTenantRentRateProvider(unitId))
-        : null;
-
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Icon(
-                    Icons.home_outlined,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'My Home',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Current tenancy',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Active',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            _InfoRow(
-              icon: Icons.apartment_outlined,
-              label: 'Property',
-              value: propertyName ?? 'Property information unavailable',
-            ),
-            _InfoRow(
-              icon: Icons.door_front_door_outlined,
-              label: 'Unit',
-              value: unitDisplayName ?? 'Unit information unavailable',
-            ),
-            _CurrentTenantRentRow(
-              rentAsync: rentAsync,
-              hasValidUnitId: hasValidUnitId,
-            ),
-            if (dashboard.tenant?.tenancyStartedAt != null)
-              _InfoRow(
-                icon: Icons.calendar_month_outlined,
-                label: 'Started',
-                value: _formatDate(dashboard.tenant!.tenancyStartedAt!),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// CURRENT TENANT RENT ROW
-// ============================================================================
-
-class _CurrentTenantRentRow extends StatelessWidget {
-  final AsyncValue<dynamic>? rentAsync;
-  final bool hasValidUnitId;
-
-  const _CurrentTenantRentRow({
-    required this.rentAsync,
-    required this.hasValidUnitId,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!hasValidUnitId || rentAsync == null) {
-      return const _InfoRow(
-        icon: Icons.payments_outlined,
-        label: 'Monthly Rent',
-        value: 'Not available',
-      );
-    }
-
-    return rentAsync!.when(
-      loading: () {
-        return const _LoadingTenantRentRow();
-      },
-      error: (_, _) {
-        return const _InfoRow(
-          icon: Icons.payments_outlined,
-          label: 'Monthly Rent',
-          value: 'Unable to load',
-        );
-      },
-      data: (rentRate) {
-        if (rentRate == null) {
-          return const _InfoRow(
-            icon: Icons.payments_outlined,
-            label: 'Monthly Rent',
-            value: 'Not set',
-          );
-        }
-
-        return _InfoRow(
-          icon: Icons.payments_outlined,
-          label: 'Monthly Rent',
-          value: '৳ ${_formatAmount(rentRate.amount)}',
-          emphasized: true,
-        );
-      },
-    );
-  }
-}
-
-class _LoadingTenantRentRow extends StatelessWidget {
-  const _LoadingTenantRentRow();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.payments_outlined,
-            size: 20,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 90,
-            child: Text(
-              'Monthly Rent',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: theme.colorScheme.onTertiaryContainer,
+                child: Icon(
+                  Icons.mail_outline_rounded,
+                  size: 20,
+                  color: theme.colorScheme.tertiaryContainer,
+                ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'New Tenancy Invitation!',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onTertiaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You have been invited to stay at "$propertyName" ($unitName) with monthly rent of ৳ ${_formatAmount(invitation.rentAmount)}.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onTertiaryContainer,
+              height: 1.4,
             ),
           ),
-          const Spacer(),
-          const SizedBox(
-            height: 18,
-            width: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.onTertiaryContainer,
+                foregroundColor: theme.colorScheme.tertiaryContainer,
+              ),
+              onPressed: onReview,
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: const Text(
+                'Review & Accept',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
         ],
       ),
@@ -789,289 +581,63 @@ class _LoadingTenantRentRow extends StatelessWidget {
 }
 
 // ============================================================================
-// NO ACTIVE TENANCY
+// NO ACTIVE TENANCY CARD
 // ============================================================================
 
 class _NoActiveTenancyCard extends StatelessWidget {
-  final bool hasHistory;
   final bool hasPendingInvitation;
 
-  const _NoActiveTenancyCard({
-    required this.hasHistory,
-    required this.hasPendingInvitation,
-  });
+  const _NoActiveTenancyCard({required this.hasPendingInvitation});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.secondaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                hasPendingInvitation
-                    ? Icons.mark_email_unread_outlined
-                    : Icons.home_outlined,
-                size: 30,
-                color: theme.colorScheme.onSecondaryContainer,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              hasPendingInvitation
-                  ? 'You have a new invitation'
-                  : 'No active tenancy',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              hasPendingInvitation
-                  ? 'Review the invitation above to see the property and tenancy details.'
-                  : hasHistory
-                  ? 'You currently do not have an active tenancy. Your previous tenancy records are still available below.'
-                  : 'Your account is ready. When an owner sends you an invitation, it will appear here.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.45,
-              ),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-    );
-  }
-}
-
-// ============================================================================
-// ACCOUNT OVERVIEW
-// ============================================================================
-
-class _AccountOverviewCard extends StatelessWidget {
-  final TenantDashboardData dashboard;
-  final VoidCallback onEditProfile;
-
-  const _AccountOverviewCard({
-    required this.dashboard,
-    required this.onEditProfile,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final profile = dashboard.appUser;
-
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'My Account',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: onEditProfile,
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('Edit Profile'),
-                ),
-              ],
+      child: Column(
+        children: [
+          Icon(
+            hasPendingInvitation
+                ? Icons.mark_email_unread_outlined
+                : Icons.home_work_outlined,
+            size: 52,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            hasPendingInvitation
+                ? 'Action Required: New Invitation'
+                : 'No Active Tenancy',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
-            const SizedBox(height: 14),
-            if (profile != null) ...[
-              _InfoRow(
-                icon: Icons.badge_outlined,
-                label: 'Griho ID',
-                value: profile.publicId,
-              ),
-              _InfoRow(
-                icon: Icons.person_outline,
-                label: 'Name',
-                value: profile.name,
-              ),
-              if (profile.phoneNumber != null &&
-                  profile.phoneNumber!.trim().isNotEmpty)
-                _InfoRow(
-                  icon: Icons.phone_outlined,
-                  label: 'Phone',
-                  value: profile.phoneNumber!,
-                ),
-              if (profile.email != null && profile.email!.trim().isNotEmpty)
-                _InfoRow(
-                  icon: Icons.email_outlined,
-                  label: 'Email',
-                  value: profile.email!,
-                ),
-            ] else
-              _InfoRow(
-                icon: Icons.person_outline,
-                label: 'Profile',
-                value: 'Profile information unavailable',
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// TENANCY HISTORY
-// ============================================================================
-
-class _TenancyHistoryPreview extends StatelessWidget {
-  final List<TenancyHistory> history;
-
-  const _TenancyHistoryPreview({required this.history});
-
-  @override
-  Widget build(BuildContext context) {
-    final preview = history.take(3).toList();
-
-    return Column(
-      children: [
-        for (var index = 0; index < preview.length; index++) ...[
-          _HistoryItem(history: preview[index]),
-          if (index != preview.length - 1) const SizedBox(height: 8),
-        ],
-      ],
-    );
-  }
-}
-
-class _HistoryItem extends StatelessWidget {
-  final TenancyHistory history;
-
-  const _HistoryItem({required this.history});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    final propertyName = history.propertyName.trim();
-
-    final unitNumber = history.unitNumber.trim();
-
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
-              child: Icon(
-                Icons.history,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    propertyName.isNotEmpty ? propertyName : 'Previous tenancy',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    unitNumber.isNotEmpty
-                        ? 'Unit $unitNumber'
-                        : 'Unit information unavailable',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  _formatDate(history.startedAt),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'to ${_formatDate(history.endedAt)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyHistoryCard extends StatelessWidget {
-  const _EmptyHistoryCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Icon(
-              Icons.history_outlined,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hasPendingInvitation
+                ? 'Please check the invitation banner above to confirm your tenancy.'
+                : 'You are currently not registered under any property. Share your Griho ID or verified phone number with your landlord to get started.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
+              height: 1.5,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Your previous tenancy records will appear here.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
 // ============================================================================
-// RECENT ACTIVITY
+// RECENT ACTIVITY CARD
 // ============================================================================
 
 class _RecentActivityCard extends StatelessWidget {
@@ -1081,17 +647,22 @@ class _RecentActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final activities = _buildActivities(dashboard);
 
     return Card(
       elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             for (var index = 0; index < activities.length; index++) ...[
               _ActivityItem(activity: activities[index]),
-              if (index != activities.length - 1) const Divider(height: 24),
+              if (index != activities.length - 1) const Divider(height: 20),
             ],
           ],
         ),
@@ -1101,45 +672,39 @@ class _RecentActivityCard extends StatelessWidget {
 
   List<_ActivityData> _buildActivities(TenantDashboardData dashboard) {
     final activities = <_ActivityData>[];
-
     final invitation = dashboard.pendingInvitation;
 
     if (invitation != null && invitation.isValid) {
       activities.add(
         _ActivityData(
           icon: Icons.mail_outline,
-          title: 'New invitation received',
-          subtitle:
-              invitation.propertyName ??
-              'A property owner sent you an invitation.',
+          title: 'Invitation received',
+          subtitle: invitation.propertyName ?? 'Property invitation waiting',
           date: invitation.createdAt,
         ),
       );
     }
 
     final tenant = dashboard.tenant;
-
     if (tenant != null &&
         tenant.status == TenantStatus.active &&
         tenant.tenancyStartedAt != null) {
       activities.add(
         _ActivityData(
-          icon: Icons.home_outlined,
-          title: 'Current tenancy started',
-          subtitle: 'You currently have an active tenancy.',
+          icon: Icons.key_rounded,
+          title: 'Moved in to new home',
+          subtitle: dashboard.currentPropertyName ?? 'Tenancy active',
           date: tenant.tenancyStartedAt!,
         ),
       );
     }
 
-    for (final history in dashboard.tenancyHistory.take(3)) {
+    for (final history in dashboard.tenancyHistory.take(2)) {
       activities.add(
         _ActivityData(
-          icon: Icons.history,
-          title: 'Tenancy ended',
-          subtitle: history.propertyName.trim().isNotEmpty
-              ? history.propertyName
-              : 'Previous tenancy',
+          icon: Icons.history_rounded,
+          title: 'Tenancy completed',
+          subtitle: history.propertyName,
           date: history.endedAt,
         ),
       );
@@ -1147,25 +712,18 @@ class _RecentActivityCard extends StatelessWidget {
 
     activities.sort((a, b) => b.date.compareTo(a.date));
 
-    if (activities.length > 5) {
-      return activities.take(5).toList();
-    }
-
     if (activities.isEmpty) {
       return [
         _ActivityData(
           icon: Icons.check_circle_outline,
-          title: 'Account ready',
-          subtitle: 'Your Griho account is ready to use.',
-          date:
-              dashboard.appUser?.createdAt ??
-              dashboard.firebaseUser?.metadata.creationTime ??
-              DateTime.now(),
+          title: 'Account active',
+          subtitle: 'Welcome to Griho system',
+          date: dashboard.appUser?.createdAt ?? DateTime.now(),
         ),
       ];
     }
 
-    return activities;
+    return activities.take(4).toList();
   }
 }
 
@@ -1196,12 +754,12 @@ class _ActivityItem extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
-          radius: 20,
+          radius: 18,
           backgroundColor: theme.colorScheme.surfaceContainerHighest,
           child: Icon(
             activity.icon,
-            size: 20,
-            color: theme.colorScheme.onSurfaceVariant,
+            size: 18,
+            color: theme.colorScheme.primary,
           ),
         ),
         const SizedBox(width: 12),
@@ -1215,10 +773,10 @@ class _ActivityItem extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
                 activity.subtitle,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -1238,81 +796,94 @@ class _ActivityItem extends StatelessWidget {
     );
   }
 }
+
+// ============================================================================
+// TENANCY HISTORY PREVIEW
+// ============================================================================
+
+class _TenancyHistoryPreview extends StatelessWidget {
+  final List<TenancyHistory> history;
+
+  const _TenancyHistoryPreview({required this.history});
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = history.take(2).toList();
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        for (final item in preview)
+          Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+            child: ListTile(
+              leading: const CircleAvatar(
+                child: Icon(Icons.home_outlined, size: 20),
+              ),
+              title: Text(
+                item.propertyName,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                'Unit: ${item.unitNumber} • ৳ ${_formatAmount(item.monthlyRent)}',
+              ),
+              trailing: Text(
+                _formatDate(item.endedAt),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 // ============================================================================
 // SECTION HEADER
 // ============================================================================
 
 class _SectionHeader extends StatelessWidget {
   final String title;
+  final String? subtitle;
 
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Text(
-      title,
-      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-    );
-  }
-}
-
-// ============================================================================
-// INFO ROW
-// ============================================================================
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool emphasized;
-
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.emphasized = false,
-  });
+  const _SectionHeader({required this.title, this.subtitle});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
-              ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            subtitle!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
 
 // ============================================================================
-// DASHBOARD ERROR
+// DASHBOARD ERROR VIEW
 // ============================================================================
 
 class _DashboardErrorView extends StatelessWidget {
@@ -1364,24 +935,23 @@ class _DashboardErrorView extends StatelessWidget {
 }
 
 // ============================================================================
-// HELPERS
+// HELPERS (NULL-SAFE)
 // ============================================================================
 
 String _formatDate(DateTime date) {
   final day = date.day.toString().padLeft(2, '0');
-
   final month = date.month.toString().padLeft(2, '0');
-
-  final year = date.year.toString();
-
-  return '$day/$month/$year';
+  return '$day/$month/${date.year}';
 }
 
-String _formatAmount(double amount) {
+/// নালেবল `num?` সাপোর্ট করায় double? পাস করলেও কোনো এরর আসবে না
+String _formatAmount(num? amount) {
+  if (amount == null) {
+    return '0.00';
+  }
   if (amount == amount.roundToDouble()) {
     return amount.toStringAsFixed(0);
   }
-
   return amount.toStringAsFixed(2);
 }
 
@@ -1389,25 +959,17 @@ String _relativeDate(DateTime date) {
   final now = DateTime.now();
   final difference = now.difference(date);
 
-  if (difference.isNegative) {
-    return 'Upcoming';
+  if (difference.isNegative || difference.inMinutes < 1) {
+    return 'Just now';
   }
-
-  if (difference.inMinutes < 1) {
-    return 'Now';
-  }
-
   if (difference.inHours < 1) {
     return '${difference.inMinutes}m ago';
   }
-
   if (difference.inDays < 1) {
     return '${difference.inHours}h ago';
   }
-
   if (difference.inDays < 7) {
     return '${difference.inDays}d ago';
   }
-
   return _formatDate(date);
 }

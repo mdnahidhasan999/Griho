@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
-
 import '../../domain/entities/tenant_invitation.dart';
-
 import '../providers/current_tenant_pending_invitation_provider.dart';
 import '../providers/tenant_invitation_provider.dart';
 
@@ -29,7 +27,6 @@ class _TenantInvitationReceiveScreenState
   bool _isLoading = true;
   bool _isAccepting = false;
   bool _isAccepted = false;
-
   String? _errorMessage;
 
   @override
@@ -49,7 +46,9 @@ class _TenantInvitationReceiveScreenState
     final invitationId = widget.invitationId.trim();
 
     if (invitationId.isEmpty) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _isLoading = false;
@@ -59,12 +58,19 @@ class _TenantInvitationReceiveScreenState
       return;
     }
 
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final invitation = await ref.read(getTenantInvitationProvider)(
         invitationId,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       if (invitation == null) {
         setState(() {
@@ -82,7 +88,9 @@ class _TenantInvitationReceiveScreenState
         _errorMessage = null;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _isLoading = false;
@@ -103,10 +111,12 @@ class _TenantInvitationReceiveScreenState
     }
 
     if (!invitation.isValid) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
-        _errorMessage = 'This invitation is no longer valid.';
+        _errorMessage = 'This invitation is no longer valid or has expired.';
       });
 
       return;
@@ -117,58 +127,15 @@ class _TenantInvitationReceiveScreenState
       _errorMessage = null;
     });
 
-    debugPrint('');
-    debugPrint('════════════════════════════════════════════');
-    debugPrint('🔐 ACCEPT INVITATION STARTED');
-    debugPrint('════════════════════════════════════════════');
-    debugPrint('Invitation ID : ${invitation.id}');
-    debugPrint('Tenant ID     : ${invitation.tenantId}');
-    debugPrint('Property ID   : ${invitation.propertyId}');
-    debugPrint('Unit ID       : ${invitation.unitId}');
-    debugPrint('Phone         : ${invitation.phone}');
-    debugPrint('Rent Amount   : ${invitation.rentAmount}');
-    debugPrint('Owner ID      : ${invitation.ownerId}');
-    debugPrint('════════════════════════════════════════════');
-    debugPrint('');
-
     try {
-      debugPrint(
-        '➡️ STEP 1: Calling acceptTenantInvitationProvider...',
-      );
+      await ref.read(acceptTenantInvitationProvider)(invitation.id);
 
-      await ref.read(acceptTenantInvitationProvider)(
-        invitation.id,
-      );
+      if (!mounted) {
+        return;
+      }
 
-      debugPrint(
-        '✅ STEP 1 SUCCESS: Invitation accepted.',
-      );
-
-      if (!mounted) return;
-
-      // --------------------------------------------------------
-      // IMPORTANT:
-      // The invitation status has changed from PENDING to
-      // ACCEPTED in Firestore.
-      //
-      // The TenantHomeInvitationGateScreen watches
-      // currentTenantPendingInvitationProvider.
-      //
-      // Invalidate it here so it does not keep using the old
-      // cached pending invitation.
-      // --------------------------------------------------------
-
-      ref.invalidate(
-        currentTenantPendingInvitationProvider,
-      );
-
-      debugPrint(
-        '✅ PENDING INVITATION PROVIDER INVALIDATED.',
-      );
-
-      // --------------------------------------------------------
-      // UPDATE LOCAL UI STATE
-      // --------------------------------------------------------
+      // Invalidate cached pending invitations
+      ref.invalidate(currentTenantPendingInvitationProvider);
 
       setState(() {
         _isAccepting = false;
@@ -176,73 +143,62 @@ class _TenantInvitationReceiveScreenState
         _errorMessage = null;
       });
 
-      debugPrint(
-        '✅ ACCEPT UI: Loading state stopped.',
-      );
-
-      debugPrint(
-        '✅ ACCEPT UI: Invitation marked as locally accepted.',
-      );
-
-      // --------------------------------------------------------
-      // SUCCESS DIALOG
-      // --------------------------------------------------------
-
+      // Show confirmation dialog before entering home
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (context) {
+        builder: (dialogContext) {
+          final dialogTheme = Theme.of(dialogContext);
+
           return AlertDialog(
-            icon: const Icon(
-              Icons.check_circle_outline,
-              size: 56,
-            ),
-            title: const Text(
-              'Invitation Accepted',
-            ),
-            content: const Text(
-              'Your tenant account has been successfully connected to this tenancy.',
+            title: const Text('Invitation Accepted'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    size: 48,
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Your Griho account is now officially connected to this tenancy agreement.',
+                  textAlign: TextAlign.center,
+                  style: dialogTheme.textTheme.bodyMedium?.copyWith(
+                    color: dialogTheme.colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
             actions: [
               FilledButton(
                 onPressed: () {
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                 },
-                child: const Text(
-                  'Continue',
-                ),
+                child: const Text('Go to Home Dashboard'),
               ),
             ],
           );
         },
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      // --------------------------------------------------------
-      // GO TO TENANT HOME
-      // --------------------------------------------------------
-
-      debugPrint(
-        '➡️ NAVIGATING TO TENANT HOME...',
-      );
-
-      context.go(
-        RouteNames.tenantHome,
-      );
-    } catch (error, stackTrace) {
-      debugPrint('');
-      debugPrint('❌❌❌ ACCEPT INVITATION FAILED ❌❌❌');
-      debugPrint('Invitation ID : ${invitation.id}');
-      debugPrint('Error Type    : ${error.runtimeType}');
-      debugPrint('Error         : $error');
-      debugPrint('');
-      debugPrint('STACK TRACE:');
-      debugPrint(stackTrace.toString());
-      debugPrint('════════════════════════════════════════════');
-      debugPrint('');
-
-      if (!mounted) return;
+      context.go(RouteNames.tenantHome);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _isAccepting = false;
@@ -252,7 +208,7 @@ class _TenantInvitationReceiveScreenState
   }
 
   // ============================================================
-  // CANCEL / REJECT
+  // DECLINE INVITATION
   // ============================================================
 
   Future<void> _rejectInvitation() async {
@@ -264,41 +220,39 @@ class _TenantInvitationReceiveScreenState
 
     final shouldReject = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Decline Invitation?',
-          ),
+          title: const Text('Decline Tenancy Invitation?'),
           content: const Text(
-            'Are you sure you want to decline this tenancy invitation?',
+            'Are you sure you want to decline this invitation? You will not be linked to this unit unless the property owner sends a new invitation.',
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(false);
+                Navigator.of(dialogContext).pop(false);
               },
-              child: const Text(
-                'Cancel',
-              ),
+              child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-              child: const Text(
-                'Decline',
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme
+                    .of(dialogContext)
+                    .colorScheme
+                    .error,
               ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Decline'),
             ),
           ],
         );
       },
     );
 
-    if (shouldReject != true) {
+    if (shouldReject != true || !mounted) {
       return;
     }
-
-    if (!mounted) return;
 
     setState(() {
       _isAccepting = true;
@@ -306,84 +260,74 @@ class _TenantInvitationReceiveScreenState
     });
 
     try {
-      await ref.read(cancelTenantInvitationProvider)(
-        invitation.id,
-      );
+      await ref.read(cancelTenantInvitationProvider)(invitation.id);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      // --------------------------------------------------------
-      // IMPORTANT:
-      // Remove cached pending invitation after rejection.
-      // --------------------------------------------------------
-
-      ref.invalidate(
-        currentTenantPendingInvitationProvider,
-      );
-
-      debugPrint(
-        '✅ PENDING INVITATION PROVIDER INVALIDATED AFTER REJECTION.',
-      );
-
-      // --------------------------------------------------------
-      // STOP LOADING
-      // --------------------------------------------------------
+      ref.invalidate(currentTenantPendingInvitationProvider);
 
       setState(() {
         _isAccepting = false;
         _errorMessage = null;
       });
 
-      // --------------------------------------------------------
-      // SUCCESS DIALOG
-      // --------------------------------------------------------
-
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (context) {
+        builder: (dialogContext) {
+          final dialogTheme = Theme.of(dialogContext);
+
           return AlertDialog(
-            icon: const Icon(
-              Icons.cancel_outlined,
-              size: 56,
-            ),
-            title: const Text(
-              'Invitation Declined',
-            ),
-            content: const Text(
-              'You have declined this tenancy invitation.',
+            title: const Text('Invitation Declined'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: dialogTheme.colorScheme.surfaceContainerHighest,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.cancel_outlined,
+                    size: 48,
+                    color: dialogTheme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'You have declined this tenancy invitation. The property owner will be informed.',
+                  textAlign: TextAlign.center,
+                  style: dialogTheme.textTheme.bodyMedium?.copyWith(
+                    color: dialogTheme.colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
             actions: [
               FilledButton(
                 onPressed: () {
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                 },
-                child: const Text(
-                  'Continue',
-                ),
+                child: const Text('Continue'),
               ),
             ],
           );
         },
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      context.go(
-        RouteNames.tenantHome,
-      );
-    } catch (error, stackTrace) {
-      debugPrint('');
-      debugPrint('❌❌❌ REJECT INVITATION FAILED ❌❌❌');
-      debugPrint('Invitation ID : ${invitation.id}');
-      debugPrint('Error Type    : ${error.runtimeType}');
-      debugPrint('Error         : $error');
-      debugPrint('STACK TRACE:');
-      debugPrint(stackTrace.toString());
-      debugPrint('════════════════════════════════════════════');
-      debugPrint('');
-
-      if (!mounted) return;
+      context.go(RouteNames.tenantHome);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _isAccepting = false;
@@ -392,67 +336,61 @@ class _TenantInvitationReceiveScreenState
     }
   }
 
-  // ============================================================
-  // ERROR
-  // ============================================================
-
   String _cleanError(Object error) {
     final message = error.toString();
-
     if (message.startsWith('Exception: ')) {
-      return message.substring(
-        'Exception: '.length,
-      );
+      return message.substring(11);
     }
-
+    if (message.startsWith('Invalid argument(s): ')) {
+      return message.substring(21);
+    }
     return message;
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
-
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text(
-          'Tenant Invitation',
+          'Tenancy Invitation',
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       body: SafeArea(
-        child: _buildBody(),
+        child: _buildBody(theme),
       ),
     );
   }
 
-  // ============================================================
-  // BODY
-  // ============================================================
-
-  Widget _buildBody() {
-    // ----------------------------------------------------------
-    // LOADING
-    // ----------------------------------------------------------
-
+  Widget _buildBody(ThemeData theme) {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 20),
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 20),
             Text(
-              'Loading invitation...',
+              'Retrieving invitation details...',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
       );
     }
-
-    // ----------------------------------------------------------
-    // ERROR
-    // ----------------------------------------------------------
 
     if (_errorMessage != null && _invitation == null) {
       return Center(
@@ -461,21 +399,39 @@ class _TenantInvitationReceiveScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.error_outline,
-                size: 64,
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer.withValues(
+                      alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.error_outline_rounded,
+                  size: 48,
+                  color: theme.colorScheme.error,
+                ),
               ),
               const SizedBox(height: 20),
               Text(
+                'Unable to Load Invitation',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 24),
-              OutlinedButton(
+              FilledButton.icon(
                 onPressed: _loadInvitation,
-                child: const Text(
-                  'Try Again',
-                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Try Again'),
               ),
             ],
           ),
@@ -484,18 +440,11 @@ class _TenantInvitationReceiveScreenState
     }
 
     final invitation = _invitation;
-
     if (invitation == null) {
       return const Center(
-        child: Text(
-          'Invitation unavailable.',
-        ),
+        child: Text('Invitation information is currently unavailable.'),
       );
     }
-
-    // ----------------------------------------------------------
-    // EXPIRED / INVALID
-    // ----------------------------------------------------------
 
     if (!invitation.isValid && !_isAccepted) {
       return Center(
@@ -504,20 +453,40 @@ class _TenantInvitationReceiveScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.event_busy_outlined,
-                size: 64,
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.event_busy_outlined,
+                  size: 48,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'This invitation is no longer valid.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
               Text(
-                'The invitation may have expired, been accepted, or been cancelled.',
+                'Invitation Inactive or Expired',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This invitation link has expired or has already been processed by the property manager.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton(
+                onPressed: () {
+                  context.go(RouteNames.tenantHome);
+                },
+                child: const Text('Return to Home'),
               ),
             ],
           ),
@@ -525,253 +494,308 @@ class _TenantInvitationReceiveScreenState
       );
     }
 
-    // ----------------------------------------------------------
-    // NORMAL INVITATION
-    // ----------------------------------------------------------
+    final rentAmount = invitation.rentAmount;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 24),
-
-          // ====================================================
-          // HEADER
-          // ====================================================
-
-          Center(
+          // 1. Hero Greeting Banner
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
             child: Column(
               children: [
-                Icon(
-                  _isAccepted
-                      ? Icons.check_circle_outline
-                      : Icons.home_work_outlined,
-                  size: 72,
-                  color: Theme.of(context).colorScheme.primary,
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _isAccepted
+                        ? Colors.green.withValues(alpha: 0.14)
+                        : theme.colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isAccepted
+                        ? Icons.check_circle_rounded
+                        : Icons.home_work_rounded,
+                    size: 44,
+                    color: _isAccepted
+                        ? Colors.green.shade800
+                        : theme.colorScheme.onPrimaryContainer,
+                  ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Text(
                   _isAccepted
-                      ? 'Invitation Accepted'
-                      : 'You Have a Tenant Invitation',
+                      ? 'Tenancy Accepted'
+                      : 'You\'re Invited to Join',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   _isAccepted
-                      ? 'Your Griho account is now connected to this tenancy.'
-                      : 'A property owner has invited you to join a tenancy.',
+                      ? 'Your Griho account is linked to this property space.'
+                      : 'A property owner has invited you to activate your official tenancy.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 32),
+          const SizedBox(height: 18),
 
-          // ====================================================
-          // INVITATION DETAILS
-          // ====================================================
-
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
+          // 2. Financial & Lease Highlight Card
+          if (rentAmount != null && rentAmount > 0) ...[
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.35),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Row(
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.payments_outlined,
+                      size: 24,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Agreed Monthly Rent',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '৳ ${_formatAmount(rentAmount)} / month',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
+
+          // 3. Agreement Details Card
+          Material(
+            color: theme.colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Lease Allocation Details',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   _DetailRow(
-                    icon: Icons.home_outlined,
+                    icon: Icons.apartment_rounded,
                     title: 'Property',
-                    value:
-                    invitation.propertyName ??
-                        'Property information unavailable',
+                    value: invitation.propertyName ??
+                        'Property details unlisted',
                   ),
-
-                  const Divider(
-                    height: 28,
-                  ),
-
+                  const Divider(height: 24),
                   _DetailRow(
                     icon: Icons.door_front_door_outlined,
-                    title: 'Unit',
+                    title: 'Assigned Unit',
                     value: _formatUnit(invitation),
                   ),
-
-                  const Divider(
-                    height: 28,
-                  ),
-
+                  const Divider(height: 24),
                   _DetailRow(
                     icon: Icons.phone_outlined,
-                    title: 'Phone',
+                    title: 'Invited Phone Number',
                     value: invitation.phone,
                   ),
-
-                  const Divider(
-                    height: 28,
-                  ),
-
+                  const Divider(height: 24),
                   _DetailRow(
-                    icon: Icons.calendar_today_outlined,
-                    title: 'Expires',
-                    value: _formatDate(
-                      invitation.expiresAt,
-                    ),
+                    icon: Icons.schedule_rounded,
+                    title: 'Invitation Valid Until',
+                    value: _formatDate(invitation.expiresAt),
                   ),
                 ],
               ),
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 18),
 
-          // ====================================================
-          // SUCCESS MESSAGE
-          // ====================================================
-
-          if (_isAccepted) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.check_circle_outline,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Invitation accepted successfully. '
-                            'Your tenant account is now connected to this tenancy.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          // 4. Information Transparency Note
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
-            const SizedBox(height: 24),
-          ],
-
-          // ====================================================
-          // WARNING / ERROR
-          // ====================================================
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.shield_outlined,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _isAccepted
+                        ? 'Your tenancy is now synchronized. Upcoming utility invoices and rental statements will appear on your home feed.'
+                        : 'By accepting, this tenancy will be formally connected to your profile, enabling direct invoice tracking and utility payment history.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
           if (_errorMessage != null && !_isAccepted) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _errorMessage!,
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: theme.colorScheme.error.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline_rounded,
+                      color: theme.colorScheme.error, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(
+                        color: theme.colorScheme.error,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // ====================================================
-          // ACCEPT
-          // ====================================================
-
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed:
-              _isAccepting || _isAccepted
-                  ? null
-                  : _acceptInvitation,
-              child: _isAccepting
-                  ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                ),
-              )
-                  : _isAccepted
-                  ? const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.check,
-                    size: 20,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Invitation Accepted',
                   ),
                 ],
-              )
-                  : const Text(
-                'Accept Invitation',
               ),
             ),
-          ),
+          ],
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 28),
 
-          // ====================================================
-          // DECLINE
-          // ====================================================
-
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed:
-              _isAccepting || _isAccepted
-                  ? null
-                  : _rejectInvitation,
-              child: const Text(
-                'Decline',
+          // 5. Action Buttons
+          if (!_isAccepted) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: _isAccepting ? null : _acceptInvitation,
+                icon: _isAccepting
+                    ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                    : const Icon(Icons.check_circle_outline_rounded, size: 20),
+                label: Text(
+                  _isAccepting ? 'Connecting...' : 'Accept Tenancy Invitation',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // ====================================================
-          // INFO
-          // ====================================================
-
-          Text(
-            _isAccepted
-                ? 'Your Griho account has been connected to this tenancy.'
-                : 'By accepting this invitation, your Griho account will be connected to this tenancy.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: _isAccepting ? null : _rejectInvitation,
+                child: const Text(
+                  'Decline Invitation',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ] else
+            ...[
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    context.go(RouteNames.tenantHome);
+                  },
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 20),
+                  label: const Text(
+                    'Proceed to Tenant Dashboard',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
         ],
       ),
     );
   }
 
-  // ============================================================
-  // UNIT DISPLAY
-  // ============================================================
-
   String _formatUnit(TenantInvitation invitation) {
-    final unitName = invitation.unitName;
-    final unitNumber = invitation.unitNumber;
+    final unitName = invitation.unitName?.trim();
+    final unitNumber = invitation.unitNumber?.trim();
 
     if (unitName != null &&
         unitName.isNotEmpty &&
         unitNumber != null &&
         unitNumber.isNotEmpty) {
-      return '$unitName ($unitNumber)';
+      return '$unitName (Unit $unitNumber)';
     }
 
     if (unitName != null && unitName.isNotEmpty) {
@@ -779,39 +803,39 @@ class _TenantInvitationReceiveScreenState
     }
 
     if (unitNumber != null && unitNumber.isNotEmpty) {
-      return unitNumber;
+      return 'Unit $unitNumber';
     }
 
-    return 'Unit information unavailable';
+    return 'Unit unassigned';
   }
 
-  // ============================================================
-  // DATE FORMAT
-  // ============================================================
-
   String _formatDate(DateTime date) {
-    final day = date.day.toString().padLeft(2, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final year = date.year.toString();
+    final local = date.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final year = local.year.toString();
 
-    final hour = date.hour % 12 == 0
-        ? 12
-        : date.hour % 12;
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
 
-    final minute = date.minute.toString().padLeft(2, '0');
+    return '$day/$month/$year at $hour:$minute $period';
+  }
 
-    final period = date.hour >= 12
-        ? 'PM'
-        : 'AM';
-
-    return '$day/$month/$year, '
-        '$hour:$minute $period';
+  String _formatAmount(num? amount) {
+    if (amount == null) {
+      return '0.00';
+    }
+    if (amount == amount.roundToDouble()) {
+      return amount.toStringAsFixed(0);
+    }
+    return amount.toStringAsFixed(2);
   }
 }
 
-// ================================================================
+// ============================================================================
 // DETAIL ROW
-// ================================================================
+// ============================================================================
 
 class _DetailRow extends StatelessWidget {
   final IconData icon;
@@ -826,26 +850,38 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 24,
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.6),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 20, color: theme.colorScheme.primary),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: Theme.of(context).textTheme.labelMedium,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 value,
-                style: Theme.of(context).textTheme.bodyLarge,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),

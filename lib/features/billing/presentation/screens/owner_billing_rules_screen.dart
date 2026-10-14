@@ -9,7 +9,6 @@ import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/property_tenants_provider.dart';
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
-
 import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/monthly_bill.dart';
 import '../controllers/generate_monthly_charges_controller.dart';
@@ -45,10 +44,12 @@ class _OwnerBillingRulesScreenState
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final profileAsync = ref.watch(currentUserProfileProvider);
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text(
           'Billing Management',
@@ -57,10 +58,10 @@ class _OwnerBillingRulesScreenState
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(icon: Icon(Icons.rule_outlined), text: 'Rules'),
+            Tab(icon: Icon(Icons.rule_folder_outlined), text: 'Billing Rules'),
             Tab(
               icon: Icon(Icons.receipt_long_outlined),
-              text: 'Generated Bills',
+              text: 'Generated Invoices',
             ),
           ],
         ),
@@ -76,7 +77,10 @@ class _OwnerBillingRulesScreenState
             final propertyId = _selectedPropertyId;
             if (propertyId != null && propertyId.isNotEmpty) {
               final ownerId =
-                  ref.read(currentUserProfileProvider).value?.uid ?? '';
+                  ref
+                      .read(currentUserProfileProvider)
+                      .value
+                      ?.uid ?? '';
               _invalidatePropertyBillingData(
                 ownerId: ownerId,
                 propertyId: propertyId,
@@ -84,20 +88,28 @@ class _OwnerBillingRulesScreenState
             }
           }
         },
-        icon: const Icon(Icons.add),
-        label: const Text('Add Rule'),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text(
+          'Add Rule',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorView(
-          message: 'Unable to load your profile.',
-          onRetry: () => ref.invalidate(currentUserProfileProvider),
-        ),
+        error: (error, stackTrace) =>
+            _ErrorView(
+              message: 'Unable to load your profile.',
+              onRetry: () {
+                ref.invalidate(currentUserProfileProvider);
+              },
+            ),
         data: (profile) {
           if (profile == null) {
             return _ErrorView(
               message: 'User profile not found.',
-              onRetry: () => ref.invalidate(currentUserProfileProvider),
+              onRetry: () {
+                ref.invalidate(currentUserProfileProvider);
+              },
             );
           }
 
@@ -108,21 +120,25 @@ class _OwnerBillingRulesScreenState
 
           return propertiesAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) => _ErrorView(
-              message: 'Unable to load properties.',
-              onRetry: () => ref.invalidate(currentOwnerPropertiesProvider),
-            ),
+            error: (error, stackTrace) =>
+                _ErrorView(
+                  message: 'Unable to load properties.',
+                  onRetry: () {
+                    ref.invalidate(currentOwnerPropertiesProvider);
+                  },
+                ),
             data: (properties) {
               if (properties.isEmpty) {
                 return const _EmptyState(
-                  icon: Icons.home_work_outlined,
-                  title: 'No properties found',
-                  message: 'Add a property before creating billing rules.',
+                  icon: Icons.apartment_rounded,
+                  title: 'No properties available',
+                  message:
+                  'Add a property before creating and assigning billing rules.',
                 );
               }
 
               final selectedPropertyId =
-                  properties.any((p) => p.id == _selectedPropertyId)
+              properties.any((p) => p.id == _selectedPropertyId)
                   ? _selectedPropertyId!
                   : properties.first.id;
 
@@ -148,7 +164,9 @@ class _OwnerBillingRulesScreenState
                       if (value == null || value.isEmpty) {
                         return;
                       }
-                      setState(() => _selectedPropertyId = value);
+                      setState(() {
+                        _selectedPropertyId = value;
+                      });
                     },
                     onGenerateBills: () {
                       _generateMonthlyCharges(
@@ -166,7 +184,9 @@ class _OwnerBillingRulesScreenState
                       if (value == null || value.isEmpty) {
                         return;
                       }
-                      setState(() => _selectedPropertyId = value);
+                      setState(() {
+                        _selectedPropertyId = value;
+                      });
                     },
                   ),
                 ],
@@ -187,8 +207,8 @@ class _OwnerBillingRulesScreenState
     );
     ref.invalidate(
       propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
+      ownerId: ownerId,
+      propertyId: propertyId,
       )),
     );
   }
@@ -235,7 +255,7 @@ class _OwnerBillingRulesScreenState
       initialDate: DateTime(dueYear, dueMonth, defaultDueDateDay),
       firstDate: dueMonthStart,
       lastDate: dueMonthEnd,
-      helpText: 'Select bill due date',
+      helpText: 'Select invoice due date',
     );
 
     if (dueDate == null || !mounted) {
@@ -243,7 +263,7 @@ class _OwnerBillingRulesScreenState
     }
 
     try {
-      _showMessage('Checking and generating charges...');
+      _showMessage('Calculating charges and resolving tenancies...');
 
       final units = await ref.read(propertyUnitsProvider(propertyId).future);
       final tenants = await ref.read(
@@ -269,7 +289,7 @@ class _OwnerBillingRulesScreenState
 
       if (tenancyTargets.isEmpty) {
         _showMessage(
-          'No tenancy found for ${_formatMonth(billingPeriodStart)}.',
+          'No tenancy period found for ${_formatMonth(billingPeriodStart)}.',
         );
         return;
       }
@@ -297,16 +317,17 @@ class _OwnerBillingRulesScreenState
 
       if (rentCount == 0 && billCount == 0) {
         _showMessage(
-          'Bills are already up to date for ${_formatMonth(billingPeriodStart)}.',
+          'Invoices are already up to date for ${_formatMonth(
+              billingPeriodStart)}.',
         );
         return;
       }
 
       _showMessage(
-        '$rentCount rent & $billCount bill(s) generated successfully.',
+        '$rentCount rent and $billCount charge bill(s) generated successfully.',
       );
     } catch (error, stackTrace) {
-      debugPrint('BILLING ERROR: $error\n$stackTrace');
+      debugPrint('BILLING GENERATION ERROR: $error\n$stackTrace');
       if (!mounted) {
         return;
       }
@@ -334,7 +355,13 @@ class _OwnerBillingRulesScreenState
 
   String _cleanErrorMessage(Object error) {
     final message = error.toString();
-    return message.startsWith('Exception: ') ? message.substring(11) : message;
+    if (message.startsWith('Exception: ')) {
+      return message.substring(11);
+    }
+    if (message.startsWith('Invalid argument(s): ')) {
+      return message.substring(21);
+    }
+    return message;
   }
 
   void _showMessage(String message) {
@@ -343,12 +370,17 @@ class _OwnerBillingRulesScreenState
     }
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 }
 
 // ============================================================================
-// RULES TAB (ফিল্টারিং ও পরিচ্ছন্ন ভিউ)
+// RULES TAB
 // ============================================================================
 
 class _RulesTab extends ConsumerWidget {
@@ -374,8 +406,8 @@ class _RulesTab extends ConsumerWidget {
     );
     final billHistoryAsync = ref.watch(
       propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
+      ownerId: ownerId,
+      propertyId: propertyId,
       )),
     );
 
@@ -383,91 +415,117 @@ class _RulesTab extends ConsumerWidget {
       onRefresh: () async {
         ref.invalidate(
           propertyBillingRulesProvider((
-            ownerId: ownerId,
-            propertyId: propertyId,
+          ownerId: ownerId,
+          propertyId: propertyId,
           )),
         );
         ref.invalidate(
           propertyMonthlyBillHistoryProvider((
-            ownerId: ownerId,
-            propertyId: propertyId,
+          ownerId: ownerId,
+          propertyId: propertyId,
           )),
         );
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         children: [
-          Text(
-            'Billing Rules',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
+          // Property Selector Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Manage rules and generate monthly charges.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 24),
-          DropdownButtonFormField<String>(
-            initialValue: propertyId,
-            decoration: const InputDecoration(
-              labelText: 'Property',
-              prefixIcon: Icon(Icons.apartment_outlined),
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              for (final property in properties)
-                DropdownMenuItem<String>(
-                  value: property.id,
-                  child: Text(property.name, overflow: TextOverflow.ellipsis),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select Property',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-            ],
-            onChanged: onPropertyChanged,
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: propertyId,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.apartment_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final property in properties)
+                      DropdownMenuItem<String>(
+                        value: property.id,
+                        child: Text(
+                          property.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: onPropertyChanged,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 14),
+
+          // Primary Invoice Generation Trigger
           SizedBox(
             width: double.infinity,
+            height: 50,
             child: FilledButton.icon(
               onPressed: onGenerateBills,
-              icon: const Icon(Icons.receipt_long_outlined),
-              label: const Text('Generate Monthly Charges'),
-            ),
-          ),
-          const SizedBox(height: 24),
-          rulesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, _) => _ErrorCard(
-              message: 'Unable to load billing rules.',
-              onRetry: () => ref.invalidate(
-                propertyBillingRulesProvider((
-                  ownerId: ownerId,
-                  propertyId: propertyId,
-                )),
+              icon: const Icon(Icons.flash_on_rounded, size: 20),
+              label: const Text(
+                'Generate Monthly Invoices',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Rules Stream
+          rulesAsync.when(
+            loading: () =>
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            error: (err, _) =>
+                _ErrorCard(
+                  message: 'Unable to load billing rules for this property.',
+                  onRetry: () {
+                    ref.invalidate(
+                      propertyBillingRulesProvider((
+                      ownerId: ownerId,
+                      propertyId: propertyId,
+                      )),
+                    );
+                  },
+                ),
             data: (rules) {
               if (rules.isEmpty) {
                 return const _EmptyState(
                   icon: Icons.receipt_long_outlined,
-                  title: 'No billing rules',
+                  title: 'No billing rules configured',
                   message:
-                      'No billing rules have been created for this property yet.',
+                  'Create billing rules to automatically generate recurring utilities and service charges.',
                 );
               }
 
               final bills = billHistoryAsync.value ?? [];
 
-              // যে রুলগুলো থেকে এখনো কোনো বিল তৈরি হয়নি
               final pendingRules = rules.where((rule) {
                 final hasBills = bills.any((b) => b.sourceRuleId == rule.id);
                 return !hasBills;
               }).toList();
 
-              // যে রুলগুলো ইতিমধ্যে বিল জেনারেট করে ফেলেছে
               final processedRules = rules.where((rule) {
                 final hasBills = bills.any((b) => b.sourceRuleId == rule.id);
                 return hasBills;
@@ -481,7 +539,7 @@ class _RulesTab extends ConsumerWidget {
                       Text(
                         'Ready to Generate',
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       const Spacer(),
@@ -498,23 +556,26 @@ class _RulesTab extends ConsumerWidget {
                           '${pendingRules.length}',
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: theme.colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   if (pendingRules.isEmpty)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
                       ),
                       child: Text(
-                        'All rules have been processed or no pending rules available.',
+                        'All rules are currently processed for recent billing cycles.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -530,7 +591,6 @@ class _RulesTab extends ConsumerWidget {
                       const SizedBox(height: 12),
                     ],
 
-                  // ইতিমধ্যে জেনারেটেড রুলগুলো কোলাপ্সিবল রাখা
                   if (processedRules.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     Theme(
@@ -539,9 +599,10 @@ class _RulesTab extends ConsumerWidget {
                         initiallyExpanded: false,
                         tilePadding: EdgeInsets.zero,
                         title: Text(
-                          'Already Generated Rules (${processedRules.length})',
+                          'Previously Processed Rules (${processedRules
+                              .length})',
                           style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
@@ -571,7 +632,7 @@ class _RulesTab extends ConsumerWidget {
 }
 
 // ============================================================================
-// GENERATED BILLS TAB (মাসভিত্তিক গ্রুপ ও বিস্তারিত ভিউ)
+// GENERATED BILLS TAB
 // ============================================================================
 
 class _GeneratedBillsTab extends ConsumerWidget {
@@ -594,8 +655,8 @@ class _GeneratedBillsTab extends ConsumerWidget {
     final theme = Theme.of(context);
     final billsAsync = ref.watch(
       propertyMonthlyBillHistoryProvider((
-        ownerId: ownerId,
-        propertyId: propertyId,
+      ownerId: ownerId,
+      propertyId: propertyId,
       )),
     );
     final unitsAsync = ref.watch(propertyUnitsProvider(propertyId));
@@ -605,74 +666,95 @@ class _GeneratedBillsTab extends ConsumerWidget {
       onRefresh: () async {
         ref.invalidate(
           propertyMonthlyBillHistoryProvider((
-            ownerId: ownerId,
-            propertyId: propertyId,
+          ownerId: ownerId,
+          propertyId: propertyId,
           )),
         );
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         children: [
-          Text(
-            'Generated Bills',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
+          // Property Selector Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Monthly batches generated for this property.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 24),
-          DropdownButtonFormField<String>(
-            initialValue: selectedPropertyId,
-            decoration: const InputDecoration(
-              labelText: 'Property',
-              prefixIcon: Icon(Icons.apartment_outlined),
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              for (final property in properties)
-                DropdownMenuItem<String>(
-                  value: property.id,
-                  child: Text(property.name, overflow: TextOverflow.ellipsis),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select Property',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-            ],
-            onChanged: onPropertyChanged,
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedPropertyId,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.apartment_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final property in properties)
+                      DropdownMenuItem<String>(
+                        value: property.id,
+                        child: Text(
+                          property.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: onPropertyChanged,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 24),
+
+          const SizedBox(height: 20),
+
           billsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => _ErrorCard(
-              message: 'Unable to load bills.',
-              onRetry: () => ref.invalidate(
-                propertyMonthlyBillHistoryProvider((
-                  ownerId: ownerId,
-                  propertyId: propertyId,
-                )),
+            loading: () =>
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: CircularProgressIndicator(),
               ),
             ),
+            error: (error, _) =>
+                _ErrorCard(
+                  message: 'Unable to load invoice batches for this property.',
+                  onRetry: () {
+                    ref.invalidate(
+                      propertyMonthlyBillHistoryProvider((
+                      ownerId: ownerId,
+                      propertyId: propertyId,
+                      )),
+                    );
+                  },
+                ),
             data: (bills) {
               if (bills.isEmpty) {
                 return const _EmptyState(
                   icon: Icons.receipt_long_outlined,
-                  title: 'No generated bills',
-                  message: 'No bills generated for this property yet.',
+                  title: 'No invoices generated yet',
+                  message:
+                  'Use the "Generate Monthly Invoices" button in the Rules tab to create charges.',
                 );
               }
 
               final units = unitsAsync.value ?? [];
               final tenants = tenantsAsync.value ?? [];
 
-              // মাস অনুযায়ী গ্রুপ করা (Grouping bills by month)
               final Map<String, List<MonthlyBill>> monthlyGroups = {};
               for (final bill in bills) {
                 final key =
-                    '${bill.billingPeriodStart.year}-${bill.billingPeriodStart.month.toString().padLeft(2, '0')}';
+                    '${bill.billingPeriodStart.year}-${bill.billingPeriodStart
+                    .month.toString().padLeft(2, '0')}';
                 monthlyGroups.putIfAbsent(key, () => []).add(bill);
               }
 
@@ -682,9 +764,9 @@ class _GeneratedBillsTab extends ConsumerWidget {
                   Row(
                     children: [
                       Text(
-                        'Billing Batches',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
+                        'Monthly Batches',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       const Spacer(),
@@ -698,8 +780,8 @@ class _GeneratedBillsTab extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '${monthlyGroups.length} Month(s)',
-                          style: theme.textTheme.labelLarge?.copyWith(
+                          '${monthlyGroups.length} Batch(es)',
+                          style: theme.textTheme.labelSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -727,7 +809,7 @@ class _GeneratedBillsTab extends ConsumerWidget {
 }
 
 // ============================================================================
-// MONTH BATCH CARD (ক্লিক করলে সব বিল দেখাবে)
+// MONTH BATCH CARD
 // ============================================================================
 
 class _MonthBatchCard extends StatelessWidget {
@@ -767,16 +849,15 @@ class _MonthBatchCard extends StatelessWidget {
     final firstBill = bills.first;
     final totalAmount = bills.fold<double>(0, (sum, b) => sum + b.amount);
 
-    return Card(
-      elevation: 0.5,
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
         onTap: () {
-          // BottomSheet-এ ওই মাসের সব বিল বিস্তারিত দেখানো
           _showBatchDetails(context);
         },
         child: Padding(
@@ -794,11 +875,11 @@ class _MonthBatchCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      Icons.folder_outlined,
+                      Icons.folder_open_rounded,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -806,12 +887,12 @@ class _MonthBatchCard extends StatelessWidget {
                         Text(
                           _formatMonthYear(firstBill.billingPeriodStart),
                           style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${bills.length} charges generated',
+                          '${bills.length} charges processed',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -819,7 +900,7 @@ class _MonthBatchCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const Icon(Icons.arrow_forward_ios, size: 16),
+                  const Icon(Icons.arrow_forward_ios_rounded, size: 16),
                 ],
               ),
               const SizedBox(height: 14),
@@ -840,16 +921,18 @@ class _MonthBatchCard extends StatelessWidget {
                       Text(
                         '৳${totalAmount.toStringAsFixed(2)}',
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w900,
                           color: theme.colorScheme.primary,
                         ),
                       ),
                     ],
                   ),
                   TextButton.icon(
-                    onPressed: () => _showBatchDetails(context),
+                    onPressed: () {
+                      _showBatchDetails(context);
+                    },
                     icon: const Icon(Icons.visibility_outlined, size: 16),
-                    label: const Text('View All Bills'),
+                    label: const Text('View All'),
                   ),
                 ],
               ),
@@ -866,7 +949,7 @@ class _MonthBatchCard extends StatelessWidget {
       isScrollControlled: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
         return DraggableScrollableSheet(
@@ -902,7 +985,7 @@ class _MonthBatchCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'All Unit & Tenant Charges (${bills.length})',
+                            'Individual Invoices (${bills.length})',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -910,8 +993,10 @@ class _MonthBatchCard extends StatelessWidget {
                         ],
                       ),
                       IconButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                        },
+                        icon: const Icon(Icons.close_rounded),
                       ),
                     ],
                   ),
@@ -924,9 +1009,8 @@ class _MonthBatchCard extends StatelessWidget {
                     itemCount: bills.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (_, index) {
-                      final bill = bills[index];
                       return _DetailedBillItem(
-                        bill: bill,
+                        bill: bills[index],
                         units: units,
                         tenants: tenants,
                       );
@@ -943,7 +1027,7 @@ class _MonthBatchCard extends StatelessWidget {
 }
 
 // ============================================================================
-// DETAILED BILL ITEM (ইনডিভিজুয়াল আইটেম ভিউ)
+// DETAILED BILL ITEM
 // ============================================================================
 
 class _DetailedBillItem extends StatelessWidget {
@@ -958,16 +1042,19 @@ class _DetailedBillItem extends StatelessWidget {
   });
 
   String _resolveTargetLabel() {
-    final matchedUnit = units.where((u) => u.id == bill.unitId).firstOrNull;
+    final matchedUnit = units
+        .where((u) => u.id == bill.unitId)
+        .firstOrNull;
     final unitText = matchedUnit != null
         ? (matchedUnit.name?.isNotEmpty == true
-              ? '${matchedUnit.name} (Unit ${matchedUnit.unitNumber})'
-              : 'Unit ${matchedUnit.unitNumber}')
+        ? '${matchedUnit.name} (Unit ${matchedUnit.unitNumber})'
+        : 'Unit ${matchedUnit.unitNumber}')
         : 'Unit ${bill.unitId}';
 
-    final matchedTenant = tenants
-        .where((t) => t.id == bill.tenantId)
-        .firstOrNull;
+    final matchedTenant =
+        tenants
+            .where((t) => t.id == bill.tenantId)
+            .firstOrNull;
     final tenantText = matchedTenant != null ? ' • ${matchedTenant.name}' : '';
 
     return '$unitText$tenantText';
@@ -981,7 +1068,7 @@ class _DetailedBillItem extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Row(
@@ -991,7 +1078,7 @@ class _DetailedBillItem extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               _billTypeIcon(bill.type),
@@ -1028,7 +1115,7 @@ class _DetailedBillItem extends StatelessWidget {
               Text(
                 '৳${bill.amount.toStringAsFixed(2)}',
                 style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1049,11 +1136,11 @@ class _DetailedBillItem extends StatelessWidget {
       case MonthlyBillType.gas:
         return Icons.local_fire_department_outlined;
       case MonthlyBillType.garbage:
-        return Icons.delete_outline;
+        return Icons.delete_outline_rounded;
       case MonthlyBillType.serviceCharge:
         return Icons.build_outlined;
       case MonthlyBillType.electricity:
-        return Icons.bolt_outlined;
+        return Icons.bolt_rounded;
       case MonthlyBillType.other:
         return Icons.receipt_long_outlined;
     }
@@ -1064,17 +1151,17 @@ class _DetailedBillItem extends StatelessWidget {
       case MonthlyBillType.rent:
         return 'Rent';
       case MonthlyBillType.water:
-        return 'Water';
+        return 'Water Bill';
       case MonthlyBillType.gas:
-        return 'Gas';
+        return 'Gas Bill';
       case MonthlyBillType.garbage:
-        return 'Garbage';
+        return 'Garbage Fee';
       case MonthlyBillType.serviceCharge:
         return 'Service Charge';
       case MonthlyBillType.electricity:
-        return 'Electricity';
+        return 'Electricity Bill';
       case MonthlyBillType.other:
-        return 'Other';
+        return 'Utility Bill';
     }
   }
 }
@@ -1100,116 +1187,161 @@ class _BillingRuleCard extends ConsumerWidget {
     final status = _resolveRuleStatus(rule);
     final chargeName = _chargeTypeLabel(rule.chargeType);
 
-    return Card(
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () async {
+          final result = await context.push(
+            RouteNames.editBillingRule,
+            extra: rule,
+          );
+          if (result == true) {
+            ref.invalidate(
+              propertyBillingRulesProvider((
+              ownerId: ownerId,
+              propertyId: rule.propertyId,
+              )),
+            );
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      _chargeTypeIcon(rule.chargeType),
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
                   ),
-                  child: Icon(
-                    _chargeTypeIcon(rule.chargeType),
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        rule.title?.trim().isNotEmpty == true
-                            ? rule.title!
-                            : chargeName,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          rule.title
+                              ?.trim()
+                              .isNotEmpty == true
+                              ? rule.title!
+                              : chargeName,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        chargeName,
+                        const SizedBox(height: 2),
+                        Text(
+                          chargeName,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _RuleStatusChip(status: status),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _InfoItem(
+                      icon: Icons.payments_outlined,
+                      label: 'Amount',
+                      value: '৳${rule.amount.toStringAsFixed(2)}',
+                    ),
+                  ),
+                  Expanded(
+                    child: _InfoItem(
+                      icon: Icons.repeat_rounded,
+                      label: 'Type',
+                      value: rule.valueType == BillingValueType.fixed
+                          ? 'Fixed'
+                          : 'Variable',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _InfoItem(
+                      icon: Icons.account_tree_outlined,
+                      label: 'Scope',
+                      value: rule.scopeType.name.toUpperCase(),
+                    ),
+                  ),
+                  Expanded(
+                    child: _InfoItem(
+                      icon: Icons.calendar_month_outlined,
+                      label: 'Effective',
+                      value:
+                      '${rule.effectiveFrom.month}/${rule.effectiveFrom.year}',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        generatedBillCount == 0
+                            ? 'No charges generated yet'
+                            : '$generatedBillCount invoice(s) generated',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _RuleStatusChip(status: status),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(height: 1),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _InfoItem(
-                    icon: Icons.payments_outlined,
-                    label: 'Amount',
-                    value: '৳${rule.amount.toStringAsFixed(2)}',
-                  ),
-                ),
-                Expanded(
-                  child: _InfoItem(
-                    icon: Icons.tune_outlined,
-                    label: 'Type',
-                    value: rule.valueType == BillingValueType.fixed
-                        ? 'Fixed'
-                        : 'Variable',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _InfoItem(
-                    icon: Icons.account_tree_outlined,
-                    label: 'Scope',
-                    value: rule.scopeType.name.toUpperCase(),
-                  ),
-                ),
-                Expanded(
-                  child: _InfoItem(
-                    icon: Icons.calendar_month_outlined,
-                    label: 'Effective',
-                    value:
-                        '${rule.effectiveFrom.month}/${rule.effectiveFrom.year}',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                generatedBillCount == 0
-                    ? 'No bills generated yet'
-                    : '$generatedBillCount bill(s) generated from this rule',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1232,17 +1364,17 @@ class _BillingRuleCard extends ConsumerWidget {
   static String _chargeTypeLabel(BillingChargeType type) {
     switch (type) {
       case BillingChargeType.water:
-        return 'Water';
+        return 'Water Bill';
       case BillingChargeType.gas:
-        return 'Gas';
+        return 'Gas Bill';
       case BillingChargeType.garbage:
-        return 'Garbage';
+        return 'Garbage Collection';
       case BillingChargeType.serviceCharge:
         return 'Service Charge';
       case BillingChargeType.electricity:
-        return 'Electricity';
+        return 'Electricity Bill';
       case BillingChargeType.other:
-        return 'Other';
+        return 'Other Utility';
     }
   }
 
@@ -1253,11 +1385,11 @@ class _BillingRuleCard extends ConsumerWidget {
       case BillingChargeType.gas:
         return Icons.local_fire_department_outlined;
       case BillingChargeType.garbage:
-        return Icons.delete_outline;
+        return Icons.delete_outline_rounded;
       case BillingChargeType.serviceCharge:
-        return Icons.build_outlined;
+        return Icons.cleaning_services_outlined;
       case BillingChargeType.electricity:
-        return Icons.bolt_outlined;
+        return Icons.bolt_rounded;
       case BillingChargeType.other:
         return Icons.receipt_long_outlined;
     }
@@ -1280,19 +1412,19 @@ class _RuleStatusChip extends StatelessWidget {
     switch (status) {
       case _RuleStatus.active:
         label = 'Active';
-        icon = Icons.check_circle_outline;
+        icon = Icons.check_circle_outline_rounded;
         break;
       case _RuleStatus.scheduled:
         label = 'Scheduled';
-        icon = Icons.schedule_outlined;
+        icon = Icons.schedule_rounded;
         break;
       case _RuleStatus.historical:
         label = 'Historical';
-        icon = Icons.history_outlined;
+        icon = Icons.history_rounded;
         break;
       case _RuleStatus.inactive:
         label = 'Inactive';
-        icon = Icons.block_outlined;
+        icon = Icons.block_rounded;
         break;
     }
 
@@ -1309,7 +1441,7 @@ class _RuleStatusChip extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             label,
-            style: theme.textTheme.labelMedium?.copyWith(
+            style: theme.textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1335,16 +1467,17 @@ class _BillStatusChip extends StatelessWidget {
         : theme.colorScheme.onErrorContainer;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         status.name.toUpperCase(),
         style: theme.textTheme.labelSmall?.copyWith(
           color: fg,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
+          fontSize: 10,
         ),
       ),
     );
@@ -1376,12 +1509,13 @@ class _InfoItem extends StatelessWidget {
               label,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 11,
               ),
             ),
             Text(
               value,
               style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -1406,15 +1540,26 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
       child: Column(
         children: [
-          Icon(icon, size: 56, color: theme.colorScheme.onSurfaceVariant),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 16),
           Text(
             title,
             style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 8),
@@ -1423,6 +1568,7 @@ class _EmptyState extends StatelessWidget {
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
+              height: 1.4,
             ),
           ),
         ],
@@ -1440,17 +1586,24 @@ class _ErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 48),
-          const SizedBox(height: 16),
-          Text(message),
-          if (onRetry != null) ...[
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: Colors.redAccent,
+            ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            Text(message, textAlign: TextAlign.center),
+            if (onRetry != null) ...[
+              const SizedBox(height: 16),
+              FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1464,22 +1617,35 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            const Icon(Icons.error_outline, size: 40),
-            const SizedBox(height: 12),
-            Text(message),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme
+            .of(context)
+            .colorScheme
+            .surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme
+            .of(context)
+            .colorScheme
+            .outlineVariant),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            size: 40,
+            color: Colors.redAccent,
+          ),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
       ),
     );
   }

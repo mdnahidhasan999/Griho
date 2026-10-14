@@ -31,6 +31,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   final _searchPhoneController = TextEditingController();
 
   final _nameController = TextEditingController();
+  final _tenantPhoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _nidController = TextEditingController();
 
@@ -52,6 +53,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     _searchController.dispose();
     _searchPhoneController.dispose();
     _nameController.dispose();
+    _tenantPhoneController.dispose();
     _emailController.dispose();
     _nidController.dispose();
     super.dispose();
@@ -66,7 +68,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   void _changeSearchType(_TenantSearchType type) {
-    if (_searchType == type) return;
+    if (_searchType == type) {
+      return;
+    }
     setState(() {
       _searchType = type;
       _searchController.clear();
@@ -79,7 +83,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   void _onGrihoIdChanged(String value) {
-    if (!_hasSearched && _searchResult == null && _searchError == null) return;
+    if (!_hasSearched && _searchResult == null && _searchError == null) {
+      return;
+    }
     setState(() {
       _searchResult = null;
       _searchError = null;
@@ -89,7 +95,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
   void _onSearchPhoneChanged(String value) {
     _searchPhoneNumber = value;
-    if (!_hasSearched && _searchResult == null && _searchError == null) return;
+    if (!_hasSearched && _searchResult == null && _searchError == null) {
+      return;
+    }
     setState(() {
       _searchResult = null;
       _searchError = null;
@@ -150,7 +158,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         result = await searchUseCase.byPhone(searchValue);
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _isSearching = false;
@@ -161,7 +171,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         _fillFromSearchResult(result);
       }
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _isSearching = false;
         _searchResult = null;
@@ -184,7 +196,25 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     final cleanPhone = PhoneNumberUtils.clean(result.phone);
     if (cleanPhone.isNotEmpty && PhoneNumberUtils.isValid(cleanPhone)) {
       _phoneNumber = PhoneNumberUtils.normalize(cleanPhone);
+      // Auto-populate local phone number digits
+      final digitsOnly = cleanPhone.replaceAll(RegExp(r'\D'), '');
+      if (digitsOnly.length >= 10) {
+        _tenantPhoneController.text =
+            digitsOnly.substring(digitsOnly.length - 10);
+      } else {
+        _tenantPhoneController.text = digitsOnly;
+      }
     }
+  }
+
+  void _clearSearchResult() {
+    setState(() {
+      _searchResult = null;
+      _hasSearched = false;
+      _searchError = null;
+      _searchController.clear();
+      _searchPhoneController.clear();
+    });
   }
 
   void _onPhoneChanged(String value) {
@@ -201,17 +231,22 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   Future<void> _createTenant() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
     final property = _selectedProperty;
     final unit = _selectedUnit;
-    if (property == null || unit == null) return;
+    if (property == null || unit == null) {
+      return;
+    }
 
     final phone = _getValidatedPhone();
     if (phone == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a valid international phone number.'),
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
@@ -223,10 +258,14 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
       unitId: unit.id,
       name: _nameController.text.trim(),
       phone: phone,
-      email: _emailController.text.trim().isEmpty
+      email: _emailController.text
+          .trim()
+          .isEmpty
           ? null
           : _emailController.text.trim(),
-      nidNumber: _nidController.text.trim().isEmpty
+      nidNumber: _nidController.text
+          .trim()
+          .isEmpty
           ? null
           : _nidController.text.trim(),
     );
@@ -235,20 +274,29 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         .read(tenantControllerProvider.notifier)
         .createTenant(request);
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     if (tenant == null) {
       final state = ref.read(tenantControllerProvider);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(state.error?.toString() ?? 'Unable to create tenant.'),
+          backgroundColor: Theme
+              .of(context)
+              .colorScheme
+              .error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
 
     final invitationData = await _showInvitationConfirmation(tenant: tenant);
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     if (invitationData == null) {
       Navigator.of(context).pop(tenant);
@@ -279,20 +327,33 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         rentAmount: rentAmount,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _showInvitationCreatedDialog(
         invitationToken: invitation.token,
         rentAmount: rentAmount,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       Navigator.of(context).pop(tenant);
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString()),
+          backgroundColor: Theme
+              .of(context)
+              .colorScheme
+              .error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       Navigator.of(context).pop(tenant);
     }
   }
@@ -309,54 +370,102 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+
         return AlertDialog(
-          title: const Text('Invitation Created'),
+          title: const Text('Invitation Ready'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Center(child: Icon(Icons.check_circle_outline, size: 52)),
-                const SizedBox(height: 16),
-                const Text(
-                  'The tenant invitation has been created successfully.',
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Initial Monthly Rent',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '৳ ${_formatAmount(rentAmount)}',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle_rounded,
+                      size: 48,
+                      color: Colors.green,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 const Text(
+                  'The tenancy invitation has been generated successfully. Share this link with the tenant to finalize their onboarding.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Monthly Rent',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '৳ ${_formatAmount(rentAmount)}',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
                   'Invitation Link',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                SelectableText(invitationLink),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                  ),
+                  child: SelectableText(
+                    invitationLink,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       await Clipboard.setData(
-                        ClipboardData(text: invitationLink),
-                      );
-                      if (!dialogContext.mounted) return;
+                          ClipboardData(text: invitationLink));
+                      if (!dialogContext.mounted) {
+                        return;
+                      }
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
                         const SnackBar(
-                          content: Text('Invitation link copied.'),
+                          content: Text('Invitation link copied to clipboard.'),
+                          behavior: SnackBarBehavior.floating,
                         ),
                       );
                     },
-                    icon: const Icon(Icons.copy),
-                    label: const Text('Copy Link'),
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    label: const Text('Copy Invitation Link'),
                   ),
                 ),
               ],
@@ -380,6 +489,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
     final tenantState = ref.watch(tenantControllerProvider);
     final selectedPropertyId = _selectedProperty?.id;
@@ -389,237 +499,411 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         : ref.watch(propertyUnitsProvider(selectedPropertyId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Tenant')),
+      backgroundColor: theme.colorScheme.surface,
+      appBar: AppBar(
+        title: const Text(
+          'Add Tenant',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
       body: SafeArea(
         child: propertiesAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => _ErrorView(
-            message: 'Unable to load your properties.',
-            onRetry: () => ref.invalidate(currentOwnerPropertiesProvider),
-          ),
+          error: (error, stack) =>
+              _ErrorView(
+                message: 'Unable to load your properties.',
+                onRetry: () => ref.invalidate(currentOwnerPropertiesProvider),
+              ),
           data: (properties) {
             if (properties.isEmpty) {
               return const _NoPropertyView();
             }
 
             return SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Tenant Information',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Select a property and unit, then search for the tenant or enter the information manually.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 32),
-                    DropdownButtonFormField<Property>(
-                      initialValue: _selectedProperty,
-                      decoration: const InputDecoration(
-                        labelText: 'Property',
-                        border: OutlineInputBorder(),
+                    // Top Overview Card
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: theme.colorScheme
+                            .outlineVariant),
                       ),
-                      items: properties
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p,
-                              child: Text(
-                                p.name,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                          )
-                          .toList(),
-                      onChanged: (p) => setState(() {
-                        _selectedProperty = p;
-                        _selectedUnit = null;
-                      }),
-                      validator: (v) =>
-                          v == null ? 'Please select a property.' : null,
-                    ),
-                    const SizedBox(height: 20),
-                    unitsAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (err, stack) => Text('Unable to load units: $err'),
-                      data: (units) {
-                        if (units.isEmpty) {
-                          return const Text(
-                            'No units available in this property.',
-                          );
-                        }
-                        return DropdownButtonFormField<Unit>(
-                          initialValue: _selectedUnit,
-                          decoration: const InputDecoration(
-                            labelText: 'Unit',
-                            border: OutlineInputBorder(),
+                            child: Icon(
+                              Icons.person_add_alt_1_rounded,
+                              size: 26,
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
                           ),
-                          items: units
-                              .map(
-                                (u) => DropdownMenuItem(
-                                  value: u,
-                                  child: Text(
-                                    '${u.unitNumber} — Floor ${u.floorNumber}',
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Register New Resident',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                              )
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Assign a tenant to a vacant unit and dispatch an official tenancy invitation.',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // Section 1: Target Building & Unit
+                    _buildSectionCard(
+                      title: '1. Allocation & Unit',
+                      subtitle: 'Choose target building and unit space',
+                      icon: Icons.apartment_rounded,
+                      children: [
+                        DropdownButtonFormField<Property>(
+                          initialValue: _selectedProperty,
+                          decoration: const InputDecoration(
+                            labelText: 'Property Building',
+                            prefixIcon: Icon(Icons.domain_rounded),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: properties
+                              .map(
+                                (p) =>
+                                DropdownMenuItem(
+                                  value: p,
+                                  child: Text(
+                                    '${p.name} (${p.propertyCode})',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                          )
                               .toList(),
-                          onChanged: (u) => setState(() => _selectedUnit = u),
-                          validator: (v) =>
-                              v == null ? 'Please select a unit.' : null,
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 28),
-                    Text(
-                      'Find Existing Griho User',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    SegmentedButton<_TenantSearchType>(
-                      segments: const [
-                        ButtonSegment(
-                          value: _TenantSearchType.grihoId,
-                          label: Text('Griho ID'),
-                          icon: Icon(Icons.badge_outlined),
+                          onChanged: (p) {
+                            setState(() {
+                              _selectedProperty = p;
+                              _selectedUnit = null;
+                            });
+                          },
+                          validator: (v) {
+                            if (v == null) {
+                              return 'Please select a property.';
+                            }
+                            return null;
+                          },
                         ),
-                        ButtonSegment(
-                          value: _TenantSearchType.phone,
-                          label: Text('Phone'),
-                          icon: Icon(Icons.phone_outlined),
+                        const SizedBox(height: 16),
+                        unitsAsync.when(
+                          loading: () => const LinearProgressIndicator(),
+                          error: (err, stack) =>
+                              Text('Unable to load units: $err'),
+                          data: (units) {
+                            if (_selectedProperty == null) {
+                              return const InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Unit / Space',
+                                  prefixIcon: Icon(
+                                      Icons.door_front_door_outlined),
+                                  border: OutlineInputBorder(),
+                                ),
+                                child: Text('Select property first'),
+                              );
+                            }
+
+                            if (units.isEmpty) {
+                              return const InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Unit / Space',
+                                  prefixIcon: Icon(
+                                      Icons.door_front_door_outlined),
+                                  border: OutlineInputBorder(),
+                                ),
+                                child: Text(
+                                    'No units available in this property'),
+                              );
+                            }
+
+                            return DropdownButtonFormField<Unit>(
+                              initialValue: _selectedUnit,
+                              decoration: const InputDecoration(
+                                labelText: 'Unit / Space',
+                                prefixIcon: Icon(
+                                    Icons.door_front_door_outlined),
+                                border: OutlineInputBorder(),
+                              ),
+                              items: units
+                                  .map(
+                                    (u) =>
+                                    DropdownMenuItem(
+                                      value: u,
+                                      child: Text(
+                                        'Unit ${u.unitNumber} • Floor ${u
+                                            .floorNumber}',
+                                      ),
+                                    ),
+                              )
+                                  .toList(),
+                              onChanged: (u) {
+                                setState(() {
+                                  _selectedUnit = u;
+                                });
+                              },
+                              validator: (v) {
+                                if (v == null) {
+                                  return 'Please select a unit.';
+                                }
+                                return null;
+                              },
+                            );
+                          },
                         ),
                       ],
-                      selected: {_searchType},
-                      onSelectionChanged: (s) => _changeSearchType(s.first),
                     ),
-                    const SizedBox(height: 12),
-                    if (_searchType == _TenantSearchType.grihoId)
-                      TextField(
-                        controller: _searchController,
-                        textCapitalization: TextCapitalization.characters,
-                        decoration: const InputDecoration(
-                          labelText: 'Griho ID',
-                          hintText: 'Enter Griho ID',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.badge_outlined),
+
+                    const SizedBox(height: 18),
+
+                    // Section 2: Griho Lookup (Optional Fast-Track)
+                    _buildSectionCard(
+                      title: '2. Griho Account Lookup',
+                      subtitle: 'Find existing members by Griho ID or phone',
+                      icon: Icons.person_search_rounded,
+                      children: [
+                        SegmentedButton<_TenantSearchType>(
+                          segments: const [
+                            ButtonSegment(
+                              value: _TenantSearchType.grihoId,
+                              label: Text('Griho ID'),
+                              icon: Icon(Icons.badge_outlined),
+                            ),
+                            ButtonSegment(
+                              value: _TenantSearchType.phone,
+                              label: Text('Phone'),
+                              icon: Icon(Icons.phone_outlined),
+                            ),
+                          ],
+                          selected: {_searchType},
+                          onSelectionChanged: (s) => _changeSearchType(s.first),
                         ),
-                        onChanged: _onGrihoIdChanged,
-                        onSubmitted: (_) => _searchRegisteredUser(),
-                      ),
-                    if (_searchType == _TenantSearchType.phone)
-                      IntlPhoneField(
-                        controller: _searchPhoneController,
-                        initialCountryCode: 'BD',
-                        decoration: const InputDecoration(
-                          labelText: 'Phone Number',
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (phone) =>
-                            _onSearchPhoneChanged(phone.completeNumber),
-                      ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton.icon(
-                        onPressed: _isSearching ? null : _searchRegisteredUser,
-                        icon: _isSearching
-                            ? const SizedBox(
+                        const SizedBox(height: 14),
+                        if (_searchType == _TenantSearchType.grihoId)
+                          TextField(
+                            controller: _searchController,
+                            textCapitalization: TextCapitalization.characters,
+                            decoration: InputDecoration(
+                              labelText: 'Griho Public ID',
+                              hintText: 'e.g. GR-98213',
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(Icons.fingerprint_rounded),
+                              suffixIcon: IconButton(
+                                tooltip: 'Search',
+                                icon: _isSearching
+                                    ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                                    : const Icon(Icons.search_rounded),
+                                onPressed: _isSearching
+                                    ? null
+                                    : _searchRegisteredUser,
+                              ),
+                            ),
+                            onChanged: _onGrihoIdChanged,
+                            onSubmitted: (_) => _searchRegisteredUser(),
+                          ),
+                        if (_searchType == _TenantSearchType.phone) ...[
+                          IntlPhoneField(
+                            controller: _searchPhoneController,
+                            initialCountryCode: 'BD',
+                            decoration: const InputDecoration(
+                              labelText: 'Registered Phone Number',
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (phone) {
+                              _onSearchPhoneChanged(phone.completeNumber);
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: OutlinedButton.icon(
+                              onPressed: _isSearching
+                                  ? null
+                                  : _searchRegisteredUser,
+                              icon: _isSearching
+                                  ? const SizedBox(
                                 height: 16,
                                 width: 16,
                                 child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                                    strokeWidth: 2),
                               )
-                            : const Icon(Icons.search),
-                        label: const Text('Search'),
-                      ),
+                                  : const Icon(Icons.search_rounded, size: 18),
+                              label: const Text('Search Member'),
+                            ),
+                          ),
+                        ],
+                        if (_searchError != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _searchError!,
+                            style: TextStyle(
+                              color: theme.colorScheme.error,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (!_isSearching && _searchResult != null) ...[
+                          const SizedBox(height: 12),
+                          _TenantSearchResultCard(
+                            result: _searchResult!,
+                            onUnlink: _clearSearchResult,
+                          ),
+                        ],
+                        if (!_isSearching &&
+                            _hasSearched &&
+                            _searchResult == null &&
+                            _searchError == null) ...[
+                          const SizedBox(height: 12),
+                          const _UserNotFoundView(),
+                        ],
+                      ],
                     ),
-                    if (_searchError != null)
-                      Text(
-                        _searchError!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+
+                    const SizedBox(height: 18),
+
+                    // Section 3: Personal & Contact Credentials
+                    _buildSectionCard(
+                      title: '3. Personal Information',
+                      subtitle: 'Contact and identification details',
+                      icon: Icons.contact_page_outlined,
+                      children: [
+                        IntlPhoneField(
+                          controller: _tenantPhoneController,
+                          initialCountryCode: 'BD',
+                          decoration: const InputDecoration(
+                            labelText: 'Tenant Phone Number',
+                            hintText: 'Enter phone number',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (phone) =>
+                              _onPhoneChanged(phone.completeNumber),
+                          validator: (phone) {
+                            if (phone == null || phone.number
+                                .trim()
+                                .isEmpty) {
+                              return 'Please enter phone number.';
+                            }
+                            if (!PhoneNumberUtils.isValid(
+                                phone.completeNumber)) {
+                              return 'Please enter a valid international number.';
+                            }
+                            return null;
+                          },
                         ),
-                      ),
-                    if (!_isSearching && _searchResult != null)
-                      _TenantSearchResultCard(result: _searchResult!),
-                    if (!_isSearching &&
-                        _hasSearched &&
-                        _searchResult == null &&
-                        _searchError == null)
-                      const _UserNotFoundView(),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _nameController,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'Full Legal Name',
+                            hintText: 'Enter tenant name',
+                            prefixIcon: Icon(Icons.person_outline_rounded),
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (v) {
+                            if (v == null || v
+                                .trim()
+                                .isEmpty) {
+                              return 'Please enter tenant full name.';
+                            }
+                            if (v
+                                .trim()
+                                .length < 2) {
+                              return 'Name must be at least 2 characters.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'Email Address (Optional)',
+                            hintText: 'e.g. resident@example.com',
+                            prefixIcon: Icon(Icons.mail_outline_rounded),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _nidController,
+                          keyboardType: TextInputType.number,
+                          textInputAction: TextInputAction.done,
+                          decoration: const InputDecoration(
+                            labelText: 'National ID / NID (Optional)',
+                            hintText: 'Enter national identity number',
+                            prefixIcon: Icon(Icons.badge_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+
                     const SizedBox(height: 28),
-                    IntlPhoneField(
-                      initialCountryCode: 'BD',
-                      decoration: const InputDecoration(
-                        labelText: 'Tenant Phone Number',
-                        hintText: 'Select country and enter phone',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (phone) =>
-                          _onPhoneChanged(phone.completeNumber),
-                      validator: (phone) {
-                        if (phone == null || phone.number.trim().isEmpty) {
-                          return 'Please enter phone number.';
-                        }
-                        if (!PhoneNumberUtils.isValid(phone.completeNumber)) {
-                          return 'Please enter a valid international number.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _nameController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        labelText: 'Tenant Name',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Please enter tenant name.'
-                          : null,
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        hintText: 'Optional',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _nidController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'NID Number',
-                        hintText: 'Optional',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
+
+                    // Submit Button
                     SizedBox(
                       width: double.infinity,
-                      height: 50,
-                      child: FilledButton(
+                      height: 52,
+                      child: FilledButton.icon(
                         onPressed: tenantState.isLoading ? null : _createTenant,
-                        child: tenantState.isLoading
+                        icon: tenantState.isLoading
                             ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Add Tenant'),
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                            : const Icon(Icons.person_add_rounded),
+                        label: Text(
+                          tenantState.isLoading
+                              ? 'Registering Tenant...'
+                              : 'Add Tenant & Prepare Invitation',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -631,7 +915,58 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
       ),
     );
   }
+
+  Widget _buildSectionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
 }
+
+// ============================================================================
+// INVITATION CONFIRMATION MODAL
+// ============================================================================
 
 class _InvitationConfirmationDialog extends StatefulWidget {
   final Tenant tenant;
@@ -656,15 +991,23 @@ class _InvitationConfirmationDialogState
   }
 
   void _submit() {
-    if (_isSubmitting || !_formKey.currentState!.validate()) return;
+    if (_isSubmitting || !_formKey.currentState!.validate()) {
+      return;
+    }
     final amount = double.tryParse(_rentController.text.trim());
-    if (amount == null || amount <= 0) return;
-    setState(() => _isSubmitting = true);
+    if (amount == null || amount <= 0) {
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+    });
     Navigator.of(context).pop(amount);
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return AlertDialog(
       title: const Text('Send Tenant Invitation'),
       content: Form(
@@ -673,20 +1016,41 @@ class _InvitationConfirmationDialogState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Tenant: ${widget.tenant.name}'),
-            const SizedBox(height: 4),
             Text(
-              widget.tenant.phone,
-              style: Theme.of(context).textTheme.bodySmall,
+              'Specify initial recurring rent terms for ${widget.tenant.name}.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.tenant.phone,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _rentController,
               keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
+                  decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              ],
               decoration: const InputDecoration(
-                labelText: 'Monthly Rent',
+                labelText: 'Initial Monthly Rent',
                 prefixText: '৳ ',
                 border: OutlineInputBorder(),
               ),
@@ -710,10 +1074,11 @@ class _InvitationConfirmationDialogState
           onPressed: _isSubmitting ? null : _submit,
           child: _isSubmitting
               ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: Colors.white),
+          )
               : const Text('Send Invitation'),
         ),
       ],
@@ -721,23 +1086,87 @@ class _InvitationConfirmationDialogState
   }
 }
 
+// ============================================================================
+// SEARCH RESULT CARD (LINKED MEMBER)
+// ============================================================================
+
 class _TenantSearchResultCard extends StatelessWidget {
   final TenantSearchResult result;
+  final VoidCallback onUnlink;
 
-  const _TenantSearchResultCard({required this.result});
+  const _TenantSearchResultCard({
+    required this.result,
+    required this.onUnlink,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(top: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          child: Icon(
-            result.isExistingTenant ? Icons.person : Icons.person_outline,
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.green.shade100,
+            child: Icon(
+                Icons.verified_user_rounded, color: Colors.green.shade800),
           ),
-        ),
-        title: Text(result.name),
-        subtitle: Text('${result.publicId} • ${result.phone}'),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        result.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade700,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Verified Member',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Griho ID: ${result.publicId} • ${result.phone}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Unlink',
+            icon: const Icon(Icons.close_rounded, size: 18),
+            onPressed: onUnlink,
+          ),
+        ],
       ),
     );
   }
@@ -748,21 +1177,31 @@ class _UserNotFoundView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
-      margin: EdgeInsets.only(top: 8),
-      child: Padding(
-        padding: EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Icon(Icons.info_outline),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'No registered Griho user was found. You can enter the tenant information manually.',
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 18,
+              color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'No registered Griho user was found with these credentials. You can enter the tenant details manually below.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -773,12 +1212,43 @@ class _NoPropertyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final theme = Theme.of(context);
+
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
-          'You need to add a property before adding a tenant.',
-          textAlign: TextAlign.center,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.apartment_rounded,
+                size: 48,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'No Properties Available',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You need to register at least one property and configure unit spaces before you can assign a tenant.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -797,9 +1267,10 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 48),
+          const Icon(
+              Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
           const SizedBox(height: 12),
-          Text(message),
+          Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 12),
           FilledButton(onPressed: onRetry, child: const Text('Retry')),
         ],

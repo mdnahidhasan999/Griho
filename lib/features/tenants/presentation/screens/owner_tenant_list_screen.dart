@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/route_names.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../units/domain/entities/unit.dart';
@@ -17,23 +19,18 @@ class OwnerTenantListScreen extends ConsumerStatefulWidget {
       _OwnerTenantListScreenState();
 }
 
-class _OwnerTenantListScreenState
-    extends ConsumerState<OwnerTenantListScreen> {
-  final TextEditingController _searchController =
-  TextEditingController();
-
+class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-
     _searchController.addListener(_onSearchChanged);
   }
 
   void _onSearchChanged() {
     final value = _searchController.text.trim().toLowerCase();
-
     if (value == _searchQuery) {
       return;
     }
@@ -48,7 +45,6 @@ class _OwnerTenantListScreenState
     _searchController
       ..removeListener(_onSearchChanged)
       ..dispose();
-
     super.dispose();
   }
 
@@ -78,7 +74,7 @@ class _OwnerTenantListScreenState
       final bIsActive = b.status == TenantStatus.active;
 
       if (aIsActive == bIsActive) {
-        return 0;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       }
 
       return aIsActive ? -1 : 1;
@@ -90,9 +86,10 @@ class _OwnerTenantListScreenState
   Future<void> _openTenantDetails(Tenant tenant) async {
     final shouldRefresh = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => TenantDetailsScreen(
-          tenantId: tenant.id,
-        ),
+        builder: (_) =>
+            TenantDetailsScreen(
+              tenantId: tenant.id,
+            ),
       ),
     );
 
@@ -105,144 +102,281 @@ class _OwnerTenantListScreenState
     }
   }
 
+  Future<void> _openAddTenant() async {
+    await context.push(RouteNames.addTenant);
+    if (!mounted) {
+      return;
+    }
+    ref.invalidate(ownerTenantsProvider);
+  }
+
   Future<void> _refreshTenants() async {
     ref.invalidate(ownerTenantsProvider);
-
     await ref.read(ownerTenantsProvider.future);
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final tenantsAsync = ref.watch(ownerTenantsProvider);
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text('My Tenants'),
+        title: const Text(
+          'My Tenants',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openAddTenant,
+        icon: const Icon(Icons.person_add_rounded),
+        label: const Text(
+          'Add Tenant',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: tenantsAsync.when(
-        loading: () {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        },
-        error: (error, stackTrace) {
-          return _ErrorView(
-            message: 'Unable to load your tenants.',
-            onRetry: _refreshTenants,
-          );
-        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) =>
+            _ErrorView(
+              message: 'Unable to load your tenants.',
+              onRetry: _refreshTenants,
+            ),
         data: (tenants) {
+          final totalCount = tenants.length;
           final filteredTenants = _filterTenants(tenants);
           final sortedTenants = _sortTenants(filteredTenants);
 
           final activeTenants = sortedTenants
-              .where(
-                (tenant) =>
-            tenant.status == TenantStatus.active,
-          )
+              .where((t) => t.status == TenantStatus.active)
               .toList();
 
           final inactiveTenants = sortedTenants
-              .where(
-                (tenant) =>
-            tenant.status == TenantStatus.inactive,
-          )
+              .where((t) => t.status == TenantStatus.inactive)
               .toList();
 
           return RefreshIndicator(
             onRefresh: _refreshTenants,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
               children: [
+                // 1. Overview Metric Badges
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricBadge(
+                        label: 'Total Tenants',
+                        value: '$totalCount',
+                        icon: Icons.people_outline_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _MetricBadge(
+                        label: 'Active',
+                        value: '${tenants
+                            .where((t) => t.status == TenantStatus.active)
+                            .length}',
+                        icon: Icons.check_circle_outline_rounded,
+                        highlightColor: Colors.teal,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _MetricBadge(
+                        label: 'Inactive',
+                        value: '${tenants
+                            .where((t) => t.status == TenantStatus.inactive)
+                            .length}',
+                        icon: Icons.pause_circle_outline_rounded,
+                        highlightColor: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // 2. Search Input Field
                 TextField(
                   controller: _searchController,
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
-                    labelText: 'Search Tenant',
-                    hintText: 'Name, phone, email, NID...',
-                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Search by name, phone, email, NID...',
+                    prefixIcon: const Icon(Icons.search_rounded),
                     suffixIcon: _searchQuery.isEmpty
                         ? null
                         : IconButton(
                       onPressed: () {
                         _searchController.clear();
                       },
-                      icon: const Icon(Icons.clear),
+                      icon: const Icon(Icons.clear_rounded, size: 20),
                     ),
-                    border: const OutlineInputBorder(),
+                    filled: true,
+                    fillColor: theme.colorScheme.surfaceContainerLow,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                          color: theme.colorScheme.outlineVariant),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                          color: theme.colorScheme.outlineVariant),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
 
-                Text(
-                  _searchQuery.isEmpty
-                      ? '${tenants.length} tenants'
-                      : '${sortedTenants.length} result(s)',
-                  style: Theme.of(context).textTheme.titleMedium,
+                // 3. Search Results Count Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _searchQuery.isEmpty
+                          ? 'All Residents ($totalCount)'
+                          : 'Search Results (${sortedTenants.length})',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (_searchQuery.isNotEmpty)
+                      TextButton(
+                        onPressed: () {
+                          _searchController.clear();
+                        },
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: const Text('Reset'),
+                      ),
+                  ],
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
 
+                // 4. Content Streams
                 if (tenants.isEmpty)
-                  const _EmptyTenantView()
-                else if (sortedTenants.isEmpty)
-                  const _NoSearchResultView()
-                else ...[
-                    if (activeTenants.isNotEmpty) ...[
-                      _SectionHeader(
-                        title: 'Active Tenants',
-                        count: activeTenants.length,
-                        icon: Icons.people_outline,
-                      ),
-                      const SizedBox(height: 12),
-                      ...activeTenants.map(
-                            (tenant) {
-                          return Padding(
-                            padding:
-                            const EdgeInsets.only(bottom: 12),
+                  _EmptyTenantView(onAddTenant: _openAddTenant)
+                else
+                  if (sortedTenants.isEmpty)
+                    _NoSearchResultView(query: _searchQuery)
+                  else
+                    ...[
+                      if (activeTenants.isNotEmpty) ...[
+                        _SectionHeader(
+                          title: 'Active Residents',
+                          count: activeTenants.length,
+                          icon: Icons.verified_user_outlined,
+                          color: Colors.green.shade700,
+                        ),
+                        const SizedBox(height: 10),
+                        for (final tenant in activeTenants) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
                             child: _TenantCard(
                               tenant: tenant,
                               onTap: () {
                                 _openTenantDetails(tenant);
                               },
                             ),
-                          );
-                        },
-                      ),
-                    ],
+                          ),
+                        ],
+                      ],
 
-                    if (inactiveTenants.isNotEmpty) ...[
-                      if (activeTenants.isNotEmpty)
-                        const SizedBox(height: 8),
-
-                      _SectionHeader(
-                        title: 'Inactive Tenants',
-                        count: inactiveTenants.length,
-                        icon: Icons.person_off_outlined,
-                      ),
-                      const SizedBox(height: 12),
-                      ...inactiveTenants.map(
-                            (tenant) {
-                          return Padding(
-                            padding:
-                            const EdgeInsets.only(bottom: 12),
+                      if (inactiveTenants.isNotEmpty) ...[
+                        if (activeTenants.isNotEmpty) const SizedBox(
+                            height: 12),
+                        _SectionHeader(
+                          title: 'Inactive / Vacated',
+                          count: inactiveTenants.length,
+                          icon: Icons.history_rounded,
+                          color: Colors.orange.shade800,
+                        ),
+                        const SizedBox(height: 10),
+                        for (final tenant in inactiveTenants) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
                             child: _TenantCard(
                               tenant: tenant,
                               onTap: () {
                                 _openTenantDetails(tenant);
                               },
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        ],
+                      ],
                     ],
-                  ],
               ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// METRIC BADGE
+// ============================================================================
+
+class _MetricBadge extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color? highlightColor;
+
+  const _MetricBadge({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.highlightColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: highlightColor ?? theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -256,11 +390,13 @@ class _SectionHeader extends StatelessWidget {
   final String title;
   final int count;
   final IconData icon;
+  final Color? color;
 
   const _SectionHeader({
     required this.title,
     required this.count,
     required this.icon,
+    this.color,
   });
 
   @override
@@ -269,33 +405,26 @@ class _SectionHeader extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 21,
-          color: theme.colorScheme.primary,
-        ),
+        Icon(icon, size: 18, color: color ?? theme.colorScheme.primary),
         const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
           ),
         ),
+        const Spacer(),
         Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 9,
-            vertical: 4,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             '$count',
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w700,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: color ?? theme.colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -319,143 +448,162 @@ class _TenantCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final propertyAsync = ref.watch(
-      propertyByIdProvider(tenant.propertyId),
-    );
+    final theme = Theme.of(context);
 
-    final unitAsync = ref.watch(
-      unitByIdProvider(tenant.unitId),
-    );
+    final propertyAsync = ref.watch(propertyByIdProvider(tenant.propertyId));
+    final unitAsync = ref.watch(unitByIdProvider(tenant.unitId));
 
-    return Card(
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Avatar
               CircleAvatar(
-                child: Icon(
-                  tenant.status == TenantStatus.active
-                      ? Icons.person_outline
-                      : Icons.person_off_outlined,
+                radius: 22,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Text(
+                  _initials(tenant.name),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
                 ),
               ),
 
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
 
+              // Details
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      tenant.name,
-                      maxLines: 1,
-                      overflow:
-                      TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(
-                        fontWeight:
-                        FontWeight.w600,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            tenant.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _TenantStatusChip(status: tenant.status),
+                      ],
                     ),
 
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 4),
 
-                    Text(
-                      tenant.phone,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium,
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.phone_outlined,
+                          size: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          tenant.phone,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
 
                     if (tenant.email != null &&
-                        tenant.email!
-                            .trim()
-                            .isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        tenant.email!,
-                        maxLines: 1,
-                        overflow:
-                        TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall,
+                        tenant.email!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.mail_outline_rounded,
+                            size: 14,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              tenant.email!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
 
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
 
-                    propertyAsync.when(
-                      loading: () =>
-                      const _SmallLoadingRow(
-                        icon: Icons.home_outlined,
-                      ),
-                      error: (_, _) =>
-                      const _LocationRow(
-                        icon: Icons.home_outlined,
-                        text:
-                        'Property unavailable',
-                      ),
-                      data: (Property? property) {
-                        return _LocationRow(
-                          icon: Icons.home_outlined,
-                          text: property?.name ??
-                              'Property not found',
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 5),
-
-                    unitAsync.when(
-                      loading: () =>
-                      const _SmallLoadingRow(
-                        icon:
-                        Icons.meeting_room_outlined,
-                      ),
-                      error: (_, _) =>
-                      const _LocationRow(
-                        icon:
-                        Icons.meeting_room_outlined,
-                        text: 'Unit unavailable',
-                      ),
-                      data: (Unit? unit) {
-                        return _LocationRow(
-                          icon:
-                          Icons.meeting_room_outlined,
-                          text:
-                          _unitDisplayName(unit),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    _TenantStatusChip(
-                      status: tenant.status,
+                    // Property & Unit Badges
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        propertyAsync.when(
+                          loading: () =>
+                          const _MiniBadgeLoading(
+                            icon: Icons.apartment_rounded,
+                          ),
+                          error: (_, _) =>
+                          const _MetaBadge(
+                            icon: Icons.apartment_rounded,
+                            text: 'Property unavailable',
+                          ),
+                          data: (Property? property) =>
+                              _MetaBadge(
+                                icon: Icons.apartment_rounded,
+                                text: property?.name ?? 'Unknown Building',
+                              ),
+                        ),
+                        unitAsync.when(
+                          loading: () =>
+                          const _MiniBadgeLoading(
+                            icon: Icons.door_front_door_outlined,
+                          ),
+                          error: (_, _) =>
+                          const _MetaBadge(
+                            icon: Icons.door_front_door_outlined,
+                            text: 'Unit unavailable',
+                          ),
+                          data: (Unit? unit) =>
+                              _MetaBadge(
+                                icon: Icons.door_front_door_outlined,
+                                text: _unitDisplayName(unit),
+                              ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
 
               Padding(
-                padding:
-                const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(top: 8),
                 child: Icon(
-                  Icons.chevron_right,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant,
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -471,124 +619,137 @@ class _TenantCard extends ConsumerWidget {
     }
 
     final name = unit.name?.trim();
-
     if (name != null && name.isNotEmpty) {
-      return name;
+      return '$name (Unit ${unit.unitNumber})';
     }
 
-    return unit.unitNumber;
+    return 'Unit ${unit.unitNumber}';
+  }
+
+  static String _initials(String name) {
+    final value = name.trim();
+    if (value.isEmpty) {
+      return 'T';
+    }
+
+    final parts = value
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.length == 1) {
+      return parts.first
+          .substring(0, parts.first.length >= 2 ? 2 : 1)
+          .toUpperCase();
+    }
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 }
 
 // ============================================================================
-// LOCATION ROW
+// META BADGE
 // ============================================================================
 
-class _LocationRow extends StatelessWidget {
+class _MetaBadge extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _LocationRow({
+  const _MetaBadge({
     required this.icon,
     required this.text,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 17,
-          color: Theme.of(context)
-              .colorScheme
-              .onSurfaceVariant,
-        ),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall,
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.colorScheme.primary),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 160),
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-// ============================================================================
-// SMALL LOADING
-// ============================================================================
-
-class _SmallLoadingRow extends StatelessWidget {
+class _MiniBadgeLoading extends StatelessWidget {
   final IconData icon;
 
-  const _SmallLoadingRow({
-    required this.icon,
-  });
+  const _MiniBadgeLoading({required this.icon});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 17,
-        ),
-        const SizedBox(width: 7),
-        const SizedBox(
-          height: 14,
-          width: 14,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          const SizedBox(
+            height: 10,
+            width: 10,
+            child: CircularProgressIndicator(strokeWidth: 1.5),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
 // ============================================================================
-// STATUS
+// TENANT STATUS CHIP
 // ============================================================================
 
 class _TenantStatusChip extends StatelessWidget {
   final TenantStatus status;
 
-  const _TenantStatusChip({
-    required this.status,
-  });
+  const _TenantStatusChip({required this.status});
 
   @override
   Widget build(BuildContext context) {
-    final isActive =
-        status == TenantStatus.active;
-
-    final colorScheme =
-        Theme.of(context).colorScheme;
+    final isActive = status == TenantStatus.active;
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         color: isActive
-            ? colorScheme.primaryContainer
-            : colorScheme.surfaceContainerHighest,
+            ? Colors.green.withValues(alpha: 0.12)
+            : Colors.orange.withValues(alpha: 0.12),
       ),
       child: Text(
         isActive ? 'Active' : 'Inactive',
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(
-          fontWeight: FontWeight.w600,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: isActive ? Colors.green.shade800 : Colors.orange.shade800,
         ),
       ),
     );
@@ -596,67 +757,108 @@ class _TenantStatusChip extends StatelessWidget {
 }
 
 // ============================================================================
-// EMPTY
+// EMPTY VIEWS
 // ============================================================================
 
 class _EmptyTenantView extends StatelessWidget {
-  const _EmptyTenantView();
+  final VoidCallback onAddTenant;
+
+  const _EmptyTenantView({required this.onAddTenant});
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(
-        vertical: 80,
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.people_outline,
-            size: 60,
-          ),
-          SizedBox(height: 16),
-          Text(
-            'No tenants yet.',
-            textAlign: TextAlign.center,
-          ),
-        ],
+    final theme = Theme.of(context);
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.people_outline_rounded,
+                size: 48,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'No Tenants Assigned Yet',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add your first resident to allocate an apartment space and dispatch onboarding links.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onAddTenant,
+              icon: const Icon(Icons.person_add_rounded, size: 18),
+              label: const Text('Add Tenant'),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
-
-// ============================================================================
-// SEARCH EMPTY
-// ============================================================================
 
 class _NoSearchResultView extends StatelessWidget {
-  const _NoSearchResultView();
+  final String query;
+
+  const _NoSearchResultView({required this.query});
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(
-        vertical: 60,
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.search_off,
-            size: 56,
-          ),
-          SizedBox(height: 16),
-          Text(
-            'No tenant found.',
-            textAlign: TextAlign.center,
-          ),
-        ],
+    final theme = Theme.of(context);
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        child: Column(
+          children: [
+            Icon(
+              Icons.search_off_rounded,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'No matching residents found',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'No resident matches "$query". Check for typos or try searching by phone number or NID.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 // ============================================================================
-// ERROR
+// ERROR VIEW
 // ============================================================================
 
 class _ErrorView extends StatelessWidget {
@@ -677,13 +879,15 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.error_outline,
+              Icons.error_outline_rounded,
               size: 48,
+              color: Colors.redAccent,
             ),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
             FilledButton(

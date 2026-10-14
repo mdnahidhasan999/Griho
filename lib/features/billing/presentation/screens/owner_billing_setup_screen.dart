@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -7,7 +8,6 @@ import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/property_tenants_provider.dart';
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
-
 import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/create_billing_rule_request.dart';
 import '../providers/billing_rule_provider.dart';
@@ -61,7 +61,7 @@ class _OwnerBillingSetupScreenState
       initialDate: initialDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      helpText: 'Select effective month',
+      helpText: 'Select effective billing month',
     );
 
     if (selectedDate == null || !mounted) {
@@ -89,13 +89,13 @@ class _OwnerBillingSetupScreenState
   IconData _scopeTypeIcon(BillingScopeType type) {
     switch (type) {
       case BillingScopeType.property:
-        return Icons.apartment_outlined;
+        return Icons.apartment_rounded;
       case BillingScopeType.floor:
         return Icons.layers_outlined;
       case BillingScopeType.unit:
         return Icons.door_front_door_outlined;
       case BillingScopeType.tenant:
-        return Icons.person_outline;
+        return Icons.person_outline_rounded;
     }
   }
 
@@ -117,15 +117,24 @@ class _OwnerBillingSetupScreenState
     for (final unit in units) {
       floors.add(unit.floorNumber);
     }
-    return floors.toList()..sort();
+    return floors.toList()
+      ..sort();
   }
 
   String _floorLabel(int floorNumber) {
-    if (floorNumber == 0) return 'Ground Floor';
-    if (floorNumber == 1) return '1st Floor';
-    if (floorNumber == 2) return '2nd Floor';
-    if (floorNumber == 3) return '3rd Floor';
-    return '$floorNumber Floor';
+    if (floorNumber == 0) {
+      return 'Ground Floor';
+    }
+    if (floorNumber == 1) {
+      return '1st Floor';
+    }
+    if (floorNumber == 2) {
+      return '2nd Floor';
+    }
+    if (floorNumber == 3) {
+      return '3rd Floor';
+    }
+    return 'Floor $floorNumber';
   }
 
   String _unitLabel(Unit unit) {
@@ -138,7 +147,9 @@ class _OwnerBillingSetupScreenState
 
   String _tenantLabel(Tenant tenant) {
     final name = tenant.name.trim();
-    if (tenant.phone.trim().isNotEmpty) {
+    if (tenant.phone
+        .trim()
+        .isNotEmpty) {
       return '$name • ${tenant.phone.trim()}';
     }
     return name;
@@ -150,7 +161,7 @@ class _OwnerBillingSetupScreenState
     }
 
     if (_selectedPropertyId == null || _selectedPropertyId!.trim().isEmpty) {
-      _showMessage('Please select a property.');
+      _showMessage('Please select a target property.');
       return;
     }
 
@@ -176,7 +187,7 @@ class _OwnerBillingSetupScreenState
     final amount = double.tryParse(_amountController.text.trim());
 
     if (amount == null || amount < 0) {
-      _showMessage('Please enter a valid amount.');
+      _showMessage('Please enter a valid positive amount.');
       return;
     }
 
@@ -214,8 +225,8 @@ class _OwnerBillingSetupScreenState
 
       ref.invalidate(
         propertyBillingRulesProvider((
-          ownerId: ownerId,
-          propertyId: _selectedPropertyId!.trim(),
+        ownerId: ownerId,
+        propertyId: _selectedPropertyId!.trim(),
         )),
       );
 
@@ -255,7 +266,12 @@ class _OwnerBillingSetupScreenState
     }
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   String _formatMonth(DateTime date) {
@@ -279,25 +295,44 @@ class _OwnerBillingSetupScreenState
   String _chargeTypeLabel(BillingChargeType type) {
     switch (type) {
       case BillingChargeType.water:
-        return 'Water';
+        return 'Water Bill';
       case BillingChargeType.gas:
-        return 'Gas';
+        return 'Gas Bill';
       case BillingChargeType.garbage:
-        return 'Garbage';
+        return 'Garbage Collection';
       case BillingChargeType.serviceCharge:
-        return 'Service Charge';
+        return 'Service / Maintenance';
       case BillingChargeType.electricity:
-        return 'Electricity';
+        return 'Electricity Bill';
       case BillingChargeType.other:
-        return 'Other';
+        return 'Other Utility';
+    }
+  }
+
+  IconData _chargeTypeIcon(BillingChargeType type) {
+    switch (type) {
+      case BillingChargeType.water:
+        return Icons.water_drop_outlined;
+      case BillingChargeType.gas:
+        return Icons.local_fire_department_outlined;
+      case BillingChargeType.garbage:
+        return Icons.delete_outline_rounded;
+      case BillingChargeType.serviceCharge:
+        return Icons.cleaning_services_outlined;
+      case BillingChargeType.electricity:
+        return Icons.bolt_rounded;
+      case BillingChargeType.other:
+        return Icons.category_outlined;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text(
           'Billing Setup',
@@ -309,24 +344,74 @@ class _OwnerBillingSetupScreenState
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
           children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.receipt_long_rounded,
+                      size: 26,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Configure Billing Rule',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Set up automated monthly utility charges or recurring building expenses.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 18),
+
             _buildSectionCard(
               title: '1. Target & Scope',
-              subtitle: 'Where will this rule be applied?',
+              subtitle: 'Select where this billing rule applies',
+              icon: Icons.account_tree_outlined,
               children: [
                 propertiesAsync.when(
                   loading: () => const LinearProgressIndicator(),
                   error: (error, stack) =>
-                      const Text('Unable to load properties.'),
+                  const Text('Unable to load properties.'),
                   data: (properties) {
                     if (properties.isEmpty) {
                       return const Text(
-                        'No property found. Add property first.',
+                        'No properties found. Please add a property first.',
                       );
                     }
 
                     return DropdownButtonFormField<String>(
                       initialValue:
-                          properties.any((p) => p.id == _selectedPropertyId)
+                      properties.any((p) => p.id == _selectedPropertyId)
                           ? _selectedPropertyId
                           : null,
                       decoration: const InputDecoration(
@@ -346,16 +431,20 @@ class _OwnerBillingSetupScreenState
                       onChanged: _isSaving
                           ? null
                           : (value) {
-                              setState(() {
-                                _selectedPropertyId = value;
-                                _selectedScopeId =
-                                    _scopeType == BillingScopeType.property
-                                    ? value
-                                    : null;
-                              });
-                            },
-                      validator: (value) =>
-                          value == null ? 'Please select a property.' : null,
+                        setState(() {
+                          _selectedPropertyId = value;
+                          _selectedScopeId =
+                          _scopeType == BillingScopeType.property
+                              ? value
+                              : null;
+                        });
+                      },
+                      validator: (value) {
+                        if (value == null) {
+                          return 'Please select a property.';
+                        }
+                        return null;
+                      },
                     );
                   },
                 ),
@@ -363,8 +452,8 @@ class _OwnerBillingSetupScreenState
                 DropdownButtonFormField<BillingScopeType>(
                   initialValue: _scopeType,
                   decoration: const InputDecoration(
-                    labelText: 'Apply Rule To',
-                    prefixIcon: Icon(Icons.account_tree_outlined),
+                    labelText: 'Rule Scope Perimeter',
+                    prefixIcon: Icon(Icons.tune_rounded),
                     border: OutlineInputBorder(),
                   ),
                   items: BillingScopeType.values.map((type) {
@@ -381,68 +470,87 @@ class _OwnerBillingSetupScreenState
                   }).toList(),
                   onChanged: _isSaving ? null : _changeScopeType,
                 ),
-                const SizedBox(height: 14),
-                _buildScopeSelector(context),
+                if (_scopeType != BillingScopeType.property) ...[
+                  const SizedBox(height: 16),
+                  _buildScopeSelector(context),
+                ],
               ],
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
             _buildSectionCard(
               title: '2. Charge Information',
-              subtitle: 'Configure charge category and amount.',
+              subtitle: 'Specify category, recurrence, and amount',
+              icon: Icons.payments_outlined,
               children: [
                 DropdownButtonFormField<BillingChargeType>(
                   initialValue: _chargeType,
                   decoration: const InputDecoration(
                     labelText: 'Charge Category',
-                    prefixIcon: Icon(Icons.receipt_long_outlined),
+                    prefixIcon: Icon(Icons.category_outlined),
                     border: OutlineInputBorder(),
                   ),
                   items: BillingChargeType.values.map((type) {
                     return DropdownMenuItem<BillingChargeType>(
                       value: type,
-                      child: Text(_chargeTypeLabel(type)),
+                      child: Row(
+                        children: [
+                          Icon(_chargeTypeIcon(type), size: 18),
+                          const SizedBox(width: 8),
+                          Text(_chargeTypeLabel(type)),
+                        ],
+                      ),
                     );
                   }).toList(),
                   onChanged: _isSaving
                       ? null
                       : (value) {
-                          if (value != null) {
-                            setState(() => _chargeType = value);
-                          }
-                        },
+                    if (value != null) {
+                      setState(() => _chargeType = value);
+                    }
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _titleController,
                   enabled: !_isSaving,
+                  textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                     labelText: 'Custom Label / Note (Optional)',
-                    hintText: 'e.g. October Motor Service',
-                    prefixIcon: Icon(Icons.title_outlined),
+                    hintText: 'e.g. October Water Bill',
+                    prefixIcon: Icon(Icons.label_outline_rounded),
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (_chargeType == BillingChargeType.other &&
-                        (value == null || value.trim().isEmpty)) {
+                        (value == null || value
+                            .trim()
+                            .isEmpty)) {
                       return 'Title is required for "Other" charge type.';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
+                Text(
+                  'Charge Type',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 SegmentedButton<BillingValueType>(
                   segments: const [
                     ButtonSegment(
                       value: BillingValueType.fixed,
-                      label: Text('Fixed (Every Month)'),
-                      icon: Icon(Icons.lock_clock_outlined),
+                      label: Text('Fixed (Monthly Recurring)'),
+                      icon: Icon(Icons.repeat_rounded),
                     ),
                     ButtonSegment(
                       value: BillingValueType.variable,
-                      label: Text('Variable (This Month)'),
-                      icon: Icon(Icons.tune_outlined),
+                      label: Text('Variable (Month Specific)'),
+                      icon: Icon(Icons.edit_calendar_rounded),
                     ),
                   ],
                   selected: {_valueType},
@@ -457,11 +565,16 @@ class _OwnerBillingSetupScreenState
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d*\.?\d{0,2}'),
+                    ),
+                  ],
                   decoration: const InputDecoration(
-                    labelText: 'Amount',
+                    labelText: 'Charge Amount',
                     hintText: '0.00',
                     prefixText: '৳ ',
-                    prefixIcon: Icon(Icons.payments_outlined),
+                    prefixIcon: Icon(Icons.currency_exchange_rounded),
                     border: OutlineInputBorder(),
                   ),
                   validator: (val) {
@@ -475,11 +588,12 @@ class _OwnerBillingSetupScreenState
               ],
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
             _buildSectionCard(
-              title: '3. Schedule & Activation',
-              subtitle: 'Select month and activation state.',
+              title: '3. Schedule & Status',
+              subtitle: 'Effective month and activation toggle',
+              icon: Icons.calendar_month_outlined,
               children: [
                 InkWell(
                   borderRadius: BorderRadius.circular(12),
@@ -488,29 +602,33 @@ class _OwnerBillingSetupScreenState
                     decoration: const InputDecoration(
                       labelText: 'Effective Month',
                       prefixIcon: Icon(Icons.calendar_month_outlined),
-                      suffixIcon: Icon(Icons.arrow_drop_down),
+                      suffixIcon: Icon(Icons.chevron_right_rounded),
                       border: OutlineInputBorder(),
                     ),
                     child: Text(
                       _effectiveMonth == null
                           ? 'Select month'
                           : _formatMonth(_effectiveMonth!),
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
                 const SizedBox(height: 14),
-                // Material দিয়ে র‍্যাপ করায় assertion এরর সমাধান হয়েছে
                 Material(
                   color: Colors.transparent,
                   child: SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text(
-                      'Rule is Active',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      'Activate Rule Immediately',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    subtitle: const Text(
-                      'Inactive rules will be skipped during generation.',
+                    subtitle: Text(
+                      _isActive
+                          ? 'This rule will be applied when generating monthly invoices.'
+                          : 'Rule is deactivated and will be ignored during invoice generation.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     value: _isActive,
                     onChanged: _isSaving
@@ -521,7 +639,7 @@ class _OwnerBillingSetupScreenState
               ],
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
 
             SizedBox(
               height: 52,
@@ -529,16 +647,18 @@ class _OwnerBillingSetupScreenState
                 onPressed: _isSaving ? null : _save,
                 icon: _isSaving
                     ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.check_circle_outline),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                    : const Icon(Icons.check_circle_outline_rounded),
                 label: Text(
-                  _isSaving ? 'Creating Rule...' : 'Save & Activate Rule',
+                  _isSaving
+                      ? 'Creating Rule...'
+                      : 'Save & Activate Billing Rule',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -552,31 +672,39 @@ class _OwnerBillingSetupScreenState
     );
   }
 
-  // Card ব্যবহার করে তৈরি সেকশন, যা ভেতরে ListTile থাকলে কোনো এরর দেয় না
   Widget _buildSectionCard({
     required String title,
     required String subtitle,
+    required IconData icon,
     required List<Widget> children,
   }) {
     final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
+
+    return Material(
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+            Row(
+              children: [
+                Icon(icon, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 2),
             Text(
               subtitle,
               style: theme.textTheme.bodySmall?.copyWith(
@@ -597,7 +725,7 @@ class _OwnerBillingSetupScreenState
     if (propertyId == null || propertyId.isEmpty) {
       return const InputDecorator(
         decoration: InputDecoration(
-          labelText: 'Scope Detail',
+          labelText: 'Scope Target',
           border: OutlineInputBorder(),
         ),
         child: Text('Please choose a property first.'),
@@ -607,13 +735,10 @@ class _OwnerBillingSetupScreenState
     switch (_scopeType) {
       case BillingScopeType.property:
         return const SizedBox.shrink();
-
       case BillingScopeType.floor:
         return _buildFloorSelector(propertyId);
-
       case BillingScopeType.unit:
         return _buildUnitSelector(propertyId);
-
       case BillingScopeType.tenant:
         return _buildTenantSelector(propertyId);
     }
@@ -627,12 +752,13 @@ class _OwnerBillingSetupScreenState
       data: (units) {
         final floors = _getFloorNumbers(units);
         if (floors.isEmpty) {
-          return const Text('No units/floors added to this property.');
+          return const Text('No units or floors found in this property.');
         }
 
         final selectedFloor = _selectedScopeId == null
             ? null
             : int.tryParse(_selectedScopeId!);
+
         return DropdownButtonFormField<int>(
           initialValue: floors.contains(selectedFloor) ? selectedFloor : null,
           decoration: const InputDecoration(
@@ -643,12 +769,17 @@ class _OwnerBillingSetupScreenState
           items: floors
               .map(
                 (f) => DropdownMenuItem(value: f, child: Text(_floorLabel(f))),
-              )
+          )
               .toList(),
           onChanged: _isSaving
               ? null
               : (val) => setState(() => _selectedScopeId = val?.toString()),
-          validator: (val) => val == null ? 'Please select a floor.' : null,
+          validator: (val) {
+            if (val == null) {
+              return 'Please select a floor.';
+            }
+            return null;
+          },
         );
       },
     );
@@ -676,13 +807,18 @@ class _OwnerBillingSetupScreenState
           items: units
               .map(
                 (u) =>
-                    DropdownMenuItem(value: u.id, child: Text(_unitLabel(u))),
-              )
+                DropdownMenuItem(value: u.id, child: Text(_unitLabel(u))),
+          )
               .toList(),
           onChanged: _isSaving
               ? null
               : (val) => setState(() => _selectedScopeId = val),
-          validator: (val) => val == null ? 'Please select a unit.' : null,
+          validator: (val) {
+            if (val == null) {
+              return 'Please select a unit.';
+            }
+            return null;
+          },
         );
       },
     );
@@ -704,19 +840,24 @@ class _OwnerBillingSetupScreenState
               : null,
           decoration: const InputDecoration(
             labelText: 'Target Tenant',
-            prefixIcon: Icon(Icons.person_outline),
+            prefixIcon: Icon(Icons.person_outline_rounded),
             border: OutlineInputBorder(),
           ),
           items: tenants
               .map(
                 (t) =>
-                    DropdownMenuItem(value: t.id, child: Text(_tenantLabel(t))),
-              )
+                DropdownMenuItem(value: t.id, child: Text(_tenantLabel(t))),
+          )
               .toList(),
           onChanged: _isSaving
               ? null
               : (val) => setState(() => _selectedScopeId = val),
-          validator: (val) => val == null ? 'Please select a tenant.' : null,
+          validator: (val) {
+            if (val == null) {
+              return 'Please select a tenant.';
+            }
+            return null;
+          },
         );
       },
     );

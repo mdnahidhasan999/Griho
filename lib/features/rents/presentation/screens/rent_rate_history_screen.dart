@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
-
 import '../../domain/entities/rent_rate.dart';
 import '../providers/rent_rate_provider.dart';
 
@@ -16,107 +15,73 @@ class RentRateHistoryScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context,
-      WidgetRef ref,) {
-    final unitAsync = ref.watch(
-      unitByIdProvider(unitId),
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final unitAsync = ref.watch(unitByIdProvider(unitId));
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text('Rent History'),
+        title: const Text(
+          'Rent Rate History',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
       ),
       body: unitAsync.when(
-        loading: () {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        },
-        error: (error, stackTrace) {
-          return _ErrorView(
-            message: error.toString(),
-            onRetry: () {
-              ref.invalidate(
-                unitByIdProvider(unitId),
-              );
-            },
-          );
-        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => _ErrorView(
+          message: error.toString(),
+          onRetry: () {
+            ref.invalidate(unitByIdProvider(unitId));
+          },
+        ),
         data: (unit) {
           if (unit == null) {
-            return const Center(
-              child: Text('Unit not found.'),
-            );
+            return const Center(child: Text('Unit information not found.'));
           }
 
-          final propertyAsync = ref.watch(
-            propertyByIdProvider(
-              unit.propertyId,
-            ),
-          );
+          final propertyAsync = ref.watch(propertyByIdProvider(unit.propertyId));
 
           return propertyAsync.when(
-            loading: () {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
-            },
-            error: (error, stackTrace) {
-              return _ErrorView(
-                message: error.toString(),
-                onRetry: () {
-                  ref.invalidate(
-                    propertyByIdProvider(
-                      unit.propertyId,
-                    ),
-                  );
-                },
-              );
-            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stackTrace) => _ErrorView(
+              message: error.toString(),
+              onRetry: () {
+                ref.invalidate(propertyByIdProvider(unit.propertyId));
+              },
+            ),
             data: (property) {
               if (property == null) {
-                return const Center(
-                  child: Text(
-                    'Property not found.',
-                  ),
-                );
+                return const Center(child: Text('Property information not found.'));
               }
 
-              final historyAsync = ref.watch(
-                unitRentRateHistoryProvider(
-                  (
-                  unitId: unit.id,
-                  ownerId: property.ownerId,
-                  ),
+              final historyProvider = unitRentRateHistoryProvider(
+                (
+                unitId: unit.id,
+                ownerId: property.ownerId,
                 ),
               );
 
+              final historyAsync = ref.watch(historyProvider);
+
               return historyAsync.when(
-                loading: () {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                },
-                error: (error, stackTrace) {
-                  return _ErrorView(
-                    message: error.toString(),
-                    onRetry: () {
-                      ref.invalidate(
-                        unitRentRateHistoryProvider(
-                          (
-                          unitId: unit.id,
-                          ownerId: property.ownerId,
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stackTrace) => _ErrorView(
+                  message: error.toString(),
+                  onRetry: () {
+                    ref.invalidate(historyProvider);
+                  },
+                ),
                 data: (history) {
                   return _HistoryBody(
                     unitNumber: unit.unitNumber,
+                    floorNumber: unit.floorNumber,
                     propertyName: property.name,
                     history: history,
+                    onRefresh: () async {
+                      ref.invalidate(historyProvider);
+                      await ref.read(historyProvider.future);
+                    },
                   );
                 },
               );
@@ -128,15 +93,23 @@ class RentRateHistoryScreen extends ConsumerWidget {
   }
 }
 
+// ============================================================================
+// HISTORY BODY
+// ============================================================================
+
 class _HistoryBody extends StatelessWidget {
   final String unitNumber;
+  final int floorNumber;
   final String propertyName;
   final List<RentRate> history;
+  final Future<void> Function() onRefresh;
 
   const _HistoryBody({
     required this.unitNumber,
+    required this.floorNumber,
     required this.propertyName,
     required this.history,
+    required this.onRefresh,
   });
 
   @override
@@ -148,22 +121,32 @@ class _HistoryBody extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.history_outlined,
-                size: 56,
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.history_toggle_off_rounded,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               Text(
-                'No rent history',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleLarge,
+                'No Rent History Recorded',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'No rent rate has been recorded for this unit.',
+              const SizedBox(height: 6),
+              Text(
+                'There are no historical rent rate snapshots for Unit $unitNumber yet.',
                 textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -172,63 +155,120 @@ class _HistoryBody extends StatelessWidget {
     }
 
     return RefreshIndicator(
-      onRefresh: () async {},
+      onRefresh: onRefresh,
       child: ListView(
-        physics:
-        const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    unitNumber,
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .headlineSmall,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    propertyName,
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .bodyLarge,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '${history.length} rent '
-                        '${history.length == 1 ? 'record' : 'records'}',
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .bodySmall,
-                  ),
-                ],
-              ),
+          // 1. Overview Unit Header Card
+          _UnitOverviewCard(
+            unitNumber: unitNumber,
+            floorNumber: floorNumber,
+            propertyName: propertyName,
+            recordCount: history.length,
+          ),
+
+          const SizedBox(height: 20),
+
+          Text(
+            'Timeline & Rate Revisions',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 16),
-          ...List.generate(
-            history.length,
-                (index) {
-              final rate = history[index];
+          const SizedBox(height: 12),
 
-              return Padding(
-                padding: const EdgeInsets.only(
-                  bottom: 12,
+          // 2. Chronological History Cards
+          for (var i = 0; i < history.length; i++) ...[
+            _RentRateCard(
+              rate: history[i],
+              isFirst: i == 0,
+            ),
+            if (i != history.length - 1) const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// UNIT OVERVIEW CARD
+// ============================================================================
+
+class _UnitOverviewCard extends StatelessWidget {
+  final String unitNumber;
+  final int floorNumber;
+  final String propertyName;
+  final int recordCount;
+
+  const _UnitOverviewCard({
+    required this.unitNumber,
+    required this.floorNumber,
+    required this.propertyName,
+    required this.recordCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.domain_rounded,
+              size: 26,
+              color: theme.colorScheme.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Unit $unitNumber',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                child: _RentRateCard(
-                  rate: rate,
-                  index: index,
+                const SizedBox(height: 2),
+                Text(
+                  '$propertyName • Floor $floorNumber',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
-              );
-            },
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              '$recordCount ${recordCount == 1 ? 'Record' : 'Records'}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.primary,
+              ),
+            ),
           ),
         ],
       ),
@@ -236,204 +276,130 @@ class _HistoryBody extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// RENT RATE ITEM CARD
+// ============================================================================
+
 class _RentRateCard extends StatelessWidget {
   final RentRate rate;
-  final int index;
+  final bool isFirst;
 
   const _RentRateCard({
     required this.rate,
-    required this.index,
+    required this.isFirst,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isCurrent =
-        rate.effectiveTo == null;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '৳ ${_formatAmount(rate.amount)}',
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(
-                      fontWeight:
-                      FontWeight.bold,
-                    ),
-                  ),
-                ),
-                _SourceChip(
-                  source: rate.source,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _DetailRow(
-              label: 'Effective From',
-              value: _formatDate(
-                rate.effectiveFrom,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _DetailRow(
-              label: 'Effective To',
-              value: rate.effectiveTo == null
-                  ? 'Current'
-                  : _formatDate(
-                rate.effectiveTo!,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding:
-              const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 6,
-              ),
-              decoration: BoxDecoration(
-                borderRadius:
-                BorderRadius.circular(20),
-                color: isCurrent
-                    ? Theme
-                    .of(context)
-                    .colorScheme
-                    .primaryContainer
-                    : Theme
-                    .of(context)
-                    .colorScheme
-                    .surfaceContainerHighest,
-              ),
-              child: Text(
-                isCurrent
-                    ? 'Current'
-                    : 'Historical',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .labelMedium,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatAmount(double amount) {
-    if (amount == amount.roundToDouble()) {
-      return amount.toStringAsFixed(0);
-    }
-
-    return amount.toStringAsFixed(2);
-  }
-
-  String _formatDate(DateTime dateTime) {
-    final local = dateTime.toLocal();
-
-    return '${local.day.toString().padLeft(2, '0')}/'
-        '${local.month.toString().padLeft(2, '0')}/'
-        '${local.year}';
-  }
-}
-
-class _SourceChip extends StatelessWidget {
-  final RentRateSource source;
-
-  const _SourceChip({
-    required this.source,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final String label;
-
-    switch (source) {
-      case RentRateSource.initial:
-        label = 'Initial';
-
-      case RentRateSource.property:
-        label = 'Property';
-
-      case RentRateSource.floor:
-        label = 'Floor';
-
-      case RentRateSource.unit:
-        label = 'Unit';
-    }
+    final theme = Theme.of(context);
+    final isCurrent = rate.effectiveTo == null;
 
     return Container(
-      padding:
-      const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 5,
-      ),
       decoration: BoxDecoration(
-        borderRadius:
-        BorderRadius.circular(20),
-        color: Theme
-            .of(context)
-            .colorScheme
-            .surfaceContainerHighest,
+        color: isCurrent
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.25)
+            : theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isCurrent
+              ? theme.colorScheme.primary.withValues(alpha: 0.6)
+              : theme.colorScheme.outlineVariant,
+          width: isCurrent ? 1.5 : 1.0,
+        ),
       ),
-      child: Text(
-        label,
-        style: Theme
-            .of(context)
-            .textTheme
-            .labelSmall,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '৳ ${_formatAmount(rate.amount)}',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: isCurrent ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isCurrent
+                      ? Colors.green.withValues(alpha: 0.15)
+                      : theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isCurrent ? 'Current Active' : 'Historical',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isCurrent ? Colors.green.shade800 : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          _DetailRow(
+            icon: Icons.calendar_today_outlined,
+            label: 'Effective Range',
+            value: '${_formatDate(rate.effectiveFrom)} → ${rate.effectiveTo == null ? 'Ongoing' : _formatDate(rate.effectiveTo!)}',
+          ),
+          const SizedBox(height: 6),
+          _DetailRow(
+            icon: Icons.layers_outlined,
+            label: 'Adjustment Scope',
+            value: _sourceLabel(rate.source),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _DetailRow extends StatelessWidget {
+  final IconData icon;
   final String label;
   final String value;
 
   const _DetailRow({
+    required this.icon,
     required this.label,
     required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Row(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 130,
-          child: Text(
-            label,
-            style: Theme
-                .of(context)
-                .textTheme
-                .labelMedium,
+        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: Theme
-                .of(context)
-                .textTheme
-                .bodyMedium,
+        const Spacer(),
+        Text(
+          value,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w700,
           ),
         ),
       ],
     );
   }
 }
+
+// ============================================================================
+// ERROR VIEW
+// ============================================================================
 
 class _ErrorView extends StatelessWidget {
   final String message;
@@ -452,14 +418,12 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-            ),
+            const Icon(Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -470,5 +434,39 @@ class _ErrorView extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+String _formatAmount(num? amount) {
+  if (amount == null) {
+    return '0.00';
+  }
+  if (amount == amount.roundToDouble()) {
+    return amount.toStringAsFixed(0);
+  }
+  return amount.toStringAsFixed(2);
+}
+
+String _formatDate(DateTime dateTime) {
+  final local = dateTime.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  return '$day/$month/${local.year}';
+}
+
+String _sourceLabel(RentRateSource source) {
+  switch (source) {
+    case RentRateSource.initial:
+      return 'Initial Tenancy Agreement';
+    case RentRateSource.property:
+      return 'Property-Wide Adjustment';
+    case RentRateSource.floor:
+      return 'Floor-Level Adjustment';
+    case RentRateSource.unit:
+      return 'Unit-Specific Adjustment';
   }
 }

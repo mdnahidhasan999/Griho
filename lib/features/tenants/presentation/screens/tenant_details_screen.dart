@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
-import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
@@ -29,22 +28,18 @@ class TenantDetailsScreen extends ConsumerStatefulWidget {
 
 class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
   Tenant? _tenant;
-
   bool _isLoading = true;
-
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-
     _loadTenant();
   }
 
   Future<void> _loadTenant() async {
     try {
       final getTenant = ref.read(getTenantProvider);
-
       final tenant = await getTenant(widget.tenantId);
 
       if (!mounted) {
@@ -74,12 +69,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
   Future<void> _endTenancy() async {
     final tenant = _tenant;
-
-    if (tenant == null) {
-      return;
-    }
-
-    if (tenant.status != TenantStatus.active) {
+    if (tenant == null || tenant.status != TenantStatus.active) {
       return;
     }
 
@@ -87,12 +77,11 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('End Tenancy?'),
+          title: const Text('End Current Tenancy?'),
           content: Text(
-            'Are you sure you want to end the tenancy of '
-                '"${tenant.name}"?\n\n'
-                'The tenant will become inactive and the unit '
-                'will become available.',
+            'Are you sure you want to end the active tenancy of "${tenant
+                .name}"?\n\n'
+                'The resident will be marked as inactive and the assigned unit will immediately become vacant and available.',
           ),
           actions: [
             TextButton(
@@ -102,6 +91,12 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme
+                    .of(context)
+                    .colorScheme
+                    .error,
+              ),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
               },
@@ -126,16 +121,18 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
     if (endedTenant == null) {
       final state = ref.read(tenantControllerProvider);
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            state.error?.toString() ??
-                'Unable to end tenancy.',
+            state.error?.toString() ?? 'Unable to end tenancy agreement.',
           ),
+          backgroundColor: Theme
+              .of(context)
+              .colorScheme
+              .error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
-
       return;
     }
 
@@ -143,32 +140,20 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
       _tenant = endedTenant;
     });
 
+    ref.invalidate(propertyTenantsProvider(tenant.propertyId));
+    ref.invalidate(propertyByIdProvider(tenant.propertyId));
+    ref.invalidate(unitByIdProvider(tenant.unitId));
     ref.invalidate(
-      propertyTenantsProvider(tenant.propertyId),
-    );
-
-    ref.invalidate(
-      propertyByIdProvider(tenant.propertyId),
-    );
-
-    ref.invalidate(
-      unitByIdProvider(tenant.unitId),
-    );
-
-    ref.invalidate(
-      tenantHistoryProvider(
-        (
-        tenantId: tenant.id,
-        ownerId: tenant.ownerId,
-        ),
-      ),
+      tenantHistoryProvider((
+      tenantId: tenant.id,
+      ownerId: tenant.ownerId,
+      )),
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-          'Tenancy ended successfully.',
-        ),
+        content: Text('Tenancy agreement ended successfully.'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -179,7 +164,6 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
   Future<void> _startNewTenancy() async {
     final tenant = _tenant;
-
     if (tenant == null) {
       return;
     }
@@ -194,18 +178,11 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) =>
-            StartNewTenancyScreen(
-              tenant: tenant,
-            ),
+        builder: (_) => StartNewTenancyScreen(tenant: tenant),
       ),
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    if (result != true) {
+    if (!mounted || result != true) {
       return;
     }
 
@@ -218,7 +195,6 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
   Future<void> _deleteTenant() async {
     final tenant = _tenant;
-
     if (tenant == null) {
       return;
     }
@@ -227,11 +203,10 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Delete Tenant?'),
+          title: const Text('Delete Resident Record?'),
           content: Text(
-            'Are you sure you want to delete '
-                '"${tenant.name}"?\n\n'
-                'This action cannot be undone.',
+            'Are you sure you want to permanently delete "${tenant.name}"?\n\n'
+                'This action cannot be undone and will detach all associated history.',
           ),
           actions: [
             TextButton(
@@ -241,6 +216,12 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme
+                    .of(context)
+                    .colorScheme
+                    .error,
+              ),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
               },
@@ -265,16 +246,18 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
     if (!success) {
       final state = ref.read(tenantControllerProvider);
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            state.error?.toString() ??
-                'Unable to delete tenant.',
+            state.error?.toString() ?? 'Unable to delete resident record.',
           ),
+          backgroundColor: Theme
+              .of(context)
+              .colorScheme
+              .error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
-
       return;
     }
 
@@ -283,22 +266,18 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Tenant Details'),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        appBar: AppBar(title: const Text('Resident Details')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_errorMessage != null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Tenant Details'),
-        ),
+        appBar: AppBar(title: const Text('Resident Details')),
         body: _ErrorView(
           message: _errorMessage!,
           onRetry: _loadTenant,
@@ -307,51 +286,37 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
     }
 
     final tenant = _tenant;
-
     if (tenant == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Tenant Details'),
-        ),
-        body: const Center(
-          child: Text('Tenant not found.'),
-        ),
+        appBar: AppBar(title: const Text('Resident Details')),
+        body: const Center(child: Text('Resident information not found.')),
       );
     }
 
-    final tenantState = ref.watch(
-      tenantControllerProvider,
-    );
-
-    final propertyAsync = ref.watch(
-      propertyByIdProvider(tenant.propertyId),
-    );
-
-    final unitAsync = ref.watch(
-      unitByIdProvider(tenant.unitId),
-    );
-
+    final tenantState = ref.watch(tenantControllerProvider);
+    final propertyAsync = ref.watch(propertyByIdProvider(tenant.propertyId));
+    final unitAsync = ref.watch(unitByIdProvider(tenant.unitId));
     final historyAsync = ref.watch(
-      tenantHistoryProvider(
-        (
-        tenantId: tenant.id,
-        ownerId: tenant.ownerId,
-        ),
-      ),
+      tenantHistoryProvider((
+      tenantId: tenant.id,
+      ownerId: tenant.ownerId,
+      )),
     );
 
     final isActive = tenant.status == TenantStatus.active;
-
-    final canStartNewTenancy =
-        tenant.status == TenantStatus.inactive &&
-            tenant.accountStatus == TenantAccountStatus.registered;
+    final canStartNewTenancy = tenant.status == TenantStatus.inactive &&
+        tenant.accountStatus == TenantAccountStatus.registered;
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text('Tenant Details'),
+        title: const Text(
+          'Resident Details',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
         actions: [
           IconButton(
-            tooltip: 'Edit Tenant',
+            tooltip: 'Edit Resident',
             onPressed: tenantState.isLoading
                 ? null
                 : () async {
@@ -363,369 +328,221 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                 extra: tenant,
               );
 
-              if (!context.mounted) {
+              if (!context.mounted || result == null) {
                 return;
               }
 
-              if (result != null) {
-                setState(() {
-                  _tenant = result;
-                });
+              setState(() {
+                _tenant = result;
+              });
 
-                ref.invalidate(
-                  propertyTenantsProvider(
-                    result.propertyId,
-                  ),
-                );
-
-                ref.invalidate(
-                  propertyByIdProvider(
-                    result.propertyId,
-                  ),
-                );
-
-                ref.invalidate(
-                  unitByIdProvider(
-                    result.unitId,
-                  ),
-                );
-
-                ref.invalidate(
-                  tenantHistoryProvider(
-                    (
-                    tenantId: result.id,
-                    ownerId: result.ownerId,
-                    ),
-                  ),
-                );
-              }
+              ref.invalidate(propertyTenantsProvider(result.propertyId));
+              ref.invalidate(propertyByIdProvider(result.propertyId));
+              ref.invalidate(unitByIdProvider(result.unitId));
+              ref.invalidate(
+                tenantHistoryProvider((
+                tenantId: result.id,
+                ownerId: result.ownerId,
+                )),
+              );
             },
-            icon: const Icon(
-              Icons.edit_outlined,
-            ),
+            icon: const Icon(Icons.edit_outlined),
           ),
           IconButton(
-            tooltip: 'Delete Tenant',
-            onPressed: tenantState.isLoading
-                ? null
-                : _deleteTenant,
-            icon: const Icon(
-              Icons.delete_outline,
-            ),
+            tooltip: 'Delete Resident',
+            onPressed: tenantState.isLoading ? null : _deleteTenant,
+            icon: const Icon(Icons.delete_outline_rounded),
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
           await _loadTenant();
-
           if (mounted) {
             final currentTenant = _tenant;
-
             if (currentTenant != null) {
               ref.invalidate(
-                tenantHistoryProvider(
-                  (
-                  tenantId: currentTenant.id,
-                  ownerId: currentTenant.ownerId,
-                  ),
-                ),
+                tenantHistoryProvider((
+                tenantId: currentTenant.id,
+                ownerId: currentTenant.ownerId,
+                )),
               );
             }
           }
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    const CircleAvatar(
-                      radius: 36,
-                      child: Icon(
-                        Icons.person_outline,
-                        size: 36,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      tenant.name,
-                      textAlign: TextAlign.center,
-                      style: Theme
-                          .of(context)
-                          .textTheme
-                          .headlineSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    _TenantStatusChip(
-                      status: tenant.status,
-                    ),
-                  ],
-                ),
+            // 1. Profile Hero Header
+            _TenantHeroCard(tenant: tenant),
+
+            const SizedBox(height: 18),
+
+            // 2. Tenancy Status Action Card
+            if (isActive) ...[
+              _ActiveTenancyActionCard(
+                isLoading: tenantState.isLoading,
+                onEndTenancy: _endTenancy,
               ),
+              const SizedBox(height: 18),
+            ] else
+              if (canStartNewTenancy) ...[
+                _NewTenancyActionCard(
+                  isLoading: tenantState.isLoading,
+                  onStartNewTenancy: _startNewTenancy,
+                ),
+                const SizedBox(height: 18),
+              ],
+
+            // 3. Property & Space Allocation
+            _buildSectionCard(
+              title: 'Current Allocation',
+              subtitle: 'Assigned property and residential space',
+              icon: Icons.apartment_rounded,
+              children: [
+                propertyAsync.when(
+                  loading: () => const _LoadingDetailRow(label: 'Property'),
+                  error: (_, _) =>
+                  const _DetailRow(
+                    label: 'Property',
+                    value: 'Property information unavailable',
+                  ),
+                  data: (property) =>
+                      _DetailRow(
+                        label: 'Property',
+                        value: property != null
+                            ? '${property.name} (${property.propertyCode})'
+                            : 'Property record not found',
+                      ),
+                ),
+                const SizedBox(height: 10),
+                unitAsync.when(
+                  loading: () => const _LoadingDetailRow(label: 'Unit / Floor'),
+                  error: (_, _) =>
+                  const _DetailRow(
+                    label: 'Unit / Floor',
+                    value: 'Unit information unavailable',
+                  ),
+                  data: (unit) =>
+                      _DetailRow(
+                        label: 'Unit / Floor',
+                        value: _unitDisplayName(unit),
+                      ),
+                ),
+              ],
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // ========================================================
-            // ACTIVE TENANCY
-            // ========================================================
-
-            if (isActive) ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Tenancy',
-                        style: Theme
-                            .of(context)
-                            .textTheme
-                            .titleMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'End the current tenancy to make '
-                            'the unit available for another tenant.',
-                        style: Theme
-                            .of(context)
-                            .textTheme
-                            .bodyMedium,
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: tenantState.isLoading
-                              ? null
-                              : _endTenancy,
-                          icon: const Icon(
-                            Icons.assignment_return_outlined,
-                          ),
-                          label: const Text(
-                            'End Tenancy',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-
-            // ========================================================
-            // START NEW TENANCY
-            // ========================================================
-
-            if (canStartNewTenancy) ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'New Tenancy',
-                        style: Theme
-                            .of(context)
-                            .textTheme
-                            .titleMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Start a new tenancy for this registered '
-                            'tenant in an available unit.',
-                        style: Theme
-                            .of(context)
-                            .textTheme
-                            .bodyMedium,
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: tenantState.isLoading
-                              ? null
-                              : _startNewTenancy,
-                          icon: const Icon(
-                            Icons.add_home_work_outlined,
-                          ),
-                          label: const Text(
-                            'Start New Tenancy',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-
-            // ========================================================
-            // TENANT INFORMATION
-            // ========================================================
-
-            _InfoCard(
-              title: 'Tenant Information',
+            // 4. Contact & Identification Credentials
+            _buildSectionCard(
+              title: 'Contact & Identification',
+              subtitle: 'Phone, email, and verified identity records',
+              icon: Icons.contact_page_outlined,
               children: [
-                _InfoRow(
-                  label: 'Phone',
+                _DetailRow(
+                  label: 'Phone Number',
                   value: tenant.phone,
+                  isSelectable: true,
                 ),
-                _InfoRow(
-                  label: 'Email',
+                const SizedBox(height: 10),
+                _DetailRow(
+                  label: 'Email Address',
                   value: tenant.email
                       ?.trim()
                       .isNotEmpty == true
                       ? tenant.email!
                       : 'Not provided',
+                  isSelectable: true,
                 ),
-                _InfoRow(
-                  label: 'NID Number',
+                const SizedBox(height: 10),
+                _DetailRow(
+                  label: 'National ID (NID)',
                   value: tenant.nidNumber
                       ?.trim()
                       .isNotEmpty == true
                       ? tenant.nidNumber!
                       : 'Not provided',
+                  isSelectable: true,
                 ),
               ],
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // ========================================================
-            // PROPERTY INFORMATION
-            // ========================================================
-
-            _InfoCard(
-              title: 'Property Information',
-              children: [
-                propertyAsync.when(
-                  loading: () =>
-                  const _LoadingInfoRow(
-                    label: 'Property',
-                  ),
-                  error: (_, _) =>
-                  const _InfoRow(
-                    label: 'Property',
-                    value: 'Unable to load',
-                  ),
-                  data: (Property? property) {
-                    return _InfoRow(
-                      label: 'Property',
-                      value: property?.name ??
-                          'Property not found',
-                    );
-                  },
-                ),
-                unitAsync.when(
-                  loading: () =>
-                  const _LoadingInfoRow(
-                    label: 'Unit',
-                  ),
-                  error: (_, _) =>
-                  const _InfoRow(
-                    label: 'Unit',
-                    value: 'Unable to load',
-                  ),
-                  data: (Unit? unit) {
-                    return _InfoRow(
-                      label: 'Unit',
-                      value: _unitDisplayName(unit),
-                    );
-                  },
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // ========================================================
-            // TENANCY HISTORY
-            // ========================================================
-
+            // 5. Tenancy History Stream
             historyAsync.when(
               loading: () =>
-              const _InfoCard(
-                title: 'Tenancy History',
-                children: [
-                  _LoadingInfoRow(
-                    label: 'Previous tenancies',
+                  _buildSectionCard(
+                    title: 'Tenancy History',
+                    subtitle: 'Past agreements and occupancy snapshots',
+                    icon: Icons.history_rounded,
+                    children: const [
+                      LinearProgressIndicator(),
+                    ],
                   ),
-                ],
-              ),
               error: (_, _) =>
-              const _InfoCard(
-                title: 'Tenancy History',
-                children: [
-                  _InfoRow(
-                    label: 'History',
-                    value: 'Unable to load',
+                  _buildSectionCard(
+                    title: 'Tenancy History',
+                    subtitle: 'Past agreements and occupancy snapshots',
+                    icon: Icons.history_rounded,
+                    children: const [
+                      Text('Unable to load tenancy history records.'),
+                    ],
                   ),
-                ],
-              ),
               data: (histories) {
                 if (histories.isEmpty) {
-                  return const _InfoCard(
+                  return _buildSectionCard(
                     title: 'Tenancy History',
+                    subtitle: 'Past agreements and occupancy snapshots',
+                    icon: Icons.history_rounded,
                     children: [
-                      _InfoRow(
-                        label: 'History',
-                        value: 'No previous tenancy.',
+                      Text(
+                        'No previous historical tenancies recorded for this resident.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   );
                 }
 
-                return _TenancyHistoryCard(
+                return _TenancyHistorySection(
                   histories: histories,
                   formatDate: _formatDate,
                 );
               },
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // ========================================================
-            // ACCOUNT INFORMATION
-            // ========================================================
-
-            _InfoCard(
+            // 6. Griho Account Metadata
+            _buildSectionCard(
               title: 'Account Information',
+              subtitle: 'System registration and account lifecycle status',
+              icon: Icons.badge_outlined,
               children: [
-                _InfoRow(
-                  label: 'Account Status',
-                  value: tenant.accountStatus ==
-                      TenantAccountStatus.registered
-                      ? 'Registered'
-                      : 'Not registered',
+                _DetailRow(
+                  label: 'Griho Account',
+                  value: tenant.accountStatus == TenantAccountStatus.registered
+                      ? 'Registered Griho User'
+                      : 'Not Registered',
                 ),
-                _InfoRow(
-                  label: 'Confirmation',
-                  value: _confirmationStatusLabel(
-                    tenant.confirmationStatus,
-                  ),
+                const SizedBox(height: 10),
+                _DetailRow(
+                  label: 'Onboarding Status',
+                  value: _confirmationStatusLabel(tenant.confirmationStatus),
                 ),
-                _InfoRow(
-                  label: 'Created',
-                  value: _formatDate(
-                    tenant.createdAt,
-                  ),
+                const SizedBox(height: 10),
+                _DetailRow(
+                  label: 'Record Created',
+                  value: _formatDate(tenant.createdAt),
                 ),
-                _InfoRow(
+                const SizedBox(height: 10),
+                _DetailRow(
                   label: 'Last Updated',
-                  value: _formatDate(
-                    tenant.updatedAt,
-                  ),
+                  value: _formatDate(tenant.updatedAt),
                 ),
               ],
             ),
@@ -735,14 +552,61 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
     );
   }
 
-  String _confirmationStatusLabel(TenantConfirmationStatus status,) {
+  Widget _buildSectionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _confirmationStatusLabel(TenantConfirmationStatus status) {
     switch (status) {
       case TenantConfirmationStatus.pending:
-        return 'Pending';
+        return 'Pending Invitation Acceptance';
       case TenantConfirmationStatus.confirmed:
-        return 'Confirmed';
+        return 'Confirmed & Verified';
       case TenantConfirmationStatus.rejected:
-        return 'Rejected';
+        return 'Declined Invitation';
     }
   }
 
@@ -750,77 +614,317 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
     if (unit == null) {
       return 'Unit not found';
     }
-
     final name = unit.name?.trim();
-
     if (name != null && name.isNotEmpty) {
-      return name;
+      return '$name (Unit ${unit.unitNumber} • Floor ${unit.floorNumber})';
     }
-
-    return unit.unitNumber;
+    return 'Unit ${unit.unitNumber} • Floor ${unit.floorNumber}';
   }
 
   String _formatDate(DateTime dateTime) {
     final local = dateTime.toLocal();
-
-    return '${local.day.toString().padLeft(2, '0')}/'
-        '${local.month.toString().padLeft(2, '0')}/'
-        '${local.year} '
-        '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$day/$month/${local.year} at $hour:$minute';
   }
 }
 
 // ============================================================================
-// TENANCY HISTORY CARD
+// PROFILE HERO CARD
 // ============================================================================
 
-class _TenancyHistoryCard extends StatelessWidget {
-  final List<TenancyHistory> histories;
-  final String Function(DateTime) formatDate;
+class _TenantHeroCard extends StatelessWidget {
+  final Tenant tenant;
 
-  const _TenancyHistoryCard({
-    required this.histories,
-    required this.formatDate,
+  const _TenantHeroCard({required this.tenant});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isActive = tenant.status == TenantStatus.active;
+    final isRegistered =
+        tenant.accountStatus == TenantAccountStatus.registered;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Text(
+                  _initials(tenant.name),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tenant.name,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      tenant.phone,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.green.withValues(alpha: 0.12)
+                      : Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isActive ? Icons.check_circle_rounded : Icons
+                          .pause_circle_rounded,
+                      size: 14,
+                      color: isActive ? Colors.green.shade800 : Colors.orange
+                          .shade800,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      isActive ? 'Active Lease' : 'Inactive / Vacated',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isActive ? Colors.green.shade800 : Colors.orange
+                            .shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isRegistered
+                      ? Colors.teal.withValues(alpha: 0.12)
+                      : theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isRegistered ? Icons.verified_user_rounded : Icons
+                          .person_outline,
+                      size: 14,
+                      color: isRegistered ? Colors.teal.shade800 : theme
+                          .colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      isRegistered ? 'Registered User' : 'Unregistered',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isRegistered ? Colors.teal.shade800 : theme
+                            .colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _initials(String name) {
+    final value = name.trim();
+    if (value.isEmpty) {
+      return 'T';
+    }
+    final parts =
+    value.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.length == 1) {
+      return parts.first
+          .substring(0, parts.first.length >= 2 ? 2 : 1)
+          .toUpperCase();
+    }
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+}
+
+// ============================================================================
+// CONTEXTUAL ACTIONS
+// ============================================================================
+
+class _ActiveTenancyActionCard extends StatelessWidget {
+  final bool isLoading;
+  final VoidCallback onEndTenancy;
+
+  const _ActiveTenancyActionCard({
+    required this.isLoading,
+    required this.onEndTenancy,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.assignment_return_outlined,
+                  size: 20,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'End Active Lease',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
             Text(
-              'Tenancy History',
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleMedium,
+              'Concluding this tenancy will finalize occupancy records and mark the assigned unit available for new tenants.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
+              ),
             ),
             const SizedBox(height: 16),
-            ...List.generate(
-              histories.length,
-                  (index) {
-                final history = histories[index];
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                  side: BorderSide(color: theme.colorScheme.error),
+                ),
+                onPressed: isLoading ? null : onEndTenancy,
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: const Text(
+                  'End Tenancy Agreement',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-                return Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
-                  children: [
-                    if (index > 0)
-                      const Divider(
-                        height: 28,
-                      ),
-                    _TenancyHistoryItem(
-                      history: history,
-                      formatDate: formatDate,
-                    ),
-                  ],
-                );
-              },
+class _NewTenancyActionCard extends StatelessWidget {
+  final bool isLoading;
+  final VoidCallback onStartNewTenancy;
+
+  const _NewTenancyActionCard({
+    required this.isLoading,
+    required this.onStartNewTenancy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.add_home_work_rounded,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Initiate New Tenancy',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'This resident is currently inactive. You can assign them to a vacant apartment and establish recurring rent terms.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: isLoading ? null : onStartNewTenancy,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text(
+                  'Assign Unit & Start Tenancy',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
           ],
         ),
@@ -830,8 +934,68 @@ class _TenancyHistoryCard extends StatelessWidget {
 }
 
 // ============================================================================
-// TENANCY HISTORY ITEM
+// TENANCY HISTORY SECTION
 // ============================================================================
+
+class _TenancyHistorySection extends StatelessWidget {
+  final List<TenancyHistory> histories;
+  final String Function(DateTime) formatDate;
+
+  const _TenancyHistorySection({
+    required this.histories,
+    required this.formatDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.history_rounded, size: 20,
+                    color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Tenancy History (${histories.length})',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Past lease terms and occupancy records',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            for (var index = 0; index < histories.length; index++) ...[
+              _TenancyHistoryItem(
+                history: histories[index],
+                formatDate: formatDate,
+              ),
+              if (index != histories.length - 1) const Divider(height: 24),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _TenancyHistoryItem extends StatelessWidget {
   final TenancyHistory history;
@@ -844,80 +1008,56 @@ class _TenancyHistoryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final unitDisplay = history.unitName
+        ?.trim()
+        .isNotEmpty == true
+        ? '${history.unitName!} (Unit ${history.unitNumber})'
+        : 'Unit ${history.unitNumber}';
+
     return Column(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Icon(
-              Icons.history,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 history.propertyName,
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleSmall,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: theme.colorScheme.surfaceContainerHighest,
+              ),
+              child: Text(
+                'Ended Lease',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        _HistoryDetailRow(
-          label: 'Property Code',
-          value: history.propertyCode,
-        ),
-        _HistoryDetailRow(
-          label: 'Unit',
-          value: history.unitName
-              ?.trim()
-              .isNotEmpty == true
-              ? history.unitName!
-              : history.unitNumber,
-        ),
-        _HistoryDetailRow(
-          label: 'Floor',
-          value: history.floorNumber.toString(),
-        ),
-        _HistoryDetailRow(
+        const SizedBox(height: 10),
+        _HistoryDataRow(label: 'Unit / Floor',
+            value: '$unitDisplay • Floor ${history.floorNumber}'),
+        _HistoryDataRow(
           label: 'Monthly Rent',
-          value: history.monthlyRent == null
-              ? 'Not provided'
-              : _formatRent(history.monthlyRent!),
+          value: history.monthlyRent != null
+              ? '৳ ${_formatRent(history.monthlyRent!)}'
+              : 'Not recorded',
         ),
-        _HistoryDetailRow(
-          label: 'Started',
-          value: formatDate(history.startedAt),
-        ),
-        _HistoryDetailRow(
-          label: 'Ended',
-          value: formatDate(history.endedAt),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 5,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: Theme
-                .of(context)
-                .colorScheme
-                .surfaceContainerHighest,
-          ),
-          child: Text(
-            'Ended',
-            style: Theme
-                .of(context)
-                .textTheme
-                .labelMedium,
-          ),
-        ),
+        _HistoryDataRow(
+            label: 'Commenced', value: formatDate(history.startedAt)),
+        _HistoryDataRow(label: 'Vacated', value: formatDate(history.endedAt)),
       ],
     );
   }
@@ -926,89 +1066,35 @@ class _TenancyHistoryItem extends StatelessWidget {
     if (value == value.roundToDouble()) {
       return value.toStringAsFixed(0);
     }
-
     return value.toStringAsFixed(2);
   }
 }
 
-// ============================================================================
-// HISTORY DETAIL ROW
-// ============================================================================
-
-class _HistoryDetailRow extends StatelessWidget {
+class _HistoryDataRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _HistoryDetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _HistoryDataRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .labelMedium,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .bodyMedium,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// LOADING INFO
-// ============================================================================
-
-class _LoadingInfoRow extends StatelessWidget {
-  final String label;
-
-  const _LoadingInfoRow({
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
-            style: Theme
-                .of(context)
-                .textTheme
-                .labelMedium,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
-          const SizedBox(height: 8),
-          const SizedBox(
-            height: 18,
-            width: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
+          Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -1018,125 +1104,89 @@ class _LoadingInfoRow extends StatelessWidget {
 }
 
 // ============================================================================
-// STATUS
+// DETAIL ROW
 // ============================================================================
 
-class _TenantStatusChip extends StatelessWidget {
-  final TenantStatus status;
-
-  const _TenantStatusChip({
-    required this.status,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 6,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Theme
-            .of(context)
-            .colorScheme
-            .surfaceContainerHighest,
-      ),
-      child: Text(
-        status == TenantStatus.active
-            ? 'Active'
-            : 'Inactive',
-        style: Theme
-            .of(context)
-            .textTheme
-            .labelMedium,
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// INFO CARD
-// ============================================================================
-
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _InfoCard({
-    required this.title,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleMedium,
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// INFO ROW
-// ============================================================================
-
-class _InfoRow extends StatelessWidget {
+class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
+  final bool isSelectable;
 
-  const _InfoRow({
+  const _DetailRow({
     required this.label,
     required this.value,
+    this.isSelectable = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
-        children: [
-          Text(
+    final theme = Theme.of(context);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 130,
+          child: Text(
             label,
-            style: Theme
-                .of(context)
-                .textTheme
-                .labelMedium,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          const SizedBox(height: 4),
-          SelectableText(
+        ),
+        Expanded(
+          child: isSelectable
+              ? SelectableText(
             value,
-            style: Theme
-                .of(context)
-                .textTheme
-                .bodyMedium,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          )
+              : Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LoadingDetailRow extends StatelessWidget {
+  final String label;
+
+  const _LoadingDetailRow({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 130,
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 1.5),
+        ),
+      ],
     );
   }
 }
 
 // ============================================================================
-// ERROR
+// ERROR VIEW
 // ============================================================================
 
 class _ErrorView extends StatelessWidget {
@@ -1157,13 +1207,15 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.error_outline,
+              Icons.error_outline_rounded,
               size: 48,
+              color: Colors.redAccent,
             ),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
             FilledButton(
