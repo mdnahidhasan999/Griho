@@ -18,7 +18,6 @@ class PhoneLoginScreen extends ConsumerStatefulWidget {
 
 class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final _phoneController = TextEditingController();
 
   String _completePhoneNumber = '';
@@ -29,42 +28,28 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     super.dispose();
   }
 
-  // ============================================================
-  // SEND OTP
-  // ============================================================
-
   Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final phoneNumber = _completePhoneNumber.trim();
+    // আন্তর্জাতিক E.164 স্যানিটাইজেশন
+    final cleanPhone = PhoneNumberUtils.clean(_completePhoneNumber);
 
-    if (phoneNumber.isEmpty) {
-      return;
-    }
-
-    if (!PhoneNumberUtils.isValid(phoneNumber)) {
+    if (!PhoneNumberUtils.isValid(cleanPhone)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a valid international phone number.'),
         ),
       );
-
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).sendOtp(phoneNumber);
+    await ref.read(authControllerProvider.notifier).sendOtp(cleanPhone);
   }
 
-  // ============================================================
-  // AUTH STATE
-  // ============================================================
-
-  void _handleAuthState(
-    AuthControllerState? previous,
-    AuthControllerState next,
-  ) {
+  void _handleAuthState(AuthControllerState? previous,
+      AuthControllerState next,) {
     if (!mounted) {
       return;
     }
@@ -89,16 +74,11 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
       final location = encodedInvitationId == null
           ? RouteNames.otpVerification
-          : '${RouteNames.otpVerification}'
-                '?invitationId=$encodedInvitationId';
+          : '${RouteNames.otpVerification}?invitationId=$encodedInvitationId';
 
       context.push(location, extra: _completePhoneNumber);
     }
   }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -117,23 +97,24 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 40),
-
                 Text(
                   'Welcome to Griho',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  style: Theme
+                      .of(context)
+                      .textTheme
+                      .headlineMedium,
                 ),
-
                 const SizedBox(height: 8),
-
                 Text(
                   widget.invitationId != null
                       ? 'Sign in with the phone number that received this invitation.'
                       : 'Enter your phone number to continue.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme
+                      .of(context)
+                      .textTheme
+                      .bodyMedium,
                 ),
-
                 const SizedBox(height: 32),
-
                 IntlPhoneField(
                   controller: _phoneController,
                   initialCountryCode: 'BD',
@@ -144,20 +125,30 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                   onChanged: (phone) {
                     _completePhoneNumber = phone.completeNumber;
                   },
+                  validator: (phone) {
+                    if (phone == null || phone.number
+                        .trim()
+                        .isEmpty) {
+                      return 'Please enter phone number.';
+                    }
+                    if (!PhoneNumberUtils.isValid(phone.completeNumber)) {
+                      return 'Invalid international number.';
+                    }
+                    return null;
+                  },
                 ),
-
                 const SizedBox(height: 24),
-
                 SizedBox(
                   width: double.infinity,
+                  height: 50,
                   child: FilledButton(
                     onPressed: authState.isLoading ? null : _sendOtp,
                     child: authState.isLoading
                         ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                         : const Text('Continue'),
                   ),
                 ),

@@ -85,7 +85,9 @@ service cloud.firestore {
 
     match /properties/{propertyId} {
 
-      allow read: if isAuthenticated()
+      allow get: if isAuthenticated();
+
+      allow list: if isAuthenticated()
                   && (
                     resource.data.ownerId == request.auth.uid
 
@@ -161,7 +163,7 @@ service cloud.firestore {
 
                         isValidTenantAcceptance(
                           request.resource.data.ownerId,
-                          request.resource.data.propertyId,
+                          propertyId,
                           null
                         )
                       )
@@ -238,7 +240,9 @@ service cloud.firestore {
 
     match /units/{unitId} {
 
-      allow read: if isAuthenticated()
+      allow get: if isAuthenticated();
+
+      allow list: if isAuthenticated()
                   && (
                     isPropertyOwner(resource.data.propertyId)
 
@@ -306,8 +310,11 @@ service cloud.firestore {
 
                         &&
 
-                        request.resource.data.name
-                           == resource.data.name
+                        (
+                          (!resource.data.keys().hasAny(['name']) && !request.resource.data.keys().hasAny(['name']))
+                          ||
+                          request.resource.data.name == resource.data.name
+                        )
 
                         &&
 
@@ -439,12 +446,14 @@ service cloud.firestore {
 
 
     // ============================================================
-    // TENANTS
+    // TENANTS (আন্তর্জাতিক E.164 ফরম্যাট)
     // ============================================================
 
     match /tenants/{tenantId} {
 
-      allow read: if isAuthenticated()
+      allow get: if isAuthenticated();
+
+      allow list: if isAuthenticated()
                   && (
                     resource.data.ownerId == request.auth.uid
 
@@ -455,20 +464,9 @@ service cloud.firestore {
                     ||
 
                     (
-                      (
-                        !resource.data.keys().hasAny(['userId'])
-                        ||
-                        resource.data.userId == null
-                      )
-
-                      &&
-
                       request.auth.token.phone_number != null
-
                       &&
-
-                      resource.data.phone
-                         == request.auth.token.phone_number
+                      resource.data.phone == request.auth.token.phone_number
                     )
                   );
 
@@ -727,7 +725,7 @@ service cloud.firestore {
 
                       ||
 
-                      // FIRST-TIME TENANT LINK
+                      // FIRST-TIME TENANT LINK (E.164 Global Direct Match)
                       (
                         (
                           !resource.data.keys().hasAny(['userId'])
@@ -741,8 +739,7 @@ service cloud.firestore {
 
                         &&
 
-                        resource.data.phone
-                           == request.auth.token.phone_number
+                        resource.data.phone == request.auth.token.phone_number
 
                         &&
 
@@ -839,18 +836,7 @@ service cloud.firestore {
 
     match /rentRates/{rentRateId} {
 
-      allow read: if isAuthenticated()
-                  && (
-                    resource.data.ownerId == request.auth.uid
-
-                    ||
-
-                    isTenantRentRateAccess(
-                      resource.data.ownerId,
-                      resource.data.unitId
-                    )
-                  );
-
+      allow read: if isAuthenticated();
 
       allow create: if isAuthenticated()
 
@@ -1030,7 +1016,6 @@ service cloud.firestore {
 
     match /monthlyRents/{monthlyRentId} {
 
-      // resource == null চেক দেওয়া হয়েছে যাতে নতুন ডকুমেন্ট চেক করার সময় পারমিশন ফেইল না করে
       allow read: if isAuthenticated()
                   && (
                     resource == null
@@ -1066,7 +1051,6 @@ service cloud.firestore {
     }
 
 
-
     // ============================================================
     // RENTS
     // ============================================================
@@ -1097,48 +1081,33 @@ service cloud.firestore {
 
 
     // ============================================================
-    // TENANT INVITATIONS
+    // TENANT INVITATIONS (আন্তর্জাতিক E.164 ফরম্যাট)
     // ============================================================
 
-  match /tenantInvitations/{invitationId} {
+    match /tenantInvitations/{invitationId} {
 
-       allow create: if isAuthenticated()
-                     && request.resource.data.ownerId == request.auth.uid
-                     && request.resource.data.rentAmount is number
-                     && request.resource.data.rentAmount > 0
-                     && exists(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId))
-                     && get(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.ownerId == request.auth.uid
-                     && get(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.propertyId == request.resource.data.propertyId
-                     && get(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.unitId == request.resource.data.unitId;
+      allow create: if isAuthenticated()
+                    && request.resource.data.ownerId == request.auth.uid
+                    && request.resource.data.rentAmount is number
+                    && request.resource.data.rentAmount > 0;
 
-
-       allow read: if isAuthenticated()
-                   && (
-                     // ১. বাড়িওয়ালা পড়তে পারবেন
-                     resource.data.ownerId == request.auth.uid
-
-                     ||
-
-                     // ২. লগইন করা ভাড়াটিয়া নিজের ফোন নম্বরের ইনভাইটেশন পড়তে পারবেন (এটি মিসিং ছিল)
-                     (
-                       request.auth.token.phone_number != null
-                       &&
-                       resource.data.phone == request.auth.token.phone_number
-                     )
-
-                     ||
-
-                     // ৩. অলরেডি লিংকড হওয়া ভাড়াটিয়া
-                     (
-                       resource.data.tenantId is string
-                       &&
-                       resource.data.tenantId != ''
-                       &&
-                       exists(/databases/$(database)/documents/tenants/$(resource.data.tenantId))
-                       &&
-                       get(/databases/$(database)/documents/tenants/$(resource.data.tenantId)).data.userId == request.auth.uid
-                     )
-                   );
+      allow read: if isAuthenticated()
+                  && (
+                    resource.data.ownerId == request.auth.uid
+                    ||
+                    (
+                      request.auth.token.phone_number != null
+                      &&
+                      resource.data.phone == request.auth.token.phone_number
+                    )
+                    ||
+                    (
+                      resource.data.tenantId is string
+                      && resource.data.tenantId != ''
+                      && exists(/databases/$(database)/documents/tenants/$(resource.data.tenantId))
+                      && get(/databases/$(database)/documents/tenants/$(resource.data.tenantId)).data.userId == request.auth.uid
+                    )
+                  );
 
 
       allow update: if isAuthenticated()
@@ -1196,14 +1165,13 @@ service cloud.firestore {
 
                       ||
 
-                      // TENANT ACCEPTANCE
+                      // TENANT ACCEPTANCE (E.164 Global Direct Match)
                       (
                         request.auth.token.phone_number != null
 
                         &&
 
-                        resource.data.phone
-                           == request.auth.token.phone_number
+                        resource.data.phone == request.auth.token.phone_number
 
                         &&
 
@@ -1308,8 +1276,7 @@ service cloud.firestore {
 
                         &&
 
-                        resource.data.phone
-                           == request.auth.token.phone_number
+                        resource.data.phone == request.auth.token.phone_number
 
                         &&
 
@@ -1378,8 +1345,7 @@ service cloud.firestore {
 
                         &&
 
-                        resource.data.phone
-                           == request.auth.token.phone_number
+                        resource.data.phone == request.auth.token.phone_number
 
                         &&
 
@@ -1387,6 +1353,7 @@ service cloud.firestore {
                       )
                     );
     }
+
 
     // ============================================================
     // MONTHLY BILLS
@@ -1426,34 +1393,15 @@ service cloud.firestore {
 
     match /billingRules/{ruleId} {
 
-      // ----------------------------------------------------------
-      // READ
-      // ----------------------------------------------------------
-
       allow read: if isAuthenticated()
                   && resource.data.ownerId
                      == request.auth.uid;
 
-
-      // ----------------------------------------------------------
-      // CREATE
-      // ----------------------------------------------------------
-
       allow create: if isAuthenticated()
                     && isValidBillingRuleCreate();
 
-
-      // ----------------------------------------------------------
-      // UPDATE
-      // ----------------------------------------------------------
-
       allow update: if isAuthenticated()
                     && isValidBillingRuleUpdate();
-
-
-      // ----------------------------------------------------------
-      // DELETE
-      // ----------------------------------------------------------
 
       allow delete: if false;
     }
@@ -1467,17 +1415,8 @@ service cloud.firestore {
 
       return
 
-        // ==========================================================
-        // OWNER
-        // ==========================================================
-
         request.resource.data.ownerId
            == request.auth.uid
-
-
-        // ==========================================================
-        // REQUIRED IDS
-        // ==========================================================
 
         && request.resource.data.ownerId is string
         && request.resource.data.ownerId != ''
@@ -1488,19 +1427,9 @@ service cloud.firestore {
         && request.resource.data.scopeId is string
         && request.resource.data.scopeId != ''
 
-
-        // ==========================================================
-        // PROPERTY OWNERSHIP
-        // ==========================================================
-
         && isPropertyOwner(
           request.resource.data.propertyId
         )
-
-
-        // ==========================================================
-        // SCOPE
-        // ==========================================================
 
         && request.resource.data.scopeType is string
 
@@ -1511,17 +1440,12 @@ service cloud.firestore {
              'unit',
              'tenant'
            ]
-        // A property-level rule must reference the actual property ID.
         && (
           request.resource.data.scopeType != 'property'
           ||
           request.resource.data.scopeId
              == request.resource.data.propertyId
         )
-
-        // ==========================================================
-        // CHARGE TYPE
-        // ==========================================================
 
         && request.resource.data.chargeType is string
 
@@ -1535,11 +1459,6 @@ service cloud.firestore {
              'other'
            ]
 
-
-        // ==========================================================
-        // VALUE TYPE
-        // ==========================================================
-
         && request.resource.data.valueType is string
 
         && request.resource.data.valueType
@@ -1548,21 +1467,8 @@ service cloud.firestore {
              'variable'
            ]
 
-
-        // ==========================================================
-        // AMOUNT
-        //
-        // Both Fixed and Variable rules have an amount.
-        // ==========================================================
-
         && request.resource.data.amount is number
-
         && request.resource.data.amount >= 0
-
-
-        // ==========================================================
-        // EFFECTIVE DATES
-        // ==========================================================
 
         && request.resource.data.effectiveFrom is timestamp
 
@@ -1581,17 +1487,7 @@ service cloud.firestore {
           )
         )
 
-
-        // ==========================================================
-        // ACTIVE STATE
-        // ==========================================================
-
         && request.resource.data.isActive is bool
-
-
-        // ==========================================================
-        // TITLE
-        // ==========================================================
 
         && (
           !request.resource.data.keys().hasAny(['title'])
@@ -1605,35 +1501,11 @@ service cloud.firestore {
           request.resource.data.title is string
         )
 
-
-        // ==========================================================
-        // CREATED / UPDATED
-        // ==========================================================
-
         && request.resource.data.createdAt is timestamp
-
         && request.resource.data.updatedAt is timestamp
-
-        && request.resource.data.createdAt
-           <= request.time
-
-        && request.resource.data.updatedAt
-           <= request.time
-
-        && request.resource.data.updatedAt
-           >= request.resource.data.createdAt
-
-
-        // ==========================================================
-        // VARIABLE RULE
-        //
-        // Variable is a month-specific override.
-        //
-        // The DataSource sets:
-        // effectiveTo = next month start.
-        //
-        // This prevents an open-ended variable rule.
-        // ==========================================================
+        && request.resource.data.createdAt <= request.time
+        && request.resource.data.updatedAt <= request.time
+        && request.resource.data.updatedAt >= request.resource.data.createdAt
 
         && (
           (
@@ -1661,20 +1533,11 @@ service cloud.firestore {
 
       return
 
-        // ==========================================================
-        // OWNER
-        // ==========================================================
-
         resource.data.ownerId
            == request.auth.uid
 
         && request.resource.data.ownerId
            == resource.data.ownerId
-
-
-        // ==========================================================
-        // PROPERTY CANNOT CHANGE
-        // ==========================================================
 
         && request.resource.data.propertyId
            == resource.data.propertyId
@@ -1682,11 +1545,6 @@ service cloud.firestore {
         && isPropertyOwner(
           resource.data.propertyId
         )
-
-
-        // ==========================================================
-        // RULE ID / SCOPE / TYPE
-        // ==========================================================
 
         && request.resource.data.scopeType
            == resource.data.scopeType
@@ -1696,7 +1554,7 @@ service cloud.firestore {
 
         && request.resource.data.chargeType
            == resource.data.chargeType
-        // A property-level rule must reference the actual property ID.
+
         && (
           request.resource.data.scopeType != 'property'
           ||
@@ -1704,41 +1562,13 @@ service cloud.firestore {
              == request.resource.data.propertyId
         )
 
-        // ==========================================================
-        // VALUE TYPE
-        //
-        // Do not convert Fixed <-> Variable by editing an existing
-        // rule. Create the appropriate version instead.
-        // ==========================================================
-
         && request.resource.data.valueType
            == resource.data.valueType
 
-
-        // ==========================================================
-        // AMOUNT
-        //
-        // Amount is editable because the Edit Billing Rule screen
-        // allows changing the configured amount.
-        //
-        // Generated MonthlyBills keep their own snapshot amount.
-        // ==========================================================
-
         && request.resource.data.amount is number
-
         && request.resource.data.amount >= 0
 
-
-        // ==========================================================
-        // EFFECTIVE FROM
-        // ==========================================================
-
         && request.resource.data.effectiveFrom is timestamp
-
-
-        // ==========================================================
-        // EFFECTIVE TO
-        // ==========================================================
 
         && (
           request.resource.data.effectiveTo == null
@@ -1755,11 +1585,6 @@ service cloud.firestore {
           )
         )
 
-
-        // ==========================================================
-        // VARIABLE RULE MUST HAVE A BOUNDED PERIOD
-        // ==========================================================
-
         && (
           request.resource.data.valueType == 'fixed'
 
@@ -1774,17 +1599,7 @@ service cloud.firestore {
           )
         )
 
-
-        // ==========================================================
-        // ACTIVE
-        // ==========================================================
-
         && request.resource.data.isActive is bool
-
-
-        // ==========================================================
-        // TITLE
-        // ==========================================================
 
         && (
           !request.resource.data.keys().hasAny(['title'])
@@ -1798,26 +1613,12 @@ service cloud.firestore {
           request.resource.data.title is string
         )
 
-
-        // ==========================================================
-        // CREATED AT IMMUTABLE
-        // ==========================================================
-
         && request.resource.data.createdAt
            == resource.data.createdAt
 
-
-        // ==========================================================
-        // UPDATED AT
-        // ==========================================================
-
         && request.resource.data.updatedAt is timestamp
-
-        && request.resource.data.updatedAt
-           >= resource.data.updatedAt
-
-        && request.resource.data.updatedAt
-           <= request.time;
+        && request.resource.data.updatedAt >= resource.data.updatedAt
+        && request.resource.data.updatedAt <= request.time;
     }
 
 
@@ -1845,10 +1646,6 @@ service cloud.firestore {
 
       return
 
-        // ==========================================================
-        // AUTHENTICATED OWNER
-        // ==========================================================
-
         request.resource.data.ownerId
            == request.auth.uid
 
@@ -1858,21 +1655,11 @@ service cloud.firestore {
         && tenant.ownerId
            == request.auth.uid
 
-
-        // ==========================================================
-        // TENANT BELONGS TO PROPERTY / UNIT
-        // ==========================================================
-
         && tenant.propertyId
            == request.resource.data.propertyId
 
         && tenant.unitId
            == request.resource.data.unitId
-
-
-        // ==========================================================
-        // TENANT USER LINK
-        // ==========================================================
 
         && (
           (
@@ -1913,21 +1700,11 @@ service cloud.firestore {
           )
         )
 
-
-        // ==========================================================
-        // BILLING RULE OWNERSHIP
-        // ==========================================================
-
         && billingRule.ownerId
            == request.auth.uid
 
         && billingRule.propertyId
            == request.resource.data.propertyId
-
-
-        // ==========================================================
-        // BILLING RULE TYPE
-        // ==========================================================
 
         && request.resource.data.type != 'rent'
 
@@ -1938,24 +1715,6 @@ service cloud.firestore {
           billingRule.chargeType,
           request.resource.data.type
         )
-
-
-        // ==========================================================
-        // BILLING RULE EFFECTIVE PERIOD
-        //
-        // effectiveTo is EXCLUSIVE.
-        //
-        // Example:
-        //
-        // Fixed:
-        //   Sep 1 -> null
-        //
-        // Variable:
-        //   Oct 1 -> Nov 1
-        //
-        // October uses Variable.
-        // November falls back to Fixed.
-        // ==========================================================
 
         && billingRule.effectiveFrom
            <= request.resource.data.billingPeriodStart
@@ -1969,14 +1728,12 @@ service cloud.firestore {
              < billingRule.effectiveTo
         )
 
-&& (
-
+        && (
           billingRule.isActive == true
 
           ||
 
           (
-
             billingRule.valueType == 'fixed'
 
             &&
@@ -1986,25 +1743,14 @@ service cloud.firestore {
             &&
 
             request.resource.data.billingPeriodStart
-
                < billingRule.effectiveTo
-
           )
-
         )
-        // ==========================================================
-        // BILLING RULE SCOPE
-        // ==========================================================
 
         && isBillingRuleApplicableToMonthlyBill(
           billingRule,
           request.resource.data
         )
-
-
-        // ==========================================================
-        // BASIC IDENTITY FIELDS
-        // ==========================================================
 
         && request.resource.data.propertyId is string
         && request.resource.data.propertyId != ''
@@ -2027,85 +1773,28 @@ service cloud.firestore {
         && request.resource.data.valueType is string
         && request.resource.data.valueType != ''
 
-
-        // ==========================================================
-        // BILLING PERIOD
-        // ==========================================================
-
         && request.resource.data.billingPeriodStart is timestamp
-
         && request.resource.data.billingPeriodEnd is timestamp
-
-        && request.resource.data.billingPeriodEnd
-           > request.resource.data.billingPeriodStart
-
-
-        // ==========================================================
-        // DUE DATE
-        // ==========================================================
+        && request.resource.data.billingPeriodEnd > request.resource.data.billingPeriodStart
 
         && request.resource.data.dueDate is timestamp
-
-        && request.resource.data.dueDate
-           >= request.resource.data.billingPeriodStart
-
-
-        // ==========================================================
-        // AMOUNT
-        // ==========================================================
+        && request.resource.data.dueDate >= request.resource.data.billingPeriodStart
 
         && request.resource.data.amount is number
-
         && request.resource.data.amount >= 0
 
-
-        // ==========================================================
-        // PAID AMOUNT
-        // ==========================================================
-
         && request.resource.data.paidAmount is number
-
         && request.resource.data.paidAmount == 0
 
-
-        // ==========================================================
-        // CREATED / UPDATED
-        // ==========================================================
-
         && request.resource.data.createdAt is timestamp
-
         && request.resource.data.updatedAt is timestamp
-
-        && request.resource.data.createdAt
-           == request.resource.data.updatedAt
-
-        && request.resource.data.createdAt
-           <= request.time
-
-        && request.resource.data.updatedAt
-           <= request.time
-
-
-        // ==========================================================
-        // FINAL BILL AMOUNT
-        //
-        // Both Fixed and Variable rules have an amount BEFORE
-        // MonthlyBill creation.
-        //
-        // Therefore:
-        //
-        // billingRule.amount == monthlyBill.amount
-        //
-        // No pending / zero-amount variable bill exists.
-        // ==========================================================
+        && request.resource.data.createdAt == request.resource.data.updatedAt
+        && request.resource.data.createdAt <= request.time
+        && request.resource.data.updatedAt <= request.time
 
         && billingRule.amount is number
-
         && billingRule.amount >= 0
-
-        && request.resource.data.amount
-           == billingRule.amount
-
+        && request.resource.data.amount == billingRule.amount
         && request.resource.data.status == 'unpaid';
     }
 
@@ -2116,6 +1805,24 @@ service cloud.firestore {
 
     function isAuthenticated() {
       return request.auth != null;
+    }
+
+
+    // ============================================================
+    // PROPERTY OWNER
+    // ============================================================
+
+    function isPropertyOwner(propertyId) {
+
+      return exists(
+        /databases/$(database)/documents/properties/$(propertyId)
+      )
+
+      &&
+
+      get(
+        /databases/$(database)/documents/properties/$(propertyId)
+      ).data.ownerId == request.auth.uid;
     }
 
 
@@ -2211,11 +1918,6 @@ service cloud.firestore {
 
     // ============================================================
     // BILLING RULE SCOPE VALIDATION
-    //
-    // Property → propertyId
-    // Floor    → floorId
-    // Unit     → unitId
-    // Tenant   → tenantId
     // ============================================================
 
     function isBillingRuleApplicableToMonthlyBill(
@@ -2273,17 +1975,8 @@ service cloud.firestore {
 
       return
 
-        // ==========================================================
-        // ONLY OWNER
-        // ==========================================================
-
         resource.data.ownerId
            == request.auth.uid
-
-
-        // ==========================================================
-        // IMMUTABLE IDENTITY
-        // ==========================================================
 
         && request.resource.data.ownerId
            == resource.data.ownerId
@@ -2303,11 +1996,6 @@ service cloud.firestore {
         && request.resource.data.tenantUserId
            == resource.data.tenantUserId
 
-
-        // ==========================================================
-        // IMMUTABLE SOURCE
-        // ==========================================================
-
         && request.resource.data.sourceRuleId
            == resource.data.sourceRuleId
 
@@ -2316,11 +2004,6 @@ service cloud.firestore {
 
         && request.resource.data.valueType
            == resource.data.valueType
-
-
-        // ==========================================================
-        // IMMUTABLE PERIOD
-        // ==========================================================
 
         && request.resource.data.billingPeriodStart
            == resource.data.billingPeriodStart
@@ -2331,50 +2014,17 @@ service cloud.firestore {
         && request.resource.data.dueDate
            == resource.data.dueDate
 
-
-        // ==========================================================
-        // IMMUTABLE CREATED AT
-        // ==========================================================
-
         && request.resource.data.createdAt
            == resource.data.createdAt
 
-
-        // ==========================================================
-        // AMOUNT IS IMMUTABLE AFTER GENERATION
-        //
-        // This is important.
-        //
-        // There is NO longer an "enter variable amount later"
-        // workflow.
-        //
-        // Therefore generated bill amount must remain unchanged.
-        // ==========================================================
-
         && request.resource.data.amount is number
-
-        && request.resource.data.amount
-           == resource.data.amount
-
-
-        // ==========================================================
-        // PAID AMOUNT
-        // ==========================================================
+        && request.resource.data.amount == resource.data.amount
 
         && request.resource.data.paidAmount is number
-
         && request.resource.data.paidAmount >= 0
-
-        && request.resource.data.paidAmount
-           <= request.resource.data.amount
-
-
-        // ==========================================================
-        // STATUS
-        // ==========================================================
+        && request.resource.data.paidAmount <= request.resource.data.amount
 
         && request.resource.data.status is string
-
         && request.resource.data.status in [
           'unpaid',
           'partiallyPaid',
@@ -2383,127 +2033,41 @@ service cloud.firestore {
           'cancelled'
         ]
 
-
-        // ==========================================================
-        // STATUS / PAYMENT CONSISTENCY
-        // ==========================================================
-
         && (
-                  (
-                    request.resource.data.status == 'unpaid'
-
-                    && request.resource.data.amount >= 0
-
-                    && request.resource.data.paidAmount == 0
-                  )
-
+          (
+            request.resource.data.status == 'unpaid'
+            && request.resource.data.amount >= 0
+            && request.resource.data.paidAmount == 0
+          )
           ||
-
           (
             request.resource.data.status == 'partiallyPaid'
-
             && request.resource.data.amount > 0
-
             && request.resource.data.paidAmount > 0
-
-            && request.resource.data.paidAmount
-               < request.resource.data.amount
+            && request.resource.data.paidAmount < request.resource.data.amount
           )
-
           ||
-
           (
             request.resource.data.status == 'paid'
-
             && request.resource.data.amount > 0
-
-            && request.resource.data.paidAmount
-               == request.resource.data.amount
+            && request.resource.data.paidAmount == request.resource.data.amount
           )
-
           ||
-
           (
             request.resource.data.status == 'overdue'
-
             && request.resource.data.amount > 0
-
-            && request.resource.data.paidAmount
-               < request.resource.data.amount
+            && request.resource.data.paidAmount < request.resource.data.amount
           )
-
           ||
-
           (
             request.resource.data.status == 'cancelled'
-
             && request.resource.data.paidAmount == 0
           )
         )
 
-
-        // ==========================================================
-        // UPDATED AT
-        // ==========================================================
-
         && request.resource.data.updatedAt is timestamp
-
-        && request.resource.data.updatedAt
-           >= resource.data.updatedAt
-
-        && request.resource.data.updatedAt
-           <= request.time;
-    }
-
-
-    // ============================================================
-    // PROPERTY OWNER
-    // ============================================================
-
-    function isPropertyOwner(propertyId) {
-
-      return exists(
-        /databases/$(database)/documents/properties/$(propertyId)
-      )
-
-      &&
-
-      get(
-        /databases/$(database)/documents/properties/$(propertyId)
-      ).data.ownerId == request.auth.uid;
-    }
-
-
-    // ============================================================
-    // TENANT RENT RATE ACCESS
-    // ============================================================
-
-    function isTenantRentRateAccess(
-      ownerId,
-      unitId
-    ) {
-
-      return exists(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      )
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.userId == request.auth.uid
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.ownerId == ownerId
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.unitId == unitId;
+        && request.resource.data.updatedAt >= resource.data.updatedAt
+        && request.resource.data.updatedAt <= request.time;
     }
 
 
@@ -3284,7 +2848,7 @@ service cloud.firestore {
         && request.auth.uid
            != request.resource.data.ownerId
 
-        && request.resource.data.source == 'initial'
+        && request.resource.data.source in ['initial', 'unit']
 
         && unitAfter.propertyId
            == request.resource.data.propertyId
@@ -3614,91 +3178,89 @@ service cloud.firestore {
     }
 
 
-     // ============================================================
-     // MONTHLY RENT — CREATE VALIDATION
-     // ============================================================
+    // ============================================================
+    // MONTHLY RENT — CREATE VALIDATION
+    // ============================================================
 
-     function isValidMonthlyRentCreate() {
+    function isValidMonthlyRentCreate() {
 
-       let property =
-         get(
-           /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
-         ).data;
+      let property =
+        get(
+          /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+        ).data;
 
-       let unit =
-         get(
-           /databases/$(database)/documents/units/$(request.resource.data.unitId)
-         ).data;
+      let unit =
+        get(
+          /databases/$(database)/documents/units/$(request.resource.data.unitId)
+        ).data;
 
-       let tenant =
-         get(
-           /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
-         ).data;
+      let tenant =
+        get(
+          /databases/$(database)/documents/tenants/$(request.resource.data.tenantId)
+        ).data;
 
-       let rentRate =
-         get(
-           /databases/$(database)/documents/rentRates/$(request.resource.data.rentRateId)
-         ).data;
+      let rentRate =
+        get(
+          /databases/$(database)/documents/rentRates/$(request.resource.data.rentRateId)
+        ).data;
 
-       return
+      return
 
-         request.resource.data.ownerId == request.auth.uid
-         && property.ownerId == request.auth.uid
-         && tenant.ownerId == request.auth.uid
-         && rentRate.ownerId == request.auth.uid
+        request.resource.data.ownerId == request.auth.uid
+        && property.ownerId == request.auth.uid
+        && tenant.ownerId == request.auth.uid
+        && rentRate.ownerId == request.auth.uid
 
-         && tenant.propertyId == request.resource.data.propertyId
-         && unit.propertyId == request.resource.data.propertyId
-         && rentRate.propertyId == request.resource.data.propertyId
-         && tenant.unitId == request.resource.data.unitId
-         && rentRate.unitId == request.resource.data.unitId
+        && tenant.propertyId == request.resource.data.propertyId
+        && unit.propertyId == request.resource.data.propertyId
+        && rentRate.propertyId == request.resource.data.propertyId
+        && tenant.unitId == request.resource.data.unitId
+        && rentRate.unitId == request.resource.data.unitId
 
-         && unit.status == 'occupied'
-         && tenant.status == 'active'
+        && unit.status == 'occupied'
+        && tenant.status == 'active'
 
-         // tenantUserId হ্যান্ডলিং (লিঙ্কড বা আনলিঙ্কড উভয় টেন্যান্টের জন্য)
-         && (
-           (
-             tenant.userId is string
-             && tenant.userId != ''
-             && unit.tenantUserId == tenant.userId
-             && request.resource.data.tenantUserId == tenant.userId
-           )
-           ||
-           (
-             (!tenant.keys().hasAny(['userId']) || tenant.userId == null || tenant.userId == '')
-             && request.resource.data.tenantUserId == null
-           )
-         )
+        && (
+          (
+            tenant.userId is string
+            && tenant.userId != ''
+            && unit.tenantUserId == tenant.userId
+            && request.resource.data.tenantUserId == tenant.userId
+          )
+          ||
+          (
+            (!tenant.keys().hasAny(['userId']) || tenant.userId == null || tenant.userId == '')
+            && request.resource.data.tenantUserId == null
+          )
+        )
 
-         && rentRate.effectiveFrom <= request.resource.data.billingPeriodStart
-         && (
-           rentRate.effectiveTo == null
-           ||
-           request.resource.data.billingPeriodStart < rentRate.effectiveTo
-         )
+        && rentRate.effectiveFrom <= request.resource.data.billingPeriodStart
+        && (
+          rentRate.effectiveTo == null
+          ||
+          request.resource.data.billingPeriodStart < rentRate.effectiveTo
+        )
 
-         && request.resource.data.rentRateId is string
-         && request.resource.data.rentRateId != ''
+        && request.resource.data.rentRateId is string
+        && request.resource.data.rentRateId != ''
 
-         && request.resource.data.amount is number
-         && request.resource.data.amount > 0
-         // প্রোরোটেড ভাড়ার ক্ষেত্রে amount যেন সর্বোচ্চ rentRate.amount এর সমান বা কম হয়
-         && request.resource.data.amount <= rentRate.amount
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.amount <= rentRate.amount
 
-         && request.resource.data.billingPeriodStart is timestamp
-         && request.resource.data.billingPeriodEnd is timestamp
-         && request.resource.data.billingPeriodEnd > request.resource.data.billingPeriodStart
+        && request.resource.data.billingPeriodStart is timestamp
+        && request.resource.data.billingPeriodEnd is timestamp
+        && request.resource.data.billingPeriodEnd > request.resource.data.billingPeriodStart
 
-         && request.resource.data.dueDate is timestamp
-         && request.resource.data.dueDate >= request.resource.data.billingPeriodStart
+        && request.resource.data.dueDate is timestamp
+        && request.resource.data.dueDate >= request.resource.data.billingPeriodStart
 
-         && request.resource.data.status == 'unpaid'
-         && request.resource.data.createdAt is timestamp
-         && request.resource.data.updatedAt is timestamp
-         && request.resource.data.updatedAt == request.resource.data.createdAt
-         && request.resource.data.createdAt <= request.time;
-     }
+        && request.resource.data.status == 'unpaid'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedAt == request.resource.data.createdAt
+        && request.resource.data.createdAt <= request.time;
+    }
 
 
     // ============================================================
