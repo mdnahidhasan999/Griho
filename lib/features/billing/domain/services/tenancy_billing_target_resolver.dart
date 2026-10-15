@@ -1,5 +1,6 @@
+import 'package:griho/features/tenants/domain/entities/tenancy_billing_target.dart';
+
 import '../../../tenants/domain/entities/repositories/tenancy_history_repository.dart';
-import '../../../tenants/domain/entities/tenancy_billing_target.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 
 class TenancyBillingTargetResolver {
