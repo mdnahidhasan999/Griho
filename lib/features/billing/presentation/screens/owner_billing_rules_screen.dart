@@ -30,6 +30,10 @@ class _OwnerBillingRulesScreenState
   String? _selectedPropertyId;
   late final TabController _tabController;
 
+  // Tracks properties that have already been auto-synced in this session
+  final Set<String> _autoSyncedProperties = <String>{};
+  bool _isAutoSyncing = false;
+
   @override
   void initState() {
     super.initState();
@@ -77,11 +81,13 @@ class _OwnerBillingRulesScreenState
             final propertyId = _selectedPropertyId;
             if (propertyId != null && propertyId.isNotEmpty) {
               final ownerId =
-                  ref
-                      .read(currentUserProfileProvider)
-                      .value
-                      ?.uid ?? '';
+                  ref.read(currentUserProfileProvider).value?.uid ?? '';
+              _autoSyncedProperties.remove(propertyId);
               _invalidatePropertyBillingData(
+                ownerId: ownerId,
+                propertyId: propertyId,
+              );
+              _triggerAutoSyncIfNeeded(
                 ownerId: ownerId,
                 propertyId: propertyId,
               );
@@ -96,13 +102,12 @@ class _OwnerBillingRulesScreenState
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) =>
-            _ErrorView(
-              message: 'Unable to load your profile.',
-              onRetry: () {
-                ref.invalidate(currentUserProfileProvider);
-              },
-            ),
+        error: (error, stackTrace) => _ErrorView(
+          message: 'Unable to load your profile.',
+          onRetry: () {
+            ref.invalidate(currentUserProfileProvider);
+          },
+        ),
         data: (profile) {
           if (profile == null) {
             return _ErrorView(
@@ -120,25 +125,24 @@ class _OwnerBillingRulesScreenState
 
           return propertiesAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) =>
-                _ErrorView(
-                  message: 'Unable to load properties.',
-                  onRetry: () {
-                    ref.invalidate(currentOwnerPropertiesProvider);
-                  },
-                ),
+            error: (error, stackTrace) => _ErrorView(
+              message: 'Unable to load properties.',
+              onRetry: () {
+                ref.invalidate(currentOwnerPropertiesProvider);
+              },
+            ),
             data: (properties) {
               if (properties.isEmpty) {
                 return const _EmptyState(
                   icon: Icons.apartment_rounded,
                   title: 'No properties available',
                   message:
-                  'Add a property before creating and assigning billing rules.',
+                      'Add a property before creating and assigning billing rules.',
                 );
               }
 
               final selectedPropertyId =
-              properties.any((p) => p.id == _selectedPropertyId)
+                  properties.any((p) => p.id == _selectedPropertyId)
                   ? _selectedPropertyId!
                   : properties.first.id;
 
@@ -150,6 +154,20 @@ class _OwnerBillingRulesScreenState
                   setState(() {
                     _selectedPropertyId = selectedPropertyId;
                   });
+                  _triggerAutoSyncIfNeeded(
+                    ownerId: ownerId,
+                    propertyId: selectedPropertyId,
+                  );
+                });
+              } else {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) {
+                    return;
+                  }
+                  _triggerAutoSyncIfNeeded(
+                    ownerId: ownerId,
+                    propertyId: selectedPropertyId,
+                  );
                 });
               }
 
@@ -160,6 +178,7 @@ class _OwnerBillingRulesScreenState
                     ownerId: ownerId,
                     propertyId: selectedPropertyId,
                     properties: properties,
+                    isAutoSyncing: _isAutoSyncing,
                     onPropertyChanged: (value) {
                       if (value == null || value.isEmpty) {
                         return;
@@ -167,9 +186,20 @@ class _OwnerBillingRulesScreenState
                       setState(() {
                         _selectedPropertyId = value;
                       });
+                      _triggerAutoSyncIfNeeded(
+                        ownerId: ownerId,
+                        propertyId: value,
+                      );
                     },
                     onGenerateBills: () {
-                      _generateMonthlyCharges(
+                      _generateMonthlyChargesManually(
+                        ownerId: ownerId,
+                        propertyId: selectedPropertyId,
+                      );
+                    },
+                    onForceResync: () {
+                      _autoSyncedProperties.remove(selectedPropertyId);
+                      _triggerAutoSyncIfNeeded(
                         ownerId: ownerId,
                         propertyId: selectedPropertyId,
                       );
@@ -180,6 +210,7 @@ class _OwnerBillingRulesScreenState
                     propertyId: selectedPropertyId,
                     properties: properties,
                     selectedPropertyId: selectedPropertyId,
+                    isAutoSyncing: _isAutoSyncing,
                     onPropertyChanged: (value) {
                       if (value == null || value.isEmpty) {
                         return;
@@ -187,6 +218,10 @@ class _OwnerBillingRulesScreenState
                       setState(() {
                         _selectedPropertyId = value;
                       });
+                      _triggerAutoSyncIfNeeded(
+                        ownerId: ownerId,
+                        propertyId: value,
+                      );
                     },
                   ),
                 ],
@@ -207,13 +242,114 @@ class _OwnerBillingRulesScreenState
     );
     ref.invalidate(
       propertyMonthlyBillHistoryProvider((
-      ownerId: ownerId,
-      propertyId: propertyId,
+        ownerId: ownerId,
+        propertyId: propertyId,
       )),
     );
   }
 
-  Future<void> _generateMonthlyCharges({
+  Future<void> _triggerAutoSyncIfNeeded({
+    required String ownerId,
+    required String propertyId,
+  }) async {
+    final now = DateTime.now();
+    final billingPeriodStart = DateTime(now.year, now.month, 1);
+
+    final controller = ref.read(
+      generateMonthlyChargesControllerProvider.notifier,
+    );
+
+    // যদি এই সেশনে বা এই মাসে একবার চেক হয়ে থাকে, তাহলে আর কখনোই পুনরায় কল হবে না
+    if (_isAutoSyncing ||
+        _autoSyncedProperties.contains(propertyId) ||
+        controller.isPropertySyncedForMonth(
+          ownerId: ownerId,
+          propertyId: propertyId,
+          billingPeriodStart: billingPeriodStart,
+        )) {
+      return;
+    }
+
+    // শুরুতেই লক করে দেওয়া হলো যাতে রুল না থাকলেও ইনফিনিট লুপ না হয়
+    _autoSyncedProperties.add(propertyId);
+
+    setState(() {
+      _isAutoSyncing = true;
+    });
+
+    try {
+      final units = await ref.read(propertyUnitsProvider(propertyId).future);
+      final tenants = await ref.read(
+        propertyTenantsProvider(propertyId).future,
+      );
+
+      if (!mounted || units.isEmpty || tenants.isEmpty) {
+        return;
+      }
+
+      final billingPeriodEnd = DateTime(now.year, now.month + 1, 1);
+      final dueYear = now.month == 12 ? now.year + 1 : now.year;
+      final dueMonth = now.month == 12 ? 1 : now.month + 1;
+      final defaultDueDate = DateTime(dueYear, dueMonth, 10);
+
+      final tenancyResolver = ref.read(tenancyBillingTargetResolverProvider);
+      final tenancyTargets = await tenancyResolver.resolve(
+        ownerId: ownerId,
+        propertyId: propertyId,
+        billingPeriodStart: billingPeriodStart,
+        billingPeriodEnd: billingPeriodEnd,
+        currentTenants: tenants,
+        units: [
+          for (final unit in units)
+            (unitId: unit.id.trim(), floorId: unit.floorNumber.toString()),
+        ],
+      );
+
+      if (!mounted || tenancyTargets.isEmpty) {
+        return;
+      }
+
+      final result = await controller.generate(
+        ownerId: ownerId,
+        propertyId: propertyId,
+        tenancyTargets: tenancyTargets,
+        billingPeriodStart: billingPeriodStart,
+        billingPeriodEnd: billingPeriodEnd,
+        dueDate: defaultDueDate,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      final rentCount = result.generatedRents.length;
+      final billCount = result.generatedBills.length;
+
+      if (rentCount > 0 || billCount > 0) {
+        _invalidatePropertyBillingData(
+          ownerId: ownerId,
+          propertyId: propertyId,
+        );
+        _showMessage(
+          'Auto-synced ${_formatMonth(billingPeriodStart)}: $rentCount rent & $billCount utility bill(s) added.',
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('AUTO BILLING SYNC ERROR: $error\n$stackTrace');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAutoSyncing = false;
+        });
+      }
+    }
+  }
+
+  // ==========================================================================
+  // MANUAL BILL GENERATION (FOR CUSTOM MONTHS / DUE DATES)
+  // ==========================================================================
+
+  Future<void> _generateMonthlyChargesManually({
     required String ownerId,
     required String propertyId,
   }) async {
@@ -289,7 +425,7 @@ class _OwnerBillingRulesScreenState
 
       if (tenancyTargets.isEmpty) {
         _showMessage(
-          'No tenancy period found for ${_formatMonth(billingPeriodStart)}.',
+          'No active tenancy found for ${_formatMonth(billingPeriodStart)}.',
         );
         return;
       }
@@ -317,14 +453,13 @@ class _OwnerBillingRulesScreenState
 
       if (rentCount == 0 && billCount == 0) {
         _showMessage(
-          'Invoices are already up to date for ${_formatMonth(
-              billingPeriodStart)}.',
+          'Invoices are already up to date for ${_formatMonth(billingPeriodStart)}.',
         );
         return;
       }
 
       _showMessage(
-        '$rentCount rent and $billCount charge bill(s) generated successfully.',
+        '$rentCount rent and $billCount utility bill(s) generated successfully.',
       );
     } catch (error, stackTrace) {
       debugPrint('BILLING GENERATION ERROR: $error\n$stackTrace');
@@ -371,31 +506,32 @@ class _OwnerBillingRulesScreenState
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 }
 
 // ============================================================================
-// RULES TAB
+// RULES TAB (MONTH-AWARE AUTO-RENEWING FIXED & VARIABLE RULES)
 // ============================================================================
 
 class _RulesTab extends ConsumerWidget {
   final String ownerId;
   final String propertyId;
   final List<dynamic> properties;
+  final bool isAutoSyncing;
   final ValueChanged<String?> onPropertyChanged;
   final VoidCallback onGenerateBills;
+  final VoidCallback onForceResync;
 
   const _RulesTab({
     required this.ownerId,
     required this.propertyId,
     required this.properties,
+    required this.isAutoSyncing,
     required this.onPropertyChanged,
     required this.onGenerateBills,
+    required this.onForceResync,
   });
 
   @override
@@ -406,8 +542,8 @@ class _RulesTab extends ConsumerWidget {
     );
     final billHistoryAsync = ref.watch(
       propertyMonthlyBillHistoryProvider((
-      ownerId: ownerId,
-      propertyId: propertyId,
+        ownerId: ownerId,
+        propertyId: propertyId,
       )),
     );
 
@@ -415,21 +551,77 @@ class _RulesTab extends ConsumerWidget {
       onRefresh: () async {
         ref.invalidate(
           propertyBillingRulesProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+            ownerId: ownerId,
+            propertyId: propertyId,
           )),
         );
         ref.invalidate(
           propertyMonthlyBillHistoryProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+            ownerId: ownerId,
+            propertyId: propertyId,
           )),
         );
+        onForceResync();
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         children: [
+          // Auto-Sync Status Banner
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                if (isAutoSyncing)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Icon(
+                    Icons.autorenew_rounded,
+                    color: theme.colorScheme.primary,
+                    size: 22,
+                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isAutoSyncing
+                            ? 'Syncing Current Month Charges...'
+                            : 'Auto-Billing Active',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Monthly rent, fixed utility rules, and current month variable bills are automatically generated and updated.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
           // Property Selector Card
           Container(
             padding: const EdgeInsets.all(16),
@@ -472,15 +664,15 @@ class _RulesTab extends ConsumerWidget {
 
           const SizedBox(height: 14),
 
-          // Primary Invoice Generation Trigger
+          // Manual Custom Month Invoice Trigger
           SizedBox(
             width: double.infinity,
-            height: 50,
-            child: FilledButton.icon(
+            height: 48,
+            child: OutlinedButton.icon(
               onPressed: onGenerateBills,
-              icon: const Icon(Icons.flash_on_rounded, size: 20),
+              icon: const Icon(Icons.calendar_month_outlined, size: 18),
               label: const Text(
-                'Generate Monthly Invoices',
+                'Generate for Custom Month / Due Date',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -490,45 +682,84 @@ class _RulesTab extends ConsumerWidget {
 
           // Rules Stream
           rulesAsync.when(
-            loading: () =>
-            const Center(
+            loading: () => const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 32),
                 child: CircularProgressIndicator(),
               ),
             ),
-            error: (err, _) =>
-                _ErrorCard(
-                  message: 'Unable to load billing rules for this property.',
-                  onRetry: () {
-                    ref.invalidate(
-                      propertyBillingRulesProvider((
-                      ownerId: ownerId,
-                      propertyId: propertyId,
-                      )),
-                    );
-                  },
-                ),
+            error: (err, _) => _ErrorCard(
+              message: 'Unable to load billing rules for this property.',
+              onRetry: () {
+                ref.invalidate(
+                  propertyBillingRulesProvider((
+                    ownerId: ownerId,
+                    propertyId: propertyId,
+                  )),
+                );
+              },
+            ),
             data: (rules) {
               if (rules.isEmpty) {
                 return const _EmptyState(
                   icon: Icons.receipt_long_outlined,
                   title: 'No billing rules configured',
                   message:
-                  'Create billing rules to automatically generate recurring utilities and service charges.',
+                      'Create billing rules to automatically generate recurring utilities and service charges every month.',
                 );
               }
 
               final bills = billHistoryAsync.value ?? [];
+              final now = DateTime.now();
+              final currentMonthStart = DateTime(now.year, now.month, 1);
 
-              final pendingRules = rules.where((rule) {
-                final hasBills = bills.any((b) => b.sourceRuleId == rule.id);
-                return !hasBills;
+              // Filter bills generated specifically for the current month
+              final currentMonthBills = bills.where((b) {
+                return b.billingPeriodStart.year == currentMonthStart.year &&
+                    b.billingPeriodStart.month == currentMonthStart.month;
               }).toList();
 
-              final processedRules = rules.where((rule) {
-                final hasBills = bills.any((b) => b.sourceRuleId == rule.id);
-                return hasBills;
+              // Active rules applicable to the current month
+              final activeCurrentMonthRules = rules.where((rule) {
+                if (!rule.isActive) {
+                  return false;
+                }
+                final ruleStart = DateTime(
+                  rule.effectiveFrom.year,
+                  rule.effectiveFrom.month,
+                  1,
+                );
+                final isStarted = !currentMonthStart.isBefore(ruleStart);
+
+                final isNotEnded =
+                    rule.effectiveTo == null ||
+                    currentMonthStart.isBefore(
+                      DateTime(
+                        rule.effectiveTo!.year,
+                        rule.effectiveTo!.month,
+                        1,
+                      ),
+                    );
+
+                return isStarted && isNotEnded;
+              }).toList();
+
+              // Rules waiting to be generated for this month
+              final pendingThisMonthRules = activeCurrentMonthRules.where((
+                rule,
+              ) {
+                final generatedForCurrentMonth = currentMonthBills.any(
+                  (b) => b.sourceRuleId == rule.id,
+                );
+                return !generatedForCurrentMonth;
+              }).toList();
+
+              // Rules already synced for this month or archived/scheduled
+              final syncedOrOtherRules = rules.where((rule) {
+                final isPending = pendingThisMonthRules.any(
+                  (p) => p.id == rule.id,
+                );
+                return !isPending;
               }).toList();
 
               return Column(
@@ -537,7 +768,7 @@ class _RulesTab extends ConsumerWidget {
                   Row(
                     children: [
                       Text(
-                        'Ready to Generate',
+                        'Pending This Month',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
@@ -553,7 +784,7 @@ class _RulesTab extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '${pendingRules.length}',
+                          '${pendingThisMonthRules.length}',
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: theme.colorScheme.onPrimaryContainer,
                             fontWeight: FontWeight.w800,
@@ -563,7 +794,7 @@ class _RulesTab extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  if (pendingRules.isEmpty)
+                  if (pendingThisMonthRules.isEmpty)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -574,52 +805,60 @@ class _RulesTab extends ConsumerWidget {
                           color: theme.colorScheme.outlineVariant,
                         ),
                       ),
-                      child: Text(
-                        'All rules are currently processed for recent billing cycles.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline_rounded,
+                            color: Colors.green,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'All active fixed and variable rules for this month have been synced to invoices.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     )
                   else
-                    for (final rule in pendingRules) ...[
+                    for (final rule in pendingThisMonthRules) ...[
                       _BillingRuleCard(
                         rule: rule,
                         ownerId: ownerId,
-                        generatedBillCount: 0,
+                        generatedBillCount: bills
+                            .where((b) => b.sourceRuleId == rule.id)
+                            .length,
+                        isSyncedThisMonth: false,
                       ),
                       const SizedBox(height: 12),
                     ],
 
-                  if (processedRules.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    Theme(
-                      data: theme.copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        initiallyExpanded: false,
-                        tilePadding: EdgeInsets.zero,
-                        title: Text(
-                          'Previously Processed Rules (${processedRules
-                              .length})',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        children: [
-                          for (final rule in processedRules) ...[
-                            _BillingRuleCard(
-                              rule: rule,
-                              ownerId: ownerId,
-                              generatedBillCount: bills
-                                  .where((b) => b.sourceRuleId == rule.id)
-                                  .length,
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                        ],
+                  if (syncedOrOtherRules.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    Text(
+                      'Active & Synced Rules (${syncedOrOtherRules.length})',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    for (final rule in syncedOrOtherRules) ...[
+                      _BillingRuleCard(
+                        rule: rule,
+                        ownerId: ownerId,
+                        generatedBillCount: bills
+                            .where((b) => b.sourceRuleId == rule.id)
+                            .length,
+                        isSyncedThisMonth: currentMonthBills.any(
+                          (b) => b.sourceRuleId == rule.id,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                   ],
                 ],
               );
@@ -640,6 +879,7 @@ class _GeneratedBillsTab extends ConsumerWidget {
   final String propertyId;
   final List<dynamic> properties;
   final String selectedPropertyId;
+  final bool isAutoSyncing;
   final ValueChanged<String?> onPropertyChanged;
 
   const _GeneratedBillsTab({
@@ -647,6 +887,7 @@ class _GeneratedBillsTab extends ConsumerWidget {
     required this.propertyId,
     required this.properties,
     required this.selectedPropertyId,
+    required this.isAutoSyncing,
     required this.onPropertyChanged,
   });
 
@@ -655,8 +896,8 @@ class _GeneratedBillsTab extends ConsumerWidget {
     final theme = Theme.of(context);
     final billsAsync = ref.watch(
       propertyMonthlyBillHistoryProvider((
-      ownerId: ownerId,
-      propertyId: propertyId,
+        ownerId: ownerId,
+        propertyId: propertyId,
       )),
     );
     final unitsAsync = ref.watch(propertyUnitsProvider(propertyId));
@@ -666,8 +907,8 @@ class _GeneratedBillsTab extends ConsumerWidget {
       onRefresh: () async {
         ref.invalidate(
           propertyMonthlyBillHistoryProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+            ownerId: ownerId,
+            propertyId: propertyId,
           )),
         );
       },
@@ -675,6 +916,11 @@ class _GeneratedBillsTab extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         children: [
+          if (isAutoSyncing) ...[
+            const LinearProgressIndicator(),
+            const SizedBox(height: 12),
+          ],
+
           // Property Selector Card
           Container(
             padding: const EdgeInsets.all(16),
@@ -718,32 +964,30 @@ class _GeneratedBillsTab extends ConsumerWidget {
           const SizedBox(height: 20),
 
           billsAsync.when(
-            loading: () =>
-            const Center(
+            loading: () => const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 32),
                 child: CircularProgressIndicator(),
               ),
             ),
-            error: (error, _) =>
-                _ErrorCard(
-                  message: 'Unable to load invoice batches for this property.',
-                  onRetry: () {
-                    ref.invalidate(
-                      propertyMonthlyBillHistoryProvider((
-                      ownerId: ownerId,
-                      propertyId: propertyId,
-                      )),
-                    );
-                  },
-                ),
+            error: (error, _) => _ErrorCard(
+              message: 'Unable to load invoice batches for this property.',
+              onRetry: () {
+                ref.invalidate(
+                  propertyMonthlyBillHistoryProvider((
+                    ownerId: ownerId,
+                    propertyId: propertyId,
+                  )),
+                );
+              },
+            ),
             data: (bills) {
               if (bills.isEmpty) {
                 return const _EmptyState(
                   icon: Icons.receipt_long_outlined,
                   title: 'No invoices generated yet',
                   message:
-                  'Use the "Generate Monthly Invoices" button in the Rules tab to create charges.',
+                      'Invoices are automatically generated when active tenants and billing rules are present.',
                 );
               }
 
@@ -753,8 +997,7 @@ class _GeneratedBillsTab extends ConsumerWidget {
               final Map<String, List<MonthlyBill>> monthlyGroups = {};
               for (final bill in bills) {
                 final key =
-                    '${bill.billingPeriodStart.year}-${bill.billingPeriodStart
-                    .month.toString().padLeft(2, '0')}';
+                    '${bill.billingPeriodStart.year}-${bill.billingPeriodStart.month.toString().padLeft(2, '0')}';
                 monthlyGroups.putIfAbsent(key, () => []).add(bill);
               }
 
@@ -780,7 +1023,7 @@ class _GeneratedBillsTab extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '${monthlyGroups.length} Batch(es)',
+                          '${monthlyGroups.length} Month(s)',
                           style: theme.textTheme.labelSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -985,7 +1228,7 @@ class _MonthBatchCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'Individual Invoices (${bills.length})',
+                            'Unit & Tenant Charges (${bills.length})',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -1042,19 +1285,16 @@ class _DetailedBillItem extends StatelessWidget {
   });
 
   String _resolveTargetLabel() {
-    final matchedUnit = units
-        .where((u) => u.id == bill.unitId)
-        .firstOrNull;
+    final matchedUnit = units.where((u) => u.id == bill.unitId).firstOrNull;
     final unitText = matchedUnit != null
         ? (matchedUnit.name?.isNotEmpty == true
-        ? '${matchedUnit.name} (Unit ${matchedUnit.unitNumber})'
-        : 'Unit ${matchedUnit.unitNumber}')
+              ? '${matchedUnit.name} (Unit ${matchedUnit.unitNumber})'
+              : 'Unit ${matchedUnit.unitNumber}')
         : 'Unit ${bill.unitId}';
 
-    final matchedTenant =
-        tenants
-            .where((t) => t.id == bill.tenantId)
-            .firstOrNull;
+    final matchedTenant = tenants
+        .where((t) => t.id == bill.tenantId)
+        .firstOrNull;
     final tenantText = matchedTenant != null ? ' • ${matchedTenant.name}' : '';
 
     return '$unitText$tenantText';
@@ -1174,11 +1414,13 @@ class _BillingRuleCard extends ConsumerWidget {
   final BillingRule rule;
   final String ownerId;
   final int generatedBillCount;
+  final bool isSyncedThisMonth;
 
   const _BillingRuleCard({
     required this.rule,
     required this.ownerId,
     required this.generatedBillCount,
+    required this.isSyncedThisMonth,
   });
 
   @override
@@ -1203,8 +1445,8 @@ class _BillingRuleCard extends ConsumerWidget {
           if (result == true) {
             ref.invalidate(
               propertyBillingRulesProvider((
-              ownerId: ownerId,
-              propertyId: rule.propertyId,
+                ownerId: ownerId,
+                propertyId: rule.propertyId,
               )),
             );
           }
@@ -1235,9 +1477,7 @@ class _BillingRuleCard extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          rule.title
-                              ?.trim()
-                              .isNotEmpty == true
+                          rule.title?.trim().isNotEmpty == true
                               ? rule.title!
                               : chargeName,
                           style: theme.textTheme.titleMedium?.copyWith(
@@ -1273,10 +1513,10 @@ class _BillingRuleCard extends ConsumerWidget {
                   Expanded(
                     child: _InfoItem(
                       icon: Icons.repeat_rounded,
-                      label: 'Type',
+                      label: 'Recurrence',
                       value: rule.valueType == BillingValueType.fixed
-                          ? 'Fixed'
-                          : 'Variable',
+                          ? 'Fixed (Monthly)'
+                          : 'Variable (1 Month)',
                     ),
                   ),
                 ],
@@ -1294,9 +1534,9 @@ class _BillingRuleCard extends ConsumerWidget {
                   Expanded(
                     child: _InfoItem(
                       icon: Icons.calendar_month_outlined,
-                      label: 'Effective',
+                      label: 'Effective From',
                       value:
-                      '${rule.effectiveFrom.month}/${rule.effectiveFrom.year}',
+                          '${rule.effectiveFrom.month}/${rule.effectiveFrom.year}',
                     ),
                   ),
                 ],
@@ -1309,26 +1549,37 @@ class _BillingRuleCard extends ConsumerWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.5,
-                  ),
+                  color: isSyncedThisMonth
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.5,
+                        ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      Icons.info_outline_rounded,
+                      isSyncedThisMonth
+                          ? Icons.verified_rounded
+                          : Icons.info_outline_rounded,
                       size: 16,
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: isSyncedThisMonth
+                          ? Colors.green.shade700
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        generatedBillCount == 0
-                            ? 'No charges generated yet'
-                            : '$generatedBillCount invoice(s) generated',
+                        isSyncedThisMonth
+                            ? 'Synced for current month ($generatedBillCount total bills)'
+                            : generatedBillCount == 0
+                            ? 'Waiting for cycle sync'
+                            : '$generatedBillCount historical bill(s) generated',
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
+                          color: isSyncedThisMonth
+                              ? Colors.green.shade800
+                              : theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -1352,11 +1603,25 @@ class _BillingRuleCard extends ConsumerWidget {
       return _RuleStatus.inactive;
     }
     final now = DateTime.now();
-    if (now.isBefore(rule.effectiveFrom)) {
+    final currentMonthStart = DateTime(now.year, now.month, 1);
+    final effectiveStart = DateTime(
+      rule.effectiveFrom.year,
+      rule.effectiveFrom.month,
+      1,
+    );
+
+    if (currentMonthStart.isBefore(effectiveStart)) {
       return _RuleStatus.scheduled;
     }
-    if (rule.effectiveTo != null && !now.isBefore(rule.effectiveTo!)) {
-      return _RuleStatus.historical;
+    if (rule.effectiveTo != null) {
+      final effectiveEnd = DateTime(
+        rule.effectiveTo!.year,
+        rule.effectiveTo!.month,
+        1,
+      );
+      if (!currentMonthStart.isBefore(effectiveEnd)) {
+        return _RuleStatus.historical;
+      }
     }
     return _RuleStatus.active;
   }
@@ -1419,7 +1684,7 @@ class _RuleStatusChip extends StatelessWidget {
         icon = Icons.schedule_rounded;
         break;
       case _RuleStatus.historical:
-        label = 'Historical';
+        label = 'Expired';
         icon = Icons.history_rounded;
         break;
       case _RuleStatus.inactive:
@@ -1620,15 +1885,9 @@ class _ErrorCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme
-            .of(context)
-            .colorScheme
-            .surfaceContainerLow,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme
-            .of(context)
-            .colorScheme
-            .outlineVariant),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [

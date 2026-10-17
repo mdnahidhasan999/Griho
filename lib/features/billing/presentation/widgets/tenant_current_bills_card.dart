@@ -1,554 +1,438 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../rents/presentation/providers/rent_rate_provider.dart';
+import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
+import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/monthly_bill.dart';
-import '../providers/monthly_bill_provider.dart';
 
 class TenantCurrentBillsCard extends ConsumerWidget {
   const TenantCurrentBillsCard({super.key});
 
+  String _formatMonthYear(DateTime date) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    // Fixed space between month and year
+    return '${months[date.month - 1]}${date.year}';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final now = DateTime.now();
+    final theme = Theme.of(context);
+    final periodStart = ref.watch(currentBillingPeriodStartProvider);
+    final billsAsync = ref.watch(currentTenantMonthlyBillsProvider);
+    final tenantAsync = ref.watch(currentTenantProvider);
+    final unitAsync = ref.watch(currentTenantUnitProvider);
 
-    final billingPeriodStart = DateTime(
-      now.year,
-      now.month,
-      1,
-    );
+    final unit = unitAsync.value;
+    final tenant = tenantAsync.value;
+    final unitId = tenant?.unitId.trim() ?? '';
 
-    final tenantUserId =
-    FirebaseAuth.instance.currentUser?.uid.trim();
+    final rentRateAsync = unitId.isNotEmpty
+        ? ref.watch(currentTenantRentRateProvider(unitId))
+        : null;
 
-    if (tenantUserId == null || tenantUserId.isEmpty) {
-      return const Card(
-        elevation: 0,
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: _BillsErrorMessage(
-            message: 'You are not authenticated.',
-          ),
-        ),
-      );
-    }
+    final unitLabel = unit != null
+        ? (unit.name?.trim().isNotEmpty == true
+              ? '${unit.name} (Unit${unit.unitNumber})'
+              : 'Unit ${unit.unitNumber} • Floor ${unit.floorNumber}')
+        : 'Assigned Unit';
 
-    final billsProvider =
-    monthlyBillsByTenantAndPeriodProvider(
-      (
-      tenantUserId: tenantUserId,
-      billingPeriodStart: billingPeriodStart,
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
-    );
-
-    final billsAsync = ref.watch(billsProvider);
-
-    return Card(
-      elevation: 0,
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: billsAsync.when(
-          loading: () => const _BillsLoading(),
-          error: (error, stackTrace) {
-            return _BillsError(
-              onRetry: () {
-                ref.invalidate(billsProvider);
-              },
-            );
-          },
-          data: (bills) {
-            return _BillsContent(
-              bills: bills,
-              billingPeriodStart: billingPeriodStart,
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// BILLS CONTENT
-// ============================================================================
-
-class _BillsContent extends StatelessWidget {
-  final List<MonthlyBill> bills;
-  final DateTime billingPeriodStart;
-
-  const _BillsContent({
-    required this.bills,
-    required this.billingPeriodStart,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    final totalAmount = bills.fold<double>(
-      0,
-          (total, bill) => total + bill.amount,
-    );
-
-    if (bills.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _BillsHeader(
-            billingPeriodStart: billingPeriodStart,
-            totalAmount: 0,
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 28),
+            child: Center(child: CircularProgressIndicator()),
           ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 20,
-            ),
-            decoration: BoxDecoration(
-              color:
-              theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.receipt_long_outlined,
-                  size: 34,
-                  color:
-                  theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'No bills for this month',
-                  style:
-                  theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Your monthly bills will appear here when they are generated.',
-                  textAlign: TextAlign.center,
-                  style:
-                  theme.textTheme.bodySmall?.copyWith(
-                    color:
-                    theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _BillsHeader(
-          billingPeriodStart: billingPeriodStart,
-          totalAmount: totalAmount,
-        ),
-        const SizedBox(height: 12),
-        for (var index = 0; index < bills.length; index++) ...[
-          _BillItem(
-            bill: bills[index],
-          ),
-          if (index != bills.length - 1)
-            const Divider(height: 20),
-        ],
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// HEADER
-// ============================================================================
-
-class _BillsHeader extends StatelessWidget {
-  final DateTime billingPeriodStart;
-  final double totalAmount;
-
-  const _BillsHeader({
-    required this.billingPeriodStart,
-    required this.totalAmount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Row(
-      children: [
-        CircleAvatar(
-          backgroundColor:
-          theme.colorScheme.primaryContainer,
-          child: Icon(
-            Icons.receipt_long_outlined,
-            color:
-            theme.colorScheme.onPrimaryContainer,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+          error: (error, _) => Column(
             children: [
-              Text(
-                'Current Bills',
-                style:
-                theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.redAccent,
+                size: 36,
               ),
-              const SizedBox(height: 2),
-              Text(
-                _formatMonth(billingPeriodStart),
-                style:
-                theme.textTheme.bodySmall?.copyWith(
-                  color:
-                  theme.colorScheme.onSurfaceVariant,
-                ),
+              const SizedBox(height: 8),
+              const Text(
+                'Unable to load current month statement.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () {
+                  ref.invalidate(currentTenantMonthlyBillsProvider);
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
               ),
             ],
           ),
+          data: (bills) {
+            final activeRentAmount = rentRateAsync?.value?.amount;
+
+            final hasRentInBills = bills.any(
+              (b) => b.type == MonthlyBillType.rent,
+            );
+
+            final unbilledRentAmount =
+                (!hasRentInBills &&
+                    activeRentAmount != null &&
+                    activeRentAmount > 0)
+                ? activeRentAmount
+                : 0.0;
+
+            final billedTotal = bills.fold<double>(
+              0,
+              (sum, item) => sum + item.amount,
+            );
+            final totalPayable = billedTotal + unbilledRentAmount;
+
+            final unpaidBilledTotal = bills
+                .where((b) => b.status != MonthlyBillStatus.paid)
+                .fold<double>(0, (sum, item) => sum + item.amount);
+            final totalDue = unpaidBilledTotal + unbilledRentAmount;
+
+            final isAllPaid = totalPayable > 0 && totalDue == 0;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Top Cycle & Unit Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.receipt_long_rounded,
+                              size: 20,
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${_formatMonthYear(periodStart)} Statement',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                Text(
+                                  unitLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isAllPaid
+                            ? Colors.green.withValues(alpha: 0.14)
+                            : Colors.amber.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        isAllPaid
+                            ? 'All Paid'
+                            : totalPayable == 0
+                            ? 'No Dues'
+                            : 'Due',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: isAllPaid
+                              ? Colors.green.shade800
+                              : Colors.amber.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // 2. Total Summary Banner
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Total Monthly Charges',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '৳ ${_formatAmount(totalPayable)}',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Remaining Due',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '৳ ${_formatAmount(totalDue)}',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: totalDue > 0
+                                  ? theme.colorScheme.error
+                                  : Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+
+                // 3. Itemized Unit Rent & Utility Breakdown
+                Text(
+                  'Unit Charge Breakdown',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Show Unit Rent row if not yet inside `bills`
+                if (!hasRentInBills &&
+                    activeRentAmount != null &&
+                    activeRentAmount > 0) ...[
+                  _BillBreakdownRow(
+                    icon: Icons.house_outlined,
+                    title: 'Monthly Unit Rent',
+                    subtitle: '$unitLabel • Recurring Rent',
+                    amount: activeRentAmount,
+                    isPaid: false,
+                  ),
+                  if (bills.isNotEmpty) const Divider(height: 18),
+                ],
+
+                if (bills.isEmpty &&
+                    (activeRentAmount == null || activeRentAmount <= 0))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'No rent or utility charges have been posted for this unit yet.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  )
+                else
+                  for (var i = 0; i < bills.length; i++) ...[
+                    _BillBreakdownRow(
+                      icon: _billIcon(bills[i].type),
+                      title: _billLabel(bills[i].type),
+                      subtitle:
+                          '${bills[i].valueType == BillingValueType.fixed ? 'Fixed' : 'Variable'} • Due: ${_formatShortDate(bills[i].dueDate)}',
+                      amount: bills[i].amount,
+                      isPaid: bills[i].status == MonthlyBillStatus.paid,
+                    ),
+                    if (i != bills.length - 1) const Divider(height: 18),
+                  ],
+              ],
+            );
+          },
         ),
-        Text(
-          '৳ ${_formatAmount(totalAmount)}',
-          style:
-          theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
+      ),
     );
+  }
+
+  static IconData _billIcon(MonthlyBillType type) {
+    switch (type) {
+      case MonthlyBillType.rent:
+        return Icons.house_outlined;
+      case MonthlyBillType.water:
+        return Icons.water_drop_outlined;
+      case MonthlyBillType.gas:
+        return Icons.local_fire_department_outlined;
+      case MonthlyBillType.electricity:
+        return Icons.bolt_rounded;
+      case MonthlyBillType.serviceCharge:
+        return Icons.cleaning_services_outlined;
+      case MonthlyBillType.garbage:
+        return Icons.delete_outline_rounded;
+      case MonthlyBillType.other:
+        return Icons.receipt_outlined;
+    }
+  }
+
+  static String _billLabel(MonthlyBillType type) {
+    switch (type) {
+      case MonthlyBillType.rent:
+        return 'Monthly Unit Rent';
+      case MonthlyBillType.water:
+        return 'Water Bill';
+      case MonthlyBillType.gas:
+        return 'Gas Bill';
+      case MonthlyBillType.electricity:
+        return 'Electricity Bill';
+      case MonthlyBillType.serviceCharge:
+        return 'Service Charge';
+      case MonthlyBillType.garbage:
+        return 'Garbage Collection';
+      case MonthlyBillType.other:
+        return 'Other Utility Charge';
+    }
+  }
+
+  static String _formatShortDate(DateTime date) {
+    final d = date.day.toString().padLeft(2, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    return '$d/$m/${date.year}';
+  }
+
+  static String _formatAmount(double amount) {
+    if (amount == amount.roundToDouble()) {
+      return amount.toStringAsFixed(0);
+    }
+    return amount.toStringAsFixed(2);
   }
 }
 
-// ============================================================================
-// BILL ITEM
-// ============================================================================
+class _BillBreakdownRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final double amount;
+  final bool isPaid;
 
-class _BillItem extends StatelessWidget {
-  final MonthlyBill bill;
-
-  const _BillItem({
-    required this.bill,
+  const _BillBreakdownRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+    required this.isPaid,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final typeLabel = _billTypeLabel(bill.type);
-    final statusLabel = _billStatusLabel(bill.status);
-    final statusColor =
-    _billStatusColor(context, bill.status);
-
     return Row(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: 20,
-          backgroundColor:
-          theme.colorScheme.surfaceContainerHighest,
-          child: Icon(
-            _billTypeIcon(bill.type),
-            size: 20,
-            color:
-            theme.colorScheme.onSurfaceVariant,
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(10),
           ),
+          child: Icon(icon, size: 18, color: theme.colorScheme.primary),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                typeLabel,
-                style:
-                theme.textTheme.titleSmall?.copyWith(
+                title,
+                style: theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 3),
               Text(
-                'Due ${_formatDate(bill.dueDate)}',
-                style:
-                theme.textTheme.bodySmall?.copyWith(
-                  color:
-                  theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding:
-                const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color:
-                  statusColor.withValues(alpha: 0.10),
-                  borderRadius:
-                  BorderRadius.circular(20),
-                ),
-                child: Text(
-                  statusLabel,
-                  style:
-                  theme.textTheme.labelSmall?.copyWith(
-                    color: statusColor,
-                    fontWeight: FontWeight.w700,
-                  ),
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 11,
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 12),
-        Text(
-          '৳ ${_formatAmount(bill.amount)}',
-          style:
-          theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '৳ ${amount == amount.roundToDouble() ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2)}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              isPaid ? 'PAID' : 'UNPAID',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: isPaid ? Colors.green.shade700 : theme.colorScheme.error,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
-}
-
-// ============================================================================
-// LOADING
-// ============================================================================
-
-class _BillsLoading extends StatelessWidget {
-  const _BillsLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox(
-      height: 90,
-      child: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// ERROR
-// ============================================================================
-
-class _BillsError extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _BillsError({
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      children: [
-        Icon(
-          Icons.receipt_long_outlined,
-          size: 34,
-          color: theme.colorScheme.error,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Could not load your bills.',
-          style:
-          theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Retry'),
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// SIMPLE ERROR MESSAGE
-// ============================================================================
-
-class _BillsErrorMessage extends StatelessWidget {
-  final String message;
-
-  const _BillsErrorMessage({
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Row(
-      children: [
-        Icon(
-          Icons.error_outline,
-          color: theme.colorScheme.error,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            message,
-            style: theme.textTheme.bodyMedium,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// BILL TYPE
-// ============================================================================
-
-String _billTypeLabel(MonthlyBillType type,) {
-  switch (type) {
-    case MonthlyBillType.rent:
-      return 'Rent';
-
-    case MonthlyBillType.water:
-      return 'Water';
-
-    case MonthlyBillType.electricity:
-      return 'Electricity';
-
-    case MonthlyBillType.gas:
-      return 'Gas';
-
-    case MonthlyBillType.garbage:
-      return 'Garbage';
-
-    case MonthlyBillType.serviceCharge:
-      return 'Service Charge';
-
-    case MonthlyBillType.other:
-      return 'Other';
-  }
-}
-
-IconData _billTypeIcon(MonthlyBillType type,) {
-  switch (type) {
-    case MonthlyBillType.rent:
-      return Icons.home_work_outlined;
-
-    case MonthlyBillType.water:
-      return Icons.water_drop_outlined;
-
-    case MonthlyBillType.electricity:
-      return Icons.bolt_outlined;
-
-    case MonthlyBillType.gas:
-      return Icons.local_fire_department_outlined;
-
-    case MonthlyBillType.garbage:
-      return Icons.delete_outline;
-
-    case MonthlyBillType.serviceCharge:
-      return Icons.miscellaneous_services_outlined;
-
-    case MonthlyBillType.other:
-      return Icons.receipt_long_outlined;
-  }
-}
-
-// ============================================================================
-// BILL STATUS
-// ============================================================================
-
-String _billStatusLabel(MonthlyBillStatus status,) {
-  switch (status) {
-    case MonthlyBillStatus.paid:
-      return 'Paid';
-
-    case MonthlyBillStatus.cancelled:
-      return 'Cancelled';
-
-    case MonthlyBillStatus.overdue:
-      return 'Overdue';
-
-    case MonthlyBillStatus.partiallyPaid:
-      return 'Partially Paid';
-
-    case MonthlyBillStatus.unpaid:
-      return 'Unpaid';
-  }
-}
-
-Color _billStatusColor(BuildContext context,
-    MonthlyBillStatus status,) {
-  final theme = Theme.of(context);
-
-  switch (status) {
-    case MonthlyBillStatus.paid:
-      return Colors.green;
-
-    case MonthlyBillStatus.overdue:
-      return theme.colorScheme.error;
-
-    case MonthlyBillStatus.cancelled:
-      return theme.colorScheme.onSurfaceVariant;
-
-    case MonthlyBillStatus.partiallyPaid:
-      return Colors.orange;
-
-    case MonthlyBillStatus.unpaid:
-      return Colors.orange;
-  }
-}
-
-// ============================================================================
-// FORMATTERS
-// ============================================================================
-
-String _formatMonth(DateTime date) {
-  const months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-
-  return '${months[date.month - 1]} ${date.year}';
-}
-
-String _formatDate(DateTime date) {
-  final local = date.toLocal();
-
-  return '${local.day.toString().padLeft(2, '0')}/'
-      '${local.month.toString().padLeft(2, '0')}/'
-      '${local.year}';
-}
-
-String _formatAmount(double amount) {
-  if (amount == amount.roundToDouble()) {
-    return amount.toStringAsFixed(0);
-  }
-
-  return amount.toStringAsFixed(2);
 }

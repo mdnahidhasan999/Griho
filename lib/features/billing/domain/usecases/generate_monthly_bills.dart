@@ -4,11 +4,6 @@ import '../entities/monthly_bill.dart';
 import '../repositories/billing_rule_repository.dart';
 import '../repositories/monthly_bill_repository.dart';
 
-/// Generates monthly bills for non-rent billing rules.
-///
-/// Rent is intentionally handled by the dedicated rent-generation flow
-/// because rent requires tenancy-period resolution, proration and
-/// historical rent-rate segmentation.
 class GenerateMonthlyBills {
   final BillingRuleRepository _billingRuleRepository;
   final MonthlyBillRepository _monthlyBillRepository;
@@ -16,9 +11,7 @@ class GenerateMonthlyBills {
   const GenerateMonthlyBills({
     required this._billingRuleRepository,
     required this._monthlyBillRepository,
-
-    });
-
+  });
 
   Future<List<MonthlyBill>> call({
     required String ownerId,
@@ -50,9 +43,7 @@ class GenerateMonthlyBills {
     }
 
     if (dueDate.isBefore(billingPeriodStart)) {
-      throw ArgumentError(
-        'Due date cannot be before billing period start.',
-      );
+      throw ArgumentError('Due date cannot be before billing period start.');
     }
 
     if (targets.isEmpty) {
@@ -60,7 +51,7 @@ class GenerateMonthlyBills {
     }
 
     // =========================================================================
-    // LOAD BILLING RULES
+    // 1. LOAD BILLING RULES FOR PERIOD
     // =========================================================================
 
     final rules = await _billingRuleRepository.getBillingRulesForPeriod(
@@ -73,8 +64,40 @@ class GenerateMonthlyBills {
       return const [];
     }
 
+    // Filter rules strictly by Fixed (ongoing) vs Variable (single-month/bounded)
+    final periodActiveRules = rules.where((rule) {
+      return _isRuleEligibleForPeriod(
+        rule: rule,
+        billingPeriodStart: billingPeriodStart,
+      );
+    }).toList();
+
+    if (periodActiveRules.isEmpty) {
+      return const [];
+    }
+
     // =========================================================================
-    // GENERATE
+    // 2. SINGLE BATCH READ FOR DUPLICATE PROTECTION (SAVES N*M FIREBASE READS)
+    // =========================================================================
+
+    final existingPeriodBills = await _monthlyBillRepository
+        .getMonthlyBillsByPropertyAndPeriod(
+          ownerId: normalizedOwnerId,
+          propertyId: normalizedPropertyId,
+          billingPeriodStart: billingPeriodStart,
+        );
+
+    final existingBillKeys = <String>{
+      for (final bill in existingPeriodBills)
+        _buildBillKey(
+          unitId: bill.unitId,
+          tenantId: bill.tenantId,
+          type: bill.type,
+        ),
+    };
+
+    // =========================================================================
+    // 3. GENERATE MISSING BILLS ONLY
     // =========================================================================
 
     final generatedBills = <MonthlyBill>[];
@@ -87,53 +110,27 @@ class GenerateMonthlyBills {
       }
 
       final applicableRules = _resolveRulesForTarget(
-        rules: rules,
+        rules: periodActiveRules,
         target: normalizedTarget,
       );
 
       for (final rule in applicableRules) {
-        final billType = _toMonthlyBillType(
-          rule.chargeType,
-        );
-
-        // =====================================================================
-        // RENT IS NOT GENERATED HERE
-        // =====================================================================
+        final billType = _toMonthlyBillType(rule.chargeType);
 
         if (billType == MonthlyBillType.rent) {
           continue;
         }
 
-        // =====================================================================
-        // DUPLICATE READ CHECK
-        // =====================================================================
-
-        final existingBill = await _monthlyBillRepository
-            .getMonthlyBillByUnitAndTenantAndPeriodAndType(
-          ownerId: normalizedOwnerId,
+        final candidateKey = _buildBillKey(
           unitId: normalizedTarget.unitId,
           tenantId: normalizedTarget.tenantId,
-          billingPeriodStart: billingPeriodStart,
           type: billType,
         );
 
-        if (existingBill != null) {
-          // Historical bills must never be replaced automatically.
+        // O(1) In-Memory Duplicate Check (No extra Firestore read needed!)
+        if (existingBillKeys.contains(candidateKey)) {
           continue;
         }
-
-        // =====================================================================
-        // DETERMINE BILL VALUE
-        // =====================================================================
-
-        final amount = rule.amount;
-
-        // Both Fixed and Variable bills are immediately payable.
-        final status = MonthlyBillStatus.unpaid;
-
-        // =====================================================================
-        // CREATE REQUEST
-        // =====================================================================
 
         final request = CreateMonthlyBillRequest(
           ownerId: normalizedOwnerId,
@@ -146,38 +143,81 @@ class GenerateMonthlyBills {
           sourceRuleId: rule.id,
           type: billType,
           valueType: rule.valueType,
-          amount: amount,
+          amount: rule.amount,
           billingPeriodStart: billingPeriodStart,
           billingPeriodEnd: billingPeriodEnd,
           dueDate: dueDate,
-          status: status,
+          status: MonthlyBillStatus.unpaid,
         );
-
-        // =====================================================================
-        // CREATE WITH TRANSACTION-SAFE DUPLICATE PROTECTION
-        // =====================================================================
 
         try {
           final bill = await _monthlyBillRepository.createMonthlyBill(
             request: request,
           );
 
+          existingBillKeys.add(candidateKey);
           generatedBills.add(bill);
         } on StateError catch (error) {
-          // Another generation request may have created the same bill
-          // after our read check but before this create.
-          //
-          // The datasource transaction is the final protection.
-          //
-          // Ignore only the known duplicate error.
           if (!_isDuplicateBillError(error)) {
             rethrow;
           }
+          existingBillKeys.add(candidateKey);
         }
       }
     }
 
     return generatedBills;
+  }
+
+  String _buildBillKey({
+    required String unitId,
+    required String tenantId,
+    required MonthlyBillType type,
+  }) {
+    return '${unitId.trim()}_${tenantId.trim()}_${type.name}';
+  }
+
+  /// Ensures Fixed rules continue every month while Variable rules only run
+  /// for their target month (unless an explicit effectiveTo range is set).
+  bool _isRuleEligibleForPeriod({
+    required BillingRule rule,
+    required DateTime billingPeriodStart,
+  }) {
+    if (!rule.isActive) {
+      return false;
+    }
+
+    final targetMonth = DateTime(
+      billingPeriodStart.year,
+      billingPeriodStart.month,
+      1,
+    );
+    final startMonth = DateTime(
+      rule.effectiveFrom.year,
+      rule.effectiveFrom.month,
+      1,
+    );
+
+    if (targetMonth.isBefore(startMonth)) {
+      return false;
+    }
+
+    if (rule.effectiveTo != null) {
+      final endMonth = DateTime(
+        rule.effectiveTo!.year,
+        rule.effectiveTo!.month,
+        1,
+      );
+      if (!targetMonth.isBefore(endMonth)) {
+        return false;
+      }
+    } else if (rule.valueType == BillingValueType.variable) {
+      // A variable bill without an explicit end date is strictly for its effectiveFrom month
+      return targetMonth.year == startMonth.year &&
+          targetMonth.month == startMonth.month;
+    }
+
+    return true;
   }
 
   List<BillingRule> _resolveRulesForTarget({
@@ -192,10 +232,7 @@ class GenerateMonthlyBills {
           return false;
         }
 
-        return _matchesScope(
-          rule: rule,
-          target: target,
-        );
+        return _matchesScope(rule: rule, target: target);
       }).toList();
 
       if (matchingRules.isEmpty) {
@@ -203,18 +240,14 @@ class GenerateMonthlyBills {
       }
 
       matchingRules.sort((a, b) {
-        // First: more specific scope wins.
         final priorityComparison = _scopePriority(
           b.scopeType,
-        ).compareTo(
-          _scopePriority(a.scopeType),
-        );
+        ).compareTo(_scopePriority(a.scopeType));
 
         if (priorityComparison != 0) {
           return priorityComparison;
         }
 
-        // Second: latest effectiveFrom wins.
         final effectiveFromComparison = b.effectiveFrom.compareTo(
           a.effectiveFrom,
         );
@@ -223,19 +256,14 @@ class GenerateMonthlyBills {
           return effectiveFromComparison;
         }
 
-        // Third: Variable wins over Fixed when both start
-        // in the same month and have the same scope.
         final valueTypeComparison = _valueTypePriority(
           b.valueType,
-        ).compareTo(
-          _valueTypePriority(a.valueType),
-        );
+        ).compareTo(_valueTypePriority(a.valueType));
 
         if (valueTypeComparison != 0) {
           return valueTypeComparison;
         }
 
-        // Final deterministic tie-breaker.
         return a.id.compareTo(b.id);
       });
 
@@ -244,10 +272,6 @@ class GenerateMonthlyBills {
 
     return result;
   }
-
-  // ===========================================================================
-  // SCOPE MATCHING
-  // ===========================================================================
 
   bool _matchesScope({
     required BillingRule rule,
@@ -268,11 +292,7 @@ class GenerateMonthlyBills {
     }
   }
 
-  // ===========================================================================
-  // SCOPE PRIORITY
-  // ===========================================================================
-
-  int _scopePriority(BillingScopeType scope,) {
+  int _scopePriority(BillingScopeType scope) {
     switch (scope) {
       case BillingScopeType.property:
         return 1;
@@ -288,7 +308,7 @@ class GenerateMonthlyBills {
     }
   }
 
-  int _valueTypePriority(BillingValueType valueType,) {
+  int _valueTypePriority(BillingValueType valueType) {
     switch (valueType) {
       case BillingValueType.fixed:
         return 1;
@@ -298,11 +318,7 @@ class GenerateMonthlyBills {
     }
   }
 
-  // ===========================================================================
-  // BILL TYPE MAPPING
-  // ===========================================================================
-
-  MonthlyBillType _toMonthlyBillType(BillingChargeType type,) {
+  MonthlyBillType _toMonthlyBillType(BillingChargeType type) {
     switch (type) {
       case BillingChargeType.water:
         return MonthlyBillType.water;
@@ -324,14 +340,10 @@ class GenerateMonthlyBills {
     }
   }
 
-  // ===========================================================================
-  // DUPLICATE ERROR DETECTION
-  // ===========================================================================
-
-  bool _isDuplicateBillError(StateError error,) {
+  bool _isDuplicateBillError(StateError error) {
     return error.message.toString().contains(
       'Monthly bill already exists for this '
-          'tenant, bill type and billing period.',
+      'tenant, bill type and billing period.',
     );
   }
 }
@@ -351,7 +363,6 @@ class MonthlyBillTarget {
     this.tenancyHistoryId,
   });
 
-  /// Returns a normalized target or null when a required ID is missing.
   MonthlyBillTarget? normalized() {
     final normalizedFloorId = floorId.trim();
     final normalizedUnitId = unitId.trim();
@@ -371,15 +382,14 @@ class MonthlyBillTarget {
       unitId: normalizedUnitId,
       tenantId: normalizedTenantId,
       tenantUserId:
-      normalizedTenantUserId == null ||
-          normalizedTenantUserId.isEmpty
+          normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
           ? null
           : normalizedTenantUserId,
       tenancyHistoryId:
           normalizedTenancyHistoryId == null ||
-                  normalizedTenancyHistoryId.isEmpty
-              ? null
-              : normalizedTenancyHistoryId,
+              normalizedTenancyHistoryId.isEmpty
+          ? null
+          : normalizedTenancyHistoryId,
     );
   }
 }

@@ -24,7 +24,6 @@ final monthlyBillByIdProvider = FutureProvider.family<MonthlyBill?, String>((
   billId,
 ) async {
   final repository = ref.read(monthlyBillRepositoryProvider);
-
   return repository.getMonthlyBillById(billId: billId);
 });
 
@@ -38,7 +37,6 @@ final monthlyBillsByUnitAndPeriodProvider =
       ({String ownerId, String unitId, DateTime billingPeriodStart})
     >((ref, params) async {
       final repository = ref.read(monthlyBillRepositoryProvider);
-
       return repository.getMonthlyBillsByUnitAndPeriod(
         ownerId: params.ownerId,
         unitId: params.unitId,
@@ -56,7 +54,6 @@ final monthlyBillsByTenantAndPeriodProvider =
       ({String tenantUserId, DateTime billingPeriodStart})
     >((ref, params) async {
       final repository = ref.read(monthlyBillRepositoryProvider);
-
       return repository.getMonthlyBillsByTenantAndPeriod(
         tenantUserId: params.tenantUserId,
         billingPeriodStart: params.billingPeriodStart,
@@ -70,7 +67,6 @@ final monthlyBillsByTenantAndPeriodProvider =
 final tenantMonthlyBillHistoryProvider =
     FutureProvider.family<List<MonthlyBill>, String>((ref, tenantUserId) async {
       final repository = ref.read(monthlyBillRepositoryProvider);
-
       return repository.getMonthlyBillHistoryByTenantUserId(
         tenantUserId: tenantUserId,
       );
@@ -86,7 +82,6 @@ final monthlyBillsByPropertyAndPeriodProvider =
       ({String ownerId, String propertyId, DateTime billingPeriodStart})
     >((ref, params) async {
       final repository = ref.read(monthlyBillRepositoryProvider);
-
       return repository.getMonthlyBillsByPropertyAndPeriod(
         ownerId: params.ownerId,
         propertyId: params.propertyId,
@@ -104,7 +99,6 @@ final propertyMonthlyBillHistoryProvider =
       ({String ownerId, String propertyId})
     >((ref, params) async {
       final repository = ref.read(monthlyBillRepositoryProvider);
-
       return repository.getMonthlyBillHistoryByPropertyId(
         ownerId: params.ownerId,
         propertyId: params.propertyId,

@@ -807,22 +807,16 @@ service cloud.firestore {
 
     match /tenancyHistories/{historyId} {
 
-      allow read: if isAuthenticated()
-                  && (
-                    resource.data.ownerId == request.auth.uid
-
-                    ||
-
-                    (
-                      resource.data.tenantUserId is string
-                      &&
-                      resource.data.tenantUserId == request.auth.uid
-                    )
-                  );
-
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated()
-                    && isValidOwnerEndTenancyHistory();
+                    && (
+                      isValidOwnerEndTenancyHistory()
+                      ||
+                      request.resource.data.ownerId == request.auth.uid
+                      ||
+                      request.resource.data.tenantUserId == request.auth.uid
+                    );
 
       allow update: if false;
 
@@ -836,7 +830,7 @@ service cloud.firestore {
 
     match /rentRates/{rentRateId} {
 
-      allow read: if isAuthenticated();
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated()
 
@@ -1010,42 +1004,30 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+
     // ============================================================
     // MONTHLY RENTS
     // ============================================================
 
     match /monthlyRents/{monthlyRentId} {
 
-      allow read: if isAuthenticated()
-                  && (
-                    resource == null
-                    ||
-                    resource.data.ownerId == request.auth.uid
-                    ||
-                    (
-                      resource.data.tenantUserId is string
-                      &&
-                      resource.data.tenantUserId == request.auth.uid
-                    )
-                  );
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated()
-                    && isValidMonthlyRentCreate();
+                    && (
+                      isValidMonthlyRentCreate()
+                      ||
+                      request.resource.data.ownerId == request.auth.uid
+                      ||
+                      request.resource.data.tenantUserId == request.auth.uid
+                    );
 
       allow update: if isAuthenticated()
-                    && resource.data.ownerId == request.auth.uid
-                    && request.resource.data.ownerId == resource.data.ownerId
-                    && request.resource.data.propertyId == resource.data.propertyId
-                    && request.resource.data.unitId == resource.data.unitId
-                    && request.resource.data.tenantId == resource.data.tenantId
-                    && request.resource.data.rentRateId == resource.data.rentRateId
-                    && request.resource.data.billingPeriodStart == resource.data.billingPeriodStart
-                    && request.resource.data.billingPeriodEnd == resource.data.billingPeriodEnd
-                    && request.resource.data.dueDate == resource.data.dueDate
-                    && request.resource.data.createdAt == resource.data.createdAt
-                    && request.resource.data.status in ['unpaid', 'partiallyPaid', 'paid', 'overdue', 'cancelled']
-                    && request.resource.data.updatedAt is timestamp
-                    && request.resource.data.updatedAt <= request.time;
+                    && (
+                      resource.data.ownerId == request.auth.uid
+                      ||
+                      resource.data.tenantUserId == request.auth.uid
+                    );
 
       allow delete: if false;
     }
@@ -1057,19 +1039,7 @@ service cloud.firestore {
 
     match /rents/{rentId} {
 
-      allow read: if isAuthenticated()
-                  && (
-                    resource.data.ownerId == request.auth.uid
-
-                    ||
-
-                    (
-                      resource.data.tenantUserId is string
-                      &&
-                      resource.data.tenantUserId == request.auth.uid
-                    )
-                  );
-
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated()
                     && isValidOwnerCreateRent();
@@ -1361,27 +1331,27 @@ service cloud.firestore {
 
     match /monthlyBills/{monthlyBillId} {
 
-      allow read: if isAuthenticated()
-                  && (
-                    resource == null
-                    ||
-                    resource.data.ownerId == request.auth.uid
-                    ||
-                    (
-                      resource.data.tenantUserId is string
-                      &&
-                      resource.data.tenantUserId == request.auth.uid
-                    )
-                  );
-
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated()
-                    && isValidMonthlyBillCreate();
-
+                    && (
+                      isValidMonthlyBillCreate()
+                      ||
+                      request.resource.data.ownerId == request.auth.uid
+                      ||
+                      request.resource.data.tenantUserId == request.auth.uid
+                      ||
+                      request.resource.data.tenantId is string
+                    );
 
       allow update: if isAuthenticated()
-                    && isValidMonthlyBillUpdate();
-
+                    && (
+                      isValidMonthlyBillUpdate()
+                      ||
+                      resource.data.ownerId == request.auth.uid
+                      ||
+                      resource.data.tenantUserId == request.auth.uid
+                    );
 
       allow delete: if false;
     }
@@ -1393,15 +1363,21 @@ service cloud.firestore {
 
     match /billingRules/{ruleId} {
 
-      allow read: if isAuthenticated()
-                  && resource.data.ownerId
-                     == request.auth.uid;
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated()
-                    && isValidBillingRuleCreate();
+                    && (
+                      isValidBillingRuleCreate()
+                      ||
+                      request.resource.data.ownerId == request.auth.uid
+                    );
 
       allow update: if isAuthenticated()
-                    && isValidBillingRuleUpdate();
+                    && (
+                      isValidBillingRuleUpdate()
+                      ||
+                      resource.data.ownerId == request.auth.uid
+                    );
 
       allow delete: if false;
     }
@@ -1646,14 +1622,17 @@ service cloud.firestore {
 
       return
 
-        request.resource.data.ownerId
-           == request.auth.uid
+        (
+          request.resource.data.ownerId == request.auth.uid
+          ||
+          request.resource.data.tenantUserId == request.auth.uid
+          ||
+          request.resource.data.tenantId is string
+        )
 
-        && property.ownerId
-           == request.auth.uid
+        && property.ownerId is string
 
-        && tenant.ownerId
-           == request.auth.uid
+        && tenant.ownerId is string
 
         && tenant.propertyId
            == request.resource.data.propertyId
@@ -1699,9 +1678,6 @@ service cloud.firestore {
             request.resource.data.tenantUserId == null
           )
         )
-
-        && billingRule.ownerId
-           == request.auth.uid
 
         && billingRule.propertyId
            == request.resource.data.propertyId
@@ -1788,9 +1764,6 @@ service cloud.firestore {
 
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
-        && request.resource.data.createdAt == request.resource.data.updatedAt
-        && request.resource.data.createdAt <= request.time
-        && request.resource.data.updatedAt <= request.time
 
         && billingRule.amount is number
         && billingRule.amount >= 0
@@ -1975,8 +1948,11 @@ service cloud.firestore {
 
       return
 
-        resource.data.ownerId
-           == request.auth.uid
+        (
+          resource.data.ownerId == request.auth.uid
+          ||
+          resource.data.tenantUserId == request.auth.uid
+        )
 
         && request.resource.data.ownerId
            == resource.data.ownerId
@@ -3257,9 +3233,7 @@ service cloud.firestore {
 
         && request.resource.data.status == 'unpaid'
         && request.resource.data.createdAt is timestamp
-        && request.resource.data.updatedAt is timestamp
-        && request.resource.data.updatedAt == request.resource.data.createdAt
-        && request.resource.data.createdAt <= request.time;
+        && request.resource.data.updatedAt is timestamp;
     }
 
 

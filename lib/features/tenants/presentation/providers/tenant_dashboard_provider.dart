@@ -9,12 +9,12 @@ import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
+import '../../domain/entities/tenancy_history.dart';
 import '../../domain/entities/tenant.dart';
 import '../../domain/entities/tenant_invitation.dart';
-import '../../domain/entities/tenancy_history.dart';
 import '../controllers/tenant_controller.dart';
-import 'tenant_invitation_provider.dart';
 import 'tenancy_history_provider.dart';
+import 'tenant_invitation_provider.dart';
 
 /// =========================================================================
 /// CURRENT AUTH USER
@@ -172,12 +172,6 @@ final currentTenantUnitProvider = FutureProvider<Unit?>((ref) async {
 /// =========================================================================
 /// CURRENT MONTH
 /// =========================================================================
-///
-/// Uses the first day of the current month as the billing period key.
-///
-/// Example:
-/// September 2026 -> 2026-09-01
-///
 
 final currentBillingPeriodStartProvider = Provider<DateTime>((ref) {
   final now = DateTime.now();
@@ -186,22 +180,7 @@ final currentBillingPeriodStartProvider = Provider<DateTime>((ref) {
 });
 
 /// =========================================================================
-/// CURRENT TENANT MONTHLY BILLS
-/// =========================================================================
-///
-/// Loads the current month's bills for the currently authenticated tenant.
-///
-/// Security/data relationship:
-///
-/// tenant.ownerId      -> ownerId
-/// tenant.id           -> tenantId
-/// Firebase Auth UID   -> tenantUserId
-///
-/// The tenant does NOT use Firebase UID as tenantId.
-///
-
-/// =========================================================================
-/// CURRENT TENANT MONTHLY BILLS
+/// CURRENT TENANT MONTHLY BILLS (100% QUERY-SAFE FOR TENANTS)
 /// =========================================================================
 
 final currentTenantMonthlyBillsProvider = FutureProvider<List<MonthlyBill>>((
@@ -209,35 +188,69 @@ final currentTenantMonthlyBillsProvider = FutureProvider<List<MonthlyBill>>((
 ) async {
   final tenant = await ref.watch(currentTenantProvider.future);
 
-  if (tenant == null) {
-    return const [];
-  }
-
-  if (tenant.status != TenantStatus.active) {
+  if (tenant == null || tenant.status != TenantStatus.active) {
     return const [];
   }
 
   final firebaseUser = ref.watch(currentFirebaseUserProvider);
-
   if (firebaseUser == null) {
     return const [];
   }
 
   final tenantUserId = firebaseUser.uid.trim();
+  final unitId = tenant.unitId.trim();
 
-  if (tenantUserId.isEmpty) {
+  if (tenantUserId.isEmpty || unitId.isEmpty) {
     return const [];
   }
 
   final billingPeriodStart = ref.watch(currentBillingPeriodStartProvider);
 
-  return ref.watch(
+  // Queries ONLY by tenantUserId + billingPeriodStart (100% allowed by Firestore rules)
+  final bills = await ref.watch(
     monthlyBillsByTenantAndPeriodProvider((
       tenantUserId: tenantUserId,
       billingPeriodStart: billingPeriodStart,
     )).future,
   );
+
+  return _deduplicateMonthlyBills(
+    bills.where((b) => b.unitId.trim() == unitId).toList(),
+  );
 });
+
+List<MonthlyBill> _deduplicateMonthlyBills(List<MonthlyBill> bills) {
+  final Map<String, MonthlyBill> uniqueMap = {};
+
+  for (final bill in bills) {
+    final trimmedRuleId = bill.sourceRuleId.trim();
+    final rulePart = trimmedRuleId.isNotEmpty ? trimmedRuleId : bill.type.name;
+    final periodPart =
+        '${bill.billingPeriodStart.year}-${bill.billingPeriodStart.month}';
+    final logicalKey = '${bill.unitId.trim()}_${periodPart}_$rulePart';
+
+    final existing = uniqueMap[logicalKey];
+    if (existing == null) {
+      uniqueMap[logicalKey] = bill;
+    } else if (bill.status == MonthlyBillStatus.paid &&
+        existing.status != MonthlyBillStatus.paid) {
+      uniqueMap[logicalKey] = bill;
+    }
+  }
+
+  final sorted = uniqueMap.values.toList()
+    ..sort((a, b) {
+      if (a.type == MonthlyBillType.rent && b.type != MonthlyBillType.rent) {
+        return -1;
+      }
+      if (a.type != MonthlyBillType.rent && b.type == MonthlyBillType.rent) {
+        return 1;
+      }
+      return a.type.name.compareTo(b.type.name);
+    });
+
+  return sorted;
+}
 
 /// =========================================================================
 /// TENANT DASHBOARD DATA
@@ -344,15 +357,21 @@ class TenantDashboardData {
 
   String? get currentUnitDisplayName {
     final unitName = currentUnit?.name?.trim();
+    final unitNumber = currentUnit?.unitNumber.trim();
+
+    if (unitName != null &&
+        unitName.isNotEmpty &&
+        unitNumber != null &&
+        unitNumber.isNotEmpty) {
+      return '$unitName (Unit $unitNumber)';
+    }
 
     if (unitName != null && unitName.isNotEmpty) {
       return unitName;
     }
 
-    final unitNumber = currentUnit?.unitNumber.trim();
-
     if (unitNumber != null && unitNumber.isNotEmpty) {
-      return unitNumber;
+      return 'Unit $unitNumber';
     }
 
     return null;
@@ -385,15 +404,10 @@ final tenantDashboardProvider = FutureProvider<TenantDashboardData>((
   }
 
   final appUserFuture = ref.watch(currentAppUserProvider.future);
-
   final tenantFuture = ref.watch(currentTenantProvider.future);
-
   final propertyFuture = ref.watch(currentTenantPropertyProvider.future);
-
   final unitFuture = ref.watch(currentTenantUnitProvider.future);
-
   final historyFuture = ref.watch(currentUserTenancyHistoryProvider.future);
-
   final invitationFuture = ref.watch(
     pendingTenantInvitationForCurrentUserProvider.future,
   );

@@ -71,8 +71,7 @@ class MonthlyBillDataSource {
     // ডিটারমিনিস্টিক ও ইউনিক ডকুমেন্ট আইডি:
     // একই ওনার, প্রোপার্টি, ইউনিট, টেন্যান্ট, বিলের ধরন এবং মাসের জন্য শুধু একটি বিল তৈরি হতে পারবে
     final documentId =
-        '${ownerId}_${propertyId}_${unitId}_${tenantId}_${request.type
-        .name}_$periodKey';
+        '${ownerId}_${propertyId}_${unitId}_${tenantId}_${request.type.name}_$periodKey';
 
     final document = _collection.doc(documentId);
     final now = DateTime.now();
@@ -175,8 +174,7 @@ class MonthlyBillDataSource {
   // UNIT + TENANT + PERIOD + TYPE
   // ==========================================================================
 
-  Future<MonthlyBillModel?>
-  getMonthlyBillByUnitAndTenantAndPeriodAndType({
+  Future<MonthlyBillModel?> getMonthlyBillByUnitAndTenantAndPeriodAndType({
     required String ownerId,
     required String unitId,
     required String tenantId,
@@ -249,11 +247,10 @@ class MonthlyBillDataSource {
   }
 
   // ==========================================================================
-  // TENANT HISTORY
+  // TENANT HISTORY (Sorted in memory to avoid composite index requirement)
   // ==========================================================================
 
-  Future<List<MonthlyBillModel>>
-  getMonthlyBillHistoryByTenantUserId({
+  Future<List<MonthlyBillModel>> getMonthlyBillHistoryByTenantUserId({
     required String tenantUserId,
   }) async {
     final normalizedTenantUserId = tenantUserId.trim();
@@ -265,16 +262,18 @@ class MonthlyBillDataSource {
 
     final snapshot = await _collection
         .where('tenantUserId', isEqualTo: normalizedTenantUserId)
-        .orderBy('billingPeriodStart', descending: true)
         .get();
 
-    return snapshot.docs
+    final bills = snapshot.docs
         .map(MonthlyBillModel.fromFirestore)
-        .toList();
+        .toList()
+      ..sort((a, b) => b.billingPeriodStart.compareTo(a.billingPeriodStart));
+
+    return bills;
   }
 
   // ==========================================================================
-  // PROPERTY + PERIOD
+  // PROPERTY + PERIOD (Sorted in memory to avoid `.orderBy('unitId')` index error)
   // ==========================================================================
 
   Future<List<MonthlyBillModel>> getMonthlyBillsByPropertyAndPeriod({
@@ -299,20 +298,21 @@ class MonthlyBillDataSource {
       'billingPeriodStart',
       isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
     )
-        .orderBy('unitId')
         .get();
 
-    return snapshot.docs
+    final bills = snapshot.docs
         .map(MonthlyBillModel.fromFirestore)
-        .toList();
+        .toList()
+      ..sort((a, b) => a.unitId.compareTo(b.unitId));
+
+    return bills;
   }
 
   // ==========================================================================
-  // PROPERTY HISTORY
+  // PROPERTY HISTORY (Sorted in memory to avoid composite index requirement)
   // ==========================================================================
 
-  Future<List<MonthlyBillModel>>
-  getMonthlyBillHistoryByPropertyId({
+  Future<List<MonthlyBillModel>> getMonthlyBillHistoryByPropertyId({
     required String ownerId,
     required String propertyId,
   }) async {
@@ -325,12 +325,14 @@ class MonthlyBillDataSource {
     final snapshot = await _collection
         .where('ownerId', isEqualTo: normalizedOwnerId)
         .where('propertyId', isEqualTo: normalizedPropertyId)
-        .orderBy('billingPeriodStart', descending: true)
         .get();
 
-    return snapshot.docs
+    final bills = snapshot.docs
         .map(MonthlyBillModel.fromFirestore)
-        .toList();
+        .toList()
+      ..sort((a, b) => b.billingPeriodStart.compareTo(a.billingPeriodStart));
+
+    return bills;
   }
 
   // ==========================================================================
