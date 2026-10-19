@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/utils/phone_number_utils.dart';
 import '../../domain/entities/app_user.dart';
 import '../../domain/entities/registration_intent.dart';
 import '../providers/auth_controller.dart';
-
-// ================================================================
-// ONBOARDING SCREEN
-// ================================================================
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -21,31 +20,45 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
 
+  String _completePhoneNumber = '';
   RegistrationIntent? _selectedIntent;
+
+  @override
+  void initState() {
+    super.initState();
+    // ফায়ারবেস থেকে ভেরিফাইড ইমেইলটি স্বয়ংক্রিয়ভাবে নিয়ে নিচ্ছে
+    final userEmail = FirebaseAuth.instance.currentUser?.email;
+    if (userEmail != null) {
+      _emailController.text = userEmail;
+    }
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
-  // ============================================================
-  // CONTINUE ACTION
-  // ============================================================
-
   Future<void> _continue() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    final intent = _selectedIntent;
-
-    if (intent == null) {
+    if (_selectedIntent == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please choose whether you are an Owner or a Tenant.'),
-          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final cleanPhone = PhoneNumberUtils.clean(_completePhoneNumber);
+    if (!PhoneNumberUtils.isValid(cleanPhone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid permanent phone number.'),
         ),
       );
       return;
@@ -53,84 +66,32 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     final result = await ref
         .read(authControllerProvider.notifier)
-        .register(intent: intent, name: _nameController.text.trim());
+        .registerWithEmailAndPhone(
+          intent: _selectedIntent!,
+          name: _nameController.text.trim(),
+          phoneNumber: cleanPhone,
+        );
 
-    if (!mounted || result == null) {
-      return;
-    }
+    if (!mounted || result == null) return;
 
     final user = result.user;
-
-    // ----------------------------------------------------------
-    // OWNER REDIRECT
-    // ----------------------------------------------------------
     if (user.role == UserRole.owner) {
       context.go(RouteNames.ownerHome);
-      return;
-    }
-
-    // ----------------------------------------------------------
-    // TENANT REDIRECT
-    // ----------------------------------------------------------
-    if (user.role == UserRole.tenant) {
-      final invitationId = result.invitationId;
-
-      if (invitationId != null && invitationId.trim().isNotEmpty) {
-        context.go(RouteNames.tenantInvitationPath(invitationId));
-        return;
-      }
-
+    } else if (user.role == UserRole.tenant) {
       context.go(RouteNames.tenantHome);
-      return;
-    }
-
-    // ----------------------------------------------------------
-    // OTHER ROLES
-    // ----------------------------------------------------------
-    switch (user.role) {
-      case UserRole.manager:
-        context.go(RouteNames.managerHome);
-        return;
-      case UserRole.caretaker:
-        context.go(RouteNames.caretakerHome);
-        return;
-      case UserRole.owner:
-      case UserRole.tenant:
-        return;
     }
   }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = ref.watch(authControllerProvider);
 
-    ref.listen(authControllerProvider, (previous, next) {
-      if (!mounted) {
-        return;
-      }
-
-      if (next.errorMessage != null &&
-          next.errorMessage != previous?.errorMessage) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.errorMessage!),
-            backgroundColor: theme.colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    });
-
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text(
-          'Profile Setup',
+          'Complete Your Profile',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
@@ -142,44 +103,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ============================================================
-                // ১. ওয়েলকাম হেডার
-                // ============================================================
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer.withValues(
-                      alpha: 0.6,
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(
-                    Icons.waving_hand_rounded,
-                    size: 28,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(height: 16),
                 Text(
-                  'Welcome to Griho',
+                  'Almost There!',
                   style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Complete your profile setup to personalize your property and tenancy experience.',
+                  'Please provide your full name and a permanent phone number to finish your account setup.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                     height: 1.4,
                   ),
                 ),
-
                 const SizedBox(height: 28),
 
-                // ============================================================
-                // ২. পুরো নাম ইনপুট
-                // ============================================================
                 Text(
                   'Full Name',
                   style: theme.textTheme.titleSmall?.copyWith(
@@ -191,93 +130,126 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   controller: _nameController,
                   textCapitalization: TextCapitalization.words,
                   enabled: !authState.isLoading,
-                  textInputAction: TextInputAction.done,
                   decoration: const InputDecoration(
-                    labelText: 'Your Name',
                     hintText: 'e.g. Md Nahid Hasan',
                     prefixIcon: Icon(Icons.person_outline_rounded),
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(14)),
+                    ),
                   ),
-                  validator: (value) {
-                    final name = value?.trim() ?? '';
-                    if (name.isEmpty) {
-                      return 'Please enter your name.';
-                    }
-                    if (name.length < 2) {
-                      return 'Name must be at least 2 characters.';
-                    }
-                    return null;
-                  },
+                  validator: (v) => v?.trim().isEmpty == true
+                      ? 'Please enter your name.'
+                      : null,
                 ),
+                const SizedBox(height: 20),
 
+                Text(
+                  'Email Address (Verified)',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _emailController,
+                  enabled: false,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.mail_outline_rounded),
+                    border: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(14)),
+                    ),
+                    filled: true,
+                    fillColor: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.4),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                Text(
+                  'Permanent Phone Number',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                IntlPhoneField(
+                  initialCountryCode: 'BD',
+                  enabled: !authState.isLoading,
+                  decoration: const InputDecoration(
+                    hintText: 'Phone number',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(14)),
+                    ),
+                  ),
+                  onChanged: (phone) =>
+                      _completePhoneNumber = phone.completeNumber,
+                  validator: (phone) =>
+                      (phone == null || phone.number.trim().isEmpty)
+                      ? 'Permanent phone number is required.'
+                      : null,
+                ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.lock_outline_rounded,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'This phone number cannot be changed later.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 28),
 
-                // ============================================================
-                // ৩. একাউন্ট টাইপ নির্বাচন
-                // ============================================================
                 Text(
                   'How will you use Griho?',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Choose the role that fits your current requirements.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Property Owner Card
+                const SizedBox(height: 12),
                 _RoleSelectionCard(
                   title: 'Property Owner',
-                  description:
-                      'Manage properties, list units, track utility bills and monitor tenant rents.',
+                  description: 'Manage properties, units, and track rents.',
                   icon: Icons.apartment_rounded,
                   selected: _selectedIntent == RegistrationIntent.owner,
-                  onTap: authState.isLoading
-                      ? () {}
-                      : () {
-                          setState(() {
-                            _selectedIntent = RegistrationIntent.owner;
-                          });
-                        },
+                  onTap: () => setState(
+                    () => _selectedIntent = RegistrationIntent.owner,
+                  ),
                 ),
-
                 const SizedBox(height: 12),
-
-                // Tenant Card
                 _RoleSelectionCard(
-                  title: 'Tenant (ভাড়াটিয়া)',
+                  title: 'Tenant (ভাড়াটিয়া)',
                   description:
-                      'View monthly rent, electricity & water bills, and manage ongoing tenancy.',
+                      'View monthly rent, utility bills, and tenancy status.',
                   icon: Icons.key_rounded,
                   selected: _selectedIntent == RegistrationIntent.tenant,
-                  onTap: authState.isLoading
-                      ? () {}
-                      : () {
-                          setState(() {
-                            _selectedIntent = RegistrationIntent.tenant;
-                          });
-                        },
+                  onTap: () => setState(
+                    () => _selectedIntent = RegistrationIntent.tenant,
+                  ),
                 ),
-
                 const SizedBox(height: 36),
 
-                // ============================================================
-                // ৪. সাবমিট বাটন
-                // ============================================================
                 SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: FilledButton(
                     onPressed: authState.isLoading ? null : _continue,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                     child: authState.isLoading
                         ? const SizedBox(
-                            height: 20,
                             width: 20,
+                            height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: Colors.white,
@@ -292,17 +264,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           ),
                   ),
                 ),
-                const SizedBox(height: 14),
-                Center(
-                  child: Text(
-                    'Your verified phone number will be securely linked to this account.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -311,10 +272,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 }
-
-// ============================================================================
-// ROLE SELECTION CARD WIDGET
-// ============================================================================
 
 class _RoleSelectionCard extends StatelessWidget {
   final String title;
@@ -334,7 +291,6 @@ class _RoleSelectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -354,23 +310,13 @@ class _RoleSelectionCard extends StatelessWidget {
           ),
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: selected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                size: 24,
-                color: selected
-                    ? theme.colorScheme.onPrimary
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
+            Icon(
+              icon,
+              size: 24,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -381,9 +327,6 @@ class _RoleSelectionCard extends StatelessWidget {
                     title,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
-                      color: selected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -391,13 +334,11 @@ class _RoleSelectionCard extends StatelessWidget {
                     description,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.4,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
             Icon(
               selected
                   ? Icons.check_circle_rounded
@@ -405,7 +346,6 @@ class _RoleSelectionCard extends StatelessWidget {
               color: selected
                   ? theme.colorScheme.primary
                   : theme.colorScheme.outlineVariant,
-              size: 22,
             ),
           ],
         ),

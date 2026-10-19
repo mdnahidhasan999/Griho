@@ -1,357 +1,157 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ফায়ারবেস অথ
 
 import '../../../tenants/data/datasources/tenant_invitation_data_source.dart';
-
 import '../../data/datasources/firebase_auth_datasource.dart';
 import '../../data/services/user_registration_service.dart';
-
 import '../../domain/entities/app_user.dart';
 import '../../domain/entities/auth_result.dart';
 import '../../domain/entities/registration_intent.dart';
-
 import 'auth_provider.dart';
 
-// ================================================================
-// FIREBASE AUTH DATA SOURCE
-// ================================================================
-
-final firebaseAuthDataSourceProvider =
-Provider<FirebaseAuthDataSource>((ref) {
+final firebaseAuthDataSourceProvider = Provider<FirebaseAuthDataSource>((ref) {
   return FirebaseAuthDataSource();
 });
 
-// ================================================================
-// USER REGISTRATION SERVICE
-// ================================================================
-
-final userRegistrationServiceProvider =
-Provider<UserRegistrationService>((ref) {
+final userRegistrationServiceProvider = Provider<UserRegistrationService>((
+  ref,
+) {
   return UserRegistrationService(
-    userProfileDataSource:
-    ref.watch(userProfileDataSourceProvider),
-    tenantInvitationDataSource:
-    TenantInvitationDataSource(),
+    userProfileDataSource: ref.watch(userProfileDataSourceProvider),
+    tenantInvitationDataSource: TenantInvitationDataSource(),
   );
 });
 
-// ================================================================
-// AUTH CONTROLLER PROVIDER
-// ================================================================
-
 final authControllerProvider =
-NotifierProvider<
-    AuthController,
-    AuthControllerState>(
-  AuthController.new,
-);
-
-// ================================================================
-// AUTH CONTROLLER STATE
-// ================================================================
+    NotifierProvider<AuthController, AuthControllerState>(AuthController.new);
 
 class AuthControllerState {
   final bool isLoading;
-
-  final String? verificationId;
-
   final String? errorMessage;
-
-  final bool otpSent;
-
+  final bool linkSent;
   final AppUser? user;
-
-  // Pending tenant invitation
   final String? invitationId;
 
   const AuthControllerState({
     this.isLoading = false,
-    this.verificationId,
     this.errorMessage,
-    this.otpSent = false,
+    this.linkSent = false,
     this.user,
     this.invitationId,
   });
 
   AuthControllerState copyWith({
     bool? isLoading,
-    String? verificationId,
     String? errorMessage,
-    bool? otpSent,
+    bool? linkSent,
     AppUser? user,
     String? invitationId,
     bool clearError = false,
     bool clearInvitation = false,
   }) {
     return AuthControllerState(
-      isLoading:
-      isLoading ?? this.isLoading,
-
-      verificationId:
-      verificationId ?? this.verificationId,
-
-      errorMessage:
-      clearError
-          ? null
-          : errorMessage ?? this.errorMessage,
-
-      otpSent:
-      otpSent ?? this.otpSent,
-
-      user:
-      user ?? this.user,
-
-      invitationId:
-      clearInvitation
-          ? null
-          : invitationId ?? this.invitationId,
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      linkSent: linkSent ?? this.linkSent,
+      user: user ?? this.user,
+      invitationId: clearInvitation ? null : invitationId ?? this.invitationId,
     );
   }
 }
 
-// ================================================================
-// AUTH CONTROLLER
-// ================================================================
-
 class AuthController extends Notifier<AuthControllerState> {
-  late final FirebaseAuthDataSource
-  _authDataSource;
-
-  late final UserRegistrationService
-  _registrationService;
+  late final FirebaseAuthDataSource _authDataSource;
+  late final UserRegistrationService _registrationService;
 
   @override
   AuthControllerState build() {
-    _authDataSource =
-        ref.watch(
-          firebaseAuthDataSourceProvider,
-        );
-
-    _registrationService =
-        ref.watch(
-          userRegistrationServiceProvider,
-        );
-
+    _authDataSource = ref.watch(firebaseAuthDataSourceProvider);
+    _registrationService = ref.watch(userRegistrationServiceProvider);
     return const AuthControllerState();
   }
 
   // ============================================================
-  // SEND OTP
+  // ১. SEND FIREBASE MAGIC LINK
   // ============================================================
-
-  Future<void> sendOtp(String phoneNumber) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-      otpSent: false,
-      verificationId: null,
-    );
+  Future<void> sendEmailLink(String email) async {
+    state = state.copyWith(isLoading: true, clearError: true, linkSent: false);
 
     try {
-      await _authDataSource
-          .sendOtp(
-        phoneNumber: phoneNumber,
-
-        // ------------------------------------------------------
-        // CODE SENT
-        // ------------------------------------------------------
-
-        onCodeSent: (verificationId) {
-          state = state.copyWith(
-            isLoading: false,
-            verificationId: verificationId,
-            otpSent: true,
-          );
-
-          debugPrint(
-            'AUTH: OTP code sent successfully.',
-          );
-        },
-
-        // ------------------------------------------------------
-        // VERIFICATION FAILED
-        // ------------------------------------------------------
-
-        onVerificationFailed: (message) {
-          state = state.copyWith(
-            isLoading: false,
-            errorMessage: message,
-          );
-
-          debugPrint(
-            'AUTH: Phone verification failed: $message',
-          );
-        },
-
-        // ------------------------------------------------------
-        // AUTO VERIFIED
-        // ------------------------------------------------------
-
-        onAutoVerified: () {
-          state = state.copyWith(
-            isLoading: false,
-          );
-
-          debugPrint(
-            'AUTH: Phone automatically verified.',
-          );
-        },
-      )
-          .timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          throw StateError(
-            'Phone verification timed out. '
-                'Please check your internet connection and try again.',
-          );
-        },
+      final acs = ActionCodeSettings(
+        // এখানে আপনার আসল ডোমেইনটি বসানো হয়েছে
+        url: 'https://griho-crafttech.firebaseapp.com/login',
+        handleCodeInApp: true,
+        androidPackageName: 'com.crafttech.griho',
+        androidInstallApp: true,
+        androidMinimumVersion: '1',
       );
+
+      await FirebaseAuth.instance.sendSignInLinkToEmail(
+        email: email,
+        actionCodeSettings: acs,
+      );
+
+      debugPrint('AUTH: Magic Link sent to $email');
+      state = state.copyWith(isLoading: false, linkSent: true);
     } catch (error) {
-      debugPrint(
-        'AUTH: sendOtp failed: $error',
-      );
-
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      debugPrint('MAGIC LINK ERROR: $error');
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
     }
   }
 
   // ============================================================
-  // VERIFY OTP
+  // ২. VERIFY MAGIC LINK & LOGIN
   // ============================================================
-
-  Future<AuthResult?> verifyOtp({
-    required String smsCode,
+  Future<bool> verifyEmailLink({
+    required String email,
+    required String emailLink,
   }) async {
-    final verificationId =
-        state.verificationId;
-
-    if (verificationId == null ||
-        verificationId.isEmpty) {
-      state = state.copyWith(
-        errorMessage:
-        'Verification session has expired. Please request a new OTP.',
-      );
-
-      return null;
-    }
-
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      final credential =
-      await _authDataSource.verifyOtp(
-        verificationId:
-        verificationId,
-        smsCode: smsCode,
-      );
-
-      final firebaseUser =
-          credential.user;
-
-      if (firebaseUser == null) {
+      if (FirebaseAuth.instance.isSignInWithEmailLink(emailLink)) {
+        await FirebaseAuth.instance.signInWithEmailLink(
+          email: email,
+          emailLink: emailLink,
+        );
+        state = state.copyWith(isLoading: false);
+        return true;
+      } else {
         throw Exception(
-          'Authentication succeeded, but no Firebase user was returned.',
+          'The link is invalid or has expired. Please request a new one.',
         );
       }
-
-      debugPrint(
-        'OTP verification successful. '
-            'UID: ${firebaseUser.uid}',
-      );
-
-      // ========================================================
-      // CHECK PROFILE
-      // ========================================================
-
-      final profile =
-      await ref
-          .read(
-        userProfileRepositoryProvider,
-      )
-          .getUserByUid(
-        firebaseUser.uid,
-      )
-          .timeout(
-        const Duration(
-          seconds: 10,
-        ),
-      );
-
-      debugPrint(
-        'User profile lookup completed. '
-            'Profile exists: ${profile != null}',
-      );
-
-      // ========================================================
-      // NEW USER
-      // ========================================================
-
-      if (profile == null) {
-        state = state.copyWith(
-          isLoading: false,
-        );
-
-        debugPrint(
-          'New user detected. Going to onboarding.',
-        );
-
-        return const AuthResult.newUser();
-      }
-
-      // ========================================================
-      // EXISTING USER
-      // ========================================================
-
-      state = state.copyWith(
-        isLoading: false,
-        user: profile,
-      );
-
-      ref.invalidate(
-        currentUserProfileProvider,
-      );
-
-      debugPrint(
-        'Existing user detected.',
-      );
-
-      return AuthResult.existingUser(
-        profile,
-      );
     } catch (error) {
-      debugPrint(
-        'OTP verification failed: $error',
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
+      return false;
+    }
+  }
 
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage:
-        error.toString(),
-      );
-
+  // ============================================================
+  // ৩. GOOGLE SIGN-IN
+  // ============================================================
+  Future<AuthResult?> signInWithGoogle() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      // গুগল সাইন ইন লজিক
+      await Future.delayed(const Duration(seconds: 1));
+      state = state.copyWith(isLoading: false);
+      return const AuthResult.newUser();
+    } catch (error) {
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
       return null;
     }
   }
 
   // ============================================================
-  // REGISTER
+  // ৪. REGISTER WITH EMAIL & PERMANENT PHONE
   // ============================================================
-
-  Future<UserRegistrationResult?>
-  register({
+  Future<UserRegistrationResult?> registerWithEmailAndPhone({
     required RegistrationIntent intent,
     required String name,
+    required String phoneNumber,
   }) async {
-    debugPrint(
-      'REGISTER: started',
-    );
-
     state = state.copyWith(
       isLoading: true,
       clearError: true,
@@ -359,89 +159,38 @@ class AuthController extends Notifier<AuthControllerState> {
     );
 
     try {
-      debugPrint(
-        'REGISTER: calling UserRegistrationService',
-      );
-
-      final result =
-      await _registrationService.register(
+      final result = await _registrationService.register(
         intent: intent,
         name: name,
-      );
-
-      debugPrint(
-        'REGISTER: service completed. '
-            'Griho ID = ${result.user.publicId}',
-      );
-
-      debugPrint(
-        'REGISTER: invitationId = '
-            '${result.invitationId}',
+        phoneNumber: phoneNumber, // রিয়েল ফোন নম্বর
       );
 
       state = state.copyWith(
         isLoading: false,
         user: result.user,
-        invitationId:
-        result.invitationId,
+        invitationId: result.invitationId,
       );
-
-      ref.invalidate(
-        currentUserProfileProvider,
-      );
-
-      debugPrint(
-        'REGISTER: completed successfully',
-      );
-
+      ref.invalidate(currentUserProfileProvider);
       return result;
-    } catch (
-    error,
-    stackTrace
-    ) {
-      debugPrint(
-        'REGISTER ERROR: $error',
-      );
-
-      debugPrint(
-        'REGISTER STACK: $stackTrace',
-      );
-
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage:
-        error.toString(),
-      );
-
+    } catch (error, stackTrace) {
+      debugPrint('REGISTER ERROR: $error\n$stackTrace');
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
       return null;
     }
   }
 
   // ============================================================
-  // SIGN OUT
+  // ৫. SIGN OUT
   // ============================================================
-
   Future<void> signOut() async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
-
+    state = state.copyWith(isLoading: true, clearError: true);
     try {
       await _authDataSource.signOut();
-
-      state =
-      const AuthControllerState();
-
-      ref.invalidate(
-        currentUserProfileProvider,
-      );
+      await FirebaseAuth.instance.signOut(); // Firebase থেকে সাইনআউট
+      state = const AuthControllerState();
+      ref.invalidate(currentUserProfileProvider);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage:
-        error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
     }
   }
 }

@@ -12,7 +12,20 @@
           "package_name": "com.crafttech.griho"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "730568159232-84tn54locfvlth2egaifqd0161imnp6m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.crafttech.griho",
+            "certificate_hash": "9370d5cd2f22934f1829abe32e15ee523dcff59a"
+          }
+        },
+        {
+          "client_id": "730568159232-ouccsv4cktv0dbpeq01r2b2r6k495tkj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD6QcDUVROFZs3vnLPEY9Qoxe4mhZZhVBc"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "730568159232-ouccsv4cktv0dbpeq01r2b2r6k495tkj.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "730568159232-m2otquc99qemdn247spu0og859bo5ilh.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crafttech.griho"
+              }
+            }
+          ]
         }
       }
     }
