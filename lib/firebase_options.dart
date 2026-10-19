@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -62,6 +59,17 @@ class DefaultFirebaseOptions {
     messagingSenderId: '730568159232',
     projectId: 'griho-crafttech',
     storageBucket: 'griho-crafttech.firebasestorage.app',
+    androidClientId: '730568159232-84tn54locfvlth2egaifqd0161imnp6m.apps.googleusercontent.com',
+    iosClientId: '730568159232-m2otquc99qemdn247spu0og859bo5ilh.apps.googleusercontent.com',
     iosBundleId: 'com.crafttech.griho',
+  );
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyDcAlU-jPpcHWZRI5S8R2gdFnldg_MXs6E',
+    appId: '1:730568159232:web:ddc7830bcd3116a49a28e5',
+    messagingSenderId: '730568159232',
+    projectId: 'griho-crafttech',
+    authDomain: 'griho-crafttech.firebaseapp.com',
+    storageBucket: 'griho-crafttech.firebasestorage.app',
+    measurementId: 'G-58ST4RYKNN',
   );
 }

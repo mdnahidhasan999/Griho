@@ -557,7 +557,7 @@ class _TenantInvitationReceiveScreenState
           const SizedBox(height: 18),
 
           // 2. Financial & Lease Highlight Card
-          if (rentAmount != null && rentAmount > 0) ...[
+          if (rentAmount > 0) ...[
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
