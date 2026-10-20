@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // ফায়ারবেস অথ
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../tenants/data/datasources/tenant_invitation_data_source.dart';
 import '../../data/datasources/firebase_auth_datasource.dart';
@@ -78,9 +79,10 @@ class AuthController extends Notifier<AuthControllerState> {
     state = state.copyWith(isLoading: true, clearError: true, linkSent: false);
 
     try {
+      final normalizedEmail = email.trim().toLowerCase();
+
       final acs = ActionCodeSettings(
-        // এখানে আপনার আসল ডোমেইনটি বসানো হয়েছে
-        url: 'https://griho-crafttech.firebaseapp.com/login',
+        url: 'https://griho-crafttech.web.app/login',
         handleCodeInApp: true,
         androidPackageName: 'com.crafttech.griho',
         androidInstallApp: true,
@@ -88,14 +90,19 @@ class AuthController extends Notifier<AuthControllerState> {
       );
 
       await FirebaseAuth.instance.sendSignInLinkToEmail(
-        email: email,
+        email: normalizedEmail,
         actionCodeSettings: acs,
       );
 
-      debugPrint('AUTH: Magic Link sent to $email');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('emailForSignIn', normalizedEmail);
+
+      debugPrint('AUTH: Magic Link sent successfully.');
+
       state = state.copyWith(isLoading: false, linkSent: true);
-    } catch (error) {
-      debugPrint('MAGIC LINK ERROR: $error');
+    } catch (error, stackTrace) {
+      debugPrint('MAGIC LINK ERROR: $error\n$stackTrace');
+
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
     }
   }
@@ -110,20 +117,33 @@ class AuthController extends Notifier<AuthControllerState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      if (FirebaseAuth.instance.isSignInWithEmailLink(emailLink)) {
-        await FirebaseAuth.instance.signInWithEmailLink(
-          email: email,
-          emailLink: emailLink,
-        );
-        state = state.copyWith(isLoading: false);
-        return true;
-      } else {
+      final normalizedEmail = email.trim().toLowerCase();
+      final link = emailLink.trim();
+
+      if (!FirebaseAuth.instance.isSignInWithEmailLink(link)) {
         throw Exception(
-          'The link is invalid or has expired. Please request a new one.',
+          'Invalid or expired email link. Please request a new link.',
         );
       }
-    } catch (error) {
+
+      await FirebaseAuth.instance.signInWithEmailLink(
+        email: normalizedEmail,
+        emailLink: link,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('emailForSignIn');
+
+      state = state.copyWith(isLoading: false);
+
+      debugPrint('AUTH: Email Link sign-in successful.');
+
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint('EMAIL LINK VERIFICATION ERROR: $error\n$stackTrace');
+
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
+
       return false;
     }
   }

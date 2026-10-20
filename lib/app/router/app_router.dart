@@ -79,6 +79,17 @@ abstract final class AppRouter {
           path: RouteNames.login,
           builder: (context, state) {
             final invitationId = state.uri.queryParameters['invitationId'];
+
+            final browserUri = Uri.base;
+
+            final isEmailLink =
+                browserUri.queryParameters['mode'] == 'signIn' &&
+                browserUri.queryParameters.containsKey('oobCode');
+
+            if (isEmailLink) {
+              return const LinkWaitingScreen(email: '');
+            }
+
             return LoginScreen(invitationId: invitationId);
           },
         ),

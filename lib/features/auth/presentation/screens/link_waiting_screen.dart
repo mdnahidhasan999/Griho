@@ -1,6 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../providers/auth_controller.dart';
@@ -16,15 +18,153 @@ class LinkWaitingScreen extends ConsumerStatefulWidget {
 
 class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
   final _linkController = TextEditingController();
+  final _emailController = TextEditingController();
+
+  bool _autoVerificationStarted = false;
+  bool _requiresEmail = false;
+  bool _verificationFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _emailController.text = widget.email;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handleIncomingEmailLink();
+    });
+  }
 
   @override
   void dispose() {
     _linkController.dispose();
+    _emailController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleIncomingEmailLink() async {
+    if (_autoVerificationStarted) return;
+    _autoVerificationStarted = true;
+
+    final incomingLink = Uri.base.toString();
+
+    debugPrint('EMAIL LINK DEBUG: Current URL: ${Uri.base}');
+    debugPrint('EMAIL LINK DEBUG: URL path: ${Uri.base.path}');
+    debugPrint(
+      'EMAIL LINK DEBUG: Has mode parameter: '
+      '${Uri.base.queryParameters.containsKey('mode')}',
+    );
+    debugPrint(
+      'EMAIL LINK DEBUG: Has oobCode parameter: '
+      '${Uri.base.queryParameters.containsKey('oobCode')}',
+    );
+
+    final isEmailLink = FirebaseAuthLinkCheck.isEmailLink(incomingLink);
+
+    debugPrint('EMAIL LINK DEBUG: Firebase recognized link: $isEmailLink');
+
+    if (!isEmailLink) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The email link could not be recognized. Please try a new link.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+
+      return;
+    }
+
+    _linkController.text = incomingLink;
+
+    var email = widget.email.trim();
+
+    if (email.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      email = prefs.getString('emailForSignIn')?.trim() ?? '';
+    }
+
+    if (email.isEmpty) {
+      if (!mounted) return;
+
+      setState(() {
+        _requiresEmail = true;
+      });
+
+      return;
+    }
+
+    await _verifyLink(email: email, link: incomingLink);
+  }
+
+  Future<void> _verifyLink({
+    required String email,
+    required String link,
+  }) async {
+    final normalizedEmail = email.trim();
+
+    if (normalizedEmail.isEmpty) {
+      setState(() {
+        _requiresEmail = true;
+      });
+      return;
+    }
+
+    final success = await ref
+        .read(authControllerProvider.notifier)
+        .verifyEmailLink(email: normalizedEmail, emailLink: link.trim());
+
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email link verified successfully!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (!mounted) return;
+
+      context.go(RouteNames.splash);
+    } else {
+      setState(() {
+        _verificationFailed = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ref.read(authControllerProvider).errorMessage ??
+                'The link is invalid or has expired. Please request a new one.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _verifyPastedLink() async {
     final link = _linkController.text.trim();
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please enter the email address used to request the link.',
+          ),
+        ),
+      );
+      return;
+    }
+
     if (link.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please paste the magic link.')),
@@ -32,23 +172,7 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
       return;
     }
 
-    final isValid = await ref
-        .read(authControllerProvider.notifier)
-        .verifyEmailLink(email: widget.email, emailLink: link);
-
-    if (!mounted) return;
-
-    if (isValid) {
-      // ভেরিফাই হলে ফায়ারবেস লগইন হয়ে যাবে এবং ইউজারকে অনবোর্ডিংয়ে পাঠাবে
-      context.go(RouteNames.onboarding);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid link. It may have expired.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    await _verifyLink(email: email, link: link);
   }
 
   @override
@@ -93,7 +217,9 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                widget.email,
+                widget.email.isEmpty
+                    ? 'Enter the email address below'
+                    : widget.email,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -109,14 +235,37 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(
-                  'Open your Gmail app and click the link to automatically sign in.\n\nIf the app doesn\'t open automatically, copy the link from the email and paste it below.',
+                  'Open the email and click the Magic Link. '
+                  'Griho will try to verify the link automatically. '
+                  'If automatic verification is unavailable, you can paste the link below.',
                   style: TextStyle(height: 1.4),
                 ),
               ),
-              const SizedBox(height: 36),
-
+              const SizedBox(height: 28),
+              if (_requiresEmail || widget.email.isEmpty) ...[
+                Text(
+                  'Email Address',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  enabled: !authState.isLoading,
+                  decoration: const InputDecoration(
+                    hintText: 'name@gmail.com',
+                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(14)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
               Text(
-                'Paste Magic Link Here',
+                'Magic Link',
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -125,8 +274,10 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
               TextFormField(
                 controller: _linkController,
                 enabled: !authState.isLoading,
+                minLines: 2,
+                maxLines: 4,
                 decoration: const InputDecoration(
-                  hintText: 'https://grihoapp.firebaseapp.com...',
+                  hintText: 'Paste the complete email sign-in link',
                   prefixIcon: Icon(Icons.link_rounded),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.all(Radius.circular(14)),
@@ -134,7 +285,6 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -154,9 +304,11 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text(
-                          'Verify Link & Continue',
-                          style: TextStyle(
+                      : Text(
+                          _verificationFailed
+                              ? 'Try Verification Again'
+                              : 'Verify Link & Continue',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -168,5 +320,12 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
         ),
       ),
     );
+  }
+}
+
+/// Uses FirebaseAuth's own email-link validation.
+class FirebaseAuthLinkCheck {
+  static bool isEmailLink(String link) {
+    return FirebaseAuth.instance.isSignInWithEmailLink(link);
   }
 }
