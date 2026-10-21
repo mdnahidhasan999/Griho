@@ -8,10 +8,6 @@ import '../datasources/user_profile_datasource.dart';
 import '../models/app_user_model.dart';
 import 'griho_id_generator.dart';
 
-// ================================================================
-// USER REGISTRATION RESULT
-// ================================================================
-
 class UserRegistrationResult {
   final AppUser user;
   final String? invitationId;
@@ -26,10 +22,6 @@ class UserRegistrationResult {
   }
 }
 
-// ================================================================
-// USER REGISTRATION SERVICE
-// ================================================================
-
 class UserRegistrationService {
   final FirebaseAuth _firebaseAuth;
   final GrihoIdGenerator _grihoIdGenerator;
@@ -41,87 +33,96 @@ class UserRegistrationService {
     GrihoIdGenerator? grihoIdGenerator,
     UserProfileDataSource? userProfileDataSource,
     TenantInvitationDataSource? tenantInvitationDataSource,
-  })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+  })
+      : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
         _grihoIdGenerator = grihoIdGenerator ?? GrihoIdGenerator(),
-        _userProfileDataSource = userProfileDataSource ?? UserProfileDataSource(),
-        _tenantInvitationDataSource = tenantInvitationDataSource ?? TenantInvitationDataSource();
-
-  // ============================================================
-  // REGISTER
-  // ============================================================
+        _userProfileDataSource = userProfileDataSource ??
+            UserProfileDataSource(),
+        _tenantInvitationDataSource = tenantInvitationDataSource ??
+            TenantInvitationDataSource();
 
   Future<UserRegistrationResult> register({
     required RegistrationIntent intent,
     required String name,
-    required String phoneNumber, // নতুন যুক্ত করা হয়েছে
+    required String phoneNumber,
   }) async {
     final firebaseUser = _firebaseAuth.currentUser;
 
     if (firebaseUser == null) {
       throw StateError(
-        'A Firebase authenticated user is required for registration.',
-      );
+          'A Firebase authenticated user is required for registration.');
     }
 
     final normalizedName = name.trim();
-
     if (normalizedName.isEmpty) {
       throw ArgumentError('Name cannot be empty.');
     }
 
-    // EXISTING USER CHECK
-    final existingUser = await _userProfileDataSource.getUserByUid(firebaseUser.uid);
+    final phone = phoneNumber.trim();
+
+    final existingUser = await _userProfileDataSource.getUserByUid(
+        firebaseUser.uid);
 
     if (existingUser != null) {
+      // যদি ইউজার আগে থেকেই থাকে, কিন্তু ফোন নাম্বার অ্যাড করতে চায় (যেমন গুগল সাইন ইন এর পর)
+      if (existingUser.phoneNumber == null ||
+          existingUser.phoneNumber!.isEmpty) {
+        // Unnecessary cast রিমুভ করা হয়েছে এবং ফিক্স করা হয়েছে
+        final updatedAppUser = existingUser.copyWith(
+          phoneNumber: phone,
+          defaultDashboard: intent == RegistrationIntent.tenant
+              ? 'tenant'
+              : 'owner',
+        );
+
+        final updatedUserModel = AppUserModel.fromEntity(updatedAppUser);
+
+        await _userProfileDataSource.updateUser(updatedUserModel);
+        return UserRegistrationResult(user: updatedUserModel);
+      }
       return UserRegistrationResult(user: existingUser);
     }
 
-    // TENANT REGISTRATION
     if (intent == RegistrationIntent.tenant) {
       return _registerTenant(
         firebaseUser: firebaseUser,
         name: normalizedName,
-        phoneNumber: phoneNumber, // পাস করা হচ্ছে
+        phoneNumber: phone,
       );
     }
 
-    // OWNER REGISTRATION
     final user = await _registerOwner(
       firebaseUser: firebaseUser,
       name: normalizedName,
-      phoneNumber: phoneNumber, // পাস করা হচ্ছে
+      phoneNumber: phone,
     );
 
     return UserRegistrationResult(user: user);
   }
 
-  // ============================================================
-  // REGISTER OWNER
-  // ============================================================
-
   Future<AppUser> _registerOwner({
     required User firebaseUser,
     required String name,
-    required String phoneNumber, // নতুন যুক্ত করা হয়েছে
+    required String phoneNumber,
   }) async {
     final publicId = await _grihoIdGenerator.generateAndReserve();
     final now = DateTime.now();
 
-    final user = AppUser(
+    final user = AppUserModel(
       uid: firebaseUser.uid,
       publicId: publicId,
-      role: UserRole.owner,
       name: name,
-      phoneNumber: phoneNumber, // Firebase এর বদলে সরাসরি প্যারামিটার থেকে নিচ্ছে
+      phoneNumber: phoneNumber,
       email: firebaseUser.email,
       photoUrl: firebaseUser.photoURL,
+      defaultDashboard: 'owner',
       isActive: true,
       createdAt: now,
       updatedAt: now,
     );
 
     try {
-      await _userProfileDataSource.createUser(AppUserModel.fromEntity(user));
+      await _userProfileDataSource.createUser(user);
       return user;
     } catch (error) {
       await _grihoIdGenerator.releaseReservation(publicId);
@@ -129,32 +130,22 @@ class UserRegistrationService {
     }
   }
 
-  // ============================================================
-  // REGISTER TENANT
-  // ============================================================
-
   Future<UserRegistrationResult> _registerTenant({
     required User firebaseUser,
     required String name,
-    required String phoneNumber, // নতুন যুক্ত করা হয়েছে
+    required String phoneNumber,
   }) async {
-
-    final phone = phoneNumber.trim(); // Firebase এর বদলে সরাসরি প্যারামিটার থেকে নিচ্ছে
-
-    if (phone.isEmpty) {
-      throw StateError('A verified phone number is required for tenant registration.');
-    }
-
-    if (!PhoneNumberUtils.isValid(phone)) {
+    if (!PhoneNumberUtils.isValid(phoneNumber)) {
       throw StateError('Invalid phone number format.');
     }
 
-    final invitation = await _tenantInvitationDataSource.getPendingInvitationByPhone(phone);
+    final invitation = await _tenantInvitationDataSource
+        .getPendingInvitationByPhone(phoneNumber);
 
     final user = await _registerTenantUser(
       firebaseUser: firebaseUser,
       name: name,
-      phoneNumber: phone,
+      phoneNumber: phoneNumber,
     );
 
     if (invitation == null) {
@@ -167,33 +158,29 @@ class UserRegistrationService {
     );
   }
 
-  // ============================================================
-  // REGISTER TENANT USER
-  // ============================================================
-
   Future<AppUser> _registerTenantUser({
     required User firebaseUser,
     required String name,
-    required String phoneNumber, // নতুন যুক্ত করা হয়েছে
+    required String phoneNumber,
   }) async {
     final publicId = await _grihoIdGenerator.generateAndReserve();
     final now = DateTime.now();
 
-    final user = AppUser(
+    final user = AppUserModel(
       uid: firebaseUser.uid,
       publicId: publicId,
-      role: UserRole.tenant,
       name: name,
-      phoneNumber: phoneNumber, // Firebase এর বদলে সরাসরি প্যারামিটার থেকে নিচ্ছে
+      phoneNumber: phoneNumber,
       email: firebaseUser.email,
       photoUrl: firebaseUser.photoURL,
+      defaultDashboard: 'tenant',
       isActive: true,
       createdAt: now,
       updatedAt: now,
     );
 
     try {
-      await _userProfileDataSource.createUser(AppUserModel.fromEntity(user));
+      await _userProfileDataSource.createUser(user);
       return user;
     } catch (error) {
       await _grihoIdGenerator.releaseReservation(publicId);

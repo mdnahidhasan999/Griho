@@ -8,23 +8,21 @@ class FirebaseAuthRepository implements AuthRepository {
   final FirebaseAuthDataSource _dataSource;
 
   FirebaseAuthRepository({FirebaseAuthDataSource? dataSource})
-    : _dataSource = dataSource ?? FirebaseAuthDataSource();
+      : _dataSource = dataSource ?? FirebaseAuthDataSource();
 
   @override
   Stream<AppUser?> get authStateChanges {
     return _dataSource.authStateChanges.map(
-      (user) => user == null ? null : _mapFirebaseUser(user),
+          (user) => user == null ? null : _mapFirebaseUser(user),
     );
   }
 
   @override
   AppUser? get currentUser {
     final user = _dataSource.currentUser;
-
     if (user == null) {
       return null;
     }
-
     return _mapFirebaseUser(user);
   }
 
@@ -65,7 +63,7 @@ class FirebaseAuthRepository implements AuthRepository {
     return AppUser(
       uid: user.uid,
       publicId: '',
-      role: UserRole.tenant,
+      // role রিমুভ করা হয়েছে
       name: user.displayName ?? '',
       phoneNumber: user.phoneNumber,
       email: user.email,

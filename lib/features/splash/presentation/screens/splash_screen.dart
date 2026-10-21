@@ -116,10 +116,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return RouteNames.onboarding;
     }
 
-    debugPrint('SPLASH: Profile identified: ${profile.publicId} (Role: ${profile
-        .role})');
+    // ফিক্স: profile.role এর জায়গায় defaultDashboard প্রিন্ট করা হয়েছে
+    debugPrint('SPLASH: Profile identified: ${profile
+        .publicId} (Default View: ${profile.defaultDashboard})');
 
-    final destination = AuthRoleResolver.resolve(profile.role);
+    // ফিক্স: profile.role এর বদলে সরাসরি profile পাস করা হয়েছে
+    final destination = AuthRoleResolver.resolve(profile);
     return AuthDestinationMapper.routeFor(destination);
   }
 

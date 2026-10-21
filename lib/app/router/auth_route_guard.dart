@@ -35,12 +35,9 @@ class AuthRouteGuard {
     if (isSplashRoute) return null;
     if (isTenantInvitationRoute) return null;
 
-    // ------------------------------------------------------------
-    // USER NOT AUTHENTICATED
-    // ------------------------------------------------------------
     if (firebaseUser == null) {
       if (isLoginRoute || isLinkWaitingRoute || isOnboardingRoute) {
-        return null; // লগইন, লিংক ওয়েটিং এবং অনবোর্ডিং পাবলিক থাকবে
+        return null;
       }
       if (isTenantAccountLinkRoute) {
         return RouteNames.login;
@@ -48,9 +45,6 @@ class AuthRouteGuard {
       return RouteNames.login;
     }
 
-    // ------------------------------------------------------------
-    // USER IS AUTHENTICATED
-    // ------------------------------------------------------------
     if (isLoginRoute || isLinkWaitingRoute) {
       return RouteNames.splash;
     }
@@ -61,7 +55,8 @@ class AuthRouteGuard {
           .getUserByUid(firebaseUser.uid);
 
       if (profile != null) {
-        final destination = AuthRoleResolver.resolve(profile.role);
+        // ERROR FIXED: profile.role এর বদলে সরাসরি profile পাস করা হয়েছে
+        final destination = AuthRoleResolver.resolve(profile);
         return AuthDestinationMapper.routeFor(destination);
       }
       return null;
@@ -76,7 +71,8 @@ class AuthRouteGuard {
         return RouteNames.onboarding;
       }
 
-      final destination = AuthRoleResolver.resolve(profile.role);
+      // ERROR FIXED: profile.role এর বদলে সরাসরি profile পাস করা হয়েছে
+      final destination = AuthRoleResolver.resolve(profile);
       final correctRoute = AuthDestinationMapper.routeFor(destination);
 
       if (path == correctRoute) return null;

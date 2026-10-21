@@ -6,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../../core/utils/phone_number_utils.dart';
-import '../../domain/entities/app_user.dart';
 import '../../domain/entities/registration_intent.dart';
 import '../providers/auth_controller.dart';
 
@@ -28,7 +27,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   void initState() {
     super.initState();
-    // ফায়ারবেস থেকে ভেরিফাইড ইমেইলটি স্বয়ংক্রিয়ভাবে নিয়ে নিচ্ছে
     final userEmail = FirebaseAuth.instance.currentUser?.email;
     if (userEmail != null) {
       _emailController.text = userEmail;
@@ -67,18 +65,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final result = await ref
         .read(authControllerProvider.notifier)
         .registerWithEmailAndPhone(
-          intent: _selectedIntent!,
-          name: _nameController.text.trim(),
-          phoneNumber: cleanPhone,
-        );
+      intent: _selectedIntent!,
+      name: _nameController.text.trim(),
+      phoneNumber: cleanPhone,
+    );
 
     if (!mounted || result == null) return;
 
     final user = result.user;
-    if (user.role == UserRole.owner) {
+    if (user.defaultDashboard == 'owner') {
       context.go(RouteNames.ownerHome);
-    } else if (user.role == UserRole.tenant) {
+    } else if (user.defaultDashboard == 'tenant') {
       context.go(RouteNames.tenantHome);
+    } else {
+      context.go(RouteNames.ownerHome);
     }
   }
 
@@ -137,7 +137,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       borderRadius: BorderRadius.all(Radius.circular(14)),
                     ),
                   ),
-                  validator: (v) => v?.trim().isEmpty == true
+                  validator: (v) =>
+                  v
+                      ?.trim()
+                      .isEmpty == true
                       ? 'Please enter your name.'
                       : null,
                 ),
@@ -182,9 +185,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                   ),
                   onChanged: (phone) =>
-                      _completePhoneNumber = phone.completeNumber,
+                  _completePhoneNumber = phone.completeNumber,
                   validator: (phone) =>
-                      (phone == null || phone.number.trim().isEmpty)
+                  (phone == null || phone.number
+                      .trim()
+                      .isEmpty)
                       ? 'Permanent phone number is required.'
                       : null,
                 ),
@@ -219,20 +224,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   description: 'Manage properties, units, and track rents.',
                   icon: Icons.apartment_rounded,
                   selected: _selectedIntent == RegistrationIntent.owner,
-                  onTap: () => setState(
-                    () => _selectedIntent = RegistrationIntent.owner,
-                  ),
+                  onTap: () =>
+                      setState(
+                            () => _selectedIntent = RegistrationIntent.owner,
+                      ),
                 ),
                 const SizedBox(height: 12),
                 _RoleSelectionCard(
                   title: 'Tenant (ভাড়াটিয়া)',
                   description:
-                      'View monthly rent, utility bills, and tenancy status.',
+                  'View monthly rent, utility bills, and tenancy status.',
                   icon: Icons.key_rounded,
                   selected: _selectedIntent == RegistrationIntent.tenant,
-                  onTap: () => setState(
-                    () => _selectedIntent = RegistrationIntent.tenant,
-                  ),
+                  onTap: () =>
+                      setState(
+                            () => _selectedIntent = RegistrationIntent.tenant,
+                      ),
                 ),
                 const SizedBox(height: 36),
 
@@ -248,20 +255,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                     child: authState.isLoading
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                         : const Text(
-                            'Complete & Continue',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                      'Complete & Continue',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],

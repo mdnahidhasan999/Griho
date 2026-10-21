@@ -58,9 +58,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       final updatedUser = AppUserModel(
         uid: widget.user.uid,
         publicId: widget.user.publicId,
-        role: widget.user.role,
         name: name,
         phoneNumber: widget.user.phoneNumber,
+        // ফোন নাম্বার ফিক্সড
+        defaultDashboard: widget.user.defaultDashboard,
         email: email.isEmpty ? null : email,
         photoUrl: widget.user.photoUrl,
         isActive: widget.user.isActive,
@@ -93,7 +94,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(_cleanErrorMessage(error)),
-          backgroundColor: Theme.of(context).colorScheme.error,
+          backgroundColor: Theme
+              .of(context)
+              .colorScheme
+              .error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -125,9 +129,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final roleName = widget.user.role == UserRole.owner
+    final roleName = widget.user.defaultDashboard == 'owner'
         ? 'Property Owner'
-        : 'Tenant';
+        : widget.user.defaultDashboard == 'tenant' ? 'Tenant' : 'Griho User';
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -270,28 +274,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   const SizedBox(height: 16),
                   InputDecorator(
                     decoration: InputDecoration(
-                      labelText: 'Verified Phone Number',
+                      labelText: 'Phone Number',
                       prefixIcon: const Icon(Icons.phone_outlined),
                       suffixIcon: Container(
                         margin: const EdgeInsets.only(right: 8),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.check_circle_rounded,
-                              size: 16,
-                              color: Colors.green.shade600,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Verified',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade700,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
                             const Icon(Icons.lock_outline, size: 18),
                           ],
                         ),
@@ -315,13 +304,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   onPressed: _isSaving ? null : _saveProfile,
                   icon: _isSaving
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                       : const Icon(Icons.save_outlined),
                   label: Text(
                     _isSaving ? 'Saving Changes...' : 'Save Changes',
@@ -339,8 +328,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
-  Widget _buildSectionCard(
-    BuildContext context, {
+  Widget _buildSectionCard(BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,

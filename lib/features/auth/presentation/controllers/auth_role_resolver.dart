@@ -1,26 +1,29 @@
 import '../../domain/entities/app_user.dart';
 
-abstract final class AuthRoleResolver {
-  static AuthUserDestination resolve(UserRole role) {
-    switch (role) {
-      case UserRole.owner:
-        return AuthUserDestination.owner;
-
-      case UserRole.manager:
-        return AuthUserDestination.manager;
-
-      case UserRole.caretaker:
-        return AuthUserDestination.caretaker;
-
-      case UserRole.tenant:
-        return AuthUserDestination.tenant;
-    }
-  }
-}
-
 enum AuthUserDestination {
   owner,
+  tenant,
   manager,
   caretaker,
-  tenant,
+  completeProfile,
+}
+
+class AuthRoleResolver {
+  static AuthUserDestination resolve(AppUser user) {
+    if (user.phoneNumber == null || user.phoneNumber!.trim().isEmpty) {
+      return AuthUserDestination.completeProfile;
+    }
+
+    switch (user.defaultDashboard) {
+      case 'tenant':
+        return AuthUserDestination.tenant;
+      case 'manager':
+        return AuthUserDestination.manager;
+      case 'caretaker':
+        return AuthUserDestination.caretaker;
+      case 'owner':
+      default:
+        return AuthUserDestination.owner;
+    }
+  }
 }

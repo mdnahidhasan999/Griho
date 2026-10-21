@@ -29,9 +29,7 @@ class AuthFlowController {
       return const AuthFlowResult.newUser();
     }
 
-    final destination = AuthRoleResolver.resolve(
-      profile.role,
-    );
+    final destination = AuthRoleResolver.resolve(profile);
 
     return AuthFlowResult.existingUser(
       profile,
@@ -67,10 +65,8 @@ class AuthFlowResult {
     status: AuthFlowStatus.newUser,
   );
 
-  const AuthFlowResult.existingUser(
-      AppUser user,
-      AuthUserDestination destination,
-      ) : this._(
+  const AuthFlowResult.existingUser(AppUser user,
+      AuthUserDestination destination,) : this._(
     status: AuthFlowStatus.existingUser,
     user: user,
     destination: destination,
