@@ -9,21 +9,31 @@ enum AuthUserDestination {
 }
 
 class AuthRoleResolver {
+  AuthRoleResolver._();
+
   static AuthUserDestination resolve(AppUser user) {
-    if (user.phoneNumber == null || user.phoneNumber!.trim().isEmpty) {
+    final phoneNumber = user.phoneNumber?.trim() ?? '';
+
+    if (phoneNumber.isEmpty) {
       return AuthUserDestination.completeProfile;
     }
 
-    switch (user.defaultDashboard) {
+    switch (user.defaultDashboard?.trim().toLowerCase()) {
+      case 'owner':
+        return AuthUserDestination.owner;
+
       case 'tenant':
         return AuthUserDestination.tenant;
+
       case 'manager':
         return AuthUserDestination.manager;
+
       case 'caretaker':
         return AuthUserDestination.caretaker;
-      case 'owner':
+
       default:
-        return AuthUserDestination.owner;
+      // Unknown or unset dashboard values must not be treated as owner.
+        return AuthUserDestination.completeProfile;
     }
   }
 }

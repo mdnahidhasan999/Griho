@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../domain/entities/app_user.dart';
 
 class AppUserModel extends AppUser {
@@ -10,12 +11,19 @@ class AppUserModel extends AppUser {
     super.email,
     super.photoUrl,
     super.defaultDashboard,
+    super.availableRoles = const [],
     required super.isActive,
     required super.createdAt,
     required super.updatedAt,
   });
 
   factory AppUserModel.fromJson(Map<String, dynamic> json) {
+    final rawRoles = json['availableRoles'];
+
+    final roles = rawRoles is List
+        ? rawRoles.whereType<String>().toSet().toList()
+        : <String>[];
+
     return AppUserModel(
       uid: json['uid'] as String,
       publicId: json['publicId'] as String,
@@ -24,6 +32,7 @@ class AppUserModel extends AppUser {
       email: json['email'] as String?,
       photoUrl: json['photoUrl'] as String?,
       defaultDashboard: json['defaultDashboard'] as String?,
+      availableRoles: List.unmodifiable(roles),
       isActive: json['isActive'] as bool? ?? true,
       createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (json['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -39,6 +48,7 @@ class AppUserModel extends AppUser {
       email: user.email,
       photoUrl: user.photoUrl,
       defaultDashboard: user.defaultDashboard,
+      availableRoles: List.unmodifiable(user.availableRoles),
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -46,8 +56,10 @@ class AppUserModel extends AppUser {
   }
 
   factory AppUserModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc) {
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data()!;
+
     return AppUserModel.fromJson({...data, 'uid': doc.id});
   }
 
@@ -60,6 +72,7 @@ class AppUserModel extends AppUser {
       'email': email,
       'photoUrl': photoUrl,
       'defaultDashboard': defaultDashboard,
+      'availableRoles': availableRoles,
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),

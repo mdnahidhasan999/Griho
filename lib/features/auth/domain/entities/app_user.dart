@@ -5,7 +5,12 @@ class AppUser {
   final String? phoneNumber;
   final String? email;
   final String? photoUrl;
+
+  // The dashboard selected to open by default.
   final String? defaultDashboard;
+
+  // Roles that have been authorized for this user.
+  final List<String> availableRoles;
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -18,6 +23,7 @@ class AppUser {
     this.email,
     this.photoUrl,
     this.defaultDashboard,
+    this.availableRoles = const [],
     required this.isActive,
     required this.createdAt,
     required this.updatedAt,
@@ -31,6 +37,7 @@ class AppUser {
     String? email,
     String? photoUrl,
     String? defaultDashboard,
+    List<String>? availableRoles,
     bool? isActive,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -43,6 +50,7 @@ class AppUser {
       email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
       defaultDashboard: defaultDashboard ?? this.defaultDashboard,
+      availableRoles: availableRoles ?? this.availableRoles,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
