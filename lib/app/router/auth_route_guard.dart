@@ -19,6 +19,8 @@ class AuthRouteGuard {
 
     final isSplashRoute = path == RouteNames.splash;
     final isLoginRoute = path == RouteNames.login;
+    final isCreateAccountRoute = path == RouteNames.createAccount;
+    final isForgotPasswordRoute = path == RouteNames.forgotPassword;
     final isLinkWaitingRoute = path == RouteNames.linkWaiting;
     final isOnboardingRoute = path == RouteNames.onboarding;
     final isTenantInvitationRoute = path.startsWith('/i/');
@@ -36,7 +38,11 @@ class AuthRouteGuard {
     if (isTenantInvitationRoute) return null;
 
     if (firebaseUser == null) {
-      if (isLoginRoute || isLinkWaitingRoute || isOnboardingRoute) {
+      if (isLoginRoute ||
+          isCreateAccountRoute ||
+          isForgotPasswordRoute ||
+          isLinkWaitingRoute ||
+          isOnboardingRoute) {
         return null;
       }
       if (isTenantAccountLinkRoute) {

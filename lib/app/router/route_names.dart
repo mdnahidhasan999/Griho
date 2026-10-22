@@ -4,9 +4,10 @@ abstract final class RouteNames {
   // ============================================================
   static const splash = '/';
   static const login = '/login';
-  static const linkWaiting = '/link-waiting'; // নতুন
+  static const createAccount = '/create-account';
+  static const forgotPassword = '/forgot-password';
+  static const linkWaiting = '/link-waiting';
   static const onboarding = '/onboarding';
-
   // ============================================================
   // HOME
   // ============================================================
