@@ -6,12 +6,19 @@ abstract final class AuthDestinationMapper {
     switch (destination) {
       case AuthUserDestination.owner:
         return RouteNames.ownerHome;
+
       case AuthUserDestination.manager:
         return RouteNames.managerHome;
+
       case AuthUserDestination.caretaker:
         return RouteNames.caretakerHome;
+
       case AuthUserDestination.tenant:
         return RouteNames.tenantHome;
+
+      case AuthUserDestination.roleSelection:
+        return RouteNames.roleSelection;
+
       case AuthUserDestination.completeProfile:
         return RouteNames.onboarding;
     }

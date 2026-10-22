@@ -138,6 +138,50 @@ class UserProfileDataSource {
     await batch.commit();
   }
 
+
+  Future<void> saveOwnerRole(String uid) async {
+    final normalizedUid = uid.trim();
+
+    if (normalizedUid.isEmpty) {
+      throw ArgumentError('User ID cannot be empty.');
+    }
+
+    final userDocument = _usersCollection.doc(normalizedUid);
+    final snapshot = await userDocument.get();
+
+    if (!snapshot.exists) {
+      throw StateError('User profile does not exist.');
+    }
+
+    final data = snapshot.data();
+
+    if (data == null) {
+      throw StateError('User profile data is unavailable.');
+    }
+
+    final phoneNumber = data['phoneNumber'];
+
+    if (phoneNumber is! String || phoneNumber
+        .trim()
+        .isEmpty) {
+      throw StateError('Complete your profile before selecting a role.');
+    }
+
+    final rawRoles = data['availableRoles'];
+    final existingRoles = rawRoles is List
+        ? rawRoles.whereType<String>().toSet()
+        : <String>{};
+
+    existingRoles.add('owner');
+
+    await userDocument.update({
+      'availableRoles': existingRoles.toList(),
+      'defaultDashboard': 'owner',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+
   Future<AppUserModel?> getUserByPublicId(String publicId) async {
     final normalizedPublicId = publicId.trim();
 

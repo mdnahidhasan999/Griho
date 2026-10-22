@@ -8,10 +8,13 @@ abstract final class RouteNames {
   static const forgotPassword = '/forgot-password';
   static const linkWaiting = '/link-waiting';
   static const onboarding = '/onboarding';
+  static const roleSelection = '/role-selection';
+
   // ============================================================
   // HOME
   // ============================================================
   static const ownerHome = '/owner';
+  static const ownerWelcome = '/owner/welcome';
   static const managerHome = '/manager';
   static const caretakerHome = '/caretaker';
   static const tenantHome = '/tenant';

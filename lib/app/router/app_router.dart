@@ -10,6 +10,7 @@ import '../../features/auth/presentation/screens/link_waiting_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 
+import '../../features/auth/presentation/screens/role_selection_screen.dart';
 import '../../features/billing/domain/entities/billing_rule.dart';
 import '../../features/billing/presentation/screens/edit_billing_rule_screen.dart';
 import '../../features/billing/presentation/screens/owner_billing_rules_screen.dart';
@@ -18,6 +19,7 @@ import '../../features/home/presentation/screens/caretaker_home_screen.dart';
 import '../../features/home/presentation/screens/manager_home_screen.dart';
 import '../../features/home/presentation/screens/owner_home_screen.dart';
 
+import '../../features/home/presentation/screens/owner_welcome_screen.dart';
 import '../../features/properties/domain/entities/property.dart';
 import '../../features/properties/presentation/screens/add_property_screen.dart';
 import '../../features/properties/presentation/screens/edit_property_screen.dart';
@@ -74,34 +76,28 @@ abstract final class AppRouter {
           },
         ),
 
-
-// ========================================================
-// LOGIN (Email/Password & Google Sign-In)
-// ========================================================
+        // ========================================================
+        // LOGIN (Email/Password & Google Sign-In)
+        // ========================================================
         GoRoute(
           path: RouteNames.login,
           builder: (context, state) {
-            final invitationId =
-            state.uri.queryParameters['invitationId'];
+            final invitationId = state.uri.queryParameters['invitationId'];
 
             final browserUri = Uri.base;
-            final verificationMode =
-            browserUri.queryParameters['mode'];
-            final verificationCode =
-            browserUri.queryParameters['oobCode'];
+            final verificationMode = browserUri.queryParameters['mode'];
+            final verificationCode = browserUri.queryParameters['oobCode'];
 
             final isEmailVerification =
                 verificationMode == 'verifyEmail' &&
-                    verificationCode != null &&
-                    verificationCode.isNotEmpty;
+                verificationCode != null &&
+                verificationCode.isNotEmpty;
 
             if (isEmailVerification) {
               return const LinkWaitingScreen(email: '');
             }
 
-            return LoginScreen(
-              invitationId: invitationId,
-            );
+            return LoginScreen(invitationId: invitationId);
           },
         ),
         GoRoute(
@@ -138,7 +134,22 @@ abstract final class AppRouter {
             return const OnboardingScreen();
           },
         ),
+        GoRoute(
+          path: RouteNames.roleSelection,
+          builder: (context, state) {
+            return const RoleSelectionScreen();
+          },
+        ),
 
+        // ========================================================
+        // OWNER WELCOME / SETUP
+        // ========================================================
+        GoRoute(
+          path: RouteNames.ownerWelcome,
+          builder: (context, state) {
+            return const OwnerWelcomeScreen();
+          },
+        ),
         // ========================================================
         // OWNER HOME
         // ========================================================
@@ -148,7 +159,6 @@ abstract final class AppRouter {
             return const OwnerHomeScreen();
           },
         ),
-
         // ========================================================
         // PROPERTY
         // ========================================================
@@ -269,9 +279,7 @@ abstract final class AppRouter {
           path: RouteNames.unitRentManagement,
           builder: (context, state) {
             final unitId = state.pathParameters['unitId'];
-            if (unitId == null || unitId
-                .trim()
-                .isEmpty) {
+            if (unitId == null || unitId.trim().isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid unit ID.')),
               );
@@ -283,9 +291,7 @@ abstract final class AppRouter {
           path: RouteNames.changeUnitRent,
           builder: (context, state) {
             final unitId = state.pathParameters['unitId'];
-            if (unitId == null || unitId
-                .trim()
-                .isEmpty) {
+            if (unitId == null || unitId.trim().isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid unit ID.')),
               );
@@ -297,9 +303,7 @@ abstract final class AppRouter {
           path: RouteNames.unitRentRateHistory,
           builder: (context, state) {
             final unitId = state.pathParameters['unitId'];
-            if (unitId == null || unitId
-                .trim()
-                .isEmpty) {
+            if (unitId == null || unitId.trim().isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid unit ID.')),
               );
@@ -311,9 +315,7 @@ abstract final class AppRouter {
           path: RouteNames.unitMonthlyRent,
           builder: (context, state) {
             final unitId = state.pathParameters['unitId'];
-            if (unitId == null || unitId
-                .trim()
-                .isEmpty) {
+            if (unitId == null || unitId.trim().isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid unit ID.')),
               );
@@ -425,9 +427,7 @@ abstract final class AppRouter {
           name: 'tenantInvitation',
           builder: (context, state) {
             final invitationId = state.pathParameters['invitationId'];
-            if (invitationId == null || invitationId
-                .trim()
-                .isEmpty) {
+            if (invitationId == null || invitationId.trim().isEmpty) {
               return const Scaffold(
                 body: Center(child: Text('Invalid invitation link.')),
               );

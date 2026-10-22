@@ -7,7 +7,7 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
   final UserProfileDataSource _dataSource;
 
   UserProfileRepositoryImpl({UserProfileDataSource? dataSource})
-    : _dataSource = dataSource ?? UserProfileDataSource();
+      : _dataSource = dataSource ?? UserProfileDataSource();
 
   @override
   Future<AppUser?> getUserByUid(String uid) {
@@ -26,6 +26,11 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
     final model = AppUserModel.fromEntity(user);
 
     return _dataSource.updateUser(model);
+  }
+
+  @override
+  Future<void> saveOwnerRole(String uid) {
+    return _dataSource.saveOwnerRole(uid);
   }
 
   @override

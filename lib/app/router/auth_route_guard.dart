@@ -23,6 +23,7 @@ class AuthRouteGuard {
     final isForgotPasswordRoute = path == RouteNames.forgotPassword;
     final isLinkWaitingRoute = path == RouteNames.linkWaiting;
     final isOnboardingRoute = path == RouteNames.onboarding;
+    final isRoleSelectionRoute = path == RouteNames.roleSelection;
     final isTenantInvitationRoute = path.startsWith('/i/');
     final isTenantAccountLinkRoute = path == RouteNames.tenantAccountLink;
 
@@ -36,18 +37,22 @@ class AuthRouteGuard {
 
     if (isSplashRoute) return null;
     if (isTenantInvitationRoute) return null;
-
     if (firebaseUser == null) {
       if (isLoginRoute ||
           isCreateAccountRoute ||
           isForgotPasswordRoute ||
-          isLinkWaitingRoute ||
-          isOnboardingRoute) {
+          isLinkWaitingRoute) {
         return null;
       }
+
+      if (isTenantInvitationRoute) {
+        return null;
+      }
+
       if (isTenantAccountLinkRoute) {
         return RouteNames.login;
       }
+
       return RouteNames.login;
     }
 
@@ -60,14 +65,36 @@ class AuthRouteGuard {
           .read(userProfileRepositoryProvider)
           .getUserByUid(firebaseUser.uid);
 
-      if (profile != null) {
-        // ERROR FIXED: profile.role এর বদলে সরাসরি profile পাস করা হয়েছে
-        final destination = AuthRoleResolver.resolve(profile);
-        return AuthDestinationMapper.routeFor(destination);
+      if (profile == null) {
+        return null;
       }
-      return null;
-    }
 
+      final destination = AuthRoleResolver.resolve(profile);
+      return AuthDestinationMapper.routeFor(destination);
+    }
+    if (isRoleSelectionRoute) {
+      final profile = await ref
+          .read(userProfileRepositoryProvider)
+          .getUserByUid(firebaseUser.uid);
+
+      if (profile == null) {
+        return RouteNames.onboarding;
+      }
+
+      final phoneNumber = profile.phoneNumber?.trim() ?? '';
+
+      if (phoneNumber.isEmpty) {
+        return RouteNames.onboarding;
+      }
+
+      final destination = AuthRoleResolver.resolve(profile);
+
+      if (destination == AuthUserDestination.roleSelection) {
+        return null;
+      }
+
+      return AuthDestinationMapper.routeFor(destination);
+    }
     if (isProtectedRoute) {
       final profile = await ref
           .read(userProfileRepositoryProvider)

@@ -10,4 +10,6 @@ abstract class UserProfileRepository {
   Future<AppUser?> getUserByPublicId(String publicId);
 
   Future<AppUser?> getUserByPhone(String phoneNumber);
+
+  Future<void> saveOwnerRole(String uid);
 }

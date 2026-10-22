@@ -5,6 +5,7 @@ enum AuthUserDestination {
   tenant,
   manager,
   caretaker,
+  roleSelection,
   completeProfile,
 }
 
@@ -32,8 +33,7 @@ class AuthRoleResolver {
         return AuthUserDestination.caretaker;
 
       default:
-      // Unknown or unset dashboard values must not be treated as owner.
-        return AuthUserDestination.completeProfile;
+        return AuthUserDestination.roleSelection;
     }
   }
 }
