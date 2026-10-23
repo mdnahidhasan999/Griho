@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/domain/entities/property.dart';
@@ -96,8 +97,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                     _showSignOutDialog(context, ref);
                   }
                 },
-                itemBuilder: (context) =>
-                const [
+                itemBuilder: (context) => const [
                   PopupMenuItem<String>(
                     value: 'edit_profile',
                     child: Row(
@@ -155,11 +155,10 @@ class OwnerHomeScreen extends ConsumerWidget {
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) =>
-            _ErrorView(
-              message: 'Unable to load owner account information.',
-              onRetry: () => ref.invalidate(currentUserProfileProvider),
-            ),
+        error: (error, stackTrace) => _ErrorView(
+          message: 'Unable to load owner account information.',
+          onRetry: () => ref.invalidate(currentUserProfileProvider),
+        ),
         data: (profile) {
           if (profile == null) {
             return _ErrorView(
@@ -215,7 +214,8 @@ class OwnerHomeScreen extends ConsumerWidget {
                 // 6. Management Hub (Navigation Modules)
                 const _SectionTitle(
                   title: 'Enterprise Management',
-                  subtitle: 'In-depth directory records and automated billing rules',
+                  subtitle:
+                      'In-depth directory records and automated billing rules',
                 ),
                 const SizedBox(height: 12),
                 const _EnterpriseHub(),
@@ -224,12 +224,23 @@ class OwnerHomeScreen extends ConsumerWidget {
           );
         },
       ),
+      bottomNavigationBar: AppBottomNavigation(
+        selectedDestination: GrihoNavigationDestination.home,
+        onHomeTap: () {
+          context.go(RouteNames.ownerHome);
+        },
+        onMoreTap: () {
+          context.push(RouteNames.more);
+        },
+      ),
     );
   }
 
-  Future<void> _openEditProfile(BuildContext context,
-      WidgetRef ref,
-      dynamic profile,) async {
+  Future<void> _openEditProfile(
+    BuildContext context,
+    WidgetRef ref,
+    dynamic profile,
+  ) async {
     final result = await context.push(RouteNames.editProfile, extra: profile);
     if (!context.mounted) {
       return;
@@ -246,29 +257,25 @@ class OwnerHomeScreen extends ConsumerWidget {
   Future<void> _showSignOutDialog(BuildContext context, WidgetRef ref) async {
     final shouldSignOut = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) =>
-          AlertDialog(
-            title: const Text('Sign out of Griho?'),
-            content: const Text(
-              'Are you sure you want to log out of your property management console?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Theme
-                      .of(context)
-                      .colorScheme
-                      .error,
-                ),
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: const Text('Sign Out'),
-              ),
-            ],
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out of Griho?'),
+        content: const Text(
+          'Are you sure you want to log out of your property management console?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
           ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
     );
 
     if (shouldSignOut != true || !context.mounted) {
@@ -286,15 +293,10 @@ class _ExecutiveHeader extends StatelessWidget {
   final String name;
   final String publicId;
 
-  const _ExecutiveHeader({
-    required this.name,
-    required this.publicId,
-  });
+  const _ExecutiveHeader({required this.name, required this.publicId});
 
   String _greetingText() {
-    final hour = DateTime
-        .now()
-        .hour;
+    final hour = DateTime.now().hour;
     if (hour < 12) {
       return 'Good Morning';
     }
@@ -365,7 +367,9 @@ class _ExecutiveHeader extends StatelessWidget {
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(20),
@@ -414,10 +418,7 @@ class _PortfolioVaultCard extends ConsumerWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: LinearGradient(
-          colors: [
-            const Color(0xFF1E222D),
-            const Color(0xFF141720),
-          ],
+          colors: [const Color(0xFF1E222D), const Color(0xFF141720)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -553,8 +554,7 @@ class _PortfolioVaultCard extends ConsumerWidget {
 
                 // Secondary Metrics Row: Occupancy Health
                 propertiesAsync.when(
-                  loading: () =>
-                  const SizedBox(
+                  loading: () => const SizedBox(
                     height: 18,
                     child: LinearProgressIndicator(),
                   ),
@@ -583,9 +583,8 @@ class _PortfolioVaultCard extends ConsumerWidget {
                             ),
                             _VaultSubMetric(
                               label: 'Real Estate Estate',
-                              value: '$totalProperties ${totalProperties == 1
-                                  ? 'Building'
-                                  : 'Buildings'}',
+                              value:
+                                  '$totalProperties ${totalProperties == 1 ? 'Building' : 'Buildings'}',
                               icon: Icons.domain_rounded,
                             ),
                             Container(
@@ -1095,10 +1094,7 @@ class _PropertyMiniCard extends StatelessWidget {
       child: InkWell(
         onTap: () {
           context.push(
-            RouteNames.propertyDetails.replaceFirst(
-              ':propertyId',
-              property.id,
-            ),
+            RouteNames.propertyDetails.replaceFirst(':propertyId', property.id),
           );
         },
         child: Container(
@@ -1152,12 +1148,13 @@ class _PropertyMiniCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 14),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
-                '${property.numberOfFloors} Floors • Code: ${property
-                    .propertyCode}',
+                '${property.numberOfFloors} Floors • Code: ${property.propertyCode}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontSize: 11,
@@ -1202,7 +1199,8 @@ class _EnterpriseHub extends StatelessWidget {
           _HubActionTile(
             icon: Icons.badge_outlined,
             title: 'Tenants & Residency Directory',
-            subtitle: 'Manage verified member accounts, agreements, and vacated records',
+            subtitle:
+                'Manage verified member accounts, agreements, and vacated records',
             tag: 'Residents',
             onTap: () => context.push(RouteNames.ownerTenants),
           ),
@@ -1210,7 +1208,8 @@ class _EnterpriseHub extends StatelessWidget {
           _HubActionTile(
             icon: Icons.tune_rounded,
             title: 'Automated Billing & Invoicing Engine',
-            subtitle: 'Utility tariff rates, recurring rent cycles, and manual bill generation',
+            subtitle:
+                'Utility tariff rates, recurring rent cycles, and manual bill generation',
             tag: 'Billing',
             onTap: () => context.push(RouteNames.ownerBillingRules),
           ),

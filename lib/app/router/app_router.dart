@@ -20,6 +20,7 @@ import '../../features/home/presentation/screens/manager_home_screen.dart';
 import '../../features/home/presentation/screens/owner_home_screen.dart';
 
 import '../../features/home/presentation/screens/owner_welcome_screen.dart';
+import '../../features/more/presentation/screens/more_screen.dart';
 import '../../features/properties/domain/entities/property.dart';
 import '../../features/properties/presentation/screens/add_property_screen.dart';
 import '../../features/properties/presentation/screens/edit_property_screen.dart';
@@ -140,7 +141,12 @@ abstract final class AppRouter {
             return const RoleSelectionScreen();
           },
         ),
-
+        GoRoute(
+          path: RouteNames.more,
+          builder: (context, state) {
+            return const MoreScreen();
+          },
+        ),
         // ========================================================
         // OWNER WELCOME / SETUP
         // ========================================================
