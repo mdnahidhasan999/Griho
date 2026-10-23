@@ -24,8 +24,10 @@ class AuthRouteGuard {
     final isLinkWaitingRoute = path == RouteNames.linkWaiting;
     final isOnboardingRoute = path == RouteNames.onboarding;
     final isRoleSelectionRoute = path == RouteNames.roleSelection;
+    final isOwnerWelcomeRoute = path == RouteNames.ownerWelcome;
     final isTenantInvitationRoute = path.startsWith('/i/');
-    final isTenantAccountLinkRoute = path == RouteNames.tenantAccountLink;
+    final isTenantAccountLinkRoute =
+        path == RouteNames.tenantAccountLink;
 
     final isOwnerRoute = path == RouteNames.ownerHome;
     final isManagerRoute = path == RouteNames.managerHome;
@@ -33,19 +35,24 @@ class AuthRouteGuard {
     final isTenantRoute = path == RouteNames.tenantHome;
 
     final isProtectedRoute =
-        isOwnerRoute || isManagerRoute || isCaretakerRoute || isTenantRoute;
+        isOwnerRoute ||
+            isManagerRoute ||
+            isCaretakerRoute ||
+            isTenantRoute;
 
-    if (isSplashRoute) return null;
-    if (isTenantInvitationRoute) return null;
+    if (isSplashRoute) {
+      return null;
+    }
+
+    if (isTenantInvitationRoute) {
+      return null;
+    }
+
     if (firebaseUser == null) {
       if (isLoginRoute ||
           isCreateAccountRoute ||
           isForgotPasswordRoute ||
           isLinkWaitingRoute) {
-        return null;
-      }
-
-      if (isTenantInvitationRoute) {
         return null;
       }
 
@@ -60,22 +67,27 @@ class AuthRouteGuard {
       return RouteNames.splash;
     }
 
+    final userProfileRepository =
+    ref.read(userProfileRepositoryProvider);
+
     if (isOnboardingRoute) {
-      final profile = await ref
-          .read(userProfileRepositoryProvider)
-          .getUserByUid(firebaseUser.uid);
+      final profile = await userProfileRepository.getUserByUid(
+        firebaseUser.uid,
+      );
 
       if (profile == null) {
         return null;
       }
 
       final destination = AuthRoleResolver.resolve(profile);
+
       return AuthDestinationMapper.routeFor(destination);
     }
+
     if (isRoleSelectionRoute) {
-      final profile = await ref
-          .read(userProfileRepositoryProvider)
-          .getUserByUid(firebaseUser.uid);
+      final profile = await userProfileRepository.getUserByUid(
+        firebaseUser.uid,
+      );
 
       if (profile == null) {
         return RouteNames.onboarding;
@@ -95,20 +107,61 @@ class AuthRouteGuard {
 
       return AuthDestinationMapper.routeFor(destination);
     }
-    if (isProtectedRoute) {
-      final profile = await ref
-          .read(userProfileRepositoryProvider)
-          .getUserByUid(firebaseUser.uid);
+
+    if (isOwnerWelcomeRoute) {
+      final profile = await userProfileRepository.getUserByUid(
+        firebaseUser.uid,
+      );
 
       if (profile == null) {
         return RouteNames.onboarding;
       }
 
-      // ERROR FIXED: profile.role এর বদলে সরাসরি profile পাস করা হয়েছে
+      final phoneNumber = profile.phoneNumber?.trim() ?? '';
+
+      if (phoneNumber.isEmpty) {
+        return RouteNames.onboarding;
+      }
+
+      final availableRoles = profile.availableRoles
+          .map((role) => role.trim().toLowerCase())
+          .toSet();
+
+      if (!availableRoles.contains('owner')) {
+        final destination = AuthRoleResolver.resolve(profile);
+
+        if (destination == AuthUserDestination.roleSelection) {
+          return RouteNames.roleSelection;
+        }
+
+        return AuthDestinationMapper.routeFor(destination);
+      }
+
+      return null;
+    }
+
+    if (isProtectedRoute) {
+      final profile = await userProfileRepository.getUserByUid(
+        firebaseUser.uid,
+      );
+
+      if (profile == null) {
+        return RouteNames.onboarding;
+      }
+
+      final phoneNumber = profile.phoneNumber?.trim() ?? '';
+
+      if (phoneNumber.isEmpty) {
+        return RouteNames.onboarding;
+      }
+
       final destination = AuthRoleResolver.resolve(profile);
       final correctRoute = AuthDestinationMapper.routeFor(destination);
 
-      if (path == correctRoute) return null;
+      if (path == correctRoute) {
+        return null;
+      }
+
       return correctRoute;
     }
 
