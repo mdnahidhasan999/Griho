@@ -183,22 +183,24 @@ class MoreScreen extends ConsumerWidget {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Default Account'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: availableRoles.map((role) {
-              return RadioListTile<String>(
-                value: role,
-                groupValue: currentRole,
-                title: Text(_roleLabel(role)),
-                onChanged: (value) {
-                  Navigator.of(dialogContext).pop();
+          content: RadioGroup<String>(
+            groupValue: currentRole,
+            onChanged: (value) {
+              Navigator.of(dialogContext).pop();
 
-                  if (value != null && value != currentRole) {
-                    _showComingSoon(context, 'Default Account');
-                  }
-                },
-              );
-            }).toList(),
+              if (value != null && value != currentRole) {
+                _showComingSoon(context, 'Default Account');
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: availableRoles.map((role) {
+                return RadioListTile<String>(
+                  value: role,
+                  title: Text(_roleLabel(role)),
+                );
+              }).toList(),
+            ),
           ),
         );
       },

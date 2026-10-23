@@ -11,5 +11,10 @@ abstract class UserProfileRepository {
 
   Future<AppUser?> getUserByPhone(String phoneNumber);
 
+  Future<void> updateDefaultDashboard({
+    required String uid,
+    required String role,
+  });
+
   Future<void> saveOwnerRole(String uid);
 }

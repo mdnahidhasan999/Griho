@@ -7,7 +7,7 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
   final UserProfileDataSource _dataSource;
 
   UserProfileRepositoryImpl({UserProfileDataSource? dataSource})
-      : _dataSource = dataSource ?? UserProfileDataSource();
+    : _dataSource = dataSource ?? UserProfileDataSource();
 
   @override
   Future<AppUser?> getUserByUid(String uid) {
@@ -41,5 +41,13 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
   @override
   Future<AppUser?> getUserByPhone(String phoneNumber) {
     return _dataSource.getUserByPhone(phoneNumber);
+  }
+
+  @override
+  Future<void> updateDefaultDashboard({
+    required String uid,
+    required String role,
+  }) {
+    return _dataSource.updateDefaultDashboard(uid: uid, role: role);
   }
 }

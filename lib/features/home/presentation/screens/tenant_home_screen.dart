@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../billing/presentation/widgets/tenant_current_bills_card.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
@@ -42,10 +43,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme
-                    .of(dialogContext)
-                    .colorScheme
-                    .error,
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Sign Out'),
@@ -72,9 +70,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
 
   void _openTenancyHistory() {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const TenantTenancyHistoryScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const TenantTenancyHistoryScreen()),
     );
   }
 
@@ -186,12 +182,11 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                 ),
               );
             },
-            orElse: () =>
-                IconButton(
-                  tooltip: 'All Invitations',
-                  onPressed: _openInvitations,
-                  icon: const Icon(Icons.mail_outline_rounded),
-                ),
+            orElse: () => IconButton(
+              tooltip: 'All Invitations',
+              onPressed: _openInvitations,
+              icon: const Icon(Icons.mail_outline_rounded),
+            ),
           ),
 
           // User Profile Menu
@@ -211,8 +206,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                 _logout();
               }
             },
-            itemBuilder: (context) =>
-            const [
+            itemBuilder: (context) => const [
               PopupMenuItem<String>(
                 value: 'edit_profile',
                 child: Row(
@@ -248,23 +242,21 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: dashboardAsync.maybeWhen(
-                data: (dashboard) =>
-                    CircleAvatar(
-                      radius: 19,
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      child: Text(
-                        dashboard.displayName.isNotEmpty
-                            ? dashboard.displayName[0].toUpperCase()
-                            : 'T',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
+                data: (dashboard) => CircleAvatar(
+                  radius: 19,
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  child: Text(
+                    dashboard.displayName.isNotEmpty
+                        ? dashboard.displayName[0].toUpperCase()
+                        : 'T',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.onPrimaryContainer,
                     ),
-                orElse: () =>
-                const CircleAvatar(
+                  ),
+                ),
+                orElse: () => const CircleAvatar(
                   radius: 19,
                   child: Icon(Icons.person_outline_rounded, size: 18),
                 ),
@@ -287,6 +279,15 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
               onOpenTenancyHistory: _openTenancyHistory,
             ),
           );
+        },
+      ),
+      bottomNavigationBar: AppBottomNavigation(
+        selectedDestination: GrihoNavigationDestination.home,
+        onHomeTap: () {
+          context.go(RouteNames.tenantHome);
+        },
+        onMoreTap: () {
+          context.push(RouteNames.more);
         },
       ),
     );
@@ -333,14 +334,13 @@ class _TenantDashboardContent extends StatelessWidget {
         // 3. Digital Residency Pass or Unassigned Passport
         if (dashboard.hasActiveTenancy) ...[
           _DigitalResidencyPass(dashboard: dashboard),
-        ] else
-          ...[
-            _NoActiveTenancyPassport(
-              userPublicId: dashboard.appUser?.publicId ?? '',
-              hasPendingInvitation: dashboard.hasPendingInvitation,
-              onOpenInvitations: onOpenInvitations,
-            ),
-          ],
+        ] else ...[
+          _NoActiveTenancyPassport(
+            userPublicId: dashboard.appUser?.publicId ?? '',
+            hasPendingInvitation: dashboard.hasPendingInvitation,
+            onOpenInvitations: onOpenInvitations,
+          ),
+        ],
 
         const SizedBox(height: 24),
 
@@ -414,9 +414,7 @@ class _HeaderSection extends StatelessWidget {
   const _HeaderSection({required this.dashboard});
 
   String _greetingText() {
-    final hour = DateTime
-        .now()
-        .hour;
+    final hour = DateTime.now().hour;
     if (hour < 12) {
       return 'Good Morning';
     }
@@ -544,10 +542,7 @@ class _DigitalResidencyPass extends ConsumerWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFF1B2232),
-            Color(0xFF131722),
-          ],
+          colors: [Color(0xFF1B2232), Color(0xFF131722)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -697,36 +692,33 @@ class _DigitalResidencyPass extends ConsumerWidget {
                         const SizedBox(height: 3),
                         rentAsync == null
                             ? const Text(
-                          '—',
-                          style: TextStyle(color: Colors.white),
-                        )
+                                '—',
+                                style: TextStyle(color: Colors.white),
+                              )
                             : rentAsync.when(
-                          loading: () =>
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: Colors.white70,
-                            ),
-                          ),
-                          error: (_, _) =>
-                          const Text(
-                            'Not set',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          data: (rent) =>
-                              Text(
-                                rent != null
-                                    ? '৳ ${_formatAmount(rent.amount)}'
-                                    : 'Not Set',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
+                                loading: () => const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                                error: (_, _) => const Text(
+                                  'Not set',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                data: (rent) => Text(
+                                  rent != null
+                                      ? '৳ ${_formatAmount(rent.amount)}'
+                                      : 'Not Set',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                  ),
                                 ),
                               ),
-                        ),
                       ],
                     ),
                     Container(
@@ -835,8 +827,9 @@ class _PendingInvitationCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.onTertiaryContainer
-                      .withValues(alpha: 0.12),
+                  color: theme.colorScheme.onTertiaryContainer.withValues(
+                    alpha: 0.12,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -852,8 +845,7 @@ class _PendingInvitationCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'You are invited to finalize lease terms for "$propertyName" ($unitName) with agreed monthly rent of ৳ ${_formatAmount(
-                invitation.rentAmount)}.',
+            'You are invited to finalize lease terms for "$propertyName" ($unitName) with agreed monthly rent of ৳ ${_formatAmount(invitation.rentAmount)}.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onTertiaryContainer,
               height: 1.4,
@@ -915,8 +907,9 @@ class _NoActiveTenancyPassport extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color:
-                theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+                color: theme.colorScheme.primaryContainer.withValues(
+                  alpha: 0.45,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -951,11 +944,14 @@ class _NoActiveTenancyPassport extends StatelessWidget {
             if (userPublicId.isNotEmpty && !hasPendingInvitation) ...[
               const SizedBox(height: 18),
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.45),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.45,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
@@ -1365,8 +1361,7 @@ class _TenancyHistoryPreview extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Unit ${item.unitNumber} • ৳ ${_formatAmount(
-                                item.monthlyRent)} / mo',
+                            'Unit ${item.unitNumber} • ৳ ${_formatAmount(item.monthlyRent)} / mo',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),

@@ -16,66 +16,90 @@ service cloud.firestore {
                     && request.auth.uid == userId
                     && request.resource.data.uid == request.auth.uid;
 
-      // Allow users to update their own profile without changing
-      // immutable identity fields.
-      allow update: if isAuthenticated()
-                    && request.auth.uid == userId
-                    && request.resource.data.uid == resource.data.uid
-                    && request.resource.data.publicId == resource.data.publicId
-                    && request.resource.data.createdAt == resource.data.createdAt
-                    && request.resource.data.phoneNumber == resource.data.phoneNumber
-                    && request.resource.data.isActive == resource.data.isActive
-                    && request.resource.data.updatedAt is timestamp
-                    && request.resource.data.updatedAt <= request.time
-                    && (
-                      // Preserve a legacy role field if it exists.
-                      (
-                        !resource.data.keys().hasAny(['role'])
-                        && !request.resource.data.keys().hasAny(['role'])
-                      )
-                      ||
-                      (
-                        resource.data.keys().hasAny(['role'])
-                        && request.resource.data.keys().hasAny(['role'])
-                        && request.resource.data.role == resource.data.role
-                      )
-                    )
-                    && (
-                      // Normal profile updates must preserve role fields.
-                      (
-                        request.resource.data.diff(resource.data)
-                          .affectedKeys()
-                          .hasOnly([
-                            'name',
-                            'email',
-                            'photoUrl',
-                            'updatedAt'
-                          ])
-                      )
-                      ||
-                      // Initial owner selection is allowed only when
-                      // no role has previously been assigned.
-                      (
-                        request.resource.data.diff(resource.data)
-                          .affectedKeys()
-                          .hasOnly([
-                            'availableRoles',
-                            'defaultDashboard',
-                            'updatedAt'
-                          ])
+          // Allow users to update their own profile without changing
+          // immutable identity fields or unauthorized role assignments.
+          allow update: if isAuthenticated()
+                        && request.auth.uid == userId
+                        && request.resource.data.uid == resource.data.uid
+                        && request.resource.data.publicId == resource.data.publicId
+                        && request.resource.data.createdAt == resource.data.createdAt
+                        && request.resource.data.phoneNumber == resource.data.phoneNumber
+                        && request.resource.data.isActive == resource.data.isActive
+                        && request.resource.data.updatedAt is timestamp
+                        && request.resource.data.updatedAt <= request.time
                         && (
-                          !resource.data.keys().hasAny(['availableRoles'])
-                          || resource.data.availableRoles == []
+                          // Preserve a legacy role field if it exists.
+                          (
+                            !resource.data.keys().hasAny(['role'])
+                            && !request.resource.data.keys().hasAny(['role'])
+                          )
+                          ||
+                          (
+                            resource.data.keys().hasAny(['role'])
+                            && request.resource.data.keys().hasAny(['role'])
+                            && request.resource.data.role == resource.data.role
+                          )
                         )
                         && (
-                          !resource.data.keys().hasAny(['defaultDashboard'])
-                          || resource.data.defaultDashboard == null
-                          || resource.data.defaultDashboard == ''
-                        )
-                        && request.resource.data.availableRoles == ['owner']
-                        && request.resource.data.defaultDashboard == 'owner'
-                      )
-                    );
+                          // Normal profile updates.
+                          (
+                            request.resource.data.diff(resource.data)
+                              .affectedKeys()
+                              .hasOnly([
+                                'name',
+                                'email',
+                                'photoUrl',
+                                'updatedAt'
+                              ])
+                          )
+                          ||
+                          // Initial owner role selection.
+                          (
+                            request.resource.data.diff(resource.data)
+                              .affectedKeys()
+                              .hasOnly([
+                                'availableRoles',
+                                'defaultDashboard',
+                                'updatedAt'
+                              ])
+                            && (
+                              !resource.data.keys().hasAny(['availableRoles'])
+                              || resource.data.availableRoles == []
+                            )
+                            && (
+                              !resource.data.keys().hasAny(['defaultDashboard'])
+                              || resource.data.defaultDashboard == null
+                              || resource.data.defaultDashboard == ''
+                            )
+                            && request.resource.data.availableRoles is list
+                            && request.resource.data.availableRoles.size() == 1
+                            && request.resource.data.availableRoles[0] is string
+                            && request.resource.data.availableRoles[0] in [
+                              'owner',
+                              'tenant',
+                              'manager',
+                              'caretaker',
+                              'electrician'
+                            ]
+                            && request.resource.data.defaultDashboard
+                               == request.resource.data.availableRoles[0]
+                          )
+                          ||
+                          // Change the default dashboard to an authorized role.
+                          (
+                            request.resource.data.diff(resource.data)
+                              .affectedKeys()
+                              .hasOnly([
+                                'defaultDashboard',
+                                'updatedAt'
+                              ])
+                            && resource.data.keys().hasAny(['availableRoles'])
+                            && resource.data.availableRoles is list
+                            && request.resource.data.keys().hasAny(['defaultDashboard'])
+                            && request.resource.data.defaultDashboard is string
+                            && request.resource.data.defaultDashboard in resource.data.availableRoles
+                          )
+                        );
 
       allow delete: if false;
     }
