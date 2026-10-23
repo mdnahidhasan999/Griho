@@ -168,6 +168,8 @@ class MoreScreen extends ConsumerWidget {
         return 'Manager';
       case 'caretaker':
         return 'Caretaker';
+      case 'electrician':
+        return 'Electrician';
       default:
         return 'Not selected';
     }

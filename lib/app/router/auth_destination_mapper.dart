@@ -12,7 +12,8 @@ abstract final class AuthDestinationMapper {
 
       case AuthUserDestination.caretaker:
         return RouteNames.caretakerHome;
-
+      case AuthUserDestination.electrician:
+        return RouteNames.electricianHome;
       case AuthUserDestination.tenant:
         return RouteNames.tenantHome;
 

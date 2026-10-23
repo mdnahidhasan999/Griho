@@ -32,12 +32,14 @@ class AuthRouteGuard {
     final isOwnerRoute = path == RouteNames.ownerHome;
     final isManagerRoute = path == RouteNames.managerHome;
     final isCaretakerRoute = path == RouteNames.caretakerHome;
+    final isElectricianRoute = path == RouteNames.electricianHome;
     final isTenantRoute = path == RouteNames.tenantHome;
 
     final isProtectedRoute =
         isOwnerRoute ||
             isManagerRoute ||
             isCaretakerRoute ||
+            isElectricianRoute ||
             isTenantRoute;
 
     if (isSplashRoute) {

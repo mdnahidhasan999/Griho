@@ -5,6 +5,7 @@ enum AuthUserDestination {
   tenant,
   manager,
   caretaker,
+  electrician,
   roleSelection,
   completeProfile,
 }
@@ -43,6 +44,9 @@ class AuthRoleResolver {
 
         case 'caretaker':
           return AuthUserDestination.caretaker;
+
+        case 'electrician':
+          return AuthUserDestination.electrician;
       }
     }
 

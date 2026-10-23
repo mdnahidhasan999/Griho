@@ -17,4 +17,6 @@ abstract class UserProfileRepository {
   });
 
   Future<void> saveOwnerRole(String uid);
+
+  Future<void> saveInitialRole(String uid, String role);
 }

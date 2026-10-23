@@ -34,6 +34,11 @@ class UserProfileRepositoryImpl implements UserProfileRepository {
   }
 
   @override
+  Future<void> saveInitialRole(String uid, String role) {
+    return _dataSource.saveInitialRole(uid, role);
+  }
+
+  @override
   Future<AppUser?> getUserByPublicId(String publicId) {
     return _dataSource.getUserByPublicId(publicId);
   }

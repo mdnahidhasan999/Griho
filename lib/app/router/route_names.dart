@@ -18,6 +18,7 @@ abstract final class RouteNames {
   static const ownerWelcome = '/owner/welcome';
   static const managerHome = '/manager';
   static const caretakerHome = '/caretaker';
+  static const electricianHome = '/electrician';
   static const tenantHome = '/tenant';
   static const editProfile = '/profile/edit';
 

@@ -16,6 +16,7 @@ import '../../features/billing/presentation/screens/edit_billing_rule_screen.dar
 import '../../features/billing/presentation/screens/owner_billing_rules_screen.dart';
 import '../../features/billing/presentation/screens/owner_billing_setup_screen.dart';
 import '../../features/home/presentation/screens/caretaker_home_screen.dart';
+import '../../features/home/presentation/screens/electrician_home_screen.dart';
 import '../../features/home/presentation/screens/manager_home_screen.dart';
 import '../../features/home/presentation/screens/owner_home_screen.dart';
 
@@ -463,7 +464,12 @@ abstract final class AppRouter {
             return const CaretakerHomeScreen();
           },
         ),
-
+        GoRoute(
+          path: RouteNames.electricianHome,
+          builder: (context, state) {
+            return const ElectricianHomeScreen();
+          },
+        ),
         // ========================================================
         // TENANT HOME
         // ========================================================

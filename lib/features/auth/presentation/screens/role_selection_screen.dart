@@ -60,62 +60,68 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
         return;
       }
 
+      // Save the selected role through the repository.
+      await ref
+          .read(userProfileRepositoryProvider)
+          .saveInitialRole(profile.uid, role.name);
+
+      if (!mounted) {
+        return;
+      }
+
+      // Reload the profile so the saved role is reflected in the app.
+      ref.invalidate(currentUserProfileProvider);
+
       switch (role) {
         case _SelectableRole.owner:
-          await ref
-              .read(userProfileRepositoryProvider)
-              .saveOwnerRole(profile.uid);
-
-          if (!mounted) {
-            return;
-          }
-
-          ref.invalidate(currentUserProfileProvider);
-
-          _showMessage(
-            'Owner role saved successfully.',
-            isError: false,
-          );
-
+          _showMessage('Owner role saved successfully.', isError: false);
           context.go(RouteNames.ownerWelcome);
           break;
 
         case _SelectableRole.tenant:
           _showMessage(
-            'Tenant access requires an invitation from the property owner.',
+            'Tenant role saved. Property access requires an owner invitation.',
             isError: false,
           );
-
           context.go(RouteNames.tenantInvitations);
           break;
 
         case _SelectableRole.manager:
           _showMessage(
-            'Manager access requires an invitation from the property owner.',
+            'Manager role saved. Property access requires an owner invitation.',
             isError: false,
           );
+          context.go(RouteNames.managerHome);
           break;
 
         case _SelectableRole.caretaker:
           _showMessage(
-            'Caretaker access requires an invitation from the property owner.',
+            'Caretaker role saved. Property access requires an owner invitation.',
             isError: false,
           );
+          context.go(RouteNames.caretakerHome);
           break;
 
         case _SelectableRole.electrician:
           _showMessage(
-            'Electrician access requires an invitation and authorization.',
+            'Electrician role saved. Work access requires authorization.',
             isError: false,
           );
+          context.go(RouteNames.electricianHome);
           break;
       }
-    } catch (error) {
+    } catch (error, stackTrace) {
+      debugPrint('Role selection failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
       if (!mounted) {
         return;
       }
 
-      _showMessage('Unable to continue. Please try again.', isError: true);
+      _showMessage(
+        'Unable to save your selected role. Please try again.',
+        isError: true,
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -131,16 +137,14 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
     }
 
     final messenger = ScaffoldMessenger.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
 
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: isError ? Theme
-              .of(context)
-              .colorScheme
-              .error : null,
+          backgroundColor: isError ? colorScheme.error : null,
         ),
       );
   }
@@ -155,30 +159,29 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
       body: SafeArea(
         child: profileAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) =>
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline_rounded, size: 48),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Unable to load your profile.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () {
-                          ref.invalidate(currentUserProfileProvider);
-                        },
-                        child: const Text('Try Again'),
-                      ),
-                    ],
+          error: (error, stackTrace) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline_rounded, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Unable to load your profile.',
+                    textAlign: TextAlign.center,
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () {
+                      ref.invalidate(currentUserProfileProvider);
+                    },
+                    child: const Text('Try Again'),
+                  ),
+                ],
               ),
+            ),
+          ),
           data: (profile) {
             if (profile == null) {
               return Center(
@@ -191,7 +194,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       const SizedBox(height: 16),
                       const Text(
                         'Your profile is not available. '
-                            'Please complete your profile first.',
+                        'Please complete your profile first.',
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
@@ -286,7 +289,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'How would you like to use Griho? '
-                          'Choose a role to continue.',
+                      'Choose a role to continue.',
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,
@@ -298,7 +301,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       role: _SelectableRole.owner,
                       title: 'Property Owner',
                       subtitle:
-                      'Manage your properties, units, tenants and bills.',
+                          'Manage your properties, units, tenants and bills.',
                       icon: Icons.home_work_outlined,
                     ),
                     const SizedBox(height: 12),
@@ -315,7 +318,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       role: _SelectableRole.manager,
                       title: 'Property Manager',
                       subtitle:
-                      'Manage property operations with owner authorization.',
+                          'Manage property operations with owner authorization.',
                       icon: Icons.manage_accounts_outlined,
                     ),
                     const SizedBox(height: 12),
@@ -332,13 +335,13 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       role: _SelectableRole.electrician,
                       title: 'Electrician',
                       subtitle:
-                      'Receive authorized electrical maintenance work.',
+                          'Receive authorized electrical maintenance work.',
                       icon: Icons.electrical_services_outlined,
                     ),
                     const SizedBox(height: 16),
                     Text(
                       'Selecting a role does not grant access automatically. '
-                          'Some roles require an invitation and approval.',
+                      'Some roles require an invitation and approval.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,
@@ -370,10 +373,10 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       : _continueWithSelectedRole,
                   child: _isNavigating
                       ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Text('Continue'),
                 ),
               ),
@@ -403,10 +406,10 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
           onTap: _isNavigating
               ? null
               : () {
-            setState(() {
-              _selectedRole = role;
-            });
-          },
+                  setState(() {
+                    _selectedRole = role;
+                  });
+                },
           borderRadius: BorderRadius.circular(18),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),

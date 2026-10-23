@@ -10,10 +10,7 @@ import '../providers/auth_controller.dart';
 class LoginScreen extends ConsumerStatefulWidget {
   final String? invitationId;
 
-  const LoginScreen({
-    super.key,
-    this.invitationId,
-  });
+  const LoginScreen({super.key, this.invitationId});
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -34,9 +31,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  void _showMessage(String message, {
-    bool isError = false,
-  }) {
+  void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context)
@@ -44,12 +39,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: isError
-              ? Theme
-              .of(context)
-              .colorScheme
-              .error
-              : null,
+          backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
         ),
       );
   }
@@ -91,17 +81,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final result = await ref
         .read(authControllerProvider.notifier)
         .signInWithEmailAndPassword(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
 
     if (!mounted) return;
 
     if (result == null) {
-      final message =
-          ref
-              .read(authControllerProvider)
-              .errorMessage;
+      final message = ref.read(authControllerProvider).errorMessage;
 
       _showMessage(
         message?.isNotEmpty == true
@@ -123,10 +110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!mounted) return;
 
     if (result == null) {
-      final message =
-          ref
-              .read(authControllerProvider)
-              .errorMessage;
+      final message = ref.read(authControllerProvider).errorMessage;
 
       _showMessage(
         message?.isNotEmpty == true
@@ -140,16 +124,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     await _navigateAfterAuthentication(result);
   }
 
-  Future<void> _navigateAfterAuthentication(AuthResult result,) async {
+  Future<void> _navigateAfterAuthentication(AuthResult result) async {
     if (!mounted) return;
 
-    if (widget.invitationId != null &&
-        widget.invitationId!.trim().isNotEmpty) {
-      context.go(
-        RouteNames.tenantInvitationPath(
-          widget.invitationId!,
-        ),
-      );
+    if (widget.invitationId != null && widget.invitationId!.trim().isNotEmpty) {
+      context.go(RouteNames.tenantInvitationPath(widget.invitationId!));
       return;
     }
 
@@ -180,7 +159,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       case 'caretaker':
         context.go(RouteNames.caretakerHome);
         return;
-
+      case 'electrician':
+        context.go(RouteNames.electricianHome);
+        return;
       default:
         context.go(RouteNames.onboarding);
     }
@@ -196,14 +177,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 32,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 440,
-              ),
+              constraints: const BoxConstraints(maxWidth: 440),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -252,15 +228,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       controller: _emailController,
                       enabled: !authState.isLoading,
                       keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [
-                        AutofillHints.email,
-                      ],
+                      autofillHints: const [AutofillHints.email],
                       textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
                         hintText: 'name@example.com',
-                        prefixIcon: const Icon(
-                          Icons.mail_outline_rounded,
-                        ),
+                        prefixIcon: const Icon(Icons.mail_outline_rounded),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -280,9 +252,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       controller: _passwordController,
                       enabled: !authState.isLoading,
                       obscureText: _obscurePassword,
-                      autofillHints: const [
-                        AutofillHints.password,
-                      ],
+                      autofillHints: const [AutofillHints.password],
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) {
                         if (!authState.isLoading) {
@@ -291,9 +261,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       },
                       decoration: InputDecoration(
                         hintText: 'Enter your password',
-                        prefixIcon: const Icon(
-                          Icons.lock_outline_rounded,
-                        ),
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
                         suffixIcon: IconButton(
                           tooltip: _obscurePassword
                               ? 'Show password'
@@ -323,10 +291,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: authState.isLoading
                             ? null
                             : () {
-                          context.go(
-                            RouteNames.forgotPassword,
-                          );
-                        },
+                                context.go(RouteNames.forgotPassword);
+                              },
                         child: const Text('Forgot Password?'),
                       ),
                     ),
@@ -345,20 +311,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         child: authState.isLoading
                             ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Text(
-                          'Sign In',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                                'Sign In',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
                     ),
 
@@ -367,9 +333,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       children: [
                         const Expanded(child: Divider()),
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
                             'OR',
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -393,10 +357,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        icon: const Icon(
-                          Icons.g_mobiledata_rounded,
-                          size: 30,
-                        ),
+                        icon: const Icon(Icons.g_mobiledata_rounded, size: 30),
                         label: const Text(
                           'Continue with Google',
                           style: TextStyle(
@@ -421,15 +382,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           onPressed: authState.isLoading
                               ? null
                               : () {
-                            context.go(
-                              RouteNames.createAccount,
-                            );
-                          },
+                                  context.go(RouteNames.createAccount);
+                                },
                           child: const Text(
                             'Create Account',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],

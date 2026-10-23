@@ -158,7 +158,13 @@ class UserProfileDataSource {
     final normalizedUid = uid.trim();
     final normalizedRole = role.trim().toLowerCase();
 
-    const allowedRoles = {'owner', 'manager', 'caretaker', 'tenant'};
+    const allowedRoles = {
+      'owner',
+      'manager',
+      'caretaker',
+      'tenant',
+      'electrician',
+    };
 
     if (normalizedUid.isEmpty) {
       throw ArgumentError('User ID cannot be empty.');
