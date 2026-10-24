@@ -8,11 +8,11 @@ import '../providers/current_tenant_pending_invitation_provider.dart';
 import '../providers/tenant_invitation_provider.dart';
 
 class TenantInvitationReceiveScreen extends ConsumerStatefulWidget {
-  final String invitationId;
+  final String invitationToken;
 
   const TenantInvitationReceiveScreen({
     super.key,
-    required this.invitationId,
+    required this.invitationToken,
   });
 
   @override
@@ -43,16 +43,16 @@ class _TenantInvitationReceiveScreenState
   // ============================================================
 
   Future<void> _loadInvitation() async {
-    final invitationId = widget.invitationId.trim();
+    final token = widget.invitationToken.trim();
 
-    if (invitationId.isEmpty) {
-      if (!mounted) {
-        return;
-      }
+    if (!mounted) {
+      return;
+    }
 
+    if (token.isEmpty) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Invitation ID is missing.';
+        _errorMessage = 'Invitation token is missing.';
       });
 
       return;
@@ -64,9 +64,9 @@ class _TenantInvitationReceiveScreenState
     });
 
     try {
-      final invitation = await ref.read(getTenantInvitationProvider)(
-        invitationId,
-      );
+      final invitation = await ref.read(
+        getInvitationByTokenProvider,
+      )(token);
 
       if (!mounted) {
         return;
@@ -75,8 +75,10 @@ class _TenantInvitationReceiveScreenState
       if (invitation == null) {
         setState(() {
           _isLoading = false;
+          _invitation = null;
           _errorMessage =
-          'This invitation does not exist or is no longer available.';
+          'This invitation does not exist, has expired, '
+              'or is no longer available.';
         });
 
         return;
@@ -94,6 +96,7 @@ class _TenantInvitationReceiveScreenState
 
       setState(() {
         _isLoading = false;
+        _invitation = null;
         _errorMessage = _cleanError(error);
       });
     }
@@ -648,7 +651,9 @@ class _TenantInvitationReceiveScreenState
                   _DetailRow(
                     icon: Icons.phone_outlined,
                     title: 'Invited Phone Number',
-                    value: invitation.phone?.trim().isNotEmpty == true
+                    value: invitation.phone
+                        ?.trim()
+                        .isNotEmpty == true
                         ? invitation.phone!.trim()
                         : 'Not provided',
                   ),

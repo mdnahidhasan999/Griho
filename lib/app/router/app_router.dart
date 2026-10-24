@@ -427,21 +427,31 @@ abstract final class AppRouter {
         ),
 
         // ========================================================
-        // TENANT INVITATION
-        // ========================================================
+// TENANT INVITATION
+// ========================================================
+
         GoRoute(
           path: RouteNames.tenantInvitation,
           name: 'tenantInvitation',
           builder: (context, state) {
-            final invitationId = state.pathParameters['invitationId'];
-            if (invitationId == null || invitationId.trim().isEmpty) {
+            final invitationToken =
+            state.pathParameters['invitationToken'];
+
+            if (invitationToken == null ||
+                invitationToken.trim().isEmpty) {
               return const Scaffold(
-                body: Center(child: Text('Invalid invitation link.')),
+                body: Center(
+                  child: Text('Invalid invitation link.'),
+                ),
               );
             }
-            return TenantInvitationReceiveScreen(invitationId: invitationId);
+
+            return TenantInvitationReceiveScreen(
+              invitationToken: invitationToken,
+            );
           },
         ),
+
         GoRoute(
           path: RouteNames.tenantInvitations,
           builder: (context, state) {

@@ -58,7 +58,7 @@ class TenantHomeInvitationGateScreen extends ConsumerWidget {
                 }
 
                 return TenantInvitationReceiveScreen(
-                  invitationId: invitation.id,
+                  invitationToken: invitation.token,
                 );
               },
             );

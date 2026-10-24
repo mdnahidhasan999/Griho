@@ -55,14 +55,25 @@ abstract final class RouteNames {
   static const editTenant = '/owner/tenants/:tenantId/edit';
   static const propertyTenants = '/owner/properties/:propertyId/tenants';
 
-  // ============================================================
-  // TENANT ACCOUNT LINK & INVITATION
-  // ============================================================
-  static const tenantAccountLink = '/tenant-account-link';
-  static const tenantInvitation = '/i/:invitationId';
 
-  static String tenantInvitationPath(String invitationId) {
-    return '/i/${Uri.encodeComponent(invitationId.trim())}';
+// ============================================================
+// TENANT ACCOUNT LINK & INVITATION
+// ============================================================
+
+  static const tenantAccountLink = '/tenant-account-link';
+
+  static const tenantInvitation = '/i/:invitationToken';
+
+  static String tenantInvitationPath(String invitationToken) {
+    final token = invitationToken.trim();
+
+    if (token.isEmpty) {
+      throw ArgumentError(
+        'Invitation token cannot be empty.',
+      );
+    }
+
+    return '/i/${Uri.encodeComponent(token)}';
   }
 
   // ============================================================

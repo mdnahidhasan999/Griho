@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 
+import '../../../../app/router/route_names.dart';
 import '../../../../core/utils/phone_number_utils.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
@@ -35,6 +36,12 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   final _emailController = TextEditingController();
   final _nidController = TextEditingController();
 
+// Keep the created tenant so retries do not create duplicates.
+  Tenant? _createdTenant;
+
+  double? _pendingRentAmount;
+
+  bool _isCreatingInvitation = false;
   Property? _selectedProperty;
   Unit? _selectedUnit;
 
@@ -231,21 +238,60 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   Future<void> _createTenant() async {
+    // If tenant already exists, retry invitation only.
+    final existingTenant = _createdTenant;
+
+    if (existingTenant != null) {
+      final pendingRent = _pendingRentAmount;
+
+      if (pendingRent != null) {
+        await _createInvitation(
+          tenant: existingTenant,
+          rentAmount: pendingRent,
+        );
+        return;
+      }
+
+      final rentAmount = await _showInvitationConfirmation(
+        tenant: existingTenant,
+      );
+
+      if (!mounted) return;
+
+      if (rentAmount == null) {
+        Navigator.of(context).pop(existingTenant);
+        return;
+      }
+
+      _pendingRentAmount = rentAmount;
+
+      await _createInvitation(
+        tenant: existingTenant,
+        rentAmount: rentAmount,
+      );
+
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     final property = _selectedProperty;
     final unit = _selectedUnit;
+
     if (property == null || unit == null) {
       return;
     }
 
     final phone = _getValidatedPhone();
+
     if (phone == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a valid international phone number.'),
+          content: Text(
+            'Please enter a valid international phone number.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -274,15 +320,16 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         .read(tenantControllerProvider.notifier)
         .createTenant(request);
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     if (tenant == null) {
       final state = ref.read(tenantControllerProvider);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(state.error?.toString() ?? 'Unable to create tenant.'),
+          content: Text(
+            state.error?.toString() ?? 'Unable to create tenant.',
+          ),
           backgroundColor: Theme
               .of(context)
               .colorScheme
@@ -290,20 +337,32 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+
       return;
     }
 
-    final invitationData = await _showInvitationConfirmation(tenant: tenant);
-    if (!mounted) {
-      return;
-    }
+    // Save the tenant before attempting invitation creation.
+    setState(() {
+      _createdTenant = tenant;
+    });
 
-    if (invitationData == null) {
+    final rentAmount = await _showInvitationConfirmation(
+      tenant: tenant,
+    );
+
+    if (!mounted) return;
+
+    if (rentAmount == null) {
       Navigator.of(context).pop(tenant);
       return;
     }
 
-    await _createInvitation(tenant: tenant, rentAmount: invitationData);
+    _pendingRentAmount = rentAmount;
+
+    await _createInvitation(
+      tenant: tenant,
+      rentAmount: rentAmount,
+    );
   }
 
   Future<double?> _showInvitationConfirmation({required Tenant tenant}) {
@@ -318,8 +377,19 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     required Tenant tenant,
     required double rentAmount,
   }) async {
+    if (_isCreatingInvitation) {
+      return;
+    }
+
+    setState(() {
+      _isCreatingInvitation = true;
+      _pendingRentAmount = rentAmount;
+    });
+
     try {
-      final invitation = await ref.read(createTenantInvitationProvider)(
+      final invitation = await ref.read(
+        createTenantInvitationProvider,
+      )(
         tenantId: tenant.id,
         propertyId: tenant.propertyId,
         unitId: tenant.unitId,
@@ -327,34 +397,45 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         rentAmount: rentAmount,
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
+
+      // Invitation was created successfully.
+      _pendingRentAmount = null;
 
       await _showInvitationCreatedDialog(
         invitationToken: invitation.token,
         rentAmount: rentAmount,
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
+
       Navigator.of(context).pop(tenant);
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
+
+      // Preserve tenant and rent for retry.
+      _pendingRentAmount = rentAmount;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error.toString()),
+          content: Text(
+            'Tenant was created, but invitation creation failed. '
+                'Tap "Retry Invitation" to try again.\n$error',
+          ),
           backgroundColor: Theme
               .of(context)
               .colorScheme
               .error,
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6),
         ),
       );
-      Navigator.of(context).pop(tenant);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCreatingInvitation = false;
+        });
+      }
     }
   }
 
@@ -482,9 +563,16 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     );
   }
 
-  String _buildInvitationLink({required String invitationToken}) {
+  String _buildInvitationLink({
+    required String invitationToken,
+  }) {
     const hostingDomain = 'griho-crafttech.web.app';
-    return 'https://$hostingDomain/i/${Uri.encodeComponent(invitationToken)}';
+
+    final invitationPath = RouteNames.tenantInvitationPath(
+      invitationToken,
+    );
+
+    return 'https://$hostingDomain$invitationPath';
   }
 
   @override
@@ -879,13 +967,16 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
                     const SizedBox(height: 28),
 
-                    // Submit Button
+                    // Submit / Retry Invitation Button
                     SizedBox(
                       width: double.infinity,
                       height: 52,
                       child: FilledButton.icon(
-                        onPressed: tenantState.isLoading ? null : _createTenant,
-                        icon: tenantState.isLoading
+                        onPressed: tenantState.isLoading ||
+                            _isCreatingInvitation
+                            ? null
+                            : _createTenant,
+                        icon: tenantState.isLoading || _isCreatingInvitation
                             ? const SizedBox(
                           height: 20,
                           width: 20,
@@ -894,10 +985,18 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                             color: Colors.white,
                           ),
                         )
-                            : const Icon(Icons.person_add_rounded),
+                            : Icon(
+                          _createdTenant != null
+                              ? Icons.refresh_rounded
+                              : Icons.person_add_rounded,
+                        ),
                         label: Text(
                           tenantState.isLoading
                               ? 'Registering Tenant...'
+                              : _isCreatingInvitation
+                              ? 'Creating Invitation...'
+                              : _createdTenant != null
+                              ? 'Retry Invitation'
                               : 'Add Tenant & Prepare Invitation',
                           style: const TextStyle(
                             fontSize: 16,

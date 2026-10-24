@@ -378,12 +378,13 @@ class _PendingInvitationCard extends ConsumerWidget {
     required this.tenantId,
   });
 
-  Future<void> _openReceiveScreen(BuildContext context, WidgetRef ref) async {
+  Future<void> _openReceiveScreen(BuildContext context,
+      WidgetRef ref,) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) =>
             TenantInvitationReceiveScreen(
-              invitationId: invitation.id,
+              invitationToken: invitation.token,
             ),
       ),
     );
@@ -555,7 +556,7 @@ class _HistoricalInvitationCard extends ConsumerWidget {
             MaterialPageRoute(
               builder: (_) =>
                   TenantInvitationReceiveScreen(
-                    invitationId: invitation.id,
+                    invitationToken: invitation.token,
                   ),
             ),
           );

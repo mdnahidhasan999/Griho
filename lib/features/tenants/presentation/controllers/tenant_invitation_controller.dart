@@ -38,7 +38,8 @@ class TenantInvitationController
     required this._acceptInvitation,
     required this._cancelInvitation,
     required this._expireInvitation,
-  }) : super(const AsyncData(null));
+  }) :
+        super(const AsyncData(null));
 
   // ================================================================
   // CREATE INVITATION
@@ -85,6 +86,7 @@ class TenantInvitationController
 
     try {
       final invitation = await _getInvitation(invitationId);
+
       state = AsyncData(invitation);
       return invitation;
     } catch (error, stackTrace) {
@@ -102,6 +104,7 @@ class TenantInvitationController
 
     try {
       final invitation = await _getInvitationByToken(token);
+
       state = AsyncData(invitation);
       return invitation;
     } catch (error, stackTrace) {
@@ -119,6 +122,7 @@ class TenantInvitationController
 
     try {
       final invitation = await _getPendingInvitation(tenantId);
+
       state = AsyncData(invitation);
       return invitation;
     } catch (error, stackTrace) {
@@ -136,6 +140,7 @@ class TenantInvitationController
 
     try {
       final invitation = await _getPendingInvitationByPhone(phone);
+
       state = AsyncData(invitation);
       return invitation;
     } catch (error, stackTrace) {
@@ -153,6 +158,7 @@ class TenantInvitationController
 
     try {
       await _acceptInvitation(invitationId);
+
       state = const AsyncData(null);
       return true;
     } catch (error, stackTrace) {
@@ -170,6 +176,7 @@ class TenantInvitationController
 
     try {
       await _cancelInvitation(invitationId);
+
       state = const AsyncData(null);
       return true;
     } catch (error, stackTrace) {
@@ -187,6 +194,7 @@ class TenantInvitationController
 
     try {
       await _expireInvitation(invitationId);
+
       state = const AsyncData(null);
       return true;
     } catch (error, stackTrace) {
@@ -208,20 +216,34 @@ class TenantInvitationController
 // CONTROLLER PROVIDER
 // ================================================================
 
-final tenantInvitationControllerProvider =
-StateNotifierProvider<
+final tenantInvitationControllerProvider = StateNotifierProvider<
     TenantInvitationController,
-    AsyncValue<TenantInvitation?>>((ref) {
+    AsyncValue<TenantInvitation?>
+>((ref) {
   return TenantInvitationController(
-    createInvitation: ref.read(createTenantInvitationProvider),
-    getInvitation: ref.read(getTenantInvitationProvider),
-    getInvitationByToken: ref.read(getInvitationByTokenProvider),
-    getPendingInvitation: ref.read(getPendingTenantInvitationProvider),
+    createInvitation: ref.read(
+      createTenantInvitationProvider,
+    ),
+    getInvitation: ref.read(
+      getTenantInvitationProvider,
+    ),
+    getInvitationByToken: ref.read(
+      getInvitationByTokenProvider,
+    ),
+    getPendingInvitation: ref.read(
+      getPendingTenantInvitationProvider,
+    ),
     getPendingInvitationByPhone: ref.read(
       getPendingInvitationByPhoneProvider,
     ),
-    acceptInvitation: ref.read(acceptTenantInvitationProvider),
-    cancelInvitation: ref.read(cancelTenantInvitationProvider),
-    expireInvitation: ref.read(expireTenantInvitationProvider),
+    acceptInvitation: ref.read(
+      acceptTenantInvitationProvider,
+    ),
+    cancelInvitation: ref.read(
+      cancelTenantInvitationProvider,
+    ),
+    expireInvitation: ref.read(
+      expireTenantInvitationProvider,
+    ),
   );
 });
