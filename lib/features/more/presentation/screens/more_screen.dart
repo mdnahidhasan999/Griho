@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -47,13 +50,9 @@ class MoreScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 28,
-                        child: Text(
-                          profile.name.isNotEmpty
-                              ? profile.name[0].toUpperCase()
-                              : 'G',
-                        ),
+                      _ProfileAvatar(
+                        name: profile.name,
+                        photoUrl: profile.photoUrl,
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -97,6 +96,8 @@ class MoreScreen extends ConsumerWidget {
                 onTap: () {
                   _showDefaultAccountDialog(
                     context,
+                    ref,
+                    profile.uid,
                     profile.availableRoles,
                     profile.defaultDashboard,
                   );
@@ -110,6 +111,8 @@ class MoreScreen extends ConsumerWidget {
                   onTap: () {
                     _showSwitchAccountDialog(
                       context,
+                      ref,
+                      profile.uid,
                       profile.availableRoles,
                       profile.defaultDashboard,
                     );
@@ -175,8 +178,27 @@ class MoreScreen extends ConsumerWidget {
     }
   }
 
+  String _routeForRole(String role) {
+    switch (role) {
+      case 'owner':
+        return RouteNames.ownerHome;
+      case 'tenant':
+        return RouteNames.tenantHome;
+      case 'manager':
+        return RouteNames.managerHome;
+      case 'caretaker':
+        return RouteNames.caretakerHome;
+      case 'electrician':
+        return RouteNames.electricianHome;
+      default:
+        return RouteNames.roleSelection;
+    }
+  }
+
   Future<void> _showDefaultAccountDialog(
     BuildContext context,
+    WidgetRef ref,
+    String uid,
     List<String> availableRoles,
     String? currentRole,
   ) async {
@@ -191,7 +213,13 @@ class MoreScreen extends ConsumerWidget {
               Navigator.of(dialogContext).pop();
 
               if (value != null && value != currentRole) {
-                _showComingSoon(context, 'Default Account');
+                _changeRole(
+                  context,
+                  ref,
+                  uid: uid,
+                  role: value,
+                  openDashboard: false,
+                );
               }
             },
             child: Column(
@@ -211,6 +239,8 @@ class MoreScreen extends ConsumerWidget {
 
   Future<void> _showSwitchAccountDialog(
     BuildContext context,
+    WidgetRef ref,
+    String uid,
     List<String> availableRoles,
     String? currentRole,
   ) async {
@@ -233,7 +263,13 @@ class MoreScreen extends ConsumerWidget {
                   Navigator.of(dialogContext).pop();
 
                   if (role != currentRole) {
-                    _showComingSoon(context, 'Account Switching');
+                    _changeRole(
+                      context,
+                      ref,
+                      uid: uid,
+                      role: role,
+                      openDashboard: true,
+                    );
                   }
                 },
               );
@@ -242,6 +278,40 @@ class MoreScreen extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _changeRole(
+    BuildContext context,
+    WidgetRef ref, {
+    required String uid,
+    required String role,
+    required bool openDashboard,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      await ref
+          .read(userProfileRepositoryProvider)
+          .updateDefaultDashboard(uid: uid, role: role);
+
+      ref.invalidate(currentUserProfileProvider);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      if (openDashboard) {
+        context.go(_routeForRole(role));
+      } else {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Default account: ${_roleLabel(role)}')),
+        );
+      }
+    } catch (error) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Unable to change account.')),
+      );
+    }
   }
 
   Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
@@ -277,6 +347,74 @@ class MoreScreen extends ConsumerWidget {
   void _showComingSoon(BuildContext context, String feature) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$feature integration is not connected yet.')),
+    );
+  }
+}
+
+/// Shows the saved profile photo (base64 data URL or network URL).
+/// Falls back to the first letter of the name when there is no photo.
+class _ProfileAvatar extends StatefulWidget {
+  const _ProfileAvatar({required this.name, required this.photoUrl});
+
+  final String name;
+  final String? photoUrl;
+
+  @override
+  State<_ProfileAvatar> createState() => _ProfileAvatarState();
+}
+
+class _ProfileAvatarState extends State<_ProfileAvatar> {
+  ImageProvider? _provider;
+
+  @override
+  void initState() {
+    super.initState();
+    _provider = _buildProvider(widget.photoUrl);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.photoUrl != widget.photoUrl) {
+      _provider = _buildProvider(widget.photoUrl);
+    }
+  }
+
+  ImageProvider? _buildProvider(String? url) {
+    if (url == null || url.isEmpty) {
+      return null;
+    }
+
+    if (url.startsWith('data:image')) {
+      try {
+        final Uint8List bytes = base64Decode(
+          url.substring(url.indexOf(',') + 1),
+        );
+
+        return MemoryImage(bytes);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    if (url.startsWith('http')) {
+      return NetworkImage(url);
+    }
+
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = _provider;
+
+    return CircleAvatar(
+      radius: 28,
+      backgroundImage: provider,
+      child: provider == null
+          ? Text(widget.name.isNotEmpty ? widget.name[0].toUpperCase() : 'G')
+          : null,
     );
   }
 }

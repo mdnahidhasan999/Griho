@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 import '../models/app_user_model.dart';
 
@@ -109,6 +110,60 @@ class UserProfileDataSource {
     }
 
     await batch.commit();
+  }
+
+  /// Updates only the fields a user is allowed to change on their profile.
+  Future<void> updateProfile({
+    required String uid,
+    required String publicId,
+    required String? phoneNumber,
+    required String name,
+    required String? email,
+    required String? photoUrl,
+  }) async {
+    final userDocument = _usersCollection.doc(uid);
+
+    // Main profile document: only name, email, photoUrl and updatedAt.
+    await userDocument.update({
+      'name': name,
+      'email': email,
+      'photoUrl': photoUrl,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Lookup copies are best effort. A failure must not lose the profile save.
+    try {
+      final batch = _firestore.batch();
+      final normalizedPhone = phoneNumber?.trim();
+
+      if (normalizedPhone != null && normalizedPhone.isNotEmpty) {
+        batch.set(_phoneLookupsCollection.doc(normalizedPhone), {
+          'phoneNumber': normalizedPhone,
+          'uid': uid,
+          'publicId': publicId,
+          'name': name,
+          'email': email,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      final normalizedPublicId = publicId.trim();
+
+      if (normalizedPublicId.isNotEmpty) {
+        batch.set(_publicIdsCollection.doc(normalizedPublicId), {
+          'publicId': normalizedPublicId,
+          'uid': uid,
+          'createdBy': uid,
+          'name': name,
+          'email': email,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      await batch.commit();
+    } catch (error) {
+      debugPrint('Profile lookup sync failed: $error');
+    }
   }
 
   Future<void> saveOwnerRole(String uid) async {

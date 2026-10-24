@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
-import '../../data/models/app_user_model.dart';
+import '../../../../core/utils/image_compression_helper.dart';
 import '../../domain/entities/app_user.dart';
 import '../providers/auth_provider.dart';
 
@@ -16,18 +21,28 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
+  static const int _maxPhotoBytes = 150 * 1024;
+
   final _formKey = GlobalKey<FormState>();
+  final _picker = ImagePicker();
 
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
 
+  String? _photoUrl;
+  Uint8List? _photoBytes;
+
   bool _isSaving = false;
+  bool _isProcessingPhoto = false;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.user.name);
     _emailController = TextEditingController(text: widget.user.email ?? '');
+
+    _photoUrl = widget.user.photoUrl;
+    _photoBytes = _decodeDataUrl(_photoUrl);
   }
 
   @override
@@ -37,8 +52,162 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.dispose();
   }
 
+  Uint8List? _decodeDataUrl(String? value) {
+    if (value == null || !value.startsWith('data:image')) {
+      return null;
+    }
+
+    try {
+      return base64Decode(value.substring(value.indexOf(',') + 1));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ImageProvider? get _photoProvider {
+    final bytes = _photoBytes;
+
+    if (bytes != null) {
+      return MemoryImage(bytes);
+    }
+
+    final url = _photoUrl;
+
+    if (url != null && url.startsWith('http')) {
+      return NetworkImage(url);
+    }
+
+    return null;
+  }
+
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _showPhotoOptions() async {
+    if (_isSaving || _isProcessingPhoto) {
+      return;
+    }
+
+    final hasPhoto = _photoProvider != null;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from gallery'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _pickPhoto(ImageSource.gallery);
+                },
+              ),
+              if (!kIsWeb)
+                ListTile(
+                  leading: const Icon(Icons.photo_camera_outlined),
+                  title: const Text('Take a photo'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _pickPhoto(ImageSource.camera);
+                  },
+                ),
+              if (hasPhoto)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded),
+                  title: const Text('Remove photo'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    setState(() {
+                      _photoUrl = null;
+                      _photoBytes = null;
+                    });
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickPhoto(ImageSource source) async {
+    if (_isSaving || _isProcessingPhoto) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingPhoto = true;
+    });
+
+    try {
+      final picked = await _picker.pickImage(
+        source: source,
+        maxWidth: kIsWeb ? 512 : 1024,
+        maxHeight: kIsWeb ? 512 : 1024,
+        imageQuality: kIsWeb ? 50 : 90,
+      );
+
+      if (picked == null) {
+        return;
+      }
+
+      final Uint8List bytes;
+
+      if (kIsWeb) {
+        // File compression is not available on web, so use the picker's resize.
+        bytes = await picked.readAsBytes();
+      } else {
+        final compressed = await ImageCompressionHelper.compressImage(
+          File(picked.path),
+        );
+
+        if (compressed == null) {
+          throw Exception('Could not process the selected photo.');
+        }
+
+        bytes = await compressed.readAsBytes();
+      }
+
+      if (bytes.length > _maxPhotoBytes) {
+        throw Exception('Photo is too large. Please choose another one.');
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _photoBytes = bytes;
+        _photoUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      });
+    } catch (error) {
+      _showSnack(_cleanErrorMessage(error), isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingPhoto = false;
+        });
+      }
+    }
+  }
+
   Future<void> _saveProfile() async {
-    if (_isSaving) {
+    if (_isSaving || _isProcessingPhoto) {
       return;
     }
 
@@ -55,22 +224,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     });
 
     try {
-      final updatedUser = AppUserModel(
+      final dataSource = ref.read(userProfileDataSourceProvider);
+
+      await dataSource.updateProfile(
         uid: widget.user.uid,
         publicId: widget.user.publicId,
-        name: name,
         phoneNumber: widget.user.phoneNumber,
-        // ফোন নাম্বার ফিক্সড
-        defaultDashboard: widget.user.defaultDashboard,
+        name: name,
         email: email.isEmpty ? null : email,
-        photoUrl: widget.user.photoUrl,
-        isActive: widget.user.isActive,
-        createdAt: widget.user.createdAt,
-        updatedAt: DateTime.now(),
+        photoUrl: _photoUrl,
       );
-
-      final dataSource = ref.read(userProfileDataSourceProvider);
-      await dataSource.updateUser(updatedUser);
 
       ref.invalidate(currentUserProfileProvider);
 
@@ -78,29 +241,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated successfully.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showSnack('Profile updated successfully.');
 
-      Navigator.of(context).pop(updatedUser);
+      Navigator.of(context).pop();
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_cleanErrorMessage(error)),
-          backgroundColor: Theme
-              .of(context)
-              .colorScheme
-              .error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showSnack(_cleanErrorMessage(error), isError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -117,21 +262,31 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label copied to clipboard.'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    _showSnack('$label copied to clipboard.');
+  }
+
+  String _roleName(String? role) {
+    switch (role) {
+      case 'owner':
+        return 'Property Owner';
+      case 'tenant':
+        return 'Tenant';
+      case 'manager':
+        return 'Property Manager';
+      case 'caretaker':
+        return 'Caretaker';
+      case 'electrician':
+        return 'Electrician';
+      default:
+        return 'Griho User';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final roleName = widget.user.defaultDashboard == 'owner'
-        ? 'Property Owner'
-        : widget.user.defaultDashboard == 'tenant' ? 'Tenant' : 'Griho User';
+    final roleName = _roleName(widget.user.defaultDashboard);
+    final photoProvider = _photoProvider;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -150,19 +305,56 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               Center(
                 child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: 46,
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      child: Text(
-                        widget.user.name.isNotEmpty
-                            ? widget.user.name[0].toUpperCase()
-                            : 'U',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onPrimaryContainer,
+                    Stack(
+                      children: [
+                        GestureDetector(
+                          onTap: _showPhotoOptions,
+                          child: CircleAvatar(
+                            radius: 46,
+                            backgroundColor: theme.colorScheme.primaryContainer,
+                            backgroundImage: photoProvider,
+                            child: _isProcessingPhoto
+                                ? const CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  )
+                                : photoProvider == null
+                                ? Text(
+                                    _nameController.text.trim().isNotEmpty
+                                        ? _nameController.text
+                                              .trim()[0]
+                                              .toUpperCase()
+                                        : 'U',
+                                    style: TextStyle(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w800,
+                                      color:
+                                          theme.colorScheme.onPrimaryContainer,
+                                    ),
+                                  )
+                                : null,
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Material(
+                            color: theme.colorScheme.primary,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _showPhotoOptions,
+                              child: Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Icon(
+                                  Icons.photo_camera_rounded,
+                                  size: 18,
+                                  color: theme.colorScheme.onPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     Container(
@@ -278,11 +470,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       prefixIcon: const Icon(Icons.phone_outlined),
                       suffixIcon: Container(
                         margin: const EdgeInsets.only(right: 8),
-                        child: Row(
+                        child: const Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.lock_outline, size: 18),
-                          ],
+                          children: [Icon(Icons.lock_outline, size: 18)],
                         ),
                       ),
                       border: const OutlineInputBorder(),
@@ -301,16 +491,18 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               SizedBox(
                 height: 52,
                 child: FilledButton.icon(
-                  onPressed: _isSaving ? null : _saveProfile,
+                  onPressed: _isSaving || _isProcessingPhoto
+                      ? null
+                      : _saveProfile,
                   icon: _isSaving
                       ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : const Icon(Icons.save_outlined),
                   label: Text(
                     _isSaving ? 'Saving Changes...' : 'Save Changes',
@@ -328,7 +520,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
-  Widget _buildSectionCard(BuildContext context, {
+  Widget _buildSectionCard(
+    BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,
