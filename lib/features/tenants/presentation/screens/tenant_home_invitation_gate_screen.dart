@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../home/presentation/screens/tenant_home_screen.dart';
+import '../providers/recipient_invitations_provider.dart';
 import '../providers/tenant_dashboard_provider.dart';
-import '../providers/tenant_invitation_provider.dart';
 import 'tenant_invitation_receive_screen.dart';
 
 class TenantHomeInvitationGateScreen extends ConsumerWidget {
@@ -12,55 +12,37 @@ class TenantHomeInvitationGateScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final tenantAsync = ref.watch(currentTenantProvider);
+    final pendingAsync = ref.watch(recipientPendingInvitationsProvider);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       body: SafeArea(
-        child: tenantAsync.when(
+        child: pendingAsync.when(
           loading: () =>
-          const _GateLoadingView(
-            message: 'Verifying residency records...',
-          ),
-          error: (error, stackTrace) =>
-              _GateErrorView(
-                title: 'Unable to Load Profile',
-                message: error.toString(),
-                onRetry: () {
-                  ref.invalidate(currentTenantProvider);
-                },
-              ),
-          data: (tenant) {
-            if (tenant == null) {
-              return _GateEmptyProfileView(
-                onRetry: () {
-                  ref.invalidate(currentTenantProvider);
-                },
-              );
+          const _GateLoadingView(message: 'Checking pending invitations...'),
+          error: (e, s) => const TenantHomeScreen(),
+          data: (pending) {
+            if (pending.isNotEmpty) {
+              return TenantInvitationReceiveScreen(
+                  invitationToken: pending.first.token);
             }
-
-            final pendingInvitationAsync = ref.watch(
-              pendingTenantInvitationStreamProvider(tenant.id),
-            );
-
-            return pendingInvitationAsync.when(
+            final tenantAsync = ref.watch(currentTenantProvider);
+            return tenantAsync.when(
               loading: () =>
-              const _GateLoadingView(
-                message: 'Checking pending invitations...',
-              ),
-              error: (error, stackTrace) {
-                // If checking for invitations fails, safely route to the home dashboard
-                return const TenantHomeScreen();
-              },
-              data: (invitation) {
-                if (invitation == null) {
-                  return const TenantHomeScreen();
-                }
-
-                return TenantInvitationReceiveScreen(
-                  invitationToken: invitation.token,
-                );
-              },
+              const _GateLoadingView(message: 'Verifying residency records...'),
+              error: (e, s) =>
+                  _GateErrorView(
+                    title: 'Unable to Load Profile',
+                    message: e.toString(),
+                    onRetry: () => ref.invalidate(currentTenantProvider),
+                  ),
+              data: (tenant) =>
+              tenant == null
+                  ? _GateEmptyProfileView(onRetry: () {
+                ref.invalidate(currentTenantProvider);
+                ref.invalidate(recipientInvitationsProvider);
+              })
+                  : const TenantHomeScreen(),
             );
           },
         ),

@@ -47,6 +47,14 @@ class AuthRouteGuard {
     }
 
     if (isTenantInvitationRoute) {
+      if (firebaseUser == null) {
+        final segments = uri?.pathSegments ?? const <String>[];
+        final token = segments.length > 1 ? segments[1] : '';
+        return Uri(
+          path: RouteNames.login,
+          queryParameters: token.isEmpty ? null : {'invitationId': token},
+        ).toString();
+      }
       return null;
     }
 

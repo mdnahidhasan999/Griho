@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -289,7 +290,8 @@ class TenantInvitationDataSource {
     // CREATE INVITATION
     // --------------------------------------------------------------
 
-    final invitationReference = _invitations.doc();
+    final invitationToken = _generateToken();
+    final invitationReference = _invitations.doc(invitationToken);
 
     final invitation = TenantInvitationModel(
       id: invitationReference.id,
@@ -307,7 +309,7 @@ class TenantInvitationDataSource {
       unitName: _readOptionalString(unitData, 'name'),
       rentAmount: rentAmount,
       status: TenantInvitationStatus.pending,
-      token: _generateToken(),
+      token: invitationToken,
       createdAt: now,
       updatedAt: now,
       expiresAt: now.add(const Duration(days: 7)),
@@ -431,17 +433,9 @@ class TenantInvitationDataSource {
       throw ArgumentError('Invitation token cannot be empty.');
     }
 
-    final snapshot = await _invitations
-        .where('token', isEqualTo: normalizedToken)
-        .limit(1)
-        .get();
-
-    if (snapshot.docs.isEmpty) {
-      return null;
-    }
-
-    final invitation =
-    TenantInvitationModel.fromFirestore(snapshot.docs.first);
+    final snapshot = await _invitations.doc(normalizedToken).get();
+    if (!snapshot.exists) return null;
+    final invitation = TenantInvitationModel.fromFirestore(snapshot);
 
     if (invitation.status == TenantInvitationStatus.pending &&
         invitation.isExpired) {
@@ -449,6 +443,66 @@ class TenantInvitationDataSource {
     }
 
     return invitation;
+  }
+
+  Stream<List<TenantInvitationModel>> watchInvitationsForRecipient({
+    String? phone,
+    String? email,
+    String? grihoId,
+  }) {
+    final queries = <Query<Map<String, dynamic>>>[];
+
+    final p = _normalize(phone);
+    if (p != null) {
+      queries.add(_invitations.where('phone',
+          isEqualTo: PhoneNumberUtils.normalizeAndValidate(p)));
+    }
+    final e = _normalizeEmail(email);
+    if (e != null) {
+      queries.add(_invitations.where('targetEmail', isEqualTo: e));
+    }
+    final g = _normalizeGrihoId(grihoId);
+    if (g != null) {
+      queries.add(_invitations.where('targetGrihoId', isEqualTo: g));
+    }
+    if (queries.isEmpty) {
+      return Stream.value(const <TenantInvitationModel>[]);
+    }
+
+    late final StreamController<List<TenantInvitationModel>> controller;
+    final latest = List<List<TenantInvitationModel>>.filled(
+        queries.length, const <TenantInvitationModel>[]);
+    final subs = <StreamSubscription>[];
+
+    void emit() {
+      final byId = <String, TenantInvitationModel>{};
+      for (final list in latest) {
+        for (final item in list) {
+          byId[item.id] = item;
+        }
+      }
+      final merged = byId.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!controller.isClosed) controller.add(merged);
+    }
+
+    controller = StreamController<List<TenantInvitationModel>>(
+      onListen: () {
+        for (var i = 0; i < queries.length; i++) {
+          subs.add(queries[i].snapshots().listen((snap) {
+            latest[i] =
+                snap.docs.map(TenantInvitationModel.fromFirestore).toList();
+            emit();
+          }, onError: controller.addError));
+        }
+      },
+      onCancel: () async {
+        for (final s in subs) {
+          await s.cancel();
+        }
+      },
+    );
+    return controller.stream;
   }
 
   // ================================================================
@@ -1064,85 +1118,54 @@ class TenantInvitationDataSource {
     required TenantInvitation invitation,
     required User user,
   }) async {
+    if (!user.emailVerified) {
+      throw StateError(
+        'Verify your email address before accessing this invitation.',
+      );
+    }
+
     final invitationPhone = _normalize(invitation.phone);
     final invitationEmail = _normalizeEmail(invitation.targetEmail);
-    final invitationGrihoId =
-    _normalizeGrihoId(invitation.targetGrihoId);
+    final invitationGrihoId = _normalizeGrihoId(invitation.targetGrihoId);
 
-    if (invitationPhone != null) {
-      final authPhoneRaw = _normalize(user.phoneNumber);
-
-      if (authPhoneRaw == null) {
-        throw StateError(
-          'Verify your phone number before accepting this invitation.',
-        );
-      }
-
-      final authPhone =
-      PhoneNumberUtils.normalizeAndValidate(authPhoneRaw);
-      final expectedPhone =
-      PhoneNumberUtils.normalizeAndValidate(invitationPhone);
-
-      if (authPhone != expectedPhone) {
-        throw StateError(
-          'Your verified phone number does not match this invitation.',
-        );
-      }
-
-      return;
-    }
+    // বাকি বিদ্যমান কোড এখানে থাকবে।
 
     if (invitationEmail != null) {
       if (!user.emailVerified) {
         throw StateError(
-          'Verify your email address before accepting this invitation.',
-        );
+            'Verify your email address before accepting this invitation.');
       }
-
-      final authEmail = _normalizeEmail(user.email);
-
-      if (authEmail == null || authEmail != invitationEmail) {
-        throw StateError(
-          'Your verified email does not match this invitation.',
-        );
+      if (_normalizeEmail(user.email) != invitationEmail) {
+        throw StateError('Your account email does not match this invitation.');
       }
-
       return;
+    }
+
+    final userSnapshot = await _users.doc(user.uid).get();
+    final userData = userSnapshot.data();
+    if (userData == null) {
+      throw StateError('Your Griho profile could not be found.');
     }
 
     if (invitationGrihoId != null) {
-      // Griho ID ownership must be established by a trusted mapping.
-      // Never accept a Griho ID just because the user typed it.
-      final userSnapshot = await _users.doc(user.uid).get();
-
-      if (!userSnapshot.exists) {
-        throw StateError(
-          'Your Griho profile could not be verified.',
-        );
+      if (_normalizeGrihoId(userData['publicId'] as String?) !=
+          invitationGrihoId) {
+        throw StateError('Your Griho ID does not match this invitation.');
       }
-
-      final userData = userSnapshot.data();
-
-      if (userData == null) {
-        throw StateError('Your Griho profile data is missing.');
-      }
-
-      final storedGrihoId =
-      _normalizeGrihoId(userData['grihoId'] as String?);
-
-      if (storedGrihoId == null ||
-          storedGrihoId != invitationGrihoId) {
-        throw StateError(
-          'Your verified Griho ID does not match this invitation.',
-        );
-      }
-
       return;
     }
 
-    throw StateError(
-      'This invitation has no valid recipient identifier.',
-    );
+    if (invitationPhone != null) {
+      final profilePhone = _normalize(userData['phoneNumber'] as String?);
+      if (profilePhone == null ||
+          PhoneNumberUtils.normalizeAndValidate(profilePhone) !=
+              PhoneNumberUtils.normalizeAndValidate(invitationPhone)) {
+        throw StateError('Your phone number does not match this invitation.');
+      }
+      return;
+    }
+
+    throw StateError('This invitation has no valid recipient identifier.');
   }
 
   // ================================================================

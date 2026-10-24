@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:griho/features/tenants/presentation/providers/recipient_invitations_provider.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../domain/entities/tenant_invitation.dart';
 import '../providers/current_tenant_pending_invitation_provider.dart';
+import '../providers/tenant_dashboard_provider.dart';
 import '../providers/tenant_invitation_provider.dart';
 
 class TenantInvitationReceiveScreen extends ConsumerStatefulWidget {
@@ -138,7 +140,8 @@ class _TenantInvitationReceiveScreenState
       }
 
       // Invalidate cached pending invitations
-      ref.invalidate(currentTenantPendingInvitationProvider);
+      ref.invalidate(recipientInvitationsProvider);
+      ref.invalidate(currentTenantProvider);
 
       setState(() {
         _isAccepting = false;

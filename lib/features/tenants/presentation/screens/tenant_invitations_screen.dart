@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/tenant_invitation.dart';
-import '../providers/tenant_dashboard_provider.dart';
-import '../providers/tenant_invitation_provider.dart';
+import '../providers/recipient_invitations_provider.dart';
 import 'tenant_invitation_receive_screen.dart';
 
 class TenantInvitationsScreen extends ConsumerWidget {
@@ -12,7 +11,6 @@ class TenantInvitationsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final tenantAsync = ref.watch(currentTenantProvider);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -22,29 +20,8 @@ class TenantInvitationsScreen extends ConsumerWidget {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-      body: SafeArea(
-        child: tenantAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) =>
-              _ErrorView(
-                message: 'Unable to load tenant profile.',
-                onRetry: () {
-                  ref.invalidate(currentTenantProvider);
-                },
-              ),
-          data: (tenant) {
-            if (tenant == null) {
-              return const _EmptyView(
-                icon: Icons.person_search_rounded,
-                title: 'Resident Profile Not Found',
-                message:
-                'Your tenant account is not currently linked to an active profile.',
-              );
-            }
-
-            return _InvitationList(tenantId: tenant.id);
-          },
-        ),
+      body: const SafeArea(
+        child: _InvitationList(),
       ),
     );
   }
@@ -55,63 +32,79 @@ class TenantInvitationsScreen extends ConsumerWidget {
 // ============================================================================
 
 class _InvitationList extends ConsumerWidget {
-  final String tenantId;
-
-  const _InvitationList({required this.tenantId});
+  const _InvitationList();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final invitationsAsync = ref.watch(tenantInvitationsProvider(tenantId));
+    final invitationsAsync = ref.watch(recipientInvitationsProvider);
 
     return invitationsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () =>
+      const Center(
+        child: CircularProgressIndicator(),
+      ),
       error: (error, stackTrace) =>
           _ErrorView(
             message: 'Unable to load your invitations.',
             onRetry: () {
-              ref.invalidate(tenantInvitationsProvider(tenantId));
+              ref.invalidate(recipientInvitationsProvider);
             },
           ),
       data: (invitations) {
         if (invitations.isEmpty) {
-          return const _EmptyView(
-            icon: Icons.mail_outline_rounded,
-            title: 'No Invitations Yet',
-            message:
-            'You do not have any tenancy invitations. When a property manager invites you, it will appear here.',
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(recipientInvitationsProvider);
+              await ref.read(recipientInvitationsProvider.future);
+            },
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(
+                  height: 400,
+                  child: _EmptyView(
+                    icon: Icons.mail_outline_rounded,
+                    title: 'No Invitations Yet',
+                    message:
+                    'You do not have any tenancy invitations. '
+                        'When a property manager invites you, '
+                        'it will appear here.',
+                  ),
+                ),
+              ],
+            ),
           );
         }
 
         final sorted = List<TenantInvitation>.from(invitations)
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-        final pendingInvitations = sorted.where((inv) {
-          return inv.status == TenantInvitationStatus.pending && !inv.isExpired;
+        final pendingInvitations = sorted.where((invitation) {
+          return invitation.status == TenantInvitationStatus.pending &&
+              !invitation.isExpired;
         }).toList();
 
-        final historicalInvitations = sorted.where((inv) {
-          return inv.status != TenantInvitationStatus.pending || inv.isExpired;
+        final historicalInvitations = sorted.where((invitation) {
+          return invitation.status != TenantInvitationStatus.pending ||
+              invitation.isExpired;
         }).toList();
 
         return RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(tenantInvitationsProvider(tenantId));
-            await ref.read(tenantInvitationsProvider(tenantId).future);
+            ref.invalidate(recipientInvitationsProvider);
+            await ref.read(recipientInvitationsProvider.future);
           },
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
             children: [
-              // 1. Metric Overview Card
               _InvitationsOverviewCard(
                 totalCount: sorted.length,
                 pendingCount: pendingInvitations.length,
                 resolvedCount: historicalInvitations.length,
               ),
-
               const SizedBox(height: 20),
 
-              // 2. Action Required (Pending Invitations)
               if (pendingInvitations.isNotEmpty) ...[
                 _SectionTitle(
                   title: 'Action Required',
@@ -120,19 +113,16 @@ class _InvitationList extends ConsumerWidget {
                   color: Colors.amber.shade900,
                 ),
                 const SizedBox(height: 10),
-                for (final invitation in pendingInvitations) ...[
+                for (final invitation in pendingInvitations)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _PendingInvitationCard(
                       invitation: invitation,
-                      tenantId: tenantId,
                     ),
                   ),
-                ],
                 const SizedBox(height: 12),
               ],
 
-              // 3. Historical / Resolved Invitations
               if (historicalInvitations.isNotEmpty) ...[
                 _SectionTitle(
                   title: 'Past Invitations',
@@ -140,15 +130,13 @@ class _InvitationList extends ConsumerWidget {
                   icon: Icons.history_rounded,
                 ),
                 const SizedBox(height: 10),
-                for (final invitation in historicalInvitations) ...[
+                for (final invitation in historicalInvitations)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _HistoricalInvitationCard(
                       invitation: invitation,
-                      tenantId: tenantId,
                     ),
                   ),
-                ],
               ],
             ],
           ),
@@ -182,7 +170,9 @@ class _InvitationsOverviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,9 +270,14 @@ class _MetricBadge extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      padding: const EdgeInsets.symmetric(
+        vertical: 10,
+        horizontal: 8,
+      ),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.5,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -337,7 +332,11 @@ class _SectionTitle extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(icon, size: 18, color: color ?? theme.colorScheme.primary),
+        Icon(
+          icon,
+          size: 18,
+          color: color ?? theme.colorScheme.primary,
+        ),
         const SizedBox(width: 8),
         Text(
           title,
@@ -347,7 +346,10 @@ class _SectionTitle extends StatelessWidget {
         ),
         const Spacer(),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 2,
+          ),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
@@ -366,22 +368,20 @@ class _SectionTitle extends StatelessWidget {
 }
 
 // ============================================================================
-// PENDING INVITATION CARD (ACTIONABLE)
+// PENDING INVITATION CARD
 // ============================================================================
 
 class _PendingInvitationCard extends ConsumerWidget {
   final TenantInvitation invitation;
-  final String tenantId;
 
   const _PendingInvitationCard({
     required this.invitation,
-    required this.tenantId,
   });
 
   Future<void> _openReceiveScreen(BuildContext context,
       WidgetRef ref,) async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) =>
             TenantInvitationReceiveScreen(
               invitationToken: invitation.token,
@@ -389,7 +389,9 @@ class _PendingInvitationCard extends ConsumerWidget {
       ),
     );
 
-    ref.invalidate(tenantInvitationsProvider(tenantId));
+    if (context.mounted) {
+      ref.invalidate(recipientInvitationsProvider);
+    }
   }
 
   @override
@@ -407,9 +409,7 @@ class _PendingInvitationCard extends ConsumerWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          _openReceiveScreen(context, ref);
-        },
+        onTap: () => _openReceiveScreen(context, ref),
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -461,10 +461,13 @@ class _PendingInvitationCard extends ConsumerWidget {
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer.withValues(
-                      alpha: 0.35),
+                    alpha: 0.35,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -508,10 +511,11 @@ class _PendingInvitationCard extends ConsumerWidget {
                 width: double.infinity,
                 height: 46,
                 child: FilledButton.icon(
-                  onPressed: () {
-                    _openReceiveScreen(context, ref);
-                  },
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  onPressed: () => _openReceiveScreen(context, ref),
+                  icon: const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                  ),
                   label: const Text(
                     'Review & Respond',
                     style: TextStyle(fontWeight: FontWeight.bold),
@@ -532,11 +536,9 @@ class _PendingInvitationCard extends ConsumerWidget {
 
 class _HistoricalInvitationCard extends ConsumerWidget {
   final TenantInvitation invitation;
-  final String tenantId;
 
   const _HistoricalInvitationCard({
     required this.invitation,
-    required this.tenantId,
   });
 
   @override
@@ -547,20 +549,25 @@ class _HistoricalInvitationCard extends ConsumerWidget {
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
+        side: BorderSide(
+          color: theme.colorScheme.outlineVariant,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () async {
           await Navigator.of(context).push<void>(
-            MaterialPageRoute(
+            MaterialPageRoute<void>(
               builder: (_) =>
                   TenantInvitationReceiveScreen(
                     invitationToken: invitation.token,
                   ),
             ),
           );
-          ref.invalidate(tenantInvitationsProvider(tenantId));
+
+          if (context.mounted) {
+            ref.invalidate(recipientInvitationsProvider);
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -639,8 +646,8 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveStatus = isExpired &&
-        status == TenantInvitationStatus.pending
+    final effectiveStatus =
+    isExpired && status == TenantInvitationStatus.pending
         ? TenantInvitationStatus.expired
         : status;
 
@@ -678,7 +685,10 @@ class _StatusChip extends StatelessWidget {
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 3,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
@@ -686,7 +696,11 @@ class _StatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
+          Icon(
+            icon,
+            size: 13,
+            color: color,
+          ),
           const SizedBox(width: 4),
           Text(
             label,
@@ -703,7 +717,7 @@ class _StatusChip extends StatelessWidget {
 }
 
 // ============================================================================
-// EMPTY & ERROR VIEWS
+// EMPTY VIEW
 // ============================================================================
 
 class _EmptyView extends StatelessWidget {
@@ -731,7 +745,8 @@ class _EmptyView extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.5),
+                  alpha: 0.5,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -764,6 +779,10 @@ class _EmptyView extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// ERROR VIEW
+// ============================================================================
+
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
@@ -790,7 +809,9 @@ class _ErrorView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
@@ -837,6 +858,7 @@ String _formatDate(DateTime dateTime) {
   final day = local.day.toString().padLeft(2, '0');
   final month = local.month.toString().padLeft(2, '0');
   final year = local.year.toString();
+
   return '$day/$month/$year';
 }
 
@@ -844,8 +866,10 @@ String _formatAmount(num? amount) {
   if (amount == null) {
     return '0';
   }
+
   if (amount == amount.roundToDouble()) {
     return amount.toStringAsFixed(0);
   }
+
   return amount.toStringAsFixed(2);
 }

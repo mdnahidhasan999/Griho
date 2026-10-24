@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../tenants/domain/entities/tenant_invitation.dart';
+import '../../../tenants/presentation/providers/recipient_invitations_provider.dart';
 import '../providers/auth_provider.dart';
 
 enum _SelectableRole { owner, tenant, manager, caretaker, electrician }
@@ -79,10 +81,46 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
           break;
 
         case _SelectableRole.tenant:
-          _showMessage(
-            'Tenant role saved. Property access requires an owner invitation.',
-            isError: false,
-          );
+          var pendingCount = 0;
+          try {
+            await ref.read(currentUserProfileProvider.future);
+            ref.invalidate(recipientInvitationsProvider);
+            final invitations = await ref
+                .read(recipientInvitationsProvider.future)
+                .timeout(const Duration(seconds: 8));
+            pendingCount = invitations
+                .where((i) =>
+            i.status == TenantInvitationStatus.pending && !i.isExpired)
+                .length;
+          } catch (_) {}
+
+          if (!mounted) return;
+
+          if (pendingCount > 0) {
+            await showDialog<void>(
+              context: context,
+              builder: (dialogContext) =>
+                  AlertDialog(
+                    icon: const Icon(Icons.mark_email_unread_rounded),
+                    title: const Text('You have an invitation'),
+                    content: Text(pendingCount == 1
+                        ? 'A property owner has invited you. Review and accept it now.'
+                        : 'Property owners have sent you $pendingCount invitations.'),
+                    actions: [
+                      FilledButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('View Invitations'),
+                      ),
+                    ],
+                  ),
+            );
+            if (!mounted) return;
+          } else {
+            _showMessage(
+              'Tenant role saved. Invitations will appear in More > Invitations.',
+              isError: false,
+            );
+          }
           context.go(RouteNames.tenantInvitations);
           break;
 
@@ -137,7 +175,9 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
     }
 
     final messenger = ScaffoldMessenger.of(context);
-    final colorScheme = Theme.of(context).colorScheme;
+    final colorScheme = Theme
+        .of(context)
+        .colorScheme;
 
     messenger
       ..hideCurrentSnackBar()
@@ -159,29 +199,30 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
       body: SafeArea(
         child: profileAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) => Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline_rounded, size: 48),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Unable to load your profile.',
-                    textAlign: TextAlign.center,
+          error: (error, stackTrace) =>
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 48),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Unable to load your profile.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () {
+                          ref.invalidate(currentUserProfileProvider);
+                        },
+                        child: const Text('Try Again'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: () {
-                      ref.invalidate(currentUserProfileProvider);
-                    },
-                    child: const Text('Try Again'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
           data: (profile) {
             if (profile == null) {
               return Center(
@@ -194,7 +235,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       const SizedBox(height: 16),
                       const Text(
                         'Your profile is not available. '
-                        'Please complete your profile first.',
+                            'Please complete your profile first.',
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
@@ -289,7 +330,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'How would you like to use Griho? '
-                      'Choose a role to continue.',
+                          'Choose a role to continue.',
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,
@@ -301,7 +342,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       role: _SelectableRole.owner,
                       title: 'Property Owner',
                       subtitle:
-                          'Manage your properties, units, tenants and bills.',
+                      'Manage your properties, units, tenants and bills.',
                       icon: Icons.home_work_outlined,
                     ),
                     const SizedBox(height: 12),
@@ -318,7 +359,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       role: _SelectableRole.manager,
                       title: 'Property Manager',
                       subtitle:
-                          'Manage property operations with owner authorization.',
+                      'Manage property operations with owner authorization.',
                       icon: Icons.manage_accounts_outlined,
                     ),
                     const SizedBox(height: 12),
@@ -335,13 +376,13 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       role: _SelectableRole.electrician,
                       title: 'Electrician',
                       subtitle:
-                          'Receive authorized electrical maintenance work.',
+                      'Receive authorized electrical maintenance work.',
                       icon: Icons.electrical_services_outlined,
                     ),
                     const SizedBox(height: 16),
                     Text(
                       'Selecting a role does not grant access automatically. '
-                      'Some roles require an invitation and approval.',
+                          'Some roles require an invitation and approval.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,
@@ -373,10 +414,10 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       : _continueWithSelectedRole,
                   child: _isNavigating
                       ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                       : const Text('Continue'),
                 ),
               ),
@@ -406,10 +447,10 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
           onTap: _isNavigating
               ? null
               : () {
-                  setState(() {
-                    _selectedRole = role;
-                  });
-                },
+            setState(() {
+              _selectedRole = role;
+            });
+          },
           borderRadius: BorderRadius.circular(18),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
