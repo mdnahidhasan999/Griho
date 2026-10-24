@@ -1,8 +1,6 @@
 import '../../../../core/services/current_user_service.dart';
-
 import '../../domain/entities/repositories/tenant_invitation_repository.dart';
 import '../../domain/entities/tenant_invitation.dart';
-
 import '../datasources/tenant_invitation_data_source.dart';
 
 class TenantInvitationRepositoryImpl
@@ -17,26 +15,28 @@ class TenantInvitationRepositoryImpl
 
   // ================================================================
   // CREATE INVITATION
-  // CURRENT OWNER ONLY
   // ================================================================
 
   @override
   Future<TenantInvitation> createInvitation({
-    required String tenantId,
+    String? tenantId,
     required String propertyId,
     required String unitId,
-    required String phone,
+    String? phone,
+    String? targetName,
+    String? targetEmail,
+    String? targetGrihoId,
     required double rentAmount,
   }) {
-    final ownerId =
-        _currentUserService.requiredUid;
-
     return _dataSource.createInvitation(
-      ownerId: ownerId,
+      ownerId: _currentUserService.requiredUid,
       tenantId: tenantId,
       propertyId: propertyId,
       unitId: unitId,
       phone: phone,
+      targetName: targetName,
+      targetEmail: targetEmail,
+      targetGrihoId: targetGrihoId,
       rentAmount: rentAmount,
     );
   }
@@ -46,12 +46,8 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?> getInvitationById(
-      String invitationId,
-      ) {
-    return _dataSource.getInvitationById(
-      invitationId,
-    );
+  Future<TenantInvitation?> getInvitationById(String invitationId,) {
+    return _dataSource.getInvitationById(invitationId);
   }
 
   // ================================================================
@@ -59,12 +55,8 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?> getInvitationByToken(
-      String token,
-      ) {
-    return _dataSource.getInvitationByToken(
-      token,
-    );
+  Future<TenantInvitation?> getInvitationByToken(String token,) {
+    return _dataSource.getInvitationByToken(token);
   }
 
   // ================================================================
@@ -72,14 +64,8 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?>
-  getPendingInvitationByTenantId(
-      String tenantId,
-      ) {
-    return _dataSource
-        .getPendingInvitationByTenantId(
-      tenantId,
-    );
+  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId,) {
+    return _dataSource.getPendingInvitationByTenantId(tenantId);
   }
 
   // ================================================================
@@ -87,29 +73,35 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?>
-  getPendingInvitationByPhone(
-      String phone,
-      ) {
-    return _dataSource
-        .getPendingInvitationByPhone(
-      phone,
-    );
+  Future<TenantInvitation?> getPendingInvitationByPhone(String phone,) {
+    return _dataSource.getPendingInvitationByPhone(phone);
   }
 
   // ================================================================
-  // REALTIME — ALL INVITATIONS
+  // GET PENDING INVITATION BY EMAIL
   // ================================================================
 
   @override
-  Stream<List<TenantInvitation>>
-  watchInvitationsByTenantId(
-      String tenantId,
-      ) {
-    return _dataSource
-        .watchInvitationsByTenantId(
-      tenantId,
-    );
+  Future<TenantInvitation?> getPendingInvitationByEmail(String email,) {
+    return _dataSource.getPendingInvitationByEmail(email);
+  }
+
+  // ================================================================
+  // GET PENDING INVITATION BY GRIHO ID
+  // ================================================================
+
+  @override
+  Future<TenantInvitation?> getPendingInvitationByGrihoId(String grihoId,) {
+    return _dataSource.getPendingInvitationByGrihoId(grihoId);
+  }
+
+  // ================================================================
+  // REALTIME — ALL TENANT INVITATIONS
+  // ================================================================
+
+  @override
+  Stream<List<TenantInvitation>> watchInvitationsByTenantId(String tenantId,) {
+    return _dataSource.watchInvitationsByTenantId(tenantId);
   }
 
   // ================================================================
@@ -117,14 +109,17 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Stream<TenantInvitation?>
-  watchPendingInvitationByTenantId(
-      String tenantId,
-      ) {
-    return _dataSource
-        .watchPendingInvitationByTenantId(
-      tenantId,
-    );
+  Stream<TenantInvitation?> watchPendingInvitationByTenantId(String tenantId,) {
+    return _dataSource.watchPendingInvitationByTenantId(tenantId);
+  }
+
+  // ================================================================
+  // REALTIME — INVITATIONS BY PHONE
+  // ================================================================
+
+  @override
+  Stream<List<TenantInvitation>> watchInvitationsByPhone(String phone,) {
+    return _dataSource.watchInvitationsByPhone(phone);
   }
 
   // ================================================================
@@ -132,12 +127,8 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<void> acceptInvitation(
-      String invitationId,
-      ) {
-    return _dataSource.acceptInvitation(
-      invitationId,
-    );
+  Future<void> acceptInvitation(String invitationId,) {
+    return _dataSource.acceptInvitation(invitationId);
   }
 
   // ================================================================
@@ -145,12 +136,8 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<void> cancelInvitation(
-      String invitationId,
-      ) {
-    return _dataSource.cancelInvitation(
-      invitationId,
-    );
+  Future<void> cancelInvitation(String invitationId,) {
+    return _dataSource.cancelInvitation(invitationId);
   }
 
   // ================================================================
@@ -158,11 +145,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<void> expireInvitation(
-      String invitationId,
-      ) {
-    return _dataSource.expireInvitation(
-      invitationId,
-    );
+  Future<void> expireInvitation(String invitationId,) {
+    return _dataSource.expireInvitation(invitationId);
   }
 }

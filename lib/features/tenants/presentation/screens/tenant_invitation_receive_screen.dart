@@ -110,7 +110,7 @@ class _TenantInvitationReceiveScreenState
       return;
     }
 
-    if (!invitation.isValid) {
+    if (!invitation.isPending || invitation.isExpired) {
       if (!mounted) {
         return;
       }
@@ -446,7 +446,8 @@ class _TenantInvitationReceiveScreenState
       );
     }
 
-    if (!invitation.isValid && !_isAccepted) {
+    if ((!invitation.isPending || invitation.isExpired) &&
+        !_isAccepted) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -647,7 +648,9 @@ class _TenantInvitationReceiveScreenState
                   _DetailRow(
                     icon: Icons.phone_outlined,
                     title: 'Invited Phone Number',
-                    value: invitation.phone,
+                    value: invitation.phone?.trim().isNotEmpty == true
+                        ? invitation.phone!.trim()
+                        : 'Not provided',
                   ),
                   const Divider(height: 24),
                   _DetailRow(

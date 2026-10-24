@@ -87,33 +87,32 @@ final hasActiveTenancyProvider = FutureProvider<bool>((ref) async {
 /// =========================================================================
 
 final pendingTenantInvitationForCurrentUserProvider =
-    StreamProvider<TenantInvitation?>((ref) async* {
-      final tenant = await ref.watch(currentTenantProvider.future);
+StreamProvider<TenantInvitation?>((ref) async* {
+  final tenant = await ref.watch(currentTenantProvider.future);
 
-      if (tenant == null) {
-        yield null;
-        return;
-      }
+  if (tenant == null) {
+    yield null;
+    return;
+  }
 
-      final tenantId = tenant.id.trim();
+  final tenantId = tenant.id.trim();
 
-      if (tenantId.isEmpty) {
-        yield null;
-        return;
-      }
+  if (tenantId.isEmpty) {
+    yield null;
+    return;
+  }
 
-      final repository = ref.read(tenantInvitationRepositoryProvider);
+  final repository = ref.read(tenantInvitationRepositoryProvider);
 
-      yield* repository.watchPendingInvitationByTenantId(tenantId);
-    });
+  yield* repository.watchPendingInvitationByTenantId(tenantId);
+});
 
 /// =========================================================================
 /// TENANCY HISTORY FOR CURRENT ACCOUNT
 /// =========================================================================
 
 final currentUserTenancyHistoryProvider = FutureProvider<List<TenancyHistory>>((
-  ref,
-) async {
+    ref,) async {
   final firebaseUser = ref.watch(currentFirebaseUserProvider);
 
   if (firebaseUser == null) {
@@ -184,8 +183,7 @@ final currentBillingPeriodStartProvider = Provider<DateTime>((ref) {
 /// =========================================================================
 
 final currentTenantMonthlyBillsProvider = FutureProvider<List<MonthlyBill>>((
-  ref,
-) async {
+    ref,) async {
   final tenant = await ref.watch(currentTenantProvider.future);
 
   if (tenant == null || tenant.status != TenantStatus.active) {
@@ -209,8 +207,8 @@ final currentTenantMonthlyBillsProvider = FutureProvider<List<MonthlyBill>>((
   // Queries ONLY by tenantUserId + billingPeriodStart (100% allowed by Firestore rules)
   final bills = await ref.watch(
     monthlyBillsByTenantAndPeriodProvider((
-      tenantUserId: tenantUserId,
-      billingPeriodStart: billingPeriodStart,
+    tenantUserId: tenantUserId,
+    billingPeriodStart: billingPeriodStart,
     )).future,
   );
 
@@ -284,7 +282,7 @@ class TenantDashboardData {
   }
 
   bool get hasPendingInvitation {
-    return pendingInvitation?.isValid == true;
+    return pendingInvitation?.isPending == true;
   }
 
   bool get hasTenancyHistory {
@@ -395,8 +393,7 @@ class TenantDashboardData {
 /// =========================================================================
 
 final tenantDashboardProvider = FutureProvider<TenantDashboardData>((
-  ref,
-) async {
+    ref,) async {
   final firebaseUser = ref.watch(currentFirebaseUserProvider);
 
   if (firebaseUser == null) {

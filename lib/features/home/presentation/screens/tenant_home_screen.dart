@@ -43,7 +43,10 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                backgroundColor: Theme
+                    .of(dialogContext)
+                    .colorScheme
+                    .error,
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Sign Out'),
@@ -182,11 +185,12 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                 ),
               );
             },
-            orElse: () => IconButton(
-              tooltip: 'All Invitations',
-              onPressed: _openInvitations,
-              icon: const Icon(Icons.mail_outline_rounded),
-            ),
+            orElse: () =>
+                IconButton(
+                  tooltip: 'All Invitations',
+                  onPressed: _openInvitations,
+                  icon: const Icon(Icons.mail_outline_rounded),
+                ),
           ),
 
           // User Profile Menu
@@ -206,7 +210,8 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                 _logout();
               }
             },
-            itemBuilder: (context) => const [
+            itemBuilder: (context) =>
+            const [
               PopupMenuItem<String>(
                 value: 'edit_profile',
                 child: Row(
@@ -242,21 +247,23 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: dashboardAsync.maybeWhen(
-                data: (dashboard) => CircleAvatar(
-                  radius: 19,
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Text(
-                    dashboard.displayName.isNotEmpty
-                        ? dashboard.displayName[0].toUpperCase()
-                        : 'T',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: theme.colorScheme.onPrimaryContainer,
+                data: (dashboard) =>
+                    CircleAvatar(
+                      radius: 19,
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      child: Text(
+                        dashboard.displayName.isNotEmpty
+                            ? dashboard.displayName[0].toUpperCase()
+                            : 'T',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                orElse: () => const CircleAvatar(
+                orElse: () =>
+                const CircleAvatar(
                   radius: 19,
                   child: Icon(Icons.person_outline_rounded, size: 18),
                 ),
@@ -334,13 +341,14 @@ class _TenantDashboardContent extends StatelessWidget {
         // 3. Digital Residency Pass or Unassigned Passport
         if (dashboard.hasActiveTenancy) ...[
           _DigitalResidencyPass(dashboard: dashboard),
-        ] else ...[
-          _NoActiveTenancyPassport(
-            userPublicId: dashboard.appUser?.publicId ?? '',
-            hasPendingInvitation: dashboard.hasPendingInvitation,
-            onOpenInvitations: onOpenInvitations,
-          ),
-        ],
+        ] else
+          ...[
+            _NoActiveTenancyPassport(
+              userPublicId: dashboard.appUser?.publicId ?? '',
+              hasPendingInvitation: dashboard.hasPendingInvitation,
+              onOpenInvitations: onOpenInvitations,
+            ),
+          ],
 
         const SizedBox(height: 24),
 
@@ -414,7 +422,9 @@ class _HeaderSection extends StatelessWidget {
   const _HeaderSection({required this.dashboard});
 
   String _greetingText() {
-    final hour = DateTime.now().hour;
+    final hour = DateTime
+        .now()
+        .hour;
     if (hour < 12) {
       return 'Good Morning';
     }
@@ -692,33 +702,36 @@ class _DigitalResidencyPass extends ConsumerWidget {
                         const SizedBox(height: 3),
                         rentAsync == null
                             ? const Text(
-                                '—',
-                                style: TextStyle(color: Colors.white),
-                              )
+                          '—',
+                          style: TextStyle(color: Colors.white),
+                        )
                             : rentAsync.when(
-                                loading: () => const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.5,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                                error: (_, _) => const Text(
-                                  'Not set',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                data: (rent) => Text(
-                                  rent != null
-                                      ? '৳ ${_formatAmount(rent.amount)}'
-                                      : 'Not Set',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                          loading: () =>
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          error: (_, _) =>
+                          const Text(
+                            'Not set',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          data: (rent) =>
+                              Text(
+                                rent != null
+                                    ? '৳ ${_formatAmount(rent.amount)}'
+                                    : 'Not Set',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
                                 ),
                               ),
+                        ),
                       ],
                     ),
                     Container(
@@ -845,7 +858,8 @@ class _PendingInvitationCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'You are invited to finalize lease terms for "$propertyName" ($unitName) with agreed monthly rent of ৳ ${_formatAmount(invitation.rentAmount)}.',
+            'You are invited to finalize lease terms for "$propertyName" ($unitName) with agreed monthly rent of ৳ ${_formatAmount(
+                invitation.rentAmount)}.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onTertiaryContainer,
               height: 1.4,
@@ -1172,8 +1186,9 @@ class _RecentActivityCard extends StatelessWidget {
   List<_ActivityData> _buildActivities(TenantDashboardData dashboard) {
     final activities = <_ActivityData>[];
     final invitation = dashboard.pendingInvitation;
-
-    if (invitation != null && invitation.isValid) {
+    if (invitation != null &&
+        invitation.isPending &&
+        !invitation.isExpired) {
       activities.add(
         _ActivityData(
           icon: Icons.mail_outline_rounded,
@@ -1361,7 +1376,8 @@ class _TenancyHistoryPreview extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Unit ${item.unitNumber} • ৳ ${_formatAmount(item.monthlyRent)} / mo',
+                            'Unit ${item.unitNumber} • ৳ ${_formatAmount(
+                                item.monthlyRent)} / mo',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),

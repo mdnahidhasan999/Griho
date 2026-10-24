@@ -21,19 +21,12 @@ import '../providers/tenant_invitation_provider.dart';
 class TenantInvitationController
     extends StateNotifier<AsyncValue<TenantInvitation?>> {
   final CreateTenantInvitation _createInvitation;
-
   final GetTenantInvitation _getInvitation;
-
   final GetInvitationByToken _getInvitationByToken;
-
   final GetPendingTenantInvitation _getPendingInvitation;
-
   final GetPendingInvitationByPhone _getPendingInvitationByPhone;
-
   final AcceptTenantInvitation _acceptInvitation;
-
   final CancelTenantInvitation _cancelInvitation;
-
   final ExpireTenantInvitation _expireInvitation;
 
   TenantInvitationController({
@@ -47,15 +40,18 @@ class TenantInvitationController
     required this._expireInvitation,
   }) : super(const AsyncData(null));
 
-  // ==============================================================
+  // ================================================================
   // CREATE INVITATION
-  // ==============================================================
+  // ================================================================
 
   Future<TenantInvitation?> createInvitation({
-    required String tenantId,
+    String? tenantId,
     required String propertyId,
     required String unitId,
-    required String phone,
+    String? phone,
+    String? targetName,
+    String? targetEmail,
+    String? targetGrihoId,
     required double rentAmount,
   }) async {
     state = const AsyncLoading();
@@ -66,162 +62,142 @@ class TenantInvitationController
         propertyId: propertyId,
         unitId: unitId,
         phone: phone,
+        targetName: targetName,
+        targetEmail: targetEmail,
+        targetGrihoId: targetGrihoId,
         rentAmount: rentAmount,
       );
 
       state = AsyncData(invitation);
-
       return invitation;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
 
-  // ==============================================================
+  // ================================================================
   // GET INVITATION BY ID
-  // ==============================================================
+  // ================================================================
 
   Future<TenantInvitation?> getInvitation(String invitationId) async {
     state = const AsyncLoading();
 
     try {
       final invitation = await _getInvitation(invitationId);
-
       state = AsyncData(invitation);
-
       return invitation;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
 
-  // ==============================================================
+  // ================================================================
   // GET INVITATION BY TOKEN
-  // ==============================================================
+  // ================================================================
 
   Future<TenantInvitation?> getInvitationByToken(String token) async {
     state = const AsyncLoading();
 
     try {
       final invitation = await _getInvitationByToken(token);
-
       state = AsyncData(invitation);
-
       return invitation;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
 
-  // ==============================================================
-  // GET PENDING BY TENANT
-  // ==============================================================
+  // ================================================================
+  // GET PENDING INVITATION BY TENANT
+  // ================================================================
 
   Future<TenantInvitation?> getPendingInvitation(String tenantId) async {
     state = const AsyncLoading();
 
     try {
       final invitation = await _getPendingInvitation(tenantId);
-
       state = AsyncData(invitation);
-
       return invitation;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
 
-  // ==============================================================
-  // GET PENDING BY PHONE
-  // ==============================================================
+  // ================================================================
+  // GET PENDING INVITATION BY PHONE
+  // ================================================================
 
-  Future<TenantInvitation?> getPendingInvitationByPhone(String phone) async {
+  Future<TenantInvitation?> getPendingInvitationByPhone(String phone,) async {
     state = const AsyncLoading();
 
     try {
       final invitation = await _getPendingInvitationByPhone(phone);
-
       state = AsyncData(invitation);
-
       return invitation;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
 
-  // ==============================================================
-  // ACCEPT
-  // ==============================================================
+  // ================================================================
+  // ACCEPT INVITATION
+  // ================================================================
 
   Future<bool> acceptInvitation(String invitationId) async {
     state = const AsyncLoading();
 
     try {
       await _acceptInvitation(invitationId);
-
       state = const AsyncData(null);
-
       return true;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return false;
     }
   }
 
-  // ==============================================================
-  // CANCEL
-  // ==============================================================
+  // ================================================================
+  // CANCEL / REJECT INVITATION
+  // ================================================================
 
   Future<bool> cancelInvitation(String invitationId) async {
     state = const AsyncLoading();
 
     try {
       await _cancelInvitation(invitationId);
-
       state = const AsyncData(null);
-
       return true;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return false;
     }
   }
 
-  // ==============================================================
-  // EXPIRE
-  // ==============================================================
+  // ================================================================
+  // EXPIRE INVITATION
+  // ================================================================
 
   Future<bool> expireInvitation(String invitationId) async {
     state = const AsyncLoading();
 
     try {
       await _expireInvitation(invitationId);
-
       state = const AsyncData(null);
-
       return true;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return false;
     }
   }
 
-  // ==============================================================
+  // ================================================================
   // CLEAR
-  // ==============================================================
+  // ================================================================
 
   void clear() {
     state = const AsyncData(null);
@@ -233,20 +209,19 @@ class TenantInvitationController
 // ================================================================
 
 final tenantInvitationControllerProvider =
-    StateNotifierProvider<
-      TenantInvitationController,
-      AsyncValue<TenantInvitation?>
-    >((ref) {
-      return TenantInvitationController(
-        createInvitation: ref.read(createTenantInvitationProvider),
-        getInvitation: ref.read(getTenantInvitationProvider),
-        getInvitationByToken: ref.read(getInvitationByTokenProvider),
-        getPendingInvitation: ref.read(getPendingTenantInvitationProvider),
-        getPendingInvitationByPhone: ref.read(
-          getPendingInvitationByPhoneProvider,
-        ),
-        acceptInvitation: ref.read(acceptTenantInvitationProvider),
-        cancelInvitation: ref.read(cancelTenantInvitationProvider),
-        expireInvitation: ref.read(expireTenantInvitationProvider),
-      );
-    });
+StateNotifierProvider<
+    TenantInvitationController,
+    AsyncValue<TenantInvitation?>>((ref) {
+  return TenantInvitationController(
+    createInvitation: ref.read(createTenantInvitationProvider),
+    getInvitation: ref.read(getTenantInvitationProvider),
+    getInvitationByToken: ref.read(getInvitationByTokenProvider),
+    getPendingInvitation: ref.read(getPendingTenantInvitationProvider),
+    getPendingInvitationByPhone: ref.read(
+      getPendingInvitationByPhoneProvider,
+    ),
+    acceptInvitation: ref.read(acceptTenantInvitationProvider),
+    cancelInvitation: ref.read(cancelTenantInvitationProvider),
+    expireInvitation: ref.read(expireTenantInvitationProvider),
+  );
+});
