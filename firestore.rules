@@ -809,11 +809,15 @@ service cloud.firestore {
 
                         &&
 
-                        request.auth.token.phone_number != null
+                                              getAfter(/databases/$(database)/documents/tenantAccess/$(request.auth.uid)).data.invitationId is string
 
-                        &&
+                                              &&
 
-                        resource.data.phone == request.auth.token.phone_number
+                                              getAfter(/databases/$(database)/documents/tenantInvitations/$(getAfter(/databases/$(database)/documents/tenantAccess/$(request.auth.uid)).data.invitationId)).data.tenantId == tenantId
+
+                                              &&
+
+                                              getAfter(/databases/$(database)/documents/tenantInvitations/$(getAfter(/databases/$(database)/documents/tenantAccess/$(request.auth.uid)).data.invitationId)).data.status == 'accepted'
 
                         &&
 
@@ -2358,9 +2362,6 @@ service cloud.firestore {
 
         && invitationAfter.unitId
            == resource.data.unitId
-
-        && invitationAfter.phone
-           == resource.data.phone
 
         && tenantAfter.userId
            == request.auth.uid
