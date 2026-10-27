@@ -19,12 +19,13 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController =
-  TextEditingController();
-  final TextEditingController _emailController =
-  TextEditingController();
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
 
   String _completePhoneNumber = '';
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -40,24 +41,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
   Future<void> _completeProfile() async {
+    if (_isSubmitting) return;
+
     FocusScope.of(context).unfocus();
 
     if (!(_formKey.currentState?.validate() ?? false)) {
-      return;
-    }
-
-    final String phoneNumber =
-    PhoneNumberUtils.clean(_completePhoneNumber);
-
-    if (!PhoneNumberUtils.isValid(phoneNumber)) {
-      _showMessage(
-        'Please enter a valid permanent phone number.',
-        isError: true,
-      );
       return;
     }
 
@@ -73,15 +66,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       return;
     }
 
-    if (firebaseUser.email == null ||
-        firebaseUser.email!.trim().isEmpty) {
+    final String? email = firebaseUser.email;
+
+    if (email == null || email
+        .trim()
+        .isEmpty) {
       _showMessage(
-        'Your account does not have an email address. Please sign in again.',
+        'Your account does not have an email address. '
+            'Please sign in again.',
         isError: true,
       );
       return;
     }
 
+    // Email/password accounts must verify their email before
+    // completing their Griho profile.
     final bool usesEmailPassword = firebaseUser.providerData.any(
           (provider) => provider.providerId == 'password',
     );
@@ -100,37 +99,73 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       return;
     }
 
-    final user = await ref
-        .read(authControllerProvider.notifier)
-        .completeUserProfile(
-      name: _nameController.text.trim(),
-      phoneNumber: phoneNumber,
+    final String phoneNumber = PhoneNumberUtils.clean(
+      _completePhoneNumber,
     );
 
-    if (!mounted) return;
-
-    if (user == null) {
-      final String message =
-          ref
-              .read(authControllerProvider)
-              .errorMessage ??
-              'Unable to complete your profile. Please try again.';
-
-      _showMessage(message, isError: true);
+    if (!PhoneNumberUtils.isValid(phoneNumber)) {
+      _showMessage(
+        'Please enter a valid permanent phone number.',
+        isError: true,
+      );
       return;
     }
 
-    _showMessage(
-      'Your profile has been completed successfully.',
-      isError: false,
-    );
+    setState(() {
+      _isSubmitting = true;
+    });
 
-    // Refresh the profile before routing to the next screen.
-    await ref.read(currentUserProfileProvider.future);
+    try {
+      final user = await ref
+          .read(authControllerProvider.notifier)
+          .completeUserProfile(
+        name: _nameController.text.trim(),
+        phoneNumber: phoneNumber,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    context.go(RouteNames.splash);
+      if (user == null) {
+        final String message =
+            ref
+                .read(authControllerProvider)
+                .errorMessage ??
+                'Unable to complete your profile. Please try again.';
+
+        _showMessage(message, isError: true);
+        return;
+      }
+
+      // The profile has already been saved successfully.
+      // Invalidate the cached profile so the next screen reads
+      // the latest Firestore data.
+      ref.invalidate(currentUserProfileProvider);
+
+      _showMessage(
+        'Your profile has been completed successfully.',
+        isError: false,
+      );
+
+      // A completed profile without an assigned role should
+      // continue to role selection, not return through Splash.
+      context.go(RouteNames.roleSelection);
+    } catch (error, stackTrace) {
+      debugPrint('ONBOARDING PROFILE ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      _showMessage(
+        'Unable to complete your profile. Please try again.',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   void _showMessage(String message, {
@@ -138,16 +173,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
+    final messenger = ScaffoldMessenger.of(context);
+    final colorScheme = Theme
+        .of(context)
+        .colorScheme;
+
+    messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor:
-          isError ? Theme
-              .of(context)
-              .colorScheme
-              .error : Colors.green,
+          backgroundColor: isError ? colorScheme.error : Colors.green,
         ),
       );
   }
@@ -156,6 +192,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final authState = ref.watch(authControllerProvider);
+
+    final bool isLoading = _isSubmitting || authState.isLoading;
+
+    final User? firebaseUser = FirebaseAuth.instance.currentUser;
+
+    final bool emailVerified = firebaseUser?.emailVerified ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -207,19 +249,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                     const SizedBox(height: 28),
 
-                    _FieldLabel(
-                      label: 'Full Name',
-                    ),
+                    const _FieldLabel(label: 'Full Name'),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _nameController,
                       textCapitalization: TextCapitalization.words,
                       textInputAction: TextInputAction.next,
-                      enabled: !authState.isLoading,
+                      enabled: !isLoading,
                       decoration: const InputDecoration(
                         hintText: 'Enter your full name',
-                        prefixIcon:
-                        Icon(Icons.person_outline_rounded),
+                        prefixIcon: Icon(Icons.person_outline_rounded),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.all(
                             Radius.circular(14),
@@ -227,16 +266,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ),
                       ),
                       validator: (value) {
-                        if (value == null ||
-                            value
-                                .trim()
-                                .isEmpty) {
+                        final name = value?.trim() ?? '';
+
+                        if (name.isEmpty) {
                           return 'Please enter your full name.';
                         }
 
-                        if (value
-                            .trim()
-                            .length < 2) {
+                        if (name.length < 2) {
                           return 'Name must contain at least 2 characters.';
                         }
 
@@ -245,20 +281,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    _FieldLabel(
-                      label: 'Email Address',
-                    ),
+                    const _FieldLabel(label: 'Email Address'),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _emailController,
                       readOnly: true,
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
-                        prefixIcon:
-                        const Icon(Icons.mail_outline_rounded),
+                        prefixIcon: const Icon(
+                          Icons.mail_outline_rounded,
+                        ),
                         suffixIcon: Icon(
-                          Icons.verified_rounded,
-                          color: Colors.green.shade700,
+                          emailVerified
+                              ? Icons.verified_rounded
+                              : Icons.info_outline_rounded,
+                          color: emailVerified
+                              ? Colors.green.shade700
+                              : theme.colorScheme.onSurfaceVariant,
                         ),
                         filled: true,
                         fillColor: theme
@@ -281,14 +320,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    _FieldLabel(
+                    const _FieldLabel(
                       label: 'Permanent Phone Number',
                     ),
                     const SizedBox(height: 8),
                     IntlPhoneField(
+                      controller: _phoneController,
                       initialCountryCode: 'BD',
-                      enabled: !authState.isLoading,
+                      enabled: !isLoading,
                       keyboardType: TextInputType.phone,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       decoration: const InputDecoration(
                         hintText: 'Enter your phone number',
                         border: OutlineInputBorder(
@@ -371,15 +412,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     SizedBox(
                       height: 54,
                       child: FilledButton(
-                        onPressed: authState.isLoading
-                            ? null
-                            : _completeProfile,
+                        onPressed: isLoading ? null : _completeProfile,
                         style: FilledButton.styleFrom(
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        child: authState.isLoading
+                        child: isLoading
                             ? const SizedBox(
                           width: 22,
                           height: 22,
@@ -399,7 +438,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextButton(
-                      onPressed: authState.isLoading
+                      onPressed: isLoading
                           ? null
                           : () => context.go(RouteNames.login),
                       child: const Text('Back to Sign In'),

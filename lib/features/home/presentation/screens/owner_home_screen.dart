@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
-import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
@@ -78,87 +77,15 @@ class OwnerHomeScreen extends ConsumerWidget {
           ],
         ),
         centerTitle: false,
-        actions: [
-          profileAsync.maybeWhen(
-            data: (profile) {
-              if (profile == null) {
-                return const SizedBox.shrink();
-              }
 
-              return PopupMenuButton<String>(
-                tooltip: 'Account Settings',
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                onSelected: (value) {
-                  if (value == 'edit_profile') {
-                    _openEditProfile(context, ref, profile);
-                  } else if (value == 'logout') {
-                    _showSignOutDialog(context, ref);
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem<String>(
-                    value: 'edit_profile',
-                    child: Row(
-                      children: [
-                        Icon(Icons.person_outline_rounded, size: 20),
-                        SizedBox(width: 12),
-                        Text('Profile Settings'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuDivider(),
-                  PopupMenuItem<String>(
-                    value: 'logout',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.logout_rounded,
-                          size: 20,
-                          color: Colors.redAccent,
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          'Sign Out',
-                          style: TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: CircleAvatar(
-                    radius: 19,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                    child: Text(
-                      profile.name.isNotEmpty
-                          ? profile.name[0].toUpperCase()
-                          : 'O',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-            orElse: () => const SizedBox.shrink(),
-          ),
-        ],
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorView(
-          message: 'Unable to load owner account information.',
-          onRetry: () => ref.invalidate(currentUserProfileProvider),
-        ),
+        error: (error, stackTrace) =>
+            _ErrorView(
+              message: 'Unable to load owner account information.',
+              onRetry: () => ref.invalidate(currentUserProfileProvider),
+            ),
         data: (profile) {
           if (profile == null) {
             return _ErrorView(
@@ -215,7 +142,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                 const _SectionTitle(
                   title: 'Enterprise Management',
                   subtitle:
-                      'In-depth directory records and automated billing rules',
+                  'In-depth directory records and automated billing rules',
                 ),
                 const SizedBox(height: 12),
                 const _EnterpriseHub(),
@@ -236,53 +163,7 @@ class OwnerHomeScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _openEditProfile(
-    BuildContext context,
-    WidgetRef ref,
-    dynamic profile,
-  ) async {
-    final result = await context.push(RouteNames.editProfile, extra: profile);
-    if (!context.mounted) {
-      return;
-    }
 
-    if (result != null) {
-      ref.invalidate(currentUserProfileProvider);
-      try {
-        await ref.read(currentUserProfileProvider.future);
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _showSignOutDialog(BuildContext context, WidgetRef ref) async {
-    final shouldSignOut = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Sign out of Griho?'),
-        content: const Text(
-          'Are you sure you want to log out of your property management console?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Sign Out'),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldSignOut != true || !context.mounted) {
-      return;
-    }
-    await ref.read(authControllerProvider.notifier).signOut();
-  }
 }
 
 // ============================================================================
@@ -296,7 +177,9 @@ class _ExecutiveHeader extends StatelessWidget {
   const _ExecutiveHeader({required this.name, required this.publicId});
 
   String _greetingText() {
-    final hour = DateTime.now().hour;
+    final hour = DateTime
+        .now()
+        .hour;
     if (hour < 12) {
       return 'Good Morning';
     }
@@ -554,7 +437,8 @@ class _PortfolioVaultCard extends ConsumerWidget {
 
                 // Secondary Metrics Row: Occupancy Health
                 propertiesAsync.when(
-                  loading: () => const SizedBox(
+                  loading: () =>
+                  const SizedBox(
                     height: 18,
                     child: LinearProgressIndicator(),
                   ),
@@ -584,7 +468,9 @@ class _PortfolioVaultCard extends ConsumerWidget {
                             _VaultSubMetric(
                               label: 'Real Estate Estate',
                               value:
-                                  '$totalProperties ${totalProperties == 1 ? 'Building' : 'Buildings'}',
+                              '$totalProperties ${totalProperties == 1
+                                  ? 'Building'
+                                  : 'Buildings'}',
                               icon: Icons.domain_rounded,
                             ),
                             Container(
@@ -1154,7 +1040,8 @@ class _PropertyMiniCard extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '${property.numberOfFloors} Floors • Code: ${property.propertyCode}',
+                '${property.numberOfFloors} Floors • Code: ${property
+                    .propertyCode}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontSize: 11,
@@ -1200,7 +1087,7 @@ class _EnterpriseHub extends StatelessWidget {
             icon: Icons.badge_outlined,
             title: 'Tenants & Residency Directory',
             subtitle:
-                'Manage verified member accounts, agreements, and vacated records',
+            'Manage verified member accounts, agreements, and vacated records',
             tag: 'Residents',
             onTap: () => context.push(RouteNames.ownerTenants),
           ),
@@ -1209,7 +1096,7 @@ class _EnterpriseHub extends StatelessWidget {
             icon: Icons.tune_rounded,
             title: 'Automated Billing & Invoicing Engine',
             subtitle:
-                'Utility tariff rates, recurring rent cycles, and manual bill generation',
+            'Utility tariff rates, recurring rent cycles, and manual bill generation',
             tag: 'Billing',
             onTap: () => context.push(RouteNames.ownerBillingRules),
           ),

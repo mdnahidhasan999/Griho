@@ -1864,6 +1864,7 @@ service cloud.firestore {
           && request.auth.token.email_verified == true;
  }
 
+
  function isInvitationRecipient(invitation) {
    return isAuthenticated()
           && hasVerifiedEmail()
