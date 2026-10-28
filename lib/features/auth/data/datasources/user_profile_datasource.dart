@@ -7,7 +7,7 @@ class UserProfileDataSource {
   final FirebaseFirestore _firestore;
 
   UserProfileDataSource({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _usersCollection =>
       _firestore.collection('users');
@@ -218,9 +218,7 @@ class UserProfileDataSource {
 
     final phoneNumber = data['phoneNumber'];
 
-    if (phoneNumber is! String || phoneNumber
-        .trim()
-        .isEmpty) {
+    if (phoneNumber is! String || phoneNumber.trim().isEmpty) {
       throw StateError('Complete your profile before selecting a role.');
     }
 
@@ -280,9 +278,9 @@ class UserProfileDataSource {
 
       final availableRoles = rawRoles is List
           ? rawRoles
-          .whereType<String>()
-          .map((value) => value.trim().toLowerCase())
-          .toSet()
+                .whereType<String>()
+                .map((value) => value.trim().toLowerCase())
+                .toSet()
           : <String>{};
 
       if (!availableRoles.contains(normalizedRole)) {
@@ -291,9 +289,7 @@ class UserProfileDataSource {
 
       final phoneNumber = data['phoneNumber'];
 
-      if (phoneNumber is! String || phoneNumber
-          .trim()
-          .isEmpty) {
+      if (phoneNumber is! String || phoneNumber.trim().isEmpty) {
         throw StateError(
           'Complete your profile before changing the default dashboard.',
         );
@@ -340,9 +336,7 @@ class UserProfileDataSource {
 
     final phoneNumber = data['phoneNumber'];
 
-    if (phoneNumber is! String || phoneNumber
-        .trim()
-        .isEmpty) {
+    if (phoneNumber is! String || phoneNumber.trim().isEmpty) {
       throw StateError('Complete your profile before selecting a role.');
     }
 
@@ -356,9 +350,7 @@ class UserProfileDataSource {
 
     final hasExistingRole =
         existingRoles.isNotEmpty ||
-            (rawDashboard is String && rawDashboard
-                .trim()
-                .isNotEmpty);
+        (rawDashboard is String && rawDashboard.trim().isNotEmpty);
 
     if (hasExistingRole) {
       throw StateError('A role has already been selected for this profile.');
@@ -413,9 +405,7 @@ class UserProfileDataSource {
 
     final uid = lookupData['uid'];
 
-    if (uid is! String || uid
-        .trim()
-        .isEmpty) {
+    if (uid is! String || uid.trim().isEmpty) {
       return null;
     }
 
