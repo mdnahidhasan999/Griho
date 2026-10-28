@@ -77,15 +77,13 @@ class OwnerHomeScreen extends ConsumerWidget {
           ],
         ),
         centerTitle: false,
-
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) =>
-            _ErrorView(
-              message: 'Unable to load owner account information.',
-              onRetry: () => ref.invalidate(currentUserProfileProvider),
-            ),
+        error: (error, stackTrace) => _ErrorView(
+          message: 'Unable to load owner account information.',
+          onRetry: () => ref.invalidate(currentUserProfileProvider),
+        ),
         data: (profile) {
           if (profile == null) {
             return _ErrorView(
@@ -130,7 +128,15 @@ class OwnerHomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 const _CommandGrid(),
+                const SizedBox(height: 12),
 
+                OutlinedButton.icon(
+                  onPressed: () {
+                    context.push(RouteNames.ownerPayments);
+                  },
+                  icon: const Icon(Icons.payments_outlined),
+                  label: const Text('Payment Management'),
+                ),
                 const SizedBox(height: 24),
 
                 // 5. Active Property Portfolio Snapshot (Horizontal Deck)
@@ -142,7 +148,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                 const _SectionTitle(
                   title: 'Enterprise Management',
                   subtitle:
-                  'In-depth directory records and automated billing rules',
+                      'In-depth directory records and automated billing rules',
                 ),
                 const SizedBox(height: 12),
                 const _EnterpriseHub(),
@@ -162,8 +168,6 @@ class OwnerHomeScreen extends ConsumerWidget {
       ),
     );
   }
-
-
 }
 
 // ============================================================================
@@ -177,9 +181,7 @@ class _ExecutiveHeader extends StatelessWidget {
   const _ExecutiveHeader({required this.name, required this.publicId});
 
   String _greetingText() {
-    final hour = DateTime
-        .now()
-        .hour;
+    final hour = DateTime.now().hour;
     if (hour < 12) {
       return 'Good Morning';
     }
@@ -437,8 +439,7 @@ class _PortfolioVaultCard extends ConsumerWidget {
 
                 // Secondary Metrics Row: Occupancy Health
                 propertiesAsync.when(
-                  loading: () =>
-                  const SizedBox(
+                  loading: () => const SizedBox(
                     height: 18,
                     child: LinearProgressIndicator(),
                   ),
@@ -468,9 +469,7 @@ class _PortfolioVaultCard extends ConsumerWidget {
                             _VaultSubMetric(
                               label: 'Real Estate Estate',
                               value:
-                              '$totalProperties ${totalProperties == 1
-                                  ? 'Building'
-                                  : 'Buildings'}',
+                                  '$totalProperties ${totalProperties == 1 ? 'Building' : 'Buildings'}',
                               icon: Icons.domain_rounded,
                             ),
                             Container(
@@ -1040,8 +1039,7 @@ class _PropertyMiniCard extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '${property.numberOfFloors} Floors • Code: ${property
-                    .propertyCode}',
+                '${property.numberOfFloors} Floors • Code: ${property.propertyCode}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontSize: 11,
@@ -1087,7 +1085,7 @@ class _EnterpriseHub extends StatelessWidget {
             icon: Icons.badge_outlined,
             title: 'Tenants & Residency Directory',
             subtitle:
-            'Manage verified member accounts, agreements, and vacated records',
+                'Manage verified member accounts, agreements, and vacated records',
             tag: 'Residents',
             onTap: () => context.push(RouteNames.ownerTenants),
           ),
@@ -1096,7 +1094,7 @@ class _EnterpriseHub extends StatelessWidget {
             icon: Icons.tune_rounded,
             title: 'Automated Billing & Invoicing Engine',
             subtitle:
-            'Utility tariff rates, recurring rent cycles, and manual bill generation',
+                'Utility tariff rates, recurring rent cycles, and manual bill generation',
             tag: 'Billing',
             onTap: () => context.push(RouteNames.ownerBillingRules),
           ),

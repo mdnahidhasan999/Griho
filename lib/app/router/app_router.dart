@@ -50,6 +50,8 @@ import '../../features/units/presentation/screens/add_unit_screen.dart';
 import '../../features/units/presentation/screens/edit_unit_screen.dart';
 import '../../features/units/presentation/screens/unit_details_screen.dart';
 import '../../features/units/presentation/screens/unit_list_screen.dart';
+import '../../features/billing/presentation/screens/owner_payment_management_screen.dart';
+import '../../features/billing/presentation/screens/tenant_payment_screen.dart';
 
 import 'auth_route_guard.dart';
 import 'auth_state_refresh_notifier.dart';
@@ -358,6 +360,18 @@ abstract final class AppRouter {
             return EditBillingRuleScreen(rule: rule);
           },
         ),
+        GoRoute(
+          path: RouteNames.ownerPayments,
+          builder: (context, state) {
+            return const OwnerPaymentManagementScreen();
+          },
+        ),
+        GoRoute(
+          path: RouteNames.tenantPayments,
+          builder: (context, state) {
+            return const TenantPaymentScreen();
+          },
+        ),
 
         // ========================================================
         // TENANTS
@@ -427,22 +441,17 @@ abstract final class AppRouter {
         ),
 
         // ========================================================
-// TENANT INVITATION
-// ========================================================
-
+        // TENANT INVITATION
+        // ========================================================
         GoRoute(
           path: RouteNames.tenantInvitation,
           name: 'tenantInvitation',
           builder: (context, state) {
-            final invitationToken =
-            state.pathParameters['invitationToken'];
+            final invitationToken = state.pathParameters['invitationToken'];
 
-            if (invitationToken == null ||
-                invitationToken.trim().isEmpty) {
+            if (invitationToken == null || invitationToken.trim().isEmpty) {
               return const Scaffold(
-                body: Center(
-                  child: Text('Invalid invitation link.'),
-                ),
+                body: Center(child: Text('Invalid invitation link.')),
               );
             }
 

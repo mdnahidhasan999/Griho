@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/route_names.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
 import '../../domain/entities/billing_rule.dart';
@@ -302,6 +304,19 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                     ),
                     if (i != bills.length - 1) const Divider(height: 18),
                   ],
+
+                const SizedBox(height: 16),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      context.push(RouteNames.tenantPayments);
+                    },
+                    icon: const Icon(Icons.payments_outlined),
+                    label: const Text('Pay a Bill'),
+                  ),
+                ),
               ],
             );
           },
