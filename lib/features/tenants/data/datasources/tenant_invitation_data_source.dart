@@ -728,6 +728,8 @@ class TenantInvitationDataSource {
       await transaction.get(propertyReference);
       final unitSnapshot =
       await transaction.get(unitReference);
+      final accountSnapshot =
+      await transaction.get(_users.doc(currentUser.uid));
 
       if (!tenantSnapshot.exists) {
         throw StateError('Tenant does not exist.');
@@ -898,8 +900,23 @@ class TenantInvitationDataSource {
       // ------------------------------------------------------------
       // UPDATE TENANT
       // ------------------------------------------------------------
+      final accountData = accountSnapshot.data();
+      final accountEmail = _normalize(
+        (accountData?['email'] as String?) ?? currentUser.email,
+      )?.toLowerCase();
+      final accountNid = _normalize(accountData?['nidNumber'] as String?);
+
+      final contactUpdates = <String, dynamic>{
+        if (accountEmail != null &&
+            _normalize(tenantSnapshot.data()?['email'] as String?) == null)
+          'email': accountEmail,
+        if (accountNid != null &&
+            _normalize(tenantSnapshot.data()?['nidNumber'] as String?) == null)
+          'nidNumber': accountNid,
+      };
 
       transaction.update(tenantReference, {
+        ...contactUpdates,
         'userId': currentUser.uid,
         'status': TenantStatus.active.name,
         'accountStatus': TenantAccountStatus.registered.name,
