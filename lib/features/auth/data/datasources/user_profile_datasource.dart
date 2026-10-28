@@ -120,6 +120,7 @@ class UserProfileDataSource {
     required String name,
     required String? email,
     required String? photoUrl,
+    String? nidNumber,
   }) async {
     final userDocument = _usersCollection.doc(uid);
 
@@ -128,6 +129,7 @@ class UserProfileDataSource {
       'name': name,
       'email': email,
       'photoUrl': photoUrl,
+      'nidNumber': nidNumber,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 

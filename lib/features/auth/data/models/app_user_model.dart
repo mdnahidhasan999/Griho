@@ -10,6 +10,7 @@ class AppUserModel extends AppUser {
     super.phoneNumber,
     super.email,
     super.photoUrl,
+    super.nidNumber,
     super.defaultDashboard,
     super.availableRoles = const [],
     required super.isActive,
@@ -31,6 +32,7 @@ class AppUserModel extends AppUser {
       phoneNumber: json['phoneNumber'] as String?,
       email: json['email'] as String?,
       photoUrl: json['photoUrl'] as String?,
+      nidNumber: json['nidNumber'] as String?,
       defaultDashboard: json['defaultDashboard'] as String?,
       availableRoles: List.unmodifiable(roles),
       isActive: json['isActive'] as bool? ?? true,
@@ -47,6 +49,7 @@ class AppUserModel extends AppUser {
       phoneNumber: user.phoneNumber,
       email: user.email,
       photoUrl: user.photoUrl,
+      nidNumber: user.nidNumber,
       defaultDashboard: user.defaultDashboard,
       availableRoles: List.unmodifiable(user.availableRoles),
       isActive: user.isActive,
@@ -56,8 +59,7 @@ class AppUserModel extends AppUser {
   }
 
   factory AppUserModel.fromFirestore(
-    DocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
+      DocumentSnapshot<Map<String, dynamic>> doc,) {
     final data = doc.data()!;
 
     return AppUserModel.fromJson({...data, 'uid': doc.id});
@@ -71,6 +73,7 @@ class AppUserModel extends AppUser {
       'phoneNumber': phoneNumber,
       'email': email,
       'photoUrl': photoUrl,
+      if (nidNumber != null) 'nidNumber': nidNumber,
       'defaultDashboard': defaultDashboard,
       'availableRoles': availableRoles,
       'isActive': isActive,

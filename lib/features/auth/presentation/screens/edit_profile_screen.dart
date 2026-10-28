@@ -28,6 +28,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
+  late final TextEditingController _nidController;
 
   String? _photoUrl;
   Uint8List? _photoBytes;
@@ -40,6 +41,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.initState();
     _nameController = TextEditingController(text: widget.user.name);
     _emailController = TextEditingController(text: widget.user.email ?? '');
+    _nidController = TextEditingController(text: widget.user.nidNumber ?? '');
 
     _photoUrl = widget.user.photoUrl;
     _photoBytes = _decodeDataUrl(_photoUrl);
@@ -49,6 +51,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _nidController.dispose();
     super.dispose();
   }
 
@@ -88,7 +91,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+        backgroundColor: isError ? Theme
+            .of(context)
+            .colorScheme
+            .error : null,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -218,6 +224,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
+    final nid = _nidController.text.trim();
 
     setState(() {
       _isSaving = true;
@@ -233,6 +240,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         name: name,
         email: email.isEmpty ? null : email,
         photoUrl: _photoUrl,
+        nidNumber: nid.isEmpty ? null : nid,
       );
 
       ref.invalidate(currentUserProfileProvider);
@@ -315,22 +323,24 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             backgroundImage: photoProvider,
                             child: _isProcessingPhoto
                                 ? const CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  )
+                              strokeWidth: 2,
+                            )
                                 : photoProvider == null
                                 ? Text(
-                                    _nameController.text.trim().isNotEmpty
-                                        ? _nameController.text
-                                              .trim()[0]
-                                              .toUpperCase()
-                                        : 'U',
-                                    style: TextStyle(
-                                      fontSize: 34,
-                                      fontWeight: FontWeight.w800,
-                                      color:
-                                          theme.colorScheme.onPrimaryContainer,
-                                    ),
-                                  )
+                              _nameController.text
+                                  .trim()
+                                  .isNotEmpty
+                                  ? _nameController.text
+                                  .trim()[0]
+                                  .toUpperCase()
+                                  : 'U',
+                              style: TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w800,
+                                color:
+                                theme.colorScheme.onPrimaryContainer,
+                              ),
+                            )
                                 : null,
                           ),
                         ),
@@ -431,6 +441,33 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       return null;
                     },
                   ),
+
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _nidController,
+                    enabled: !_isSaving,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => _saveProfile(),
+                    maxLength: 17,
+                    decoration: const InputDecoration(
+                      labelText: 'National ID (NID)',
+                      hintText: 'Optional',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                      border: OutlineInputBorder(),
+                      counterText: '',
+                    ),
+                    validator: (value) {
+                      final nid = value?.trim() ?? '';
+                      if (nid.isEmpty) return null;
+                      if (!RegExp(r'^\d{10}$|^\d{13}$|^\d{17}$').hasMatch(
+                          nid)) {
+                        return 'NID must be 10, 13 or 17 digits.';
+                      }
+                      return null;
+                    },
+                  ),
+
                 ],
               ),
               const SizedBox(height: 20),
@@ -496,13 +533,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       : _saveProfile,
                   icon: _isSaving
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                       : const Icon(Icons.save_outlined),
                   label: Text(
                     _isSaving ? 'Saving Changes...' : 'Save Changes',
@@ -520,8 +557,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
-  Widget _buildSectionCard(
-    BuildContext context, {
+  Widget _buildSectionCard(BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,

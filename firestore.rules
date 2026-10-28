@@ -27,6 +27,14 @@ service cloud.firestore {
                         && request.resource.data.isActive == resource.data.isActive
                         && request.resource.data.updatedAt is timestamp
                         && request.resource.data.updatedAt <= request.time
+                                                && (
+                                                  !request.resource.data.keys().hasAny(['nidNumber'])
+                                                  || request.resource.data.nidNumber == null
+                                                  || (
+                                                    request.resource.data.nidNumber is string
+                                                    && request.resource.data.nidNumber.size() <= 20
+                                                  )
+                                                )
                         && (
                           // Preserve a legacy role field if it exists.
                           (
@@ -49,6 +57,7 @@ service cloud.firestore {
                                 'name',
                                 'email',
                                 'photoUrl',
+                                'nidNumber',
                                 'updatedAt'
                               ])
                           )

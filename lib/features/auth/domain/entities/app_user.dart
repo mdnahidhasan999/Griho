@@ -5,6 +5,7 @@ class AppUser {
   final String? phoneNumber;
   final String? email;
   final String? photoUrl;
+  final String? nidNumber;
 
   // The dashboard selected to open by default.
   final String? defaultDashboard;
@@ -22,6 +23,7 @@ class AppUser {
     this.phoneNumber,
     this.email,
     this.photoUrl,
+    this.nidNumber,
     this.defaultDashboard,
     this.availableRoles = const [],
     required this.isActive,
@@ -36,6 +38,7 @@ class AppUser {
     String? phoneNumber,
     String? email,
     String? photoUrl,
+    String? nidNumber,
     String? defaultDashboard,
     List<String>? availableRoles,
     bool? isActive,
@@ -49,6 +52,7 @@ class AppUser {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
+      nidNumber: nidNumber ?? this.nidNumber,
       defaultDashboard: defaultDashboard ?? this.defaultDashboard,
       availableRoles: availableRoles ?? this.availableRoles,
       isActive: isActive ?? this.isActive,
