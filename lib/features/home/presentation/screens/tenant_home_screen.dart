@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
-import '../../../auth/presentation/providers/auth_controller.dart';
+
 import '../../../billing/presentation/widgets/tenant_current_bills_card.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
 import '../../../tenants/domain/entities/tenancy_history.dart';
@@ -27,41 +27,6 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     await ref.read(tenantDashboardProvider.future);
   }
 
-  Future<void> _logout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Sign out of Griho?'),
-          content: const Text(
-            'Are you sure you want to sign out of your resident account?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme
-                    .of(dialogContext)
-                    .colorScheme
-                    .error,
-              ),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Sign Out'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldLogout != true) {
-      return;
-    }
-
-    await ref.read(authControllerProvider.notifier).signOut();
-  }
 
   void _openInvitation(TenantInvitation invitation) {
     context.push(RouteNames.tenantInvitationPath(invitation.id));
@@ -77,34 +42,6 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     );
   }
 
-  Future<void> _openEditProfile(TenantDashboardData dashboard) async {
-    final user = dashboard.appUser;
-
-    if (user == null) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile information is not currently available.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final result = await context.push(RouteNames.editProfile, extra: user);
-    if (!mounted) {
-      return;
-    }
-
-    if (result != null) {
-      ref.invalidate(tenantDashboardProvider);
-      try {
-        await ref.read(tenantDashboardProvider.future);
-      } catch (_) {}
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,108 +106,6 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
           ],
         ),
         centerTitle: false,
-        actions: [
-          // Invitation Inbox Button with Active Badge
-          dashboardAsync.maybeWhen(
-            data: (dashboard) {
-              final hasPending = dashboard.hasPendingInvitation;
-              return IconButton(
-                tooltip: 'All Invitations',
-                onPressed: _openInvitations,
-                icon: Badge(
-                  isLabelVisible: hasPending,
-                  backgroundColor: theme.colorScheme.error,
-                  smallSize: 8,
-                  child: const Icon(Icons.mail_outline_rounded),
-                ),
-              );
-            },
-            orElse: () =>
-                IconButton(
-                  tooltip: 'All Invitations',
-                  onPressed: _openInvitations,
-                  icon: const Icon(Icons.mail_outline_rounded),
-                ),
-          ),
-
-          // User Profile Menu
-          PopupMenuButton<String>(
-            tooltip: 'Account Settings',
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            onSelected: (value) {
-              if (value == 'edit_profile') {
-                dashboardAsync.maybeWhen(
-                  data: (dashboard) => _openEditProfile(dashboard),
-                  orElse: () {},
-                );
-              }
-              if (value == 'logout') {
-                _logout();
-              }
-            },
-            itemBuilder: (context) =>
-            const [
-              PopupMenuItem<String>(
-                value: 'edit_profile',
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline_rounded, size: 20),
-                    SizedBox(width: 12),
-                    Text('My Profile'),
-                  ],
-                ),
-              ),
-              PopupMenuDivider(),
-              PopupMenuItem<String>(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.logout_rounded,
-                      size: 20,
-                      color: Colors.redAccent,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Sign Out',
-                      style: TextStyle(
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: dashboardAsync.maybeWhen(
-                data: (dashboard) =>
-                    CircleAvatar(
-                      radius: 19,
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      child: Text(
-                        dashboard.displayName.isNotEmpty
-                            ? dashboard.displayName[0].toUpperCase()
-                            : 'T',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ),
-                orElse: () =>
-                const CircleAvatar(
-                  radius: 19,
-                  child: Icon(Icons.person_outline_rounded, size: 18),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: dashboardAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

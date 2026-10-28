@@ -452,8 +452,8 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                   value: tenant.email
                       ?.trim()
                       .isNotEmpty == true
-                      ? tenant.email!
-                      : 'Not provided',
+                      ? tenant.email!.trim()
+                      : 'Email not linked to this resident record',
                   isSelectable: true,
                 ),
                 const SizedBox(height: 10),
