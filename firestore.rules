@@ -1419,59 +1419,39 @@ service cloud.firestore {
     // MONTHLY BILLS
     // ============================================================
 
-    match /monthlyBills/{monthlyBillId} {
+ match /monthlyBills/{monthlyBillId} {
+   allow read, list: if isAuthenticated();
 
-      allow read, list: if isAuthenticated();
+   // Only the authenticated property owner may create
+   // a bill that passes the complete validation.
+   allow create: if isAuthenticated()
+                 && request.resource.data.ownerId == request.auth.uid
+                 && isValidMonthlyBillCreate();
 
-      allow create: if isAuthenticated()
-                    && (
-                      isValidMonthlyBillCreate()
-                      ||
-                      request.resource.data.ownerId == request.auth.uid
-                      ||
-                      request.resource.data.tenantUserId == request.auth.uid
-                      ||
-                      request.resource.data.tenantId is string
-                    );
+   // Client-side updates are restricted to cancellation.
+   // Payment confirmation must use a trusted workflow.
+   allow update: if isAuthenticated()
+                 && isValidMonthlyBillCancellation();
 
-      allow update: if isAuthenticated()
-                    && (
-                      isValidMonthlyBillUpdate()
-                      ||
-                      resource.data.ownerId == request.auth.uid
-                      ||
-                      resource.data.tenantUserId == request.auth.uid
-                    );
-
-      allow delete: if false;
-    }
+   allow delete: if false;
+ }
 
 
     // ============================================================
     // BILLING RULES
     // ============================================================
 
-    match /billingRules/{ruleId} {
+  match /billingRules/{ruleId} {
+    allow read, list: if isAuthenticated();
 
-      allow read, list: if isAuthenticated();
+    allow create: if isAuthenticated()
+                  && isValidBillingRuleCreate();
 
-      allow create: if isAuthenticated()
-                    && (
-                      isValidBillingRuleCreate()
-                      ||
-                      request.resource.data.ownerId == request.auth.uid
-                    );
+    allow update: if isAuthenticated()
+                  && isValidBillingRuleUpdate();
 
-      allow update: if isAuthenticated()
-                    && (
-                      isValidBillingRuleUpdate()
-                      ||
-                      resource.data.ownerId == request.auth.uid
-                    );
-
-      allow delete: if false;
-    }
-
+    allow delete: if false;
+  }
 
     // ============================================================
     // BILLING RULE — CREATE VALIDATION
@@ -1719,10 +1699,10 @@ service cloud.firestore {
           ||
           request.resource.data.tenantId is string
         )
-
-        && property.ownerId is string
-
-        && tenant.ownerId is string
+&& request.resource.data.ownerId == request.auth.uid
+&& property.ownerId == request.resource.data.ownerId
+&& tenant.ownerId == request.resource.data.ownerId
+&& billingRule.ownerId == request.resource.data.ownerId
 
         && tenant.propertyId
            == request.resource.data.propertyId
@@ -2093,111 +2073,32 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
-    // MONTHLY BILL — UPDATE VALIDATION
-    // ============================================================
+   function isValidMonthlyBillCancellation() {
+     return isAuthenticated()
 
-    function isValidMonthlyBillUpdate() {
+       // The bill owner must own the property.
+       && resource.data.ownerId == request.auth.uid
+       && isPropertyOwner(resource.data.propertyId)
 
-      return
+       // Do not cancel an already paid bill.
+       && resource.data.status != 'paid'
+       && resource.data.status != 'cancelled'
 
-        (
-          resource.data.ownerId == request.auth.uid
-          ||
-          resource.data.tenantUserId == request.auth.uid
-        )
+       // Do not cancel a bill that already has payments.
+       && resource.data.paidAmount is number
+       && resource.data.paidAmount == 0
 
-        && request.resource.data.ownerId
-           == resource.data.ownerId
+       // Only status and updatedAt may change.
+       && request.resource.data.diff(resource.data)
+            .affectedKeys()
+            .hasOnly(['status', 'updatedAt'])
 
-        && request.resource.data.propertyId
-           == resource.data.propertyId
+       && request.resource.data.status == 'cancelled'
 
-        && request.resource.data.floorId
-           == resource.data.floorId
-
-        && request.resource.data.unitId
-           == resource.data.unitId
-
-        && request.resource.data.tenantId
-           == resource.data.tenantId
-
-        && request.resource.data.tenantUserId
-           == resource.data.tenantUserId
-
-        && request.resource.data.sourceRuleId
-           == resource.data.sourceRuleId
-
-        && request.resource.data.type
-           == resource.data.type
-
-        && request.resource.data.valueType
-           == resource.data.valueType
-
-        && request.resource.data.billingPeriodStart
-           == resource.data.billingPeriodStart
-
-        && request.resource.data.billingPeriodEnd
-           == resource.data.billingPeriodEnd
-
-        && request.resource.data.dueDate
-           == resource.data.dueDate
-
-        && request.resource.data.createdAt
-           == resource.data.createdAt
-
-        && request.resource.data.amount is number
-        && request.resource.data.amount == resource.data.amount
-
-        && request.resource.data.paidAmount is number
-        && request.resource.data.paidAmount >= 0
-        && request.resource.data.paidAmount <= request.resource.data.amount
-
-        && request.resource.data.status is string
-        && request.resource.data.status in [
-          'unpaid',
-          'partiallyPaid',
-          'paid',
-          'overdue',
-          'cancelled'
-        ]
-
-        && (
-          (
-            request.resource.data.status == 'unpaid'
-            && request.resource.data.amount >= 0
-            && request.resource.data.paidAmount == 0
-          )
-          ||
-          (
-            request.resource.data.status == 'partiallyPaid'
-            && request.resource.data.amount > 0
-            && request.resource.data.paidAmount > 0
-            && request.resource.data.paidAmount < request.resource.data.amount
-          )
-          ||
-          (
-            request.resource.data.status == 'paid'
-            && request.resource.data.amount > 0
-            && request.resource.data.paidAmount == request.resource.data.amount
-          )
-          ||
-          (
-            request.resource.data.status == 'overdue'
-            && request.resource.data.amount > 0
-            && request.resource.data.paidAmount < request.resource.data.amount
-          )
-          ||
-          (
-            request.resource.data.status == 'cancelled'
-            && request.resource.data.paidAmount == 0
-          )
-        )
-
-        && request.resource.data.updatedAt is timestamp
-        && request.resource.data.updatedAt >= resource.data.updatedAt
-        && request.resource.data.updatedAt <= request.time;
-    }
+       && request.resource.data.updatedAt is timestamp
+       && request.resource.data.updatedAt >= resource.data.updatedAt
+       && request.resource.data.updatedAt <= request.time;
+   }
 
 
     // ============================================================
