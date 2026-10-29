@@ -111,12 +111,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
       amountsByBillId[bill.id] = amount;
 
-      // This assumes the provider returns MonthlyBill objects from
-      // monthlyBills. Rent entries must carry their source collection.
-      //
-      // Until the entity/provider is extended with billCollection,
-      // this fallback supports existing non-rent bills only.
-      collectionsByBillId[bill.id] = 'monthlyBills';
+      collectionsByBillId[bill.id] = bill.billCollection;
     }
 
     final reference = _referenceController.text.trim();

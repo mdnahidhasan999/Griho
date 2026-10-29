@@ -1435,6 +1435,21 @@ service cloud.firestore {
 
    allow delete: if false;
  }
+     // ============================================================
+     // PAYMENT TRANSACTIONS — READ ACCESS
+     // ============================================================
+
+     match /paymentTransactions/{paymentId} {
+
+       // Owner can read only their own payment transactions.
+       // Tenant can read only their own payment transactions.
+       allow get, list: if isAuthenticated()
+                        && (
+                          resource.data.ownerId == request.auth.uid
+                          || resource.data.tenantUserId == request.auth.uid
+                        );
+
+     }
 
 
     // ============================================================

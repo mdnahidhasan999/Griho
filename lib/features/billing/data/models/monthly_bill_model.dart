@@ -6,6 +6,7 @@ import '../../domain/entities/monthly_bill.dart';
 class MonthlyBillModel extends MonthlyBill {
   const MonthlyBillModel({
     required super.id,
+    super.billCollection = 'monthlyBills',
     required super.ownerId,
     required super.propertyId,
     required super.floorId,
@@ -41,6 +42,7 @@ class MonthlyBillModel extends MonthlyBill {
 
     return MonthlyBillModel(
       id: doc.id,
+      billCollection: 'monthlyBills',
       ownerId: _readRequiredString(data, 'ownerId'),
       propertyId: _readRequiredString(data, 'propertyId'),
       floorId: _readRequiredString(data, 'floorId'),
@@ -95,6 +97,7 @@ class MonthlyBillModel extends MonthlyBill {
 
   MonthlyBillModel copyWithModel({
     String? id,
+    String? billCollection,
     String? ownerId,
     String? propertyId,
     String? floorId,
@@ -118,6 +121,7 @@ class MonthlyBillModel extends MonthlyBill {
   }) {
     return MonthlyBillModel(
       id: id ?? this.id,
+      billCollection: billCollection ?? this.billCollection,
       ownerId: ownerId ?? this.ownerId,
       propertyId: propertyId ?? this.propertyId,
       floorId: floorId ?? this.floorId,

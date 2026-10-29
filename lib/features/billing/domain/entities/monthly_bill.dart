@@ -20,7 +20,9 @@ enum MonthlyBillType {
 
 class MonthlyBill {
   final String id;
-
+  /// Firestore collection containing this bill.
+  /// Rent records may come from monthlyRents.
+  final String billCollection;
   final String ownerId;
   final String propertyId;
   final String floorId;
@@ -70,6 +72,7 @@ class MonthlyBill {
 
   const MonthlyBill({
     required this.id,
+    this.billCollection = 'monthlyBills',
     required this.ownerId,
     required this.propertyId,
     required this.floorId,
@@ -114,6 +117,7 @@ class MonthlyBill {
 
   MonthlyBill copyWith({
     String? id,
+    String? billCollection,
     String? ownerId,
     String? propertyId,
     String? floorId,
@@ -137,6 +141,7 @@ class MonthlyBill {
   }) {
     return MonthlyBill(
       id: id ?? this.id,
+      billCollection: billCollection ?? this.billCollection,
       ownerId: ownerId ?? this.ownerId,
       propertyId: propertyId ?? this.propertyId,
       floorId: floorId ?? this.floorId,
