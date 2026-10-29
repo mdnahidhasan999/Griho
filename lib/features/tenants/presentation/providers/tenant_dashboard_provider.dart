@@ -15,6 +15,8 @@ import '../../domain/entities/tenant_invitation.dart';
 import '../controllers/tenant_controller.dart';
 import 'tenancy_history_provider.dart';
 import 'tenant_invitation_provider.dart';
+import '../../../billing/domain/entities/billing_rule.dart';
+import '../../../rents/domain/entities/monthly_rent.dart';
 
 /// =========================================================================
 /// CURRENT AUTH USER
@@ -180,11 +182,8 @@ final currentBillingPeriodStartProvider = Provider<DateTime>((ref) {
 });
 
 /// =========================================================================
-/// CURRENT TENANT MONTHLY BILLS (100% QUERY-SAFE FOR TENANTS)
-/// =========================================================================
-/// ===========================================================================
 /// CURRENT TENANT MONTHLY BILLS + RENT
-/// ===========================================================================
+/// =========================================================================
 
 final currentTenantMonthlyBillsProvider = FutureProvider<List<MonthlyBill>>((
   ref,
@@ -192,54 +191,56 @@ final currentTenantMonthlyBillsProvider = FutureProvider<List<MonthlyBill>>((
   final tenant = await ref.watch(currentTenantProvider.future);
 
   if (tenant == null || tenant.status != TenantStatus.active) {
-    return const [];
+    return const <MonthlyBill>[];
   }
 
   final firebaseUser = ref.watch(currentFirebaseUserProvider);
 
   if (firebaseUser == null) {
-    return const [];
+    return const <MonthlyBill>[];
   }
 
-  final tenantUserId = firebaseUser.uid.trim();
-  final unitId = tenant.unitId.trim();
+  final String tenantUserId = firebaseUser.uid.trim();
+  final String unitId = tenant.unitId.trim();
 
   if (tenantUserId.isEmpty || unitId.isEmpty) {
-    return const [];
+    return const <MonthlyBill>[];
   }
 
-  final billingPeriodStart = ref.watch(currentBillingPeriodStartProvider);
+  final DateTime billingPeriodStart = ref.watch(
+    currentBillingPeriodStartProvider,
+  );
 
   final params = (
     tenantUserId: tenantUserId,
     billingPeriodStart: billingPeriodStart,
   );
 
-  // Load non-rent bills and rent records.
-  final billsFuture = ref.watch(
-    monthlyBillsByTenantAndPeriodProvider(params).future,
-  );
-
-  final rentsFuture = ref.watch(
-    monthlyRentsByTenantAndPeriodProvider(params).future,
-  );
-
-  final results = await Future.wait<List<MonthlyBill>>([
-    billsFuture,
-    rentsFuture,
+  // Fetch bills and rents concurrently.
+  final results = await Future.wait<dynamic>([
+    ref.watch(monthlyBillsByTenantAndPeriodProvider(params).future),
+    ref.watch(monthlyRentsByTenantAndPeriodProvider(params).future),
   ]);
 
-  final combinedBills = <MonthlyBill>[...results[0], ...results[1]];
+  final List<MonthlyBill> bills = results[0] as List<MonthlyBill>;
 
-  // Keep bills belonging to the tenant's current unit.
+  final List<MonthlyRent> rents = results[1] as List<MonthlyRent>;
+
+  // Convert rent records into MonthlyBill for common display.
+  final List<MonthlyBill> convertedRents = rents
+      .map(_monthlyRentToBill)
+      .toList();
+
+  final combinedBills = <MonthlyBill>[...bills, ...convertedRents];
+
+  // Only show bills belonging to the authenticated tenant
+  // and the tenant's current unit.
   final currentUnitBills = combinedBills.where((bill) {
     return bill.unitId.trim() == unitId &&
         bill.tenantUserId?.trim() == tenantUserId;
   }).toList();
 
-  // A Firestore document is uniquely identified by its collection + ID.
-  // Do not deduplicate by sourceRuleId: separate tenancies or charges
-  // can legitimately share the same rule ID.
+  // Deduplicate by collection + document ID.
   final uniqueBills = <String, MonthlyBill>{};
 
   for (final bill in currentUnitBills) {
@@ -247,6 +248,7 @@ final currentTenantMonthlyBillsProvider = FutureProvider<List<MonthlyBill>>((
     uniqueBills[key] = bill;
   }
 
+  // Sort rent first, then by due date.
   final sortedBills = uniqueBills.values.toList()
     ..sort((a, b) {
       if (a.type == MonthlyBillType.rent && b.type != MonthlyBillType.rent) {
@@ -268,6 +270,53 @@ final currentTenantMonthlyBillsProvider = FutureProvider<List<MonthlyBill>>((
 
   return sortedBills;
 });
+
+/// =========================================================================
+/// MONTHLY RENT -> COMMON MONTHLY BILL
+/// =========================================================================
+
+MonthlyBill _monthlyRentToBill(MonthlyRent rent) {
+  final MonthlyBillStatus billStatus;
+
+  switch (rent.status) {
+    case MonthlyRentStatus.unpaid:
+      billStatus = MonthlyBillStatus.unpaid;
+
+    case MonthlyRentStatus.partiallyPaid:
+      billStatus = MonthlyBillStatus.partiallyPaid;
+
+    case MonthlyRentStatus.paid:
+      billStatus = MonthlyBillStatus.paid;
+
+    case MonthlyRentStatus.overdue:
+      billStatus = MonthlyBillStatus.overdue;
+
+    case MonthlyRentStatus.cancelled:
+      billStatus = MonthlyBillStatus.cancelled;
+  }
+
+  return MonthlyBill(
+    id: rent.id,
+    billCollection: 'monthlyRents',
+    ownerId: rent.ownerId,
+    propertyId: rent.propertyId,
+    floorId: '',
+    unitId: rent.unitId,
+    tenantId: rent.tenantId,
+    tenantUserId: rent.tenantUserId,
+    sourceRuleId: rent.rentRateId,
+    type: MonthlyBillType.rent,
+    valueType: BillingValueType.fixed,
+    amount: rent.amount,
+    paidAmount: rent.paidAmount,
+    billingPeriodStart: rent.billingPeriodStart,
+    billingPeriodEnd: rent.billingPeriodEnd,
+    dueDate: rent.dueDate,
+    status: billStatus,
+    createdAt: rent.createdAt,
+    updatedAt: rent.updatedAt,
+  );
+}
 
 /// =========================================================================
 /// TENANT DASHBOARD DATA
