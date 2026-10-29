@@ -13,6 +13,7 @@ class MonthlyRentModel extends MonthlyRent {
     required super.rentRateId,
     required super.monthlyRate,
     required super.amount,
+    super.paidAmount = 0,
     required super.chargeableDays,
     required super.daysInBillingPeriod,
     required super.prorationFactor,
@@ -27,14 +28,12 @@ class MonthlyRentModel extends MonthlyRent {
   });
 
   factory MonthlyRentModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc,
-      ) {
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data();
 
     if (data == null) {
-      throw StateError(
-        'Monthly rent document ${doc.id} has no data.',
-      );
+      throw StateError('Monthly rent document ${doc.id} has no data.');
     }
 
     return MonthlyRentModel(
@@ -45,55 +44,24 @@ class MonthlyRentModel extends MonthlyRent {
       tenantId: _readRequiredString(data, 'tenantId'),
       tenantUserId: _readOptionalString(data, 'tenantUserId'),
       rentRateId: _readRequiredString(data, 'rentRateId'),
-      monthlyRate: _readRequiredDouble(
-        data,
-        'monthlyRate',
-      ),
-      amount: _readRequiredDouble(
-        data,
-        'amount',
-      ),
-      chargeableDays: _readRequiredPositiveInt(
-        data,
-        'chargeableDays',
-      ),
+      monthlyRate: _readRequiredDouble(data, 'monthlyRate'),
+      amount: _readRequiredDouble(data, 'amount'),
+      paidAmount: _readOptionalNonNegativeDouble(data, 'paidAmount'),
+
+      chargeableDays: _readRequiredPositiveInt(data, 'chargeableDays'),
       daysInBillingPeriod: _readRequiredPositiveInt(
         data,
         'daysInBillingPeriod',
       ),
-      prorationFactor: _readRequiredPositiveDouble(
-        data,
-        'prorationFactor',
-      ),
-      billingPeriodStart: _readRequiredDateTime(
-        data,
-        'billingPeriodStart',
-      ),
-      billingPeriodEnd: _readRequiredDateTime(
-        data,
-        'billingPeriodEnd',
-      ),
-      chargePeriodStart: _readRequiredDateTime(
-        data,
-        'chargePeriodStart',
-      ),
-      chargePeriodEnd: _readRequiredDateTime(
-        data,
-        'chargePeriodEnd',
-      ),
-      dueDate: _readRequiredDateTime(
-        data,
-        'dueDate',
-      ),
+      prorationFactor: _readRequiredPositiveDouble(data, 'prorationFactor'),
+      billingPeriodStart: _readRequiredDateTime(data, 'billingPeriodStart'),
+      billingPeriodEnd: _readRequiredDateTime(data, 'billingPeriodEnd'),
+      chargePeriodStart: _readRequiredDateTime(data, 'chargePeriodStart'),
+      chargePeriodEnd: _readRequiredDateTime(data, 'chargePeriodEnd'),
+      dueDate: _readRequiredDateTime(data, 'dueDate'),
       status: _readStatus(data),
-      createdAt: _readRequiredDateTime(
-        data,
-        'createdAt',
-      ),
-      updatedAt: _readRequiredDateTime(
-        data,
-        'updatedAt',
-      ),
+      createdAt: _readRequiredDateTime(data, 'createdAt'),
+      updatedAt: _readRequiredDateTime(data, 'updatedAt'),
     );
   }
 
@@ -107,17 +75,14 @@ class MonthlyRentModel extends MonthlyRent {
       'rentRateId': rentRateId,
       'monthlyRate': monthlyRate,
       'amount': amount,
+      'paidAmount': paidAmount,
       'chargeableDays': chargeableDays,
       'daysInBillingPeriod': daysInBillingPeriod,
       'prorationFactor': prorationFactor,
-      'billingPeriodStart':
-      Timestamp.fromDate(billingPeriodStart),
-      'billingPeriodEnd':
-      Timestamp.fromDate(billingPeriodEnd),
-      'chargePeriodStart':
-      Timestamp.fromDate(chargePeriodStart),
-      'chargePeriodEnd':
-      Timestamp.fromDate(chargePeriodEnd),
+      'billingPeriodStart': Timestamp.fromDate(billingPeriodStart),
+      'billingPeriodEnd': Timestamp.fromDate(billingPeriodEnd),
+      'chargePeriodStart': Timestamp.fromDate(chargePeriodStart),
+      'chargePeriodEnd': Timestamp.fromDate(chargePeriodEnd),
       'dueDate': Timestamp.fromDate(dueDate),
       'status': status.name,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -125,25 +90,17 @@ class MonthlyRentModel extends MonthlyRent {
     };
   }
 
-  static String _readRequiredString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String _readRequiredString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! String || value.trim().isEmpty) {
-      throw StateError(
-        'Monthly rent field "$field" is missing or invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is missing or invalid.');
     }
 
     return value.trim();
   }
 
-  static String? _readOptionalString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -151,9 +108,7 @@ class MonthlyRentModel extends MonthlyRent {
     }
 
     if (value is! String) {
-      throw StateError(
-        'Monthly rent field "$field" is invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is invalid.');
     }
 
     final normalized = value.trim();
@@ -161,16 +116,11 @@ class MonthlyRentModel extends MonthlyRent {
     return normalized.isEmpty ? null : normalized;
   }
 
-  static double _readRequiredDouble(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static double _readRequiredDouble(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! num) {
-      throw StateError(
-        'Monthly rent field "$field" is missing or invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is missing or invalid.');
     }
 
     final result = value.toDouble();
@@ -185,15 +135,13 @@ class MonthlyRentModel extends MonthlyRent {
   }
 
   static double _readRequiredPositiveDouble(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+    Map<String, dynamic> data,
+    String field,
+  ) {
     final value = data[field];
 
     if (value is! num) {
-      throw StateError(
-        'Monthly rent field "$field" is missing or invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is missing or invalid.');
     }
 
     final result = value.toDouble();
@@ -207,16 +155,35 @@ class MonthlyRentModel extends MonthlyRent {
     return result;
   }
 
-  static int _readRequiredPositiveInt(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static double _readOptionalNonNegativeDouble(
+    Map<String, dynamic> data,
+    String field,
+  ) {
+    final value = data[field];
+
+    // Backward compatibility for old monthly rent documents.
+    if (value == null) {
+      return 0;
+    }
+
+    if (value is! num) {
+      throw StateError('Monthly rent field "$field" is invalid.');
+    }
+
+    final result = value.toDouble();
+
+    if (!result.isFinite || result < 0) {
+      throw StateError('Monthly rent field "$field" must be zero or greater.');
+    }
+
+    return result;
+  }
+
+  static int _readRequiredPositiveInt(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! num || value % 1 != 0) {
-      throw StateError(
-        'Monthly rent field "$field" is missing or invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is missing or invalid.');
     }
 
     final result = value.toInt();
@@ -231,36 +198,28 @@ class MonthlyRentModel extends MonthlyRent {
   }
 
   static DateTime _readRequiredDateTime(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+    Map<String, dynamic> data,
+    String field,
+  ) {
     final value = data[field];
 
     if (value is Timestamp) {
       return value.toDate();
     }
 
-    throw StateError(
-      'Monthly rent field "$field" is missing or invalid.',
-    );
+    throw StateError('Monthly rent field "$field" is missing or invalid.');
   }
 
-  static MonthlyRentStatus _readStatus(
-      Map<String, dynamic> data,
-      ) {
+  static MonthlyRentStatus _readStatus(Map<String, dynamic> data) {
     final value = data['status'];
 
     if (value is! String) {
-      throw StateError(
-        'Monthly rent field "status" is missing or invalid.',
-      );
+      throw StateError('Monthly rent field "status" is missing or invalid.');
     }
 
     return MonthlyRentStatus.values.firstWhere(
-          (status) => status.name == value,
-      orElse: () => throw StateError(
-        'Unknown monthly rent status: $value',
-      ),
+      (status) => status.name == value,
+      orElse: () => throw StateError('Unknown monthly rent status: $value'),
     );
   }
 }

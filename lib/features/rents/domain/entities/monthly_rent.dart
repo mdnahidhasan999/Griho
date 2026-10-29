@@ -1,10 +1,4 @@
-enum MonthlyRentStatus {
-  unpaid,
-  partiallyPaid,
-  paid,
-  overdue,
-  cancelled,
-}
+enum MonthlyRentStatus { unpaid, partiallyPaid, paid, overdue, cancelled }
 
 class MonthlyRent {
   final String id;
@@ -31,6 +25,9 @@ class MonthlyRent {
   /// For a full-month tenancy this normally equals [monthlyRate].
   /// For a partial-month tenancy this is the prorated amount.
   final double amount;
+
+  /// Total amount already paid against this rent segment.
+  final double paidAmount;
 
   /// Number of calendar days covered by this rent charge.
   final int chargeableDays;
@@ -77,6 +74,7 @@ class MonthlyRent {
     required this.rentRateId,
     required this.monthlyRate,
     required this.amount,
+    this.paidAmount = 0,
     required this.chargeableDays,
     required this.daysInBillingPeriod,
     required this.prorationFactor,
@@ -104,6 +102,7 @@ class MonthlyRent {
     String? rentRateId,
     double? monthlyRate,
     double? amount,
+    double? paidAmount,
     int? chargeableDays,
     int? daysInBillingPeriod,
     double? prorationFactor,
@@ -123,24 +122,20 @@ class MonthlyRent {
       propertyId: propertyId ?? this.propertyId,
       unitId: unitId ?? this.unitId,
       tenantId: tenantId ?? this.tenantId,
-      tenantUserId:
-      clearTenantUserId ? null : tenantUserId ?? this.tenantUserId,
+      tenantUserId: clearTenantUserId
+          ? null
+          : tenantUserId ?? this.tenantUserId,
       rentRateId: rentRateId ?? this.rentRateId,
       monthlyRate: monthlyRate ?? this.monthlyRate,
       amount: amount ?? this.amount,
+      paidAmount: paidAmount ?? this.paidAmount,
       chargeableDays: chargeableDays ?? this.chargeableDays,
-      daysInBillingPeriod:
-      daysInBillingPeriod ?? this.daysInBillingPeriod,
-      prorationFactor:
-      prorationFactor ?? this.prorationFactor,
-      billingPeriodStart:
-      billingPeriodStart ?? this.billingPeriodStart,
-      billingPeriodEnd:
-      billingPeriodEnd ?? this.billingPeriodEnd,
-      chargePeriodStart:
-      chargePeriodStart ?? this.chargePeriodStart,
-      chargePeriodEnd:
-      chargePeriodEnd ?? this.chargePeriodEnd,
+      daysInBillingPeriod: daysInBillingPeriod ?? this.daysInBillingPeriod,
+      prorationFactor: prorationFactor ?? this.prorationFactor,
+      billingPeriodStart: billingPeriodStart ?? this.billingPeriodStart,
+      billingPeriodEnd: billingPeriodEnd ?? this.billingPeriodEnd,
+      chargePeriodStart: chargePeriodStart ?? this.chargePeriodStart,
+      chargePeriodEnd: chargePeriodEnd ?? this.chargePeriodEnd,
       dueDate: dueDate ?? this.dueDate,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,

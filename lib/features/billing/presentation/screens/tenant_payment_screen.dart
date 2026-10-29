@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/payment_workflow_datasource.dart';
 import '../../domain/entities/monthly_bill.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
-
 import '../providers/payment_workflow_provider.dart';
 
 class TenantPaymentScreen extends ConsumerStatefulWidget {
@@ -17,11 +16,12 @@ class TenantPaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
-  String? _selectedBillId;
+  final Set<String> _selectedBillIds = <String>{};
+  final Map<String, TextEditingController> _amountControllers =
+      <String, TextEditingController>{};
 
   PaymentMethod _method = PaymentMethod.bkash;
 
-  final _amountController = TextEditingController();
   final _referenceController = TextEditingController();
   final _noteController = TextEditingController();
 
@@ -29,9 +29,13 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
   @override
   void dispose() {
-    _amountController.dispose();
+    for (final controller in _amountControllers.values) {
+      controller.dispose();
+    }
+
     _referenceController.dispose();
     _noteController.dispose();
+
     super.dispose();
   }
 
@@ -59,26 +63,60 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     return names[bill.type] ?? bill.type.name;
   }
 
-  Future<void> _submit(List<MonthlyBill> bills) async {
-    final matchingBills = bills.where((bill) => bill.id == _selectedBillId);
+  TextEditingController _amountControllerFor(MonthlyBill bill) {
+    return _amountControllers.putIfAbsent(
+      bill.id,
+      () => TextEditingController(text: _remaining(bill).toStringAsFixed(2)),
+    );
+  }
 
-    final selected = matchingBills.isEmpty ? null : matchingBills.first;
+  double _enteredAmount(MonthlyBill bill) {
+    return double.tryParse(_amountControllerFor(bill).text.trim()) ?? 0;
+  }
 
-    if (selected == null) {
-      _message('Select a bill first.');
+  double _selectedTotal(List<MonthlyBill> bills) {
+    return bills
+        .where((bill) => _selectedBillIds.contains(bill.id))
+        .fold<double>(0, (total, bill) => total + _enteredAmount(bill));
+  }
+
+  Future<void> _submit(List<MonthlyBill> payableBills) async {
+    final selectedBills = payableBills
+        .where((bill) => _selectedBillIds.contains(bill.id))
+        .toList();
+
+    if (selectedBills.isEmpty) {
+      _message('Select at least one bill.');
       return;
     }
 
-    final amount = double.tryParse(_amountController.text.trim());
+    final amountsByBillId = <String, double>{};
+    final collectionsByBillId = <String, String>{};
 
-    if (amount == null || !amount.isFinite || amount <= 0) {
-      _message('Enter a valid payment amount.');
-      return;
-    }
+    for (final bill in selectedBills) {
+      final amount = _enteredAmount(bill);
 
-    if (amount > _remaining(selected) + 0.001) {
-      _message('Payment cannot exceed the remaining balance.');
-      return;
+      if (!amount.isFinite || amount <= 0) {
+        _message('Enter a valid payment amount for ${_billTitle(bill)}.');
+        return;
+      }
+
+      if (amount > _remaining(bill) + 0.001) {
+        _message(
+          'Payment cannot exceed the remaining balance '
+          'for ${_billTitle(bill)}.',
+        );
+        return;
+      }
+
+      amountsByBillId[bill.id] = amount;
+
+      // This assumes the provider returns MonthlyBill objects from
+      // monthlyBills. Rent entries must carry their source collection.
+      //
+      // Until the entity/provider is extended with billCollection,
+      // this fallback supports existing non-rent bills only.
+      collectionsByBillId[bill.id] = 'monthlyBills';
     }
 
     final reference = _referenceController.text.trim();
@@ -92,12 +130,14 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       _submitting = true;
     });
 
+    var submittedCount = 0;
+
     try {
-      await ref
+      final createdPayments = await ref
           .read(paymentWorkflowDataSourceProvider)
-          .submitPayment(
-            billId: selected.id,
-            amount: amount,
+          .submitPayments(
+            amountsByBillId: amountsByBillId,
+            collectionsByBillId: collectionsByBillId,
             method: _method,
             reference: reference.isEmpty ? null : reference,
             note: _noteController.text.trim().isEmpty
@@ -105,20 +145,33 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                 : _noteController.text.trim(),
           );
 
+      submittedCount = createdPayments.length;
+
       if (!mounted) return;
 
-      _amountController.clear();
+      _selectedBillIds.clear();
+
+      for (final bill in selectedBills) {
+        _amountControllers[bill.id]?.text = _remaining(bill).toStringAsFixed(2);
+      }
+
       _referenceController.clear();
       _noteController.clear();
 
       _message(
-        'Payment submitted. It will remain pending until '
-        'the owner verifies it.',
+        '$submittedCount payment request(s) submitted. '
+        'They remain pending until the owner verifies them.',
       );
     } catch (error) {
-      if (mounted) {
-        _message(error.toString().replaceFirst('Bad state: ', ''));
-      }
+      if (!mounted) return;
+
+      _message(
+        submittedCount > 0
+            ? '$submittedCount payment request(s) were submitted, '
+                  'but another request failed: '
+                  '${_friendlyError(error)}'
+            : 'Unable to submit payment: ${_friendlyError(error)}',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -126,6 +179,10 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
         });
       }
     }
+  }
+
+  String _friendlyError(Object error) {
+    return error.toString().replaceFirst('Bad state: ', '');
   }
 
   void _message(String message) {
@@ -137,7 +194,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final billsAsync = ref.watch(currentTenantMonthlyBillsProvider);
-
     final paymentHistory = ref.watch(tenantPaymentTransactionsProvider);
 
     return Scaffold(
@@ -160,26 +216,9 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
               )
               .toList();
 
-          if (_selectedBillId == null ||
-              !payableBills.any((bill) => bill.id == _selectedBillId)) {
-            _selectedBillId = payableBills.isEmpty
-                ? null
-                : payableBills.first.id;
-
-            final selected = payableBills.isEmpty ? null : payableBills.first;
-
-            if (selected != null && _amountController.text.isEmpty) {
-              _amountController.text = _remaining(selected).toStringAsFixed(2);
-            }
-          }
-
-          final selectedBillMatches = payableBills.where(
-            (bill) => bill.id == _selectedBillId,
+          _selectedBillIds.removeWhere(
+            (id) => !payableBills.any((bill) => bill.id == id),
           );
-
-          final selectedBill = selectedBillMatches.isEmpty
-              ? null
-              : selectedBillMatches.first;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -191,80 +230,141 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Pay a bill',
+                        'Pay bills',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Submit your payment details after sending '
-                        'the money to the account provided by your '
-                        'property owner. A submitted payment is not '
-                        'considered paid until it is verified.',
+                        'Select one or more outstanding bills and enter '
+                        'the amount you are paying for each bill. '
+                        'The owner must verify every payment request '
+                        'before the bill balance changes.',
                       ),
                       const SizedBox(height: 16),
-
                       if (payableBills.isEmpty)
                         const Text(
                           'There are no outstanding bills '
                           'available for payment.',
                         )
                       else ...[
-                        DropdownButtonFormField<String>(
-                          initialValue: _selectedBillId,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Select bill',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: payableBills.map((bill) {
-                            return DropdownMenuItem<String>(
-                              value: bill.id,
+                        Row(
+                          children: [
+                            Expanded(
                               child: Text(
-                                '${_billTitle(bill)} • '
-                                'Due ৳${_money(_remaining(bill))}',
-                                overflow: TextOverflow.ellipsis,
+                                'Outstanding bills',
+                                style: Theme.of(context).textTheme.titleMedium,
                               ),
-                            );
-                          }).toList(),
-                          onChanged: _submitting
-                              ? null
-                              : (value) {
-                                  setState(() {
-                                    _selectedBillId = value;
-
-                                    final matching = payableBills.where(
-                                      (bill) => bill.id == value,
-                                    );
-
-                                    final bill = matching.isEmpty
-                                        ? null
-                                        : matching.first;
-
-                                    _amountController.text = bill == null
-                                        ? ''
-                                        : _remaining(bill).toStringAsFixed(2);
-                                  });
-                                },
+                            ),
+                            TextButton(
+                              onPressed: _submitting
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        if (_selectedBillIds.length ==
+                                            payableBills.length) {
+                                          _selectedBillIds.clear();
+                                        } else {
+                                          _selectedBillIds
+                                            ..clear()
+                                            ..addAll(
+                                              payableBills.map(
+                                                (bill) => bill.id,
+                                              ),
+                                            );
+                                        }
+                                      });
+                                    },
+                              child: Text(
+                                _selectedBillIds.length == payableBills.length
+                                    ? 'Deselect all'
+                                    : 'Select all',
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 8),
+                        ...payableBills.map((bill) {
+                          final selected = _selectedBillIds.contains(bill.id);
 
-                        if (selectedBill != null) ...[
-                          const SizedBox(height: 10),
-                          _InfoRow(
-                            label: 'Bill amount',
-                            value: '৳${_money(selectedBill.amount)}',
-                          ),
-                          _InfoRow(
-                            label: 'Already paid',
-                            value: '৳${_money(selectedBill.paidAmount)}',
-                          ),
-                          _InfoRow(
-                            label: 'Remaining due',
-                            value: '৳${_money(_remaining(selectedBill))}',
-                          ),
-                        ],
+                          final controller = _amountControllerFor(bill);
 
-                        const SizedBox(height: 12),
-
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                children: [
+                                  CheckboxListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    value: selected,
+                                    onChanged: _submitting
+                                        ? null
+                                        : (value) {
+                                            setState(() {
+                                              if (value == true) {
+                                                _selectedBillIds.add(bill.id);
+                                              } else {
+                                                _selectedBillIds.remove(
+                                                  bill.id,
+                                                );
+                                              }
+                                            });
+                                          },
+                                    title: Text(_billTitle(bill)),
+                                    subtitle: Text(
+                                      'Bill: ৳${_money(bill.amount)}\n'
+                                      'Paid: ৳${_money(bill.paidAmount)}\n'
+                                      'Due: ৳${_money(_remaining(bill))}',
+                                    ),
+                                    isThreeLine: true,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                  ),
+                                  if (selected) ...[
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      controller: controller,
+                                      enabled: !_submitting,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
+                                      decoration: InputDecoration(
+                                        labelText: 'Payment amount (৳)',
+                                        helperText:
+                                            'Maximum: ৳${_money(_remaining(bill))}',
+                                        border: const OutlineInputBorder(),
+                                      ),
+                                      onChanged: (_) {
+                                        setState(() {});
+                                      },
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 8),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                _InfoRow(
+                                  label: 'Selected bills',
+                                  value: '${_selectedBillIds.length}',
+                                ),
+                                _InfoRow(
+                                  label: 'Selected payment total',
+                                  value:
+                                      '৳${_money(_selectedTotal(payableBills))}',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         DropdownButtonFormField<PaymentMethod>(
                           initialValue: _method,
                           decoration: const InputDecoration(
@@ -287,24 +387,10 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                   }
                                 },
                         ),
-
                         const SizedBox(height: 12),
-
-                        TextField(
-                          controller: _amountController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Amount paid (৳)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-
                         TextField(
                           controller: _referenceController,
+                          enabled: !_submitting,
                           decoration: InputDecoration(
                             labelText: _method == PaymentMethod.cash
                                 ? 'Reference / receipt number (optional)'
@@ -317,20 +403,17 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                             border: const OutlineInputBorder(),
                           ),
                         ),
-
                         const SizedBox(height: 12),
-
                         TextField(
                           controller: _noteController,
+                          enabled: !_submitting,
                           maxLines: 2,
                           decoration: const InputDecoration(
                             labelText: 'Note (optional)',
                             border: OutlineInputBorder(),
                           ),
                         ),
-
                         const SizedBox(height: 16),
-
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
@@ -349,7 +432,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                             label: Text(
                               _submitting
                                   ? 'Submitting…'
-                                  : 'Submit payment for verification',
+                                  : 'Submit selected payments',
                             ),
                           ),
                         ),
@@ -358,16 +441,12 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
               Text(
                 'Payment history',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-
               const SizedBox(height: 8),
-
               paymentHistory.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) =>
@@ -396,16 +475,13 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                   return Column(
                     children: docs.map((doc) {
                       final data = doc.data();
-
                       final amount = data['amount'];
-
                       final status = (data['status'] ?? 'pending').toString();
-
                       final method = (data['method'] ?? 'other').toString();
-
                       final reference = (data['reference'] ?? '').toString();
-
                       final reason = (data['rejectionReason'] ?? '').toString();
+                      final collection =
+                          (data['billCollection'] ?? 'monthlyBills').toString();
 
                       return Card(
                         child: ListTile(
@@ -421,12 +497,12 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                             ' • ${method.toUpperCase()}',
                           ),
                           subtitle: Text(
-                            'Status: ${status.toUpperCase()}'
+                            'Status: ${status.toUpperCase()}\n'
+                            'Bill source: $collection'
                             '${reference.isNotEmpty ? '\nReference: $reference' : ''}'
                             '${reason.isNotEmpty ? '\nReason: $reason' : ''}',
                           ),
-                          isThreeLine:
-                              reference.isNotEmpty || reason.isNotEmpty,
+                          isThreeLine: true,
                         ),
                       );
                     }).toList(),
@@ -469,7 +545,8 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label),
+          Expanded(child: Text(label)),
+          const SizedBox(width: 12),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),
