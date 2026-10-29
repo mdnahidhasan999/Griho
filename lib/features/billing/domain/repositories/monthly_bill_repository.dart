@@ -1,3 +1,4 @@
+import '../../../rents/domain/entities/monthly_rent.dart';
 import '../entities/create_monthly_bill_request.dart';
 import '../entities/monthly_bill.dart';
 
@@ -10,9 +11,7 @@ abstract class MonthlyBillRepository {
   });
 
   /// Gets a monthly bill by its document ID.
-  Future<MonthlyBill?> getMonthlyBillById({
-    required String billId,
-  });
+  Future<MonthlyBill?> getMonthlyBillById({required String billId});
 
   /// Gets all bills for a specific unit and billing period.
   ///
@@ -30,8 +29,7 @@ abstract class MonthlyBillRepository {
   ///
   /// Tenant ID is part of the identity because the same unit
   /// can have different tenants during the same calendar month.
-  Future<MonthlyBill?>
-  getMonthlyBillByUnitAndTenantAndPeriodAndType({
+  Future<MonthlyBill?> getMonthlyBillByUnitAndTenantAndPeriodAndType({
     required String ownerId,
     required String unitId,
     required String tenantId,
@@ -41,6 +39,12 @@ abstract class MonthlyBillRepository {
 
   /// Gets all bills for a tenant during a billing period.
   Future<List<MonthlyBill>> getMonthlyBillsByTenantAndPeriod({
+    required String tenantUserId,
+    required DateTime billingPeriodStart,
+  });
+
+  /// Gets monthly rent records for a tenant for a billing period.
+  Future<List<MonthlyRent>> getMonthlyRentsByTenantAndPeriod({
     required String tenantUserId,
     required DateTime billingPeriodStart,
   });
@@ -63,9 +67,6 @@ abstract class MonthlyBillRepository {
     required String propertyId,
   });
 
-
   /// Cancels/voids a monthly bill.
-  Future<MonthlyBill?> cancelMonthlyBill({
-    required String billId,
-  });
+  Future<MonthlyBill?> cancelMonthlyBill({required String billId});
 }

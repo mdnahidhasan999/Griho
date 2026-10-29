@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../rents/domain/entities/monthly_rent.dart';
 import '../../data/datasources/monthly_bill_datasource.dart';
 import '../../data/repositories/monthly_bill_repository_impl.dart';
 import '../../domain/entities/monthly_bill.dart';
@@ -55,6 +56,23 @@ final monthlyBillsByTenantAndPeriodProvider =
     >((ref, params) async {
       final repository = ref.read(monthlyBillRepositoryProvider);
       return repository.getMonthlyBillsByTenantAndPeriod(
+        tenantUserId: params.tenantUserId,
+        billingPeriodStart: params.billingPeriodStart,
+      );
+    });
+
+// ============================================================================
+// TENANT RENT + PERIOD
+// ============================================================================
+
+final monthlyRentsByTenantAndPeriodProvider =
+    FutureProvider.family<
+      List<MonthlyRent>,
+      ({String tenantUserId, DateTime billingPeriodStart})
+    >((ref, params) async {
+      final repository = ref.read(monthlyBillRepositoryProvider);
+
+      return repository.getMonthlyRentsByTenantAndPeriod(
         tenantUserId: params.tenantUserId,
         billingPeriodStart: params.billingPeriodStart,
       );
