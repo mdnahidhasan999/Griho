@@ -337,6 +337,7 @@ class PaymentWorkflowDataSource {
             ? MonthlyBillStatus.paid.name
             : MonthlyBillStatus.partiallyPaid.name,
         'updatedAt': FieldValue.serverTimestamp(),
+        'lastPaymentId': normalizedPaymentId,
       });
 
       transaction.update(paymentRef, {

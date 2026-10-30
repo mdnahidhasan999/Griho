@@ -536,7 +536,7 @@ service cloud.firestore {
 
       allow get: if isAuthenticated();
 
-  allow list: if isAuthenticated()
+        allow list: if isAuthenticated()
               && (
                 resource.data.ownerId == request.auth.uid
 
@@ -1096,28 +1096,17 @@ service cloud.firestore {
     // MONTHLY RENTS
     // ============================================================
 
-    match /monthlyRents/{monthlyRentId} {
+            match /monthlyRents/{monthlyRentId} {
+              allow get, list: if isAuthenticated();
 
-      allow read, list: if isAuthenticated();
+              allow create: if isAuthenticated()
+                            && isValidMonthlyRentCreate();
 
-      allow create: if isAuthenticated()
-                    && (
-                      isValidMonthlyRentCreate()
-                      ||
-                      request.resource.data.ownerId == request.auth.uid
-                      ||
-                      request.resource.data.tenantUserId == request.auth.uid
-                    );
+              allow update: if isAuthenticated()
+                            && isValidMonthlyRentPaymentUpdate(monthlyRentId);
 
-      allow update: if isAuthenticated()
-                    && (
-                      resource.data.ownerId == request.auth.uid
-                      ||
-                      resource.data.tenantUserId == request.auth.uid
-                    );
-
-      allow delete: if false;
-    }
+              allow delete: if false;
+            }
 
 
     // ============================================================
@@ -1415,58 +1404,64 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
-    // MONTHLY BILLS
-    // ============================================================
+            // ============================================================
+            // MONTHLY BILLS
+            // ============================================================
 
- match /monthlyBills/{monthlyBillId} {
-   allow read, list: if isAuthenticated();
+        match /monthlyBills/{monthlyBillId} {
+          allow get, list: if isAuthenticated();
 
-   // Only the authenticated property owner may create
-   // a bill that passes the complete validation.
-   allow create: if isAuthenticated()
-                 && request.resource.data.ownerId == request.auth.uid
-                 && isValidMonthlyBillCreate();
+          allow create: if isAuthenticated()
+                        && request.resource.data.ownerId == request.auth.uid
+                        && isValidMonthlyBillCreate();
 
-   // Client-side updates are restricted to cancellation.
-   // Payment confirmation must use a trusted workflow.
-   allow update: if isAuthenticated()
-                 && isValidMonthlyBillCancellation();
-
-   allow delete: if false;
- }
-     // ============================================================
-     // PAYMENT TRANSACTIONS — READ ACCESS
-     // ============================================================
-
-     match /paymentTransactions/{paymentId} {
-
-       // Owner can read only their own payment transactions.
-       // Tenant can read only their own payment transactions.
-       allow get, list: if isAuthenticated()
+          // Preserve existing cancellation validation.
+          // Also allow only a validated payment confirmation update.
+          allow update: if isAuthenticated()
                         && (
-                          resource.data.ownerId == request.auth.uid
-                          || resource.data.tenantUserId == request.auth.uid
+                          isValidMonthlyBillCancellation()
+                          || isValidMonthlyBillPaymentUpdate(monthlyBillId)
                         );
 
-     }
+          allow delete: if false;
+        }
+             // ============================================================
+             // PAYMENT TRANSACTIONS — READ ACCESS
+             // ============================================================
+        match /paymentTransactions/{paymentId} {
+          allow get, list: if isAuthenticated()
+                           && (
+                             resource.data.ownerId == request.auth.uid
+                             || resource.data.tenantUserId == request.auth.uid
+                           );
+
+          // Tenant submits a pending payment claim.
+          allow create: if isAuthenticated()
+                        && isValidPaymentTransactionCreate();
+
+          // Owner can confirm or reject a pending payment.
+          allow update: if isAuthenticated()
+                        && isValidPaymentTransactionUpdate(paymentId);
+
+          allow delete: if false;
+        }
 
 
     // ============================================================
     // BILLING RULES
     // ============================================================
 
-  match /billingRules/{ruleId} {
-    allow read, list: if isAuthenticated();
+      match /billingRules/{ruleId} {
+        allow read, list: if isAuthenticated();
 
-    allow create: if isAuthenticated()
-                  && isValidBillingRuleCreate();
+        allow create: if isAuthenticated()
+                      && isValidBillingRuleCreate();
 
-    allow update: if isAuthenticated()
-                  && isValidBillingRuleUpdate();
+        allow update: if isAuthenticated()
+                      && isValidBillingRuleUpdate();
 
-    allow delete: if false;
-  }
+        allow delete: if false;
+      }
 
     // ============================================================
     // BILLING RULE — CREATE VALIDATION
@@ -1714,10 +1709,10 @@ service cloud.firestore {
           ||
           request.resource.data.tenantId is string
         )
-&& request.resource.data.ownerId == request.auth.uid
-&& property.ownerId == request.resource.data.ownerId
-&& tenant.ownerId == request.resource.data.ownerId
-&& billingRule.ownerId == request.resource.data.ownerId
+        && request.resource.data.ownerId == request.auth.uid
+        && property.ownerId == request.resource.data.ownerId
+        && tenant.ownerId == request.resource.data.ownerId
+        && billingRule.ownerId == request.resource.data.ownerId
 
         && tenant.propertyId
            == request.resource.data.propertyId
@@ -2535,7 +2530,301 @@ service cloud.firestore {
                 );
     }
 
+// ============================================================
+// PAYMENT TRANSACTION CREATE
+// ============================================================
 
+function isValidPaymentTransactionCreate() {
+  let d = request.resource.data;
+
+  return d.tenantUserId == request.auth.uid
+      && d.ownerId is string
+      && d.propertyId is string
+      && d.unitId is string
+      && d.tenantId is string
+      && d.billId is string
+      && d.billId != ''
+      && d.amount is number
+      && d.amount > 0
+      && d.billCollection in ['monthlyBills', 'monthlyRents']
+      && d.method in ['cash', 'bank', 'bkash', 'nagad', 'other']
+      && d.status == 'pending'
+      && d.rejectionReason == null
+      && d.reviewedAt == null
+      && d.reviewedBy == null
+      && d.createdAt == request.time
+      && d.updatedAt == request.time
+      && (
+        (
+          d.billCollection == 'monthlyBills'
+          && isValidMonthlyBillPaymentClaim(d)
+        )
+        ||
+        (
+          d.billCollection == 'monthlyRents'
+          && isValidMonthlyRentPaymentClaim(d)
+        )
+      );
+}
+
+// ============================================================
+// MONTHLY BILL PAYMENT CLAIM
+// ============================================================
+
+function isValidMonthlyBillPaymentClaim(d) {
+  let path =
+    /databases/$(database)/documents/monthlyBills/$(d.billId);
+
+  let bill = get(path).data;
+
+  return exists(path)
+      && bill.ownerId == d.ownerId
+      && bill.propertyId == d.propertyId
+      && bill.unitId == d.unitId
+      && bill.tenantId == d.tenantId
+      && bill.tenantUserId == request.auth.uid
+      && bill.status in ['unpaid', 'partiallyPaid', 'overdue']
+      && bill.amount is number
+      && bill.paidAmount is number
+      && bill.paidAmount >= 0
+      && bill.paidAmount < bill.amount
+      && d.amount <= bill.amount - bill.paidAmount;
+}
+
+// ============================================================
+// MONTHLY RENT PAYMENT CLAIM
+// ============================================================
+
+function isValidMonthlyRentPaymentClaim(d) {
+  let path =
+    /databases/$(database)/documents/monthlyRents/$(d.billId);
+
+  let bill = get(path).data;
+
+  return exists(path)
+      && bill.ownerId == d.ownerId
+      && bill.propertyId == d.propertyId
+      && bill.unitId == d.unitId
+      && bill.tenantId == d.tenantId
+      && bill.tenantUserId == request.auth.uid
+      && bill.status in ['unpaid', 'partiallyPaid', 'overdue']
+      && bill.amount is number
+      && bill.paidAmount is number
+      && bill.paidAmount >= 0
+      && bill.paidAmount < bill.amount
+      && d.amount <= bill.amount - bill.paidAmount;
+}
+
+// ============================================================
+// PAYMENT TRANSACTION UPDATE
+// ============================================================
+
+function isValidPaymentTransactionUpdate(paymentId) {
+  let old = resource.data;
+  let next = request.resource.data;
+
+  return old.ownerId == request.auth.uid
+      && old.status == 'pending'
+      && next.ownerId == old.ownerId
+      && next.tenantUserId == old.tenantUserId
+      && next.propertyId == old.propertyId
+      && next.unitId == old.unitId
+      && next.tenantId == old.tenantId
+      && next.billId == old.billId
+      && next.billCollection == old.billCollection
+      && next.amount == old.amount
+      && next.method == old.method
+      && next.reference == old.reference
+      && next.note == old.note
+      && next.createdAt == old.createdAt
+      && next.reviewedBy == request.auth.uid
+      && next.reviewedAt == request.time
+      && next.updatedAt == request.time
+      && (
+        (
+          next.status == 'confirmed'
+          && next.rejectionReason == old.rejectionReason
+          && isPaymentBillUpdatedAfterConfirmation(old, paymentId)
+        )
+        ||
+        (
+          next.status == 'rejected'
+          && next.rejectionReason is string
+          && next.rejectionReason.size() > 0
+          && next.rejectionReason.size() <= 500
+        )
+      );
+}
+
+function isPaymentBillUpdatedAfterConfirmation(payment, paymentId) {
+  return
+    (
+      payment.billCollection == 'monthlyBills'
+      && isMonthlyBillUpdatedForPayment(payment, paymentId)
+    )
+    ||
+    (
+      payment.billCollection == 'monthlyRents'
+      && isMonthlyRentUpdatedForPayment(payment, paymentId)
+    );
+}
+
+function isMonthlyBillUpdatedForPayment(payment, paymentId) {
+  let path =
+    /databases/$(database)/documents/monthlyBills/$(payment.billId);
+
+  let before = get(path).data;
+  let after = getAfter(path).data;
+
+  let expectedPaid = before.paidAmount + payment.amount;
+
+  return exists(path)
+      && before.ownerId == request.auth.uid
+      && before.ownerId == payment.ownerId
+      && before.tenantUserId == payment.tenantUserId
+      && before.tenantId == payment.tenantId
+      && before.propertyId == payment.propertyId
+      && before.unitId == payment.unitId
+      && before.status in ['unpaid', 'partiallyPaid', 'overdue']
+      && before.amount is number
+      && before.paidAmount is number
+      && payment.amount <= before.amount - before.paidAmount
+      && after.lastPaymentId == paymentId
+      && after.paidAmount == expectedPaid
+      && after.status == (
+        expectedPaid >= before.amount
+          ? 'paid'
+          : 'partiallyPaid'
+      )
+      && after.updatedAt == request.time;
+}
+
+function isMonthlyRentUpdatedForPayment(payment, paymentId) {
+  let path =
+    /databases/$(database)/documents/monthlyRents/$(payment.billId);
+
+  let before = get(path).data;
+  let after = getAfter(path).data;
+
+  let expectedPaid = before.paidAmount + payment.amount;
+
+  return exists(path)
+      && before.ownerId == request.auth.uid
+      && before.ownerId == payment.ownerId
+      && before.tenantUserId == payment.tenantUserId
+      && before.tenantId == payment.tenantId
+      && before.propertyId == payment.propertyId
+      && before.unitId == payment.unitId
+      && before.status in ['unpaid', 'partiallyPaid', 'overdue']
+      && before.amount is number
+      && before.paidAmount is number
+      && payment.amount <= before.amount - before.paidAmount
+      && after.lastPaymentId == paymentId
+      && after.paidAmount == expectedPaid
+      && after.status == (
+        expectedPaid >= before.amount
+          ? 'paid'
+          : 'partiallyPaid'
+      )
+      && after.updatedAt == request.time;
+}
+
+// ============================================================
+// BILL BALANCE UPDATE
+// ============================================================
+
+function isValidMonthlyBillPaymentUpdate(billId) {
+  let old = resource.data;
+  let next = request.resource.data;
+
+  return old.ownerId == request.auth.uid
+      && old.status in ['unpaid', 'partiallyPaid', 'overdue']
+      && next.ownerId == old.ownerId
+      && next.propertyId == old.propertyId
+      && next.unitId == old.unitId
+      && next.tenantId == old.tenantId
+      && next.tenantUserId == old.tenantUserId
+      && next.amount == old.amount
+      && next.sourceRuleId == old.sourceRuleId
+      && next.billingPeriodStart == old.billingPeriodStart
+      && next.billingPeriodEnd == old.billingPeriodEnd
+      && next.paidAmount is number
+      && next.paidAmount > old.paidAmount
+      && next.paidAmount <= old.amount
+      && next.status == (
+        next.paidAmount >= old.amount
+          ? 'paid'
+          : 'partiallyPaid'
+      )
+      && next.updatedAt == request.time
+      && next.diff(old).affectedKeys().hasOnly([
+        'paidAmount',
+        'status',
+        'updatedAt',
+        'lastPaymentId'
+      ])
+      && next.lastPaymentId is string
+      && existsAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      )
+      && getAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      ).data.status == 'confirmed'
+      && getAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      ).data.billId == billId
+      && getAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      ).data.billCollection == 'monthlyBills'
+      && getAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      ).data.amount == next.paidAmount - old.paidAmount;
+}
+
+function isValidMonthlyRentPaymentUpdate(rentId) {
+  let old = resource.data;
+  let next = request.resource.data;
+
+  return old.ownerId == request.auth.uid
+      && old.status in ['unpaid', 'partiallyPaid', 'overdue']
+      && next.ownerId == old.ownerId
+      && next.propertyId == old.propertyId
+      && next.unitId == old.unitId
+      && next.tenantId == old.tenantId
+      && next.tenantUserId == old.tenantUserId
+      && next.amount == old.amount
+      && next.paidAmount is number
+      && next.paidAmount > old.paidAmount
+      && next.paidAmount <= old.amount
+      && next.status == (
+        next.paidAmount >= old.amount
+          ? 'paid'
+          : 'partiallyPaid'
+      )
+      && next.updatedAt == request.time
+      && next.diff(old).affectedKeys().hasOnly([
+        'paidAmount',
+        'status',
+        'updatedAt',
+        'lastPaymentId'
+      ])
+      && next.lastPaymentId is string
+      && existsAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      )
+      && getAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      ).data.status == 'confirmed'
+      && getAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      ).data.billId == rentId
+      && getAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      ).data.billCollection == 'monthlyRents'
+      && getAfter(
+        /databases/$(database)/documents/paymentTransactions/$(next.lastPaymentId)
+      ).data.amount == next.paidAmount - old.paidAmount;
+}
     // ============================================================
     // OWNER — END TENANCY
     // TENANT ACCESS DELETE VALIDATION
