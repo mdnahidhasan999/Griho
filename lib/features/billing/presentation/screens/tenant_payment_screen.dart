@@ -32,10 +32,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     for (final controller in _amountControllers.values) {
       controller.dispose();
     }
-
     _referenceController.dispose();
     _noteController.dispose();
-
     super.dispose();
   }
 
@@ -55,11 +53,10 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       MonthlyBillType.water: 'Water',
       MonthlyBillType.gas: 'Gas',
       MonthlyBillType.garbage: 'Garbage',
-      MonthlyBillType.serviceCharge: 'Service charge',
+      MonthlyBillType.serviceCharge: 'Service Charge',
       MonthlyBillType.electricity: 'Electricity',
-      MonthlyBillType.other: 'Other charge',
+      MonthlyBillType.other: 'Other Charge',
     };
-
     return names[bill.type] ?? bill.type.name;
   }
 
@@ -86,7 +83,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
         .toList();
 
     if (selectedBills.isEmpty) {
-      _message('Select at least one bill.');
+      _message('Please select at least one bill to pay.');
       return;
     }
 
@@ -103,21 +100,19 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
       if (amount > _remaining(bill) + 0.001) {
         _message(
-          'Payment cannot exceed the remaining balance '
-          'for ${_billTitle(bill)}.',
+          'Payment cannot exceed the remaining balance for ${_billTitle(bill)}.',
         );
         return;
       }
 
       amountsByBillId[bill.id] = amount;
-
       collectionsByBillId[bill.id] = bill.billCollection;
     }
 
     final reference = _referenceController.text.trim();
 
     if (_method != PaymentMethod.cash && reference.isEmpty) {
-      _message('Enter the transaction/reference ID.');
+      _message('Please enter the transaction/reference ID.');
       return;
     }
 
@@ -144,27 +139,26 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
       if (!mounted) return;
 
-      _selectedBillIds.clear();
-
-      for (final bill in selectedBills) {
-        _amountControllers[bill.id]?.text = _remaining(bill).toStringAsFixed(2);
-      }
-
-      _referenceController.clear();
-      _noteController.clear();
+      setState(() {
+        _selectedBillIds.clear();
+        for (final bill in selectedBills) {
+          _amountControllers[bill.id]?.text = _remaining(
+            bill,
+          ).toStringAsFixed(2);
+        }
+        _referenceController.clear();
+        _noteController.clear();
+      });
 
       _message(
-        '$submittedCount payment request(s) submitted. '
-        'They remain pending until the owner verifies them.',
+        'Successfully submitted $submittedCount payment request(s). They are pending owner verification.',
       );
     } catch (error) {
       if (!mounted) return;
 
       _message(
         submittedCount > 0
-            ? '$submittedCount payment request(s) were submitted, '
-                  'but another request failed: '
-                  '${_friendlyError(error)}'
+            ? '$submittedCount payment(s) were submitted, but another failed: ${_friendlyError(error)}'
             : 'Unable to submit payment: ${_friendlyError(error)}',
       );
     } finally {
@@ -188,18 +182,22 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final billsAsync = ref.watch(currentTenantMonthlyBillsProvider);
     final paymentHistory = ref.watch(tenantPaymentTransactionsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Payments')),
+      appBar: AppBar(
+        title: const Text(
+          'Property Payments',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
       body: billsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _ErrorState(
           message: 'Unable to load your bills: $error',
-          onRetry: () {
-            ref.invalidate(currentTenantMonthlyBillsProvider);
-          },
+          onRetry: () => ref.invalidate(currentTenantMonthlyBillsProvider),
         ),
         data: (bills) {
           final payableBills = bills
@@ -218,230 +216,390 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Pay bills',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Select one or more outstanding bills and enter '
-                        'the amount you are paying for each bill. '
-                        'The owner must verify every payment request '
-                        'before the bill balance changes.',
-                      ),
-                      const SizedBox(height: 16),
-                      if (payableBills.isEmpty)
-                        const Text(
-                          'There are no outstanding bills '
-                          'available for payment.',
-                        )
-                      else ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Outstanding bills',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
+              // Header Banner
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.4,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: theme.colorScheme.primary,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Smart Bill Payment',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onPrimaryContainer,
                             ),
-                            TextButton(
-                              onPressed: _submitting
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        if (_selectedBillIds.length ==
-                                            payableBills.length) {
-                                          _selectedBillIds.clear();
-                                        } else {
-                                          _selectedBillIds
-                                            ..clear()
-                                            ..addAll(
-                                              payableBills.map(
-                                                (bill) => bill.id,
-                                              ),
-                                            );
-                                        }
-                                      });
-                                    },
-                              child: Text(
-                                _selectedBillIds.length == payableBills.length
-                                    ? 'Deselect all'
-                                    : 'Select all',
-                              ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Select one or multiple bills below, enter payment amounts, and submit. The property owner will review and verify them.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.4,
                             ),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Outstanding Bills Section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Outstanding Bills',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (payableBills.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: _submitting
+                          ? null
+                          : () {
+                              setState(() {
+                                if (_selectedBillIds.length ==
+                                    payableBills.length) {
+                                  _selectedBillIds.clear();
+                                } else {
+                                  _selectedBillIds
+                                    ..clear()
+                                    ..addAll(
+                                      payableBills.map((bill) => bill.id),
+                                    );
+                                }
+                              });
+                            },
+                      icon: Icon(
+                        _selectedBillIds.length == payableBills.length
+                            ? Icons.deselect_rounded
+                            : Icons.select_all_rounded,
+                        size: 18,
+                      ),
+                      label: Text(
+                        _selectedBillIds.length == payableBills.length
+                            ? 'Deselect All'
+                            : 'Select All',
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              if (payableBills.isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 48,
+                          color: Colors.green,
                         ),
-                        const SizedBox(height: 8),
-                        ...payableBills.map((bill) {
-                          final selected = _selectedBillIds.contains(bill.id);
+                        SizedBox(height: 12),
+                        Text(
+                          'All caught up! No outstanding bills found.',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else ...[
+                ...payableBills.map((bill) {
+                  final selected = _selectedBillIds.contains(bill.id);
+                  final controller = _amountControllerFor(bill);
 
-                          final controller = _amountControllerFor(bill);
-
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                children: [
-                                  CheckboxListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    value: selected,
-                                    onChanged: _submitting
-                                        ? null
-                                        : (value) {
-                                            setState(() {
-                                              if (value == true) {
-                                                _selectedBillIds.add(bill.id);
-                                              } else {
-                                                _selectedBillIds.remove(
-                                                  bill.id,
-                                                );
-                                              }
-                                            });
-                                          },
-                                    title: Text(_billTitle(bill)),
-                                    subtitle: Text(
-                                      'Bill: ৳${_money(bill.amount)}\n'
-                                      'Paid: ৳${_money(bill.paidAmount)}\n'
-                                      'Due: ৳${_money(_remaining(bill))}',
-                                    ),
-                                    isThreeLine: true,
-                                    controlAffinity:
-                                        ListTileControlAffinity.leading,
-                                  ),
-                                  if (selected) ...[
-                                    const SizedBox(height: 8),
-                                    TextField(
-                                      controller: controller,
-                                      enabled: !_submitting,
-                                      keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                            decimal: true,
-                                          ),
-                                      decoration: InputDecoration(
-                                        labelText: 'Payment amount (৳)',
-                                        helperText:
-                                            'Maximum: ৳${_money(_remaining(bill))}',
-                                        border: const OutlineInputBorder(),
-                                      ),
-                                      onChanged: (_) {
-                                        setState(() {});
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.5)
+                          : theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: selected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.outlineVariant,
+                        width: selected ? 2 : 1,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: selected,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                onChanged: _submitting
+                                    ? null
+                                    : (value) {
+                                        setState(() {
+                                          if (value == true) {
+                                            _selectedBillIds.add(bill.id);
+                                          } else {
+                                            _selectedBillIds.remove(bill.id);
+                                          }
+                                        });
                                       },
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _billTitle(bill),
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Total: ৳${_money(bill.amount)}  •  Paid: ৳${_money(bill.paidAmount)}',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
                                     ),
                                   ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.errorContainer
+                                      .withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Due: ৳${_money(_remaining(bill))}',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.error,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (selected) ...[
+                            const Divider(height: 20),
+                            TextField(
+                              controller: controller,
+                              enabled: !_submitting,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: 'Enter Payment Amount (৳)',
+                                helperText:
+                                    'Maximum payable: ৳${_money(_remaining(bill))}',
+                                prefixIcon: const Icon(Icons.payment_rounded),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+
+                const SizedBox(height: 12),
+
+                // Payment Details Form Card
+                if (_selectedBillIds.isNotEmpty) ...[
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: theme.colorScheme.outlineVariant),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Payment Summary & Method',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Divider(height: 20),
+                          _InfoRow(
+                            label: 'Selected Bills Count',
+                            value: '${_selectedBillIds.length}',
+                          ),
+                          const SizedBox(height: 6),
+                          _InfoRow(
+                            label: 'Total Payable Amount',
+                            value: '৳${_money(_selectedTotal(payableBills))}',
+                            isHighlight: true,
+                          ),
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField<PaymentMethod>(
+                            initialValue: _method,
+                            decoration: InputDecoration(
+                              labelText: 'Payment Method',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.account_balance_wallet_rounded,
+                              ),
+                              isDense: true,
+                            ),
+                            items: PaymentMethod.values.map((method) {
+                              return DropdownMenuItem<PaymentMethod>(
+                                value: method,
+                                child: Text(_methodLabel(method)),
+                              );
+                            }).toList(),
+                            onChanged: _submitting
+                                ? null
+                                : (value) {
+                                    if (value != null) {
+                                      setState(() => _method = value);
+                                    }
+                                  },
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _referenceController,
+                            enabled: !_submitting,
+                            decoration: InputDecoration(
+                              labelText: _method == PaymentMethod.cash
+                                  ? 'Receipt / Reference Number (Optional)'
+                                  : 'Transaction ID / TrxID *',
+                              hintText: _method == PaymentMethod.bkash
+                                  ? 'e.g. 9H74X... (bKash TrxID)'
+                                  : _method == PaymentMethod.nagad
+                                  ? 'e.g. NAGAD1234...'
+                                  : 'Enter transaction reference',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.receipt_long_rounded,
+                              ),
+                              isDense: true,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _noteController,
+                            enabled: !_submitting,
+                            maxLines: 2,
+                            decoration: InputDecoration(
+                              labelText: 'Note for Owner (Optional)',
+                              hintText:
+                                  'Add any details regarding this payment...',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              prefixIcon: const Icon(Icons.note_alt_rounded),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: FilledButton(
+                              onPressed: _submitting
+                                  ? null
+                                  : () => _submit(payableBills),
+                              style: FilledButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_submitting) ...[
+                                    const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                  ] else ...[
+                                    const Icon(Icons.send_rounded, size: 18),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Text(
+                                    _submitting
+                                        ? 'Submitting Payments...'
+                                        : 'Submit All Selected Payments',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                          );
-                        }),
-                        const SizedBox(height: 8),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              children: [
-                                _InfoRow(
-                                  label: 'Selected bills',
-                                  value: '${_selectedBillIds.length}',
-                                ),
-                                _InfoRow(
-                                  label: 'Selected payment total',
-                                  value:
-                                      '৳${_money(_selectedTotal(payableBills))}',
-                                ),
-                              ],
-                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<PaymentMethod>(
-                          initialValue: _method,
-                          decoration: const InputDecoration(
-                            labelText: 'Payment method',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: PaymentMethod.values.map((method) {
-                            return DropdownMenuItem<PaymentMethod>(
-                              value: method,
-                              child: Text(_methodLabel(method)),
-                            );
-                          }).toList(),
-                          onChanged: _submitting
-                              ? null
-                              : (value) {
-                                  if (value != null) {
-                                    setState(() {
-                                      _method = value;
-                                    });
-                                  }
-                                },
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _referenceController,
-                          enabled: !_submitting,
-                          decoration: InputDecoration(
-                            labelText: _method == PaymentMethod.cash
-                                ? 'Reference / receipt number (optional)'
-                                : 'Transaction / reference ID *',
-                            hintText: _method == PaymentMethod.bkash
-                                ? 'bKash TrxID'
-                                : _method == PaymentMethod.nagad
-                                ? 'Nagad TrxID'
-                                : 'Bank transaction/reference number',
-                            border: const OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _noteController,
-                          enabled: !_submitting,
-                          maxLines: 2,
-                          decoration: const InputDecoration(
-                            labelText: 'Note (optional)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _submitting
-                                ? null
-                                : () => _submit(payableBills),
-                            icon: _submitting
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.send_rounded),
-                            label: Text(
-                              _submitting
-                                  ? 'Submitting…'
-                                  : 'Submit selected payments',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
+                ],
+              ],
+
+              const SizedBox(height: 32),
+              Text(
+                'Payment History & Status',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 20),
-              Text(
-                'Payment history',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
+
               paymentHistory.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) =>
@@ -451,51 +609,124 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                     ..sort((a, b) {
                       final aDate = a.data()['createdAt'];
                       final bDate = b.data()['createdAt'];
-
                       final aMillis = aDate is Timestamp
                           ? aDate.millisecondsSinceEpoch
                           : 0;
-
                       final bMillis = bDate is Timestamp
                           ? bDate.millisecondsSinceEpoch
                           : 0;
-
                       return bMillis.compareTo(aMillis);
                     });
 
                   if (docs.isEmpty) {
-                    return const Text('No payment submissions yet.');
+                    return Container(
+                      padding: const EdgeInsets.all(24),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'No payment submissions yet.',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    );
                   }
 
                   return Column(
                     children: docs.map((doc) {
                       final data = doc.data();
                       final amount = data['amount'];
-                      final status = (data['status'] ?? 'pending').toString();
-                      final method = (data['method'] ?? 'other').toString();
+                      final status = (data['status'] ?? 'pending')
+                          .toString()
+                          .toLowerCase();
+                      final method = (data['method'] ?? 'other')
+                          .toString()
+                          .toUpperCase();
                       final reference = (data['reference'] ?? '').toString();
                       final reason = (data['rejectionReason'] ?? '').toString();
                       final collection =
                           (data['billCollection'] ?? 'monthlyBills').toString();
 
-                      return Card(
+                      Color statusColor;
+                      IconData statusIcon;
+                      if (status == 'confirmed') {
+                        statusColor = Colors.green;
+                        statusIcon = Icons.check_circle_rounded;
+                      } else if (status == 'rejected') {
+                        statusColor = Colors.red;
+                        statusIcon = Icons.cancel_rounded;
+                      } else {
+                        statusColor = Colors.orange;
+                        statusIcon = Icons.hourglass_top_rounded;
+                      }
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
+                        ),
                         child: ListTile(
-                          leading: Icon(
-                            status == 'confirmed'
-                                ? Icons.check_circle_outline
-                                : status == 'rejected'
-                                ? Icons.cancel_outlined
-                                : Icons.hourglass_top_rounded,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
                           ),
-                          title: Text(
-                            '৳${amount is num ? _money(amount.toDouble()) : '—'}'
-                            ' • ${method.toUpperCase()}',
+                          leading: CircleAvatar(
+                            backgroundColor: statusColor.withValues(
+                              alpha: 0.15,
+                            ),
+                            child: Icon(statusIcon, color: statusColor),
                           ),
-                          subtitle: Text(
-                            'Status: ${status.toUpperCase()}\n'
-                            'Bill source: $collection'
-                            '${reference.isNotEmpty ? '\nReference: $reference' : ''}'
-                            '${reason.isNotEmpty ? '\nReason: $reason' : ''}',
+                          title: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '৳${amount is num ? _money(amount.toDouble()) : '—'}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  status.toUpperCase(),
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Method: $method  •  Source: $collection'),
+                                if (reference.isNotEmpty)
+                                  Text('TrxID/Ref: $reference'),
+                                if (reason.isNotEmpty)
+                                  Text(
+                                    'Reason: $reason',
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                           isThreeLine: true,
                         ),
@@ -504,6 +735,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                   );
                 },
               ),
+              const SizedBox(height: 36),
             ],
           );
         },
@@ -514,37 +746,56 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   String _methodLabel(PaymentMethod method) {
     switch (method) {
       case PaymentMethod.cash:
-        return 'Cash';
+        return 'Cash Payment';
       case PaymentMethod.bank:
-        return 'Bank transfer';
+        return 'Bank Transfer';
       case PaymentMethod.bkash:
         return 'bKash';
       case PaymentMethod.nagad:
         return 'Nagad';
       case PaymentMethod.other:
-        return 'Other';
+        return 'Other Method';
     }
   }
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    this.isHighlight = false,
+  });
 
   final String label;
   final String value;
+  final bool isHighlight;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(child: Text(label)),
-          const SizedBox(width: 12),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-        ],
-      ),
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: isHighlight
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurfaceVariant,
+            fontWeight: isHighlight ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: isHighlight ? 16 : 14,
+            color: isHighlight
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface,
+          ),
+        ),
+      ],
     );
   }
 }
