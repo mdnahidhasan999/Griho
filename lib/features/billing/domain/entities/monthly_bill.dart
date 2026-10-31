@@ -20,6 +20,7 @@ enum MonthlyBillType {
 
 class MonthlyBill {
   final String id;
+
   /// Firestore collection containing this bill.
   /// Rent records may come from monthlyRents.
   final String billCollection;
@@ -102,6 +103,43 @@ class MonthlyBill {
     }
 
     return remaining;
+  }
+
+  /// Whether the bill has passed its payment deadline
+  /// and still has an outstanding balance.
+  bool get isOverdue {
+    if (remainingAmount <= 0 ||
+        status == MonthlyBillStatus.paid ||
+        status == MonthlyBillStatus.cancelled) {
+      return false;
+    }
+
+    final now = DateTime.now();
+
+    final today = DateTime(now.year, now.month, now.day);
+
+    final deadline = DateTime(
+      dueDate.year,
+      dueDate.month,
+      dueDate.day,
+    );
+
+    return today.isAfter(deadline);
+  }
+
+  /// Returns the effective status without modifying
+  /// the original Firestore status.
+  MonthlyBillStatus get effectiveStatus {
+    if (status == MonthlyBillStatus.paid ||
+        status == MonthlyBillStatus.cancelled) {
+      return status;
+    }
+
+    if (isOverdue) {
+      return MonthlyBillStatus.overdue;
+    }
+
+    return status;
   }
 
   bool get isFullyPaid =>

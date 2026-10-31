@@ -92,6 +92,54 @@ class MonthlyRent {
 
   bool get isFullMonth => chargeableDays == daysInBillingPeriod;
 
+  /// Remaining amount that the tenant still needs to pay.
+  double get remainingAmount {
+    final remaining = amount - paidAmount;
+
+    if (remaining <= 0) {
+      return 0;
+    }
+
+    return remaining;
+  }
+
+  /// Whether the rent has passed its payment deadline
+  /// and still has an outstanding balance.
+  bool get isOverdue {
+    if (remainingAmount <= 0 ||
+        status == MonthlyRentStatus.paid ||
+        status == MonthlyRentStatus.cancelled) {
+      return false;
+    }
+
+    final now = DateTime.now();
+
+    final today = DateTime(now.year, now.month, now.day);
+
+    final deadline = DateTime(
+      dueDate.year,
+      dueDate.month,
+      dueDate.day,
+    );
+
+    return today.isAfter(deadline);
+  }
+
+  /// Returns the effective status without modifying
+  /// the original Firestore status.
+  MonthlyRentStatus get effectiveStatus {
+    if (status == MonthlyRentStatus.paid ||
+        status == MonthlyRentStatus.cancelled) {
+      return status;
+    }
+
+    if (isOverdue) {
+      return MonthlyRentStatus.overdue;
+    }
+
+    return status;
+  }
+
   MonthlyRent copyWith({
     String? id,
     String? ownerId,
