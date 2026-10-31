@@ -26,13 +26,14 @@ class TenantCurrentBillsCard extends ConsumerWidget {
       'November',
       'December',
     ];
-    // Fixed space between month and year
-    return '${months[date.month - 1]}${date.year}';
+
+    return '${months[date.month - 1]} ${date.year}';
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+
     final periodStart = ref.watch(currentBillingPeriodStartProvider);
     final billsAsync = ref.watch(currentTenantMonthlyBillsProvider);
     final tenantAsync = ref.watch(currentTenantProvider);
@@ -47,9 +48,11 @@ class TenantCurrentBillsCard extends ConsumerWidget {
         : null;
 
     final unitLabel = unit != null
-        ? (unit.name?.trim().isNotEmpty == true
-              ? '${unit.name} (Unit${unit.unitNumber})'
-              : 'Unit ${unit.unitNumber} • Floor ${unit.floorNumber}')
+        ? (unit.name
+        ?.trim()
+        .isNotEmpty == true
+        ? '${unit.name} (Unit ${unit.unitNumber})'
+        : 'Unit ${unit.unitNumber} • Floor ${unit.floorNumber}')
         : 'Assigned Unit';
 
     return Material(
@@ -62,63 +65,72 @@ class TenantCurrentBillsCard extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: billsAsync.when(
-          loading: () => const Padding(
+          loading: () =>
+          const Padding(
             padding: EdgeInsets.symmetric(vertical: 28),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (error, _) => Column(
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                color: Colors.redAccent,
-                size: 36,
+          error: (error, _) =>
+              Column(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.redAccent,
+                    size: 36,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Unable to load current month statement.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      ref.invalidate(currentTenantMonthlyBillsProvider);
+                    },
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Retry'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Unable to load current month statement.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () {
-                  ref.invalidate(currentTenantMonthlyBillsProvider);
-                },
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
           data: (bills) {
             final activeRentAmount = rentRateAsync?.value?.amount;
 
             final hasRentInBills = bills.any(
-              (b) => b.type == MonthlyBillType.rent,
+                  (bill) => bill.type == MonthlyBillType.rent,
             );
 
             final unbilledRentAmount =
-                (!hasRentInBills &&
-                    activeRentAmount != null &&
-                    activeRentAmount > 0)
+            (!hasRentInBills &&
+                activeRentAmount != null &&
+                activeRentAmount > 0)
                 ? activeRentAmount
                 : 0.0;
 
+            // Total charges generated for this billing period.
             final billedTotal = bills.fold<double>(
               0,
-              (sum, item) => sum + item.amount,
+                  (sum, bill) => sum + bill.amount,
             );
+
             final totalPayable = billedTotal + unbilledRentAmount;
 
-            final unpaidBilledTotal = bills
-                .where((b) => b.status != MonthlyBillStatus.paid)
-                .fold<double>(0, (sum, item) => sum + item.amount);
-            final totalDue = unpaidBilledTotal + unbilledRentAmount;
+            // Remaining amount from generated bills.
+            final remainingDue = bills.fold<double>(
+              0,
+                  (sum, bill) => sum + bill.remainingAmount,
+            );
 
-            final isAllPaid = totalPayable > 0 && totalDue == 0;
+            // Include rent that has not yet been generated as a bill.
+            final totalDue = remainingDue + unbilledRentAmount;
+
+            final isAllPaid = totalPayable > 0 && totalDue <= 0.001;
+            final hasNoCharges = totalPayable <= 0;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Top Cycle & Unit Header
+                // 1. Billing Cycle & Unit Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -143,7 +155,7 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${_formatMonthYear(periodStart)} Statement',
+                                  '${_formatMonthYear (periodStart)} Statement',
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -172,13 +184,15 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: isAllPaid
                             ? Colors.green.withValues(alpha: 0.14)
+                            : hasNoCharges
+                            ? theme.colorScheme.surfaceContainerHighest
                             : Colors.amber.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         isAllPaid
                             ? 'All Paid'
-                            : totalPayable == 0
+                            : hasNoCharges
                             ? 'No Dues'
                             : 'Due',
                         style: TextStyle(
@@ -186,6 +200,8 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                           fontWeight: FontWeight.w800,
                           color: isAllPaid
                               ? Colors.green.shade800
+                              : hasNoCharges
+                              ? theme.colorScheme.onSurfaceVariant
                               : Colors.amber.shade900,
                         ),
                       ),
@@ -195,15 +211,16 @@ class TenantCurrentBillsCard extends ConsumerWidget {
 
                 const SizedBox(height: 16),
 
-                // 2. Total Summary Banner
+                // 2. Total Summary
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(
-                      alpha: 0.5,
-                    ),
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    border: Border.all(
+                      color: theme.colorScheme.outlineVariant,
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -258,16 +275,17 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                 const Divider(height: 1),
                 const SizedBox(height: 12),
 
-                // 3. Itemized Unit Rent & Utility Breakdown
+                // 3. Itemized Charges
                 Text(
                   'Unit Charge Breakdown',
                   style: theme.textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+
                 const SizedBox(height: 10),
 
-                // Show Unit Rent row if not yet inside `bills`
+                // Show rent when it has not yet been generated as a bill.
                 if (!hasRentInBills &&
                     activeRentAmount != null &&
                     activeRentAmount > 0) ...[
@@ -276,7 +294,7 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                     title: 'Monthly Unit Rent',
                     subtitle: '$unitLabel • Recurring Rent',
                     amount: activeRentAmount,
-                    isPaid: false,
+                    remainingAmount: activeRentAmount,
                   ),
                   if (bills.isNotEmpty) const Divider(height: 18),
                 ],
@@ -298,11 +316,15 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                       icon: _billIcon(bills[i].type),
                       title: _billLabel(bills[i].type),
                       subtitle:
-                          '${bills[i].valueType == BillingValueType.fixed ? 'Fixed' : 'Variable'} • Due: ${_formatShortDate(bills[i].dueDate)}',
+                      '${bills[i].valueType == BillingValueType.fixed
+                          ? 'Fixed'
+                          : 'Variable'} • Due: ${_formatShortDate(
+                          bills[i].dueDate)}',
                       amount: bills[i].amount,
-                      isPaid: bills[i].status == MonthlyBillStatus.paid,
+                      remainingAmount: bills[i].remainingAmount,
                     ),
-                    if (i != bills.length - 1) const Divider(height: 18),
+                    if (i != bills.length - 1)
+                      const Divider(height: 18),
                   ],
 
                 const SizedBox(height: 16),
@@ -364,15 +386,17 @@ class TenantCurrentBillsCard extends ConsumerWidget {
   }
 
   static String _formatShortDate(DateTime date) {
-    final d = date.day.toString().padLeft(2, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    return '$d/$m/${date.year}';
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day/$month/${date.year}';
   }
 
   static String _formatAmount(double amount) {
     if (amount == amount.roundToDouble()) {
       return amount.toStringAsFixed(0);
     }
+
     return amount.toStringAsFixed(2);
   }
 }
@@ -382,19 +406,34 @@ class _BillBreakdownRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final double amount;
-  final bool isPaid;
+  final double remainingAmount;
 
   const _BillBreakdownRow({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.amount,
-    required this.isPaid,
+    required this.remainingAmount,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    final isPaid = remainingAmount <= 0.001;
+    final isPartiallyPaid = !isPaid && remainingAmount < amount;
+
+    final status = isPaid
+        ? 'PAID'
+        : isPartiallyPaid
+        ? 'PARTIALLY PAID'
+        : 'UNPAID';
+
+    final statusColor = isPaid
+        ? Colors.green.shade700
+        : isPartiallyPaid
+        ? Colors.orange.shade800
+        : theme.colorScheme.error;
 
     return Row(
       children: [
@@ -404,7 +443,11 @@ class _BillBreakdownRow extends StatelessWidget {
             color: theme.colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, size: 18, color: theme.colorScheme.primary),
+          child: Icon(
+            icon,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -431,23 +474,31 @@ class _BillBreakdownRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              '৳ ${amount == amount.roundToDouble() ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2)}',
+              '৳ ${_formatAmount(amount)}',
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w900,
               ),
             ),
             const SizedBox(height: 2),
             Text(
-              isPaid ? 'PAID' : 'UNPAID',
+              status,
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
-                color: isPaid ? Colors.green.shade700 : theme.colorScheme.error,
+                color: statusColor,
               ),
             ),
           ],
         ),
       ],
     );
+  }
+
+  static String _formatAmount(double amount) {
+    if (amount == amount.roundToDouble()) {
+      return amount.toStringAsFixed(0);
+    }
+
+    return amount.toStringAsFixed(2);
   }
 }
