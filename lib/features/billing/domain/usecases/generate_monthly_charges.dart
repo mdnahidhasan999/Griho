@@ -2,6 +2,7 @@ import '../../../rents/domain/entities/generate_monthly_rent_request.dart';
 import '../../../rents/domain/entities/monthly_rent.dart';
 import '../../../rents/domain/usecases/generate_monthly_rent.dart';
 import '../../../tenants/domain/entities/tenancy_billing_target.dart';
+import '../entities/billing_rule.dart';
 import '../entities/generate_monthly_charges_result.dart';
 import 'generate_monthly_bills.dart';
 
@@ -21,6 +22,8 @@ class GenerateMonthlyCharges {
     required DateTime billingPeriodStart,
     required DateTime billingPeriodEnd,
     required DateTime dueDate,
+    bool generateRent = true,
+    BillingValueType? onlyBillValueType,
   }) async {
     final normalizedOwnerId = ownerId.trim();
     final normalizedPropertyId = propertyId.trim();
@@ -47,38 +50,39 @@ class GenerateMonthlyCharges {
 
     final generatedRents = <MonthlyRent>[];
 
-    for (final target in tenancyTargets) {
-      final unitId = target.unitId.trim();
-      final tenantId = target.tenantId.trim();
+    if (generateRent) {
+      for (final target in tenancyTargets) {
+        final unitId = target.unitId.trim();
+        final tenantId = target.tenantId.trim();
 
-      if (unitId.isEmpty) {
-        throw ArgumentError(
-          'Unit ID cannot be empty in tenancy billing target.',
+        if (unitId.isEmpty) {
+          throw ArgumentError(
+            'Unit ID cannot be empty in tenancy billing target.',
+          );
+        }
+
+        if (tenantId.isEmpty) {
+          throw ArgumentError(
+            'Tenant ID cannot be empty in tenancy billing target.',
+          );
+        }
+
+        final rentRequest = GenerateMonthlyRentRequest(
+          ownerId: normalizedOwnerId,
+          propertyId: normalizedPropertyId,
+          unitId: unitId,
+          tenantId: tenantId,
+          tenantUserId: target.tenantUserId?.trim(),
+          billingPeriodStart: billingPeriodStart,
+          billingPeriodEnd: billingPeriodEnd,
+          dueDate: dueDate,
+          tenancyStart: target.tenancyStart,
+          tenancyEnd: target.tenancyEnd,
         );
+
+        final rents = await _generateMonthlyRent(rentRequest);
+        generatedRents.addAll(rents);
       }
-
-      if (tenantId.isEmpty) {
-        throw ArgumentError(
-          'Tenant ID cannot be empty in tenancy billing target.',
-        );
-      }
-
-      final rentRequest = GenerateMonthlyRentRequest(
-        ownerId: normalizedOwnerId,
-        propertyId: normalizedPropertyId,
-        unitId: unitId,
-        tenantId: tenantId,
-        tenantUserId: target.tenantUserId?.trim(),
-        billingPeriodStart: billingPeriodStart,
-        billingPeriodEnd: billingPeriodEnd,
-        dueDate: dueDate,
-        tenancyStart: target.tenancyStart,
-        tenancyEnd: target.tenancyEnd,
-      );
-
-      final rents = await _generateMonthlyRent(rentRequest);
-
-      generatedRents.addAll(rents);
     }
 
     final billTargets = <MonthlyBillTarget>[
@@ -99,6 +103,7 @@ class GenerateMonthlyCharges {
       billingPeriodStart: billingPeriodStart,
       billingPeriodEnd: billingPeriodEnd,
       dueDate: dueDate,
+      onlyValueType: onlyBillValueType,
     );
 
     return GenerateMonthlyChargesResult(

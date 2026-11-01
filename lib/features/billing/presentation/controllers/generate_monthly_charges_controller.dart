@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../tenants/domain/entities/tenancy_billing_target.dart';
+import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/generate_monthly_charges_result.dart';
 import '../providers/monthly_bill_provider.dart';
 import '../providers/monthly_charge_generation_provider.dart';
@@ -96,6 +97,8 @@ class GenerateMonthlyChargesController
     required DateTime billingPeriodStart,
     required DateTime billingPeriodEnd,
     required DateTime dueDate,
+    bool generateRent = true,
+    BillingValueType? onlyBillValueType,
   }) async {
     state = const AsyncValue.loading();
 
@@ -110,6 +113,8 @@ class GenerateMonthlyChargesController
         billingPeriodStart: billingPeriodStart,
         billingPeriodEnd: billingPeriodEnd,
         dueDate: dueDate,
+        generateRent: generateRent,
+        onlyBillValueType: onlyBillValueType,
       );
 
       // Lock this property + month so we don't repeat unnecessary Firebase reads

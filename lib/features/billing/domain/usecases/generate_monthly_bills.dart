@@ -20,6 +20,7 @@ class GenerateMonthlyBills {
     required DateTime billingPeriodStart,
     required DateTime billingPeriodEnd,
     required DateTime dueDate,
+    BillingValueType? onlyValueType,
   }) async {
     final normalizedOwnerId = ownerId.trim();
     final normalizedPropertyId = propertyId.trim();
@@ -82,10 +83,10 @@ class GenerateMonthlyBills {
 
     final existingPeriodBills = await _monthlyBillRepository
         .getMonthlyBillsByPropertyAndPeriod(
-          ownerId: normalizedOwnerId,
-          propertyId: normalizedPropertyId,
-          billingPeriodStart: billingPeriodStart,
-        );
+      ownerId: normalizedOwnerId,
+      propertyId: normalizedPropertyId,
+      billingPeriodStart: billingPeriodStart,
+    );
 
     final existingBillKeys = <String>{
       for (final bill in existingPeriodBills)
@@ -114,7 +115,13 @@ class GenerateMonthlyBills {
         target: normalizedTarget,
       );
 
-      for (final rule in applicableRules) {
+      final selectedRules = onlyValueType == null
+          ? applicableRules
+          : applicableRules
+          .where((rule) => rule.valueType == onlyValueType)
+          .toList();
+
+      for (final rule in selectedRules) {
         final billType = _toMonthlyBillType(rule.chargeType);
 
         if (billType == MonthlyBillType.rent) {
@@ -343,7 +350,7 @@ class GenerateMonthlyBills {
   bool _isDuplicateBillError(StateError error) {
     return error.message.toString().contains(
       'Monthly bill already exists for this '
-      'tenant, bill type and billing period.',
+          'tenant, bill type and billing period.',
     );
   }
 }
@@ -382,12 +389,12 @@ class MonthlyBillTarget {
       unitId: normalizedUnitId,
       tenantId: normalizedTenantId,
       tenantUserId:
-          normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
+      normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
           ? null
           : normalizedTenantUserId,
       tenancyHistoryId:
-          normalizedTenancyHistoryId == null ||
-              normalizedTenancyHistoryId.isEmpty
+      normalizedTenancyHistoryId == null ||
+          normalizedTenancyHistoryId.isEmpty
           ? null
           : normalizedTenancyHistoryId,
     );

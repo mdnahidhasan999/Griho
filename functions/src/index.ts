@@ -674,6 +674,7 @@ function parseBillingRule(
   };
 }
 
+
 function isRuleEligibleForPeriod({
   rule,
   billingPeriodStart,
@@ -681,38 +682,36 @@ function isRuleEligibleForPeriod({
   rule: BillingRule;
   billingPeriodStart: Date;
 }): boolean {
+  // Inactive rules must never generate new bills.
+  if (!rule.isActive) {
+    return false;
+  }
+
   const targetMonth = monthStart(billingPeriodStart);
   const startMonth = monthStart(rule.effectiveFrom);
 
+  // Rule cannot apply before its effective month.
   if (targetMonth < startMonth) {
     return false;
   }
 
   // effectiveTo is exclusive.
-  if (
-    rule.effectiveTo !== null &&
-    targetMonth >= monthStart(rule.effectiveTo)
-  ) {
-    return false;
+  if (rule.effectiveTo !== null) {
+    const endMonth = monthStart(rule.effectiveTo);
+
+    if (targetMonth >= endMonth) {
+      return false;
+    }
+  } else if (rule.valueType === "variable") {
+    // Variable rule without effectiveTo applies
+    // only to its effectiveFrom month.
+    return (
+      targetMonth.getUTCFullYear() === startMonth.getUTCFullYear() &&
+      targetMonth.getUTCMonth() === startMonth.getUTCMonth()
+    );
   }
 
-  // Inactive Variable rules must never generate new bills.
-  if (!rule.isActive && rule.valueType === "variable") {
-    return false;
-  }
-
-  // An inactive Fixed rule with an effectiveTo represents
-  // a historical version superseded by a newer Fixed rule.
-  //
-  // An inactive Fixed rule without effectiveTo is not applicable.
-  if (
-    !rule.isActive &&
-    rule.valueType === "fixed" &&
-    rule.effectiveTo === null
-  ) {
-    return false;
-  }
-
+  // Fixed rules recur while their effective period is valid.
   return true;
 }
 
@@ -971,7 +970,11 @@ async function createMonthlyUtilityBills({
       target,
     );
 
-    for (const rule of applicableRules) {
+const automaticRules = applicableRules.filter(
+  (rule) => rule.valueType === "fixed",
+);
+
+   for (const rule of automaticRules) {
       const type = rule.chargeType;
 
       const candidateKey = buildBillKey(
