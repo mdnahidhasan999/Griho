@@ -8,12 +8,9 @@ enum PaymentMethod { cash, bank, bkash, nagad, other }
 enum PaymentReviewStatus { pending, confirmed, rejected }
 
 class PaymentWorkflowDataSource {
-  PaymentWorkflowDataSource({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? auth,
-  })
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  PaymentWorkflowDataSource({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -22,9 +19,9 @@ class PaymentWorkflowDataSource {
       _firestore.collection('paymentTransactions');
 
   CollectionReference<Map<String, dynamic>> _billCollection(
-      String collectionName,) {
-    if (collectionName != 'monthlyBills' &&
-        collectionName != 'monthlyRents') {
+    String collectionName,
+  ) {
+    if (collectionName != 'monthlyBills' && collectionName != 'monthlyRents') {
       throw ArgumentError('Unsupported bill collection.');
     }
 
@@ -38,8 +35,7 @@ class PaymentWorkflowDataSource {
       return 'monthlyBills';
     }
 
-    if (normalized != 'monthlyBills' &&
-        normalized != 'monthlyRents') {
+    if (normalized != 'monthlyBills' && normalized != 'monthlyRents') {
       throw ArgumentError('Unsupported bill collection.');
     }
 
@@ -56,10 +52,11 @@ class PaymentWorkflowDataSource {
     return user.uid;
   }
 
-  double _readAmount(Map<String, dynamic> data,
-      String field, {
-        double? defaultValue,
-      }) {
+  double _readAmount(
+    Map<String, dynamic> data,
+    String field, {
+    double? defaultValue,
+  }) {
     final value = data[field];
 
     if (value == null && defaultValue != null) {
@@ -100,18 +97,13 @@ class PaymentWorkflowDataSource {
     }
 
     if (!requestedAmount.isFinite || requestedAmount <= 0) {
-      throw ArgumentError(
-        'Payment amount must be greater than zero.',
-      );
+      throw ArgumentError('Payment amount must be greater than zero.');
     }
 
     final remaining = billAmount - paidAmount - pendingAmount;
 
-    if (remaining <= 0 ||
-        requestedAmount > remaining + 0.001) {
-      throw StateError(
-        'Payment exceeds the remaining payable balance.',
-      );
+    if (remaining <= 0 || requestedAmount > remaining + 0.001) {
+      throw StateError('Payment exceeds the remaining payable balance.');
     }
   }
 
@@ -142,7 +134,6 @@ class PaymentWorkflowDataSource {
   // ------------------------------------------------------------
   // SUBMIT SINGLE PAYMENT
   // ------------------------------------------------------------
-
   Future<String> submitPayment({
     required String billId,
     required double amount,
@@ -155,30 +146,21 @@ class PaymentWorkflowDataSource {
     final uid = _currentUid;
 
     final normalizedBillId = billId.trim();
-    final normalizedCollection = _normalizeBillCollection(
-      billCollection,
-    );
+    final normalizedCollection = _normalizeBillCollection(billCollection);
 
     if (normalizedBillId.isEmpty) {
       throw ArgumentError('Bill ID is required.');
     }
 
     if (!amount.isFinite || amount <= 0) {
-      throw ArgumentError(
-        'Payment amount must be greater than zero.',
-      );
+      throw ArgumentError('Payment amount must be greater than zero.');
     }
 
-    final billRef = _billCollection(
-      normalizedCollection,
-    ).doc(normalizedBillId);
+    final billRef = _billCollection(normalizedCollection).doc(normalizedBillId);
 
     final paymentRef = _payments.doc();
 
-    final normalizedBatchId =
-    batchId
-        ?.trim()
-        .isNotEmpty == true
+    final normalizedBatchId = batchId?.trim().isNotEmpty == true
         ? batchId!.trim()
         : paymentRef.id;
 
@@ -192,24 +174,16 @@ class PaymentWorkflowDataSource {
       final bill = billSnapshot.data()!;
 
       if (bill['tenantUserId'] != uid) {
-        throw StateError(
-          'You cannot submit payment for this bill.',
-        );
+        throw StateError('You cannot submit payment for this bill.');
       }
 
       if (_isClosedBill(bill)) {
-        throw StateError(
-          'This bill cannot receive payments.',
-        );
+        throw StateError('This bill cannot receive payments.');
       }
 
       final billAmount = _readAmount(bill, 'amount');
 
-      final paidAmount = _readAmount(
-        bill,
-        'paidAmount',
-        defaultValue: 0,
-      );
+      final paidAmount = _readAmount(bill, 'paidAmount', defaultValue: 0);
 
       final pendingAmount = _readAmount(
         bill,
@@ -268,9 +242,8 @@ class PaymentWorkflowDataSource {
   }
 
   // ------------------------------------------------------------
-  // SUBMIT MULTIPLE PAYMENTS
+  // SUBMIT MULTIPLE PAYMENTS (COMBINED PAYMENT)
   // ------------------------------------------------------------
-
   Future<Map<String, String>> submitPayments({
     required Map<String, double> amountsByBillId,
     required Map<String, String> collectionsByBillId,
@@ -289,14 +262,10 @@ class PaymentWorkflowDataSource {
             .toSet()
             .difference(collectionsByBillId.keys.toSet())
             .isNotEmpty) {
-      throw ArgumentError(
-        'Every selected bill must have a collection name.',
-      );
+      throw ArgumentError('Every selected bill must have a collection name.');
     }
 
-    final batchId = _payments
-        .doc()
-        .id;
+    final batchId = _payments.doc().id;
 
     final createdPayments = <String, String>{};
 
@@ -320,12 +289,10 @@ class PaymentWorkflowDataSource {
   }
 
   // ------------------------------------------------------------
-  // CONFIRM PAYMENT
+  // CONFIRM PAYMENT (OWNER ACTION)
   // ------------------------------------------------------------
 
-  Future<void> confirmPayment({
-    required String paymentId,
-  }) async {
+  Future<void> confirmPayment({required String paymentId}) async {
     final uid = _currentUid;
 
     final normalizedPaymentId = paymentId.trim();
@@ -346,23 +313,17 @@ class PaymentWorkflowDataSource {
       final payment = paymentSnapshot.data()!;
 
       if (payment['ownerId'] != uid) {
-        throw StateError(
-          'Only the bill owner can confirm payment.',
-        );
+        throw StateError('Only the bill owner can confirm payment.');
       }
 
       if (payment['status'] != PaymentReviewStatus.pending.name) {
-        throw StateError(
-          'This payment has already been reviewed.',
-        );
+        throw StateError('This payment has already been reviewed.');
       }
 
       final billId = payment['billId'];
       final paymentAmountValue = payment['amount'];
 
-      if (billId is! String ||
-          billId.isEmpty ||
-          paymentAmountValue is! num) {
+      if (billId is! String || billId.isEmpty || paymentAmountValue is! num) {
         throw StateError('Payment request data is invalid.');
       }
 
@@ -376,9 +337,7 @@ class PaymentWorkflowDataSource {
         payment['billCollection'] as String?,
       );
 
-      final billRef = _billCollection(
-        billCollection,
-      ).doc(billId);
+      final billRef = _billCollection(billCollection).doc(billId);
 
       final billSnapshot = await transaction.get(billRef);
 
@@ -388,32 +347,22 @@ class PaymentWorkflowDataSource {
 
       final bill = billSnapshot.data()!;
 
-      _validatePaymentOwnership(
-        bill: bill,
-        payment: payment,
-        ownerId: uid,
-      );
+      _validatePaymentOwnership(bill: bill, payment: payment, ownerId: uid);
 
       if (_isClosedBill(bill)) {
-        throw StateError(
-          'This bill cannot receive this payment.',
-        );
+        throw StateError('This bill cannot receive this payment.');
       }
 
       if (payment['reservationApplied'] != true) {
         throw StateError(
           'Payment reservation is missing. '
-              'Please reconcile this payment before confirming.',
+          'Please reconcile this payment before confirming.',
         );
       }
 
       final billAmount = _readAmount(bill, 'amount');
 
-      final paidAmount = _readAmount(
-        bill,
-        'paidAmount',
-        defaultValue: 0,
-      );
+      final paidAmount = _readAmount(bill, 'paidAmount', defaultValue: 0);
 
       final pendingAmount = _readAmount(
         bill,
@@ -422,21 +371,16 @@ class PaymentWorkflowDataSource {
       );
 
       if (pendingAmount + 0.001 < paymentAmount) {
-        throw StateError(
-          'Payment reservation data is invalid.',
-        );
+        throw StateError('Payment reservation data is invalid.');
       }
 
       if (paidAmount + paymentAmount > billAmount + 0.001) {
-        throw StateError(
-          'Payment exceeds the remaining bill balance.',
-        );
+        throw StateError('Payment exceeds the remaining bill balance.');
       }
 
       final newPaidAmount = paidAmount + paymentAmount;
 
-      final newPendingAmount =
-      (pendingAmount - paymentAmount)
+      final newPendingAmount = (pendingAmount - paymentAmount)
           .clamp(0.0, double.infinity)
           .toDouble();
 
@@ -463,7 +407,7 @@ class PaymentWorkflowDataSource {
   }
 
   // ------------------------------------------------------------
-  // REJECT PAYMENT
+  // REJECT PAYMENT (OWNER ACTION)
   // ------------------------------------------------------------
 
   Future<void> rejectPayment({
@@ -480,9 +424,7 @@ class PaymentWorkflowDataSource {
     }
 
     if (normalizedReason.isEmpty) {
-      throw ArgumentError(
-        'Please provide a rejection reason.',
-      );
+      throw ArgumentError('Please provide a rejection reason.');
     }
 
     final paymentRef = _payments.doc(normalizedPaymentId);
@@ -497,23 +439,17 @@ class PaymentWorkflowDataSource {
       final payment = paymentSnapshot.data()!;
 
       if (payment['ownerId'] != uid) {
-        throw StateError(
-          'Only the bill owner can reject payment.',
-        );
+        throw StateError('Only the bill owner can reject payment.');
       }
 
       if (payment['status'] != PaymentReviewStatus.pending.name) {
-        throw StateError(
-          'This payment has already been reviewed.',
-        );
+        throw StateError('This payment has already been reviewed.');
       }
 
       final billId = payment['billId'];
       final paymentAmountValue = payment['amount'];
 
-      if (billId is! String ||
-          billId.isEmpty ||
-          paymentAmountValue is! num) {
+      if (billId is! String || billId.isEmpty || paymentAmountValue is! num) {
         throw StateError('Payment request data is invalid.');
       }
 
@@ -527,9 +463,7 @@ class PaymentWorkflowDataSource {
         payment['billCollection'] as String?,
       );
 
-      final billRef = _billCollection(
-        billCollection,
-      ).doc(billId);
+      final billRef = _billCollection(billCollection).doc(billId);
 
       final billSnapshot = await transaction.get(billRef);
 
@@ -539,11 +473,7 @@ class PaymentWorkflowDataSource {
 
       final bill = billSnapshot.data()!;
 
-      _validatePaymentOwnership(
-        bill: bill,
-        payment: payment,
-        ownerId: uid,
-      );
+      _validatePaymentOwnership(bill: bill, payment: payment, ownerId: uid);
 
       if (payment['reservationApplied'] == true) {
         final pendingAmount = _readAmount(
@@ -553,13 +483,10 @@ class PaymentWorkflowDataSource {
         );
 
         if (pendingAmount + 0.001 < paymentAmount) {
-          throw StateError(
-            'Payment reservation data is invalid.',
-          );
+          throw StateError('Payment reservation data is invalid.');
         }
 
-        final newPendingAmount =
-        (pendingAmount - paymentAmount)
+        final newPendingAmount = (pendingAmount - paymentAmount)
             .clamp(0.0, double.infinity)
             .toDouble();
 
@@ -581,20 +508,13 @@ class PaymentWorkflowDataSource {
   }
 
   // ------------------------------------------------------------
-  // TENANT PAYMENT STREAM
+  // STREAMS
   // ------------------------------------------------------------
-
   Stream<QuerySnapshot<Map<String, dynamic>>> watchTenantPayments() {
     final uid = _currentUid;
 
-    return _payments
-        .where('tenantUserId', isEqualTo: uid)
-        .snapshots();
+    return _payments.where('tenantUserId', isEqualTo: uid).snapshots();
   }
-
-  // ------------------------------------------------------------
-  // OWNER PAYMENT STREAM
-  // ------------------------------------------------------------
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchOwnerPayments({
     required String ownerId,
@@ -604,13 +524,13 @@ class PaymentWorkflowDataSource {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedOwnerId.isEmpty || normalizedOwnerId != uid) {
-      throw StateError(
-        'You can only view your own property payments.',
-      );
+      throw StateError('You can only view your own property payments.');
     }
 
-    Query<Map<String, dynamic>> query =
-    _payments.where('ownerId', isEqualTo: uid);
+    Query<Map<String, dynamic>> query = _payments.where(
+      'ownerId',
+      isEqualTo: uid,
+    );
 
     if (pendingOnly) {
       query = query.where(

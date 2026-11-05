@@ -117,8 +117,7 @@ class _OwnerBillingSetupScreenState
     for (final unit in units) {
       floors.add(unit.floorNumber);
     }
-    return floors.toList()
-      ..sort();
+    return floors.toList()..sort();
   }
 
   String _floorLabel(int floorNumber) {
@@ -140,17 +139,15 @@ class _OwnerBillingSetupScreenState
   String _unitLabel(Unit unit) {
     final unitNumber = unit.unitNumber.trim();
     if (unit.name != null && unit.name!.trim().isNotEmpty) {
-      return '${unit.name!.trim()} • Unit $unitNumber';
+      return '${unit.name!.trim()} - Unit $unitNumber';
     }
     return 'Unit $unitNumber';
   }
 
   String _tenantLabel(Tenant tenant) {
     final name = tenant.name.trim();
-    if (tenant.phone
-        .trim()
-        .isNotEmpty) {
-      return '$name • ${tenant.phone.trim()}';
+    if (tenant.phone.trim().isNotEmpty) {
+      return '$name (${tenant.phone.trim()})';
     }
     return name;
   }
@@ -225,8 +222,8 @@ class _OwnerBillingSetupScreenState
 
       ref.invalidate(
         propertyBillingRulesProvider((
-        ownerId: ownerId,
-        propertyId: _selectedPropertyId!.trim(),
+          ownerId: ownerId,
+          propertyId: _selectedPropertyId!.trim(),
         )),
       );
 
@@ -267,10 +264,7 @@ class _OwnerBillingSetupScreenState
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
@@ -401,7 +395,7 @@ class _OwnerBillingSetupScreenState
                 propertiesAsync.when(
                   loading: () => const LinearProgressIndicator(),
                   error: (error, stack) =>
-                  const Text('Unable to load properties.'),
+                      const Text('Unable to load properties.'),
                   data: (properties) {
                     if (properties.isEmpty) {
                       return const Text(
@@ -411,7 +405,7 @@ class _OwnerBillingSetupScreenState
 
                     return DropdownButtonFormField<String>(
                       initialValue:
-                      properties.any((p) => p.id == _selectedPropertyId)
+                          properties.any((p) => p.id == _selectedPropertyId)
                           ? _selectedPropertyId
                           : null,
                       decoration: const InputDecoration(
@@ -431,14 +425,14 @@ class _OwnerBillingSetupScreenState
                       onChanged: _isSaving
                           ? null
                           : (value) {
-                        setState(() {
-                          _selectedPropertyId = value;
-                          _selectedScopeId =
-                          _scopeType == BillingScopeType.property
-                              ? value
-                              : null;
-                        });
-                      },
+                              setState(() {
+                                _selectedPropertyId = value;
+                                _selectedScopeId =
+                                    _scopeType == BillingScopeType.property
+                                    ? value
+                                    : null;
+                              });
+                            },
                       validator: (value) {
                         if (value == null) {
                           return 'Please select a property.';
@@ -506,10 +500,10 @@ class _OwnerBillingSetupScreenState
                   onChanged: _isSaving
                       ? null
                       : (value) {
-                    if (value != null) {
-                      setState(() => _chargeType = value);
-                    }
-                  },
+                          if (value != null) {
+                            setState(() => _chargeType = value);
+                          }
+                        },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -524,9 +518,7 @@ class _OwnerBillingSetupScreenState
                   ),
                   validator: (value) {
                     if (_chargeType == BillingChargeType.other &&
-                        (value == null || value
-                            .trim()
-                            .isEmpty)) {
+                        (value == null || value.trim().isEmpty)) {
                       return 'Title is required for "Other" charge type.';
                     }
                     return null;
@@ -647,13 +639,13 @@ class _OwnerBillingSetupScreenState
                 onPressed: _isSaving ? null : _save,
                 icon: _isSaving
                     ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Icon(Icons.check_circle_outline_rounded),
                 label: Text(
                   _isSaving
@@ -769,7 +761,7 @@ class _OwnerBillingSetupScreenState
           items: floors
               .map(
                 (f) => DropdownMenuItem(value: f, child: Text(_floorLabel(f))),
-          )
+              )
               .toList(),
           onChanged: _isSaving
               ? null
@@ -807,8 +799,8 @@ class _OwnerBillingSetupScreenState
           items: units
               .map(
                 (u) =>
-                DropdownMenuItem(value: u.id, child: Text(_unitLabel(u))),
-          )
+                    DropdownMenuItem(value: u.id, child: Text(_unitLabel(u))),
+              )
               .toList(),
           onChanged: _isSaving
               ? null
@@ -846,8 +838,8 @@ class _OwnerBillingSetupScreenState
           items: tenants
               .map(
                 (t) =>
-                DropdownMenuItem(value: t.id, child: Text(_tenantLabel(t))),
-          )
+                    DropdownMenuItem(value: t.id, child: Text(_tenantLabel(t))),
+              )
               .toList(),
           onChanged: _isSaving
               ? null

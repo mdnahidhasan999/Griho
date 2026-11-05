@@ -15,15 +15,9 @@ class MonthlyRent {
   final String rentRateId;
 
   /// Monthly contractual rent amount from the applicable rent rate.
-  ///
-  /// This is the monthly-rate snapshot, not necessarily the final
-  /// amount charged for this billing period.
   final double monthlyRate;
 
   /// Final rent amount charged for this billing segment.
-  ///
-  /// For a full-month tenancy this normally equals [monthlyRate].
-  /// For a partial-month tenancy this is the prorated amount.
   final double amount;
 
   /// Total amount already paid against this rent segment.
@@ -36,12 +30,6 @@ class MonthlyRent {
   final int daysInBillingPeriod;
 
   /// Proration factor used to calculate [amount].
-  ///
-  /// Full month:
-  ///   1.0
-  ///
-  /// Partial month:
-  ///   chargeableDays / daysInBillingPeriod
   final double prorationFactor;
 
   /// First day of the billing month.
@@ -113,14 +101,8 @@ class MonthlyRent {
     }
 
     final now = DateTime.now();
-
     final today = DateTime(now.year, now.month, now.day);
-
-    final deadline = DateTime(
-      dueDate.year,
-      dueDate.month,
-      dueDate.day,
-    );
+    final deadline = DateTime(dueDate.year, dueDate.month, dueDate.day);
 
     return today.isAfter(deadline);
   }

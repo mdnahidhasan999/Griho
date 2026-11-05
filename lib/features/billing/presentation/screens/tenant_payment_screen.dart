@@ -7,6 +7,9 @@ import '../../domain/entities/monthly_bill.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
 import '../providers/payment_workflow_provider.dart';
 
+typedef PaymentQuerySnapshot = QuerySnapshot<Map<String, dynamic>>;
+typedef PaymentDocSnapshot = QueryDocumentSnapshot<Map<String, dynamic>>;
+
 class TenantPaymentScreen extends ConsumerStatefulWidget {
   const TenantPaymentScreen({super.key});
 
@@ -181,23 +184,12 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  // ------------------------------------------------------------
-  // PAYMENT HISTORY GROUPING
-  // ------------------------------------------------------------
-
-  List<_PaymentGroup> _groupPayments(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
-    final grouped =
-        <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+  List<_PaymentGroup> _groupPayments(List<PaymentDocSnapshot> docs) {
+    final grouped = <String, List<PaymentDocSnapshot>>{};
 
     for (final doc in docs) {
       final data = doc.data();
-
-      // New payments should contain a common batchId.
-      // Legacy payments without batchId remain individual groups.
       final batchId = (data['batchId'] ?? '').toString().trim();
-
       final groupKey = batchId.isNotEmpty ? batchId : 'legacy_${doc.id}';
 
       grouped.putIfAbsent(groupKey, () => []).add(doc);
@@ -223,7 +215,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
           .toSet();
 
       final overallStatus = _resolveGroupStatus(statuses);
-
       final firstData = payments.first.data();
 
       return _PaymentGroup(
@@ -254,33 +245,18 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     if (value is Timestamp) {
       return value.millisecondsSinceEpoch;
     }
-
     if (value is DateTime) {
       return value.millisecondsSinceEpoch;
     }
-
     return 0;
   }
 
   String _resolveGroupStatus(Set<String> statuses) {
     if (statuses.isEmpty) return 'pending';
-
-    if (statuses.length == 1) {
-      return statuses.first;
-    }
-
-    if (statuses.every((status) => status == 'confirmed')) {
-      return 'confirmed';
-    }
-
-    if (statuses.every((status) => status == 'rejected')) {
-      return 'rejected';
-    }
-
-    if (statuses.contains('pending')) {
-      return 'pending';
-    }
-
+    if (statuses.length == 1) return statuses.first;
+    if (statuses.every((status) => status == 'confirmed')) return 'confirmed';
+    if (statuses.every((status) => status == 'rejected')) return 'rejected';
+    if (statuses.contains('pending')) return 'pending';
     return 'partially processed';
   }
 
@@ -327,13 +303,9 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     return 'Bill';
   }
 
-  // ------------------------------------------------------------
-  // PAYMENT HISTORY CARD
-  // ------------------------------------------------------------
-
   Widget _buildPaymentHistory(
     List<MonthlyBill> bills,
-    AsyncValue<QuerySnapshot<Map<String, dynamic>>> paymentHistory,
+    AsyncValue<PaymentQuerySnapshot> paymentHistory,
   ) {
     final theme = Theme.of(context);
 
@@ -411,7 +383,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                   ),
                   children: [
                     const Divider(height: 12),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -430,9 +401,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 14),
-
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -442,28 +411,20 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
                     ...group.payments.map((paymentDoc) {
                       final data = paymentDoc.data();
-
                       final amount = data['amount'];
                       final paidAmount = amount is num
                           ? amount.toDouble()
                           : 0.0;
-
                       final billStatus = (data['status'] ?? 'pending')
                           .toString()
                           .toLowerCase();
-
                       final billStatusColor = _statusColor(billStatus);
-
                       final billTitle = _paymentBillTitle(data, bills);
-
                       final collection =
                           (data['billCollection'] ?? 'monthlyBills').toString();
-
                       final reason = (data['rejectionReason'] ?? '').toString();
 
                       return Container(
@@ -495,9 +456,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 ),
                               ],
                             ),
-
                             const SizedBox(height: 8),
-
                             Row(
                               children: [
                                 Expanded(
@@ -512,7 +471,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 ),
                               ],
                             ),
-
                             if (reason.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Text(
@@ -527,20 +485,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                         ),
                       );
                     }),
-
-                    if (group.payments.length > 1) ...[
-                      const Divider(height: 20),
-                      _InfoRow(
-                        label: 'Total Submitted Bills',
-                        value: '${group.payments.length}',
-                      ),
-                      const SizedBox(height: 6),
-                      _InfoRow(
-                        label: 'Combined Payment Amount',
-                        value: '৳${_money(group.totalAmount)}',
-                        isHighlight: true,
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -551,16 +495,10 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     );
   }
 
-  // ------------------------------------------------------------
-  // MAIN SCREEN
-  // ------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     final billsAsync = ref.watch(currentTenantMonthlyBillsProvider);
-
     final paymentHistory = ref.watch(tenantPaymentTransactionsProvider);
 
     return Scaffold(
@@ -595,7 +533,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // INFORMATION CARD
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -644,7 +581,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
               const SizedBox(height: 24),
 
-              // OUTSTANDING BILLS HEADER
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -689,7 +625,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
               const SizedBox(height: 8),
 
-              // EMPTY BILLS
               if (payableBills.isEmpty)
                 const Center(
                   child: Padding(
@@ -711,10 +646,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                   ),
                 )
               else ...[
-                // INDIVIDUAL SELECTABLE BILLS
                 ...payableBills.map((bill) {
                   final selected = _selectedBillIds.contains(bill.id);
-
                   final controller = _amountControllerFor(bill);
 
                   return AnimatedContainer(
@@ -769,8 +702,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'Total: ৳${_money(bill.amount)}  •  '
-                                      'Paid: ৳${_money(bill.paidAmount)}',
+                                      'Total: ৳${_money(bill.amount)} • Paid: ৳${_money(bill.paidAmount)}',
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(
                                             color: theme
@@ -802,7 +734,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                               ),
                             ],
                           ),
-
                           if (selected) ...[
                             const Divider(height: 20),
                             TextField(
@@ -833,7 +764,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
                 const SizedBox(height: 12),
 
-                // PAYMENT SUMMARY
                 if (_selectedBillIds.isNotEmpty) ...[
                   Card(
                     elevation: 0,
@@ -852,24 +782,18 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-
                           const Divider(height: 20),
-
                           _InfoRow(
                             label: 'Selected Bills Count',
                             value: '${_selectedBillIds.length}',
                           ),
-
                           const SizedBox(height: 6),
-
                           _InfoRow(
                             label: 'Total Payable Amount',
                             value: '৳${_money(_selectedTotal(payableBills))}',
                             isHighlight: true,
                           ),
-
                           const SizedBox(height: 20),
-
                           DropdownButtonFormField<PaymentMethod>(
                             initialValue: _method,
                             decoration: InputDecoration(
@@ -898,9 +822,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                     }
                                   },
                           ),
-
                           const SizedBox(height: 16),
-
                           TextField(
                             controller: _referenceController,
                             enabled: !_submitting,
@@ -922,9 +844,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                               isDense: true,
                             ),
                           ),
-
                           const SizedBox(height: 16),
-
                           TextField(
                             controller: _noteController,
                             enabled: !_submitting,
@@ -939,9 +859,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                               prefixIcon: const Icon(Icons.note_alt_rounded),
                             ),
                           ),
-
                           const SizedBox(height: 24),
-
                           SizedBox(
                             width: double.infinity,
                             height: 50,
@@ -992,20 +910,14 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
               ],
 
               const SizedBox(height: 32),
-
-              // PAYMENT HISTORY HEADER
               Text(
                 'Payment History & Status',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
-
               const SizedBox(height: 12),
-
-              // GROUPED PAYMENT HISTORY
               _buildPaymentHistory(bills, paymentHistory),
-
               const SizedBox(height: 36),
             ],
           );
@@ -1030,10 +942,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 }
 
-// ------------------------------------------------------------
-// PAYMENT GROUP MODEL
-// ------------------------------------------------------------
-
 class _PaymentGroup {
   const _PaymentGroup({
     required this.id,
@@ -1046,23 +954,13 @@ class _PaymentGroup {
   });
 
   final String id;
-
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> payments;
-
+  final List<PaymentDocSnapshot> payments;
   final double totalAmount;
-
   final String status;
-
   final String method;
-
   final String reference;
-
   final dynamic createdAt;
 }
-
-// ------------------------------------------------------------
-// STATUS BADGE
-// ------------------------------------------------------------
 
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.status, required this.color});
@@ -1089,10 +987,6 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
-
-// ------------------------------------------------------------
-// INFO ROW
-// ------------------------------------------------------------
 
 class _InfoRow extends StatelessWidget {
   const _InfoRow({
@@ -1135,10 +1029,6 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
-
-// ------------------------------------------------------------
-// ERROR STATE
-// ------------------------------------------------------------
 
 class _ErrorState extends StatelessWidget {
   const _ErrorState({required this.message, required this.onRetry});

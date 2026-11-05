@@ -7,17 +7,9 @@ enum BillingChargeType {
   other,
 }
 
-enum BillingValueType {
-  fixed,
-  variable,
-}
+enum BillingValueType { fixed, variable }
 
-enum BillingScopeType {
-  property,
-  floor,
-  unit,
-  tenant,
-}
+enum BillingScopeType { property, floor, unit, tenant }
 
 class BillingRule {
   final String id;
@@ -79,6 +71,53 @@ class BillingRule {
     required this.updatedAt,
   });
 
+  /// Checks whether this rule is active and eligible for the given billing month.
+  ///
+  /// - Fixed rules continue every month from [effectiveFrom] until [effectiveTo] (if set).
+  /// - Variable rules without [effectiveTo] apply strictly to their [effectiveFrom] month,
+  ///   so in the following month the Fixed rule automatically becomes effective again.
+  bool isEffectiveForMonth(DateTime date) {
+    if (!isActive) {
+      return false;
+    }
+
+    final targetMonth = DateTime(date.year, date.month, 1);
+    final startMonth = DateTime(effectiveFrom.year, effectiveFrom.month, 1);
+
+    if (targetMonth.isBefore(startMonth)) {
+      return false;
+    }
+
+    if (effectiveTo != null) {
+      final endMonth = DateTime(effectiveTo!.year, effectiveTo!.month, 1);
+      if (!targetMonth.isBefore(endMonth)) {
+        return false;
+      }
+    } else if (valueType == BillingValueType.variable) {
+      return targetMonth.year == startMonth.year &&
+          targetMonth.month == startMonth.month;
+    }
+
+    return true;
+  }
+
+  /// Creates an immutable snapshot map to store inside generated monthly bills.
+  Map<String, dynamic> toImmutableSnapshot() {
+    return {
+      'ruleId': id,
+      'ownerId': ownerId,
+      'propertyId': propertyId,
+      'scopeType': scopeType.name,
+      'scopeId': scopeId,
+      'chargeType': chargeType.name,
+      'valueType': valueType.name,
+      'amount': amount,
+      'title': title,
+      'effectiveFrom': effectiveFrom.toIso8601String(),
+      'effectiveTo': effectiveTo?.toIso8601String(),
+    };
+  }
+
   BillingRule copyWith({
     String? id,
     String? ownerId,
@@ -106,14 +145,9 @@ class BillingRule {
       chargeType: chargeType ?? this.chargeType,
       valueType: valueType ?? this.valueType,
       amount: amount ?? this.amount,
-      title: clearTitle
-          ? null
-          : title ?? this.title,
-      effectiveFrom:
-      effectiveFrom ?? this.effectiveFrom,
-      effectiveTo: clearEffectiveTo
-          ? null
-          : effectiveTo ?? this.effectiveTo,
+      title: clearTitle ? null : title ?? this.title,
+      effectiveFrom: effectiveFrom ?? this.effectiveFrom,
+      effectiveTo: clearEffectiveTo ? null : effectiveTo ?? this.effectiveTo,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

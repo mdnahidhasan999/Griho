@@ -3,6 +3,7 @@ import '../entities/create_monthly_bill_request.dart';
 import '../entities/monthly_bill.dart';
 import '../repositories/billing_rule_repository.dart';
 import '../repositories/monthly_bill_repository.dart';
+import '../services/billing_rule_resolver.dart';
 
 class GenerateMonthlyBills {
   final BillingRuleRepository _billingRuleRepository;
@@ -67,10 +68,7 @@ class GenerateMonthlyBills {
 
     // Filter rules strictly by Fixed (ongoing) vs Variable (single-month/bounded)
     final periodActiveRules = rules.where((rule) {
-      return _isRuleEligibleForPeriod(
-        rule: rule,
-        billingPeriodStart: billingPeriodStart,
-      );
+      return rule.isEffectiveForMonth(billingPeriodStart);
     }).toList();
 
     if (periodActiveRules.isEmpty) {
@@ -78,27 +76,27 @@ class GenerateMonthlyBills {
     }
 
     // =========================================================================
-    // 2. SINGLE BATCH READ FOR DUPLICATE PROTECTION (SAVES N*M FIREBASE READS)
+    // 2. SINGLE BATCH READ FOR DUPLICATE & OVERRIDE CHECK
     // =========================================================================
 
     final existingPeriodBills = await _monthlyBillRepository
         .getMonthlyBillsByPropertyAndPeriod(
-      ownerId: normalizedOwnerId,
-      propertyId: normalizedPropertyId,
-      billingPeriodStart: billingPeriodStart,
-    );
+          ownerId: normalizedOwnerId,
+          propertyId: normalizedPropertyId,
+          billingPeriodStart: billingPeriodStart,
+        );
 
-    final existingBillKeys = <String>{
+    final existingBillsByKey = <String, MonthlyBill>{
       for (final bill in existingPeriodBills)
         _buildBillKey(
           unitId: bill.unitId,
           tenantId: bill.tenantId,
           type: bill.type,
-        ),
+        ): bill,
     };
 
     // =========================================================================
-    // 3. GENERATE MISSING BILLS ONLY
+    // 3. GENERATE MISSING BILLS OR APPLY VARIABLE OVERRIDES OVER FIXED BILLS
     // =========================================================================
 
     final generatedBills = <MonthlyBill>[];
@@ -112,14 +110,15 @@ class GenerateMonthlyBills {
 
       final applicableRules = _resolveRulesForTarget(
         rules: periodActiveRules,
+        propertyId: normalizedPropertyId,
         target: normalizedTarget,
       );
 
       final selectedRules = onlyValueType == null
           ? applicableRules
           : applicableRules
-          .where((rule) => rule.valueType == onlyValueType)
-          .toList();
+                .where((rule) => rule.valueType == onlyValueType)
+                .toList();
 
       for (final rule in selectedRules) {
         final billType = _toMonthlyBillType(rule.chargeType);
@@ -134,9 +133,21 @@ class GenerateMonthlyBills {
           type: billType,
         );
 
-        // O(1) In-Memory Duplicate Check (No extra Firestore read needed!)
-        if (existingBillKeys.contains(candidateKey)) {
-          continue;
+        final existingBill = existingBillsByKey[candidateKey];
+
+        if (existingBill != null) {
+          final canOverrideFixedBill =
+              existingBill.status != MonthlyBillStatus.cancelled &&
+              existingBill.valueType == BillingValueType.fixed &&
+              rule.valueType == BillingValueType.variable &&
+              rule.amount >= existingBill.paidAmount;
+
+          final isReplacingCancelledBill =
+              existingBill.status == MonthlyBillStatus.cancelled;
+
+          if (!canOverrideFixedBill && !isReplacingCancelledBill) {
+            continue;
+          }
         }
 
         final request = CreateMonthlyBillRequest(
@@ -148,6 +159,10 @@ class GenerateMonthlyBills {
           tenantUserId: normalizedTarget.tenantUserId,
           tenancyHistoryId: normalizedTarget.tenancyHistoryId,
           sourceRuleId: rule.id,
+          title: rule.title,
+          ruleScopeType: rule.scopeType,
+          ruleScopeId: rule.scopeId,
+          ruleSnapshot: rule.toImmutableSnapshot(),
           type: billType,
           valueType: rule.valueType,
           amount: rule.amount,
@@ -162,13 +177,12 @@ class GenerateMonthlyBills {
             request: request,
           );
 
-          existingBillKeys.add(candidateKey);
+          existingBillsByKey[candidateKey] = bill;
           generatedBills.add(bill);
         } on StateError catch (error) {
           if (!_isDuplicateBillError(error)) {
             rethrow;
           }
-          existingBillKeys.add(candidateKey);
         }
       }
     }
@@ -184,51 +198,9 @@ class GenerateMonthlyBills {
     return '${unitId.trim()}_${tenantId.trim()}_${type.name}';
   }
 
-  /// Ensures Fixed rules continue every month while Variable rules only run
-  /// for their target month (unless an explicit effectiveTo range is set).
-  bool _isRuleEligibleForPeriod({
-    required BillingRule rule,
-    required DateTime billingPeriodStart,
-  }) {
-    if (!rule.isActive) {
-      return false;
-    }
-
-    final targetMonth = DateTime(
-      billingPeriodStart.year,
-      billingPeriodStart.month,
-      1,
-    );
-    final startMonth = DateTime(
-      rule.effectiveFrom.year,
-      rule.effectiveFrom.month,
-      1,
-    );
-
-    if (targetMonth.isBefore(startMonth)) {
-      return false;
-    }
-
-    if (rule.effectiveTo != null) {
-      final endMonth = DateTime(
-        rule.effectiveTo!.year,
-        rule.effectiveTo!.month,
-        1,
-      );
-      if (!targetMonth.isBefore(endMonth)) {
-        return false;
-      }
-    } else if (rule.valueType == BillingValueType.variable) {
-      // A variable bill without an explicit end date is strictly for its effectiveFrom month
-      return targetMonth.year == startMonth.year &&
-          targetMonth.month == startMonth.month;
-    }
-
-    return true;
-  }
-
   List<BillingRule> _resolveRulesForTarget({
     required List<BillingRule> rules,
+    required String propertyId,
     required MonthlyBillTarget target,
   }) {
     final result = <BillingRule>[];
@@ -239,40 +211,18 @@ class GenerateMonthlyBills {
           return false;
         }
 
-        return _matchesScope(rule: rule, target: target);
+        return _matchesScope(
+          rule: rule,
+          propertyId: propertyId,
+          target: target,
+        );
       }).toList();
 
       if (matchingRules.isEmpty) {
         continue;
       }
 
-      matchingRules.sort((a, b) {
-        final priorityComparison = _scopePriority(
-          b.scopeType,
-        ).compareTo(_scopePriority(a.scopeType));
-
-        if (priorityComparison != 0) {
-          return priorityComparison;
-        }
-
-        final effectiveFromComparison = b.effectiveFrom.compareTo(
-          a.effectiveFrom,
-        );
-
-        if (effectiveFromComparison != 0) {
-          return effectiveFromComparison;
-        }
-
-        final valueTypeComparison = _valueTypePriority(
-          b.valueType,
-        ).compareTo(_valueTypePriority(a.valueType));
-
-        if (valueTypeComparison != 0) {
-          return valueTypeComparison;
-        }
-
-        return a.id.compareTo(b.id);
-      });
+      matchingRules.sort(BillingRuleResolver.compareRulesByPriority);
 
       result.add(matchingRules.first);
     }
@@ -282,46 +232,21 @@ class GenerateMonthlyBills {
 
   bool _matchesScope({
     required BillingRule rule,
+    required String propertyId,
     required MonthlyBillTarget target,
   }) {
     switch (rule.scopeType) {
       case BillingScopeType.property:
-        return true;
+        return rule.scopeId.trim().isEmpty || rule.scopeId.trim() == propertyId;
 
       case BillingScopeType.floor:
-        return rule.scopeId == target.floorId;
+        return rule.scopeId.trim() == target.floorId;
 
       case BillingScopeType.unit:
-        return rule.scopeId == target.unitId;
+        return rule.scopeId.trim() == target.unitId;
 
       case BillingScopeType.tenant:
-        return rule.scopeId == target.tenantId;
-    }
-  }
-
-  int _scopePriority(BillingScopeType scope) {
-    switch (scope) {
-      case BillingScopeType.property:
-        return 1;
-
-      case BillingScopeType.floor:
-        return 2;
-
-      case BillingScopeType.unit:
-        return 3;
-
-      case BillingScopeType.tenant:
-        return 4;
-    }
-  }
-
-  int _valueTypePriority(BillingValueType valueType) {
-    switch (valueType) {
-      case BillingValueType.fixed:
-        return 1;
-
-      case BillingValueType.variable:
-        return 2;
+        return rule.scopeId.trim() == target.tenantId;
     }
   }
 
@@ -350,7 +275,7 @@ class GenerateMonthlyBills {
   bool _isDuplicateBillError(StateError error) {
     return error.message.toString().contains(
       'Monthly bill already exists for this '
-          'tenant, bill type and billing period.',
+      'tenant, bill type and billing period.',
     );
   }
 }
@@ -389,12 +314,12 @@ class MonthlyBillTarget {
       unitId: normalizedUnitId,
       tenantId: normalizedTenantId,
       tenantUserId:
-      normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
+          normalizedTenantUserId == null || normalizedTenantUserId.isEmpty
           ? null
           : normalizedTenantUserId,
       tenancyHistoryId:
-      normalizedTenancyHistoryId == null ||
-          normalizedTenancyHistoryId.isEmpty
+          normalizedTenancyHistoryId == null ||
+              normalizedTenancyHistoryId.isEmpty
           ? null
           : normalizedTenancyHistoryId,
     );

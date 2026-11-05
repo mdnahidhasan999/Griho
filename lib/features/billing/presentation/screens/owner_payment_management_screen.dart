@@ -16,12 +16,10 @@ class OwnerPaymentManagementScreen extends ConsumerStatefulWidget {
 class _OwnerPaymentManagementScreenState
     extends ConsumerState<OwnerPaymentManagementScreen> {
   String _filter = 'all';
-
   bool _busy = false;
 
   String _money(dynamic value) {
     if (value is! num) return '—';
-
     return value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2);
   }
 
@@ -43,10 +41,8 @@ class _OwnerPaymentManagementScreenState
     switch (status) {
       case 'confirmed':
         return Colors.green;
-
       case 'rejected':
         return Theme.of(context).colorScheme.error;
-
       default:
         return Colors.orange;
     }
@@ -89,7 +85,6 @@ class _OwnerPaymentManagementScreenState
               FilledButton(
                 onPressed: () {
                   final text = controller.text.trim();
-
                   if (text.isNotEmpty) {
                     Navigator.pop(dialogContext, text);
                   }
@@ -102,7 +97,6 @@ class _OwnerPaymentManagementScreenState
       );
 
       controller.dispose();
-
       if (reason == null) return;
     } else {
       final approved = await showDialog<bool>(
@@ -215,7 +209,6 @@ class _OwnerPaymentManagementScreenState
                   },
                 ),
               ),
-
               Expanded(
                 child: paymentsAsync.when(
                   loading: () =>
@@ -241,7 +234,6 @@ class _OwnerPaymentManagementScreenState
                           final aMillis = aTime is Timestamp
                               ? aTime.millisecondsSinceEpoch
                               : 0;
-
                           final bMillis = bTime is Timestamp
                               ? bTime.millisecondsSinceEpoch
                               : 0;
@@ -257,7 +249,6 @@ class _OwnerPaymentManagementScreenState
                         .where((doc) => doc.data()['status'] == 'confirmed')
                         .fold<double>(0.0, (totalAmount, doc) {
                           final amount = doc.data()['amount'];
-
                           return totalAmount +
                               (amount is num ? amount.toDouble() : 0.0);
                         });
@@ -284,9 +275,7 @@ class _OwnerPaymentManagementScreenState
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 12),
-
                         if (docs.isEmpty)
                           const Padding(
                             padding: EdgeInsets.all(32),
@@ -297,10 +286,8 @@ class _OwnerPaymentManagementScreenState
                         else
                           ...docs.map((doc) {
                             final data = doc.data();
-
                             final status = (data['status'] ?? 'pending')
                                 .toString();
-
                             final reference = (data['reference'] ?? '')
                                 .toString();
 
@@ -336,43 +323,34 @@ class _OwnerPaymentManagementScreenState
                                         ),
                                       ],
                                     ),
-
                                     const SizedBox(height: 6),
-
                                     _DetailLine(
                                       label: 'Tenant ID',
                                       value: '${data['tenantId'] ?? '—'}',
                                     ),
-
                                     _DetailLine(
                                       label: 'Property / Unit',
                                       value:
-                                          '${data['propertyId'] ?? '—'}'
-                                          ' / ${data['unitId'] ?? '—'}',
+                                          '${data['propertyId'] ?? '—'} / ${data['unitId'] ?? '—'}',
                                     ),
-
                                     _DetailLine(
                                       label: 'Bill ID',
                                       value: '${data['billId'] ?? '—'}',
                                     ),
-
                                     _DetailLine(
                                       label: 'Method',
                                       value: '${data['method'] ?? '—'}',
                                     ),
-
                                     _DetailLine(
                                       label: 'Transaction ID',
                                       value: reference.isEmpty
                                           ? 'Not provided'
                                           : reference,
                                     ),
-
                                     _DetailLine(
                                       label: 'Submitted',
                                       value: _date(data['createdAt']),
                                     ),
-
                                     if ((data['note'] ?? '')
                                         .toString()
                                         .trim()
@@ -381,7 +359,6 @@ class _OwnerPaymentManagementScreenState
                                         label: 'Note',
                                         value: '${data['note']}',
                                       ),
-
                                     if ((data['rejectionReason'] ?? '')
                                         .toString()
                                         .trim()
@@ -390,10 +367,8 @@ class _OwnerPaymentManagementScreenState
                                         label: 'Rejection reason',
                                         value: '${data['rejectionReason']}',
                                       ),
-
                                     if (status == 'pending') ...[
                                       const SizedBox(height: 12),
-
                                       Row(
                                         children: [
                                           Expanded(
@@ -409,9 +384,7 @@ class _OwnerPaymentManagementScreenState
                                               label: const Text('Reject'),
                                             ),
                                           ),
-
                                           const SizedBox(width: 10),
-
                                           Expanded(
                                             child: FilledButton.icon(
                                               onPressed: _busy

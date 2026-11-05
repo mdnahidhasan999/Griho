@@ -1,4 +1,3 @@
-
 import { initializeApp } from "firebase-admin/app";
 import {
   getFirestore,
@@ -116,20 +115,15 @@ function getDhakaDateParts(date: Date): DateParts {
 }
 
 /**
- * Creates midnight of a Bangladesh calendar date.
- *
- * Bangladesh is UTC+06:00.
- * The returned Date is the actual UTC instant corresponding
- * to midnight in Asia/Dhaka.
+ * Creates midnight of a Bangladesh calendar date (UTC+06:00).
  */
 function dhakaDate(
   year: number,
   month: number,
   day: number,
 ): Date {
-  return new Date(
-    Date.UTC(year, month - 1, day) - 6 * 60 * 60 * 1000,
-  );
+  const dhakaOffsetMs = 6 * 60 * 60 * 1000;
+  return new Date(Date.UTC(year, month - 1, day) - dhakaOffsetMs);
 }
 
 function dateOnly(date: Date): Date {
@@ -204,9 +198,7 @@ function daysBetweenInclusive(
     endParts.day,
   );
 
-  return Math.floor(
-    (endUtc - startUtc) / 86400000,
-  ) + 1;
+  return Math.floor((endUtc - startUtc) / 86400000) + 1;
 }
 
 function sameCalendarDate(
@@ -243,7 +235,7 @@ function requiredString(
 ): string {
   const value = data[field];
 
-if (typeof value !== "string" || value.trim().length === 0) {
+  if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(
       `Invalid or missing "${field}" in document ${documentId}.`,
     );
@@ -336,23 +328,6 @@ function isAlreadyExists(error: unknown): boolean {
 
 // ============================================================================
 // TENANCY TARGET RESOLVER
-//
-// Mirrors:
-// lib/features/billing/domain/services/
-// tenancy_billing_target_resolver.dart
-//
-// Historical tenancy:
-//   tenancyHistories
-//   status = ended
-//   startedAt and endedAt are inclusive
-//
-// Current tenancy:
-//   tenants
-//   status = active
-//   tenancyStartedAt is required
-//
-// floorId:
-//   floorNumber.toString()
 // ============================================================================
 
 async function loadBillingTargets({
@@ -385,10 +360,7 @@ async function loadBillingTargets({
     throw new Error("Invalid billing period.");
   }
 
-  // --------------------------------------------------------------------------
   // 1. LOAD UNITS
-  // --------------------------------------------------------------------------
-
   const unitsSnapshot = await db
     .collection(UNIT_COLLECTION)
     .where("propertyId", "==", normalizedPropertyId)
@@ -415,13 +387,7 @@ async function loadBillingTargets({
 
   const targets: BillingTarget[] = [];
 
-  // --------------------------------------------------------------------------
   // 2. HISTORICAL ENDED TENANCIES
-  //
-  // Same query strategy as TenancyHistoryDataSource:
-  // ownerId + unitId
-  // --------------------------------------------------------------------------
-
   for (const [unitId, floorId] of floorByUnitId.entries()) {
     const historySnapshot = await db
       .collection(TENANCY_HISTORY_COLLECTION)
@@ -496,14 +462,7 @@ async function loadBillingTargets({
     }
   }
 
-  // --------------------------------------------------------------------------
   // 3. CURRENT ACTIVE TENANCIES
-  //
-  // Same fields as Tenant entity:
-  // ownerId, propertyId, unitId, status, userId,
-  // tenancyStartedAt
-  // --------------------------------------------------------------------------
-
   const tenantsSnapshot = await db
     .collection(TENANT_COLLECTION)
     .where("propertyId", "==", normalizedPropertyId)
@@ -568,13 +527,7 @@ async function loadBillingTargets({
     });
   }
 
-  // --------------------------------------------------------------------------
   // 4. REMOVE EXACT DUPLICATE TARGETS
-  //
-  // Same key as the Dart resolver:
-  // unitId + tenantId + tenancyStart + tenancyEnd
-  // --------------------------------------------------------------------------
-
   const uniqueTargets = new Map<string, BillingTarget>();
 
   for (const target of targets) {
@@ -590,7 +543,6 @@ async function loadBillingTargets({
 
   const result = [...uniqueTargets.values()];
 
-  // Stable ordering: unit -> tenancy start -> tenant.
   result.sort((a, b) => {
     const unitComparison = a.unitId.localeCompare(b.unitId);
 
@@ -613,11 +565,6 @@ async function loadBillingTargets({
 
 // ============================================================================
 // BILLING RULES
-//
-// Mirrors GenerateMonthlyBills:
-// - getBillingRulesForPeriod()
-// - _isRuleEligibleForPeriod()
-// - _resolveRulesForTarget()
 // ============================================================================
 
 function parseBillingRule(
@@ -674,7 +621,6 @@ function parseBillingRule(
   };
 }
 
-
 function isRuleEligibleForPeriod({
   rule,
   billingPeriodStart,
@@ -682,7 +628,6 @@ function isRuleEligibleForPeriod({
   rule: BillingRule;
   billingPeriodStart: Date;
 }): boolean {
-  // Inactive rules must never generate new bills.
   if (!rule.isActive) {
     return false;
   }
@@ -690,12 +635,10 @@ function isRuleEligibleForPeriod({
   const targetMonth = monthStart(billingPeriodStart);
   const startMonth = monthStart(rule.effectiveFrom);
 
-  // Rule cannot apply before its effective month.
   if (targetMonth < startMonth) {
     return false;
   }
 
-  // effectiveTo is exclusive.
   if (rule.effectiveTo !== null) {
     const endMonth = monthStart(rule.effectiveTo);
 
@@ -703,15 +646,11 @@ function isRuleEligibleForPeriod({
       return false;
     }
   } else if (rule.valueType === "variable") {
-    // Variable rule without effectiveTo applies
-    // only to its effectiveFrom month.
-    return (
-      targetMonth.getUTCFullYear() === startMonth.getUTCFullYear() &&
-      targetMonth.getUTCMonth() === startMonth.getUTCMonth()
-    );
+    // Compare Asia/Dhaka YYYY-MM period keys so Variable rules apply strictly
+    // to their effectiveFrom month and Fixed rules resume the next month.
+    return formatPeriod(targetMonth) === formatPeriod(startMonth);
   }
 
-  // Fixed rules recur while their effective period is valid.
   return true;
 }
 
@@ -770,11 +709,12 @@ function valueTypePriority(
 
 function ruleMatchesTarget(
   rule: BillingRule,
+  propertyId: string,
   target: BillingTarget,
 ): boolean {
   switch (rule.scopeType) {
     case "property":
-      return true;
+      return rule.scopeId.trim() === "" || rule.scopeId === propertyId;
 
     case "floor":
       return rule.scopeId === target.floorId;
@@ -788,21 +728,15 @@ function ruleMatchesTarget(
 }
 
 /**
- * Same resolution order as GenerateMonthlyBills:
- *
- * 1. Scope priority:
- *    tenant > unit > floor > property
- *
- * 2. Latest effectiveFrom
- *
- * 3. Variable before Fixed when both dates match
- *
+ * Resolution priority matching Dart BillingRuleResolver:
+ * 1. Variable rules override Fixed rules for the target month
+ * 2. Scope priority: tenant > unit > floor > property
+ * 3. Latest effectiveFrom
  * 4. Rule ID ascending
- *
- * Only one rule is selected per charge type and target.
  */
 function resolveRulesForTarget(
   rules: BillingRule[],
+  propertyId: string,
   target: BillingTarget,
 ): BillingRule[] {
   const result: BillingRule[] = [];
@@ -812,10 +746,18 @@ function resolveRulesForTarget(
       .filter((rule) => {
         return (
           rule.chargeType === chargeType &&
-          ruleMatchesTarget(rule, target)
+          ruleMatchesTarget(rule, propertyId, target)
         );
       })
       .sort((a, b) => {
+        const valueComparison =
+          valueTypePriority(b.valueType) -
+          valueTypePriority(a.valueType);
+
+        if (valueComparison !== 0) {
+          return valueComparison;
+        }
+
         const priorityComparison =
           scopePriority(b.scopeType) -
           scopePriority(a.scopeType);
@@ -832,14 +774,6 @@ function resolveRulesForTarget(
           return effectiveComparison;
         }
 
-        const valueComparison =
-          valueTypePriority(b.valueType) -
-          valueTypePriority(a.valueType);
-
-        if (valueComparison !== 0) {
-          return valueComparison;
-        }
-
         return a.id.localeCompare(b.id);
       });
 
@@ -853,12 +787,6 @@ function resolveRulesForTarget(
 
 // ============================================================================
 // MONTHLY UTILITY BILL GENERATION
-//
-// Mirrors MonthlyBillDataSource document ID:
-//
-// ownerId_propertyId_unitId_tenantId_type_YYYY-MM
-//
-// Existing bill snapshots are never overwritten.
 // ============================================================================
 
 function monthlyBillDocumentId({
@@ -894,7 +822,15 @@ function buildBillKey(
   return `${unitId.trim()}_${tenantId.trim()}_${type}`;
 }
 
-async function loadExistingMonthlyBillKeys({
+type ExistingBillSummary = {
+  valueType: string;
+  status: string;
+  paidAmount: number;
+  amount: number;
+  sourceRuleId: string;
+};
+
+async function loadExistingMonthlyBillsByKey({
   ownerId,
   propertyId,
   billingPeriodStart,
@@ -902,7 +838,7 @@ async function loadExistingMonthlyBillKeys({
   ownerId: string;
   propertyId: string;
   billingPeriodStart: Date;
-}): Promise<Set<string>> {
+}): Promise> {
   const snapshot = await db
     .collection(MONTHLY_BILL_COLLECTION)
     .where("ownerId", "==", ownerId)
@@ -914,7 +850,7 @@ async function loadExistingMonthlyBillKeys({
     )
     .get();
 
-  const keys = new Set<string>();
+  const map = new Map<string, ExistingBillSummary>();
 
   for (const doc of snapshot.docs) {
     const data = doc.data();
@@ -927,10 +863,45 @@ async function loadExistingMonthlyBillKeys({
       continue;
     }
 
-    keys.add(buildBillKey(unitId, tenantId, type));
+    map.set(buildBillKey(unitId, tenantId, type), {
+      valueType: optionalString(data, "valueType") ?? "fixed",
+      status: optionalString(data, "status") ?? "unpaid",
+      paidAmount: typeof data.paidAmount === "number" ? data.paidAmount : 0,
+      amount: typeof data.amount === "number" ? data.amount : 0,
+      sourceRuleId: optionalString(data, "sourceRuleId") ?? "",
+    });
   }
 
-  return keys;
+  return map;
+}
+
+function buildRuleSnapshot(rule: BillingRule): Record<string, unknown> {
+  return {
+    ruleId: rule.id,
+    ownerId: rule.ownerId,
+    propertyId: rule.propertyId,
+    scopeType: rule.scopeType,
+    scopeId: rule.scopeId,
+    chargeType: rule.chargeType,
+    valueType: rule.valueType,
+    amount: rule.amount,
+    title: rule.title,
+    effectiveFrom: rule.effectiveFrom.toISOString(),
+    effectiveTo: rule.effectiveTo ? rule.effectiveTo.toISOString() : null,
+  };
+}
+
+function resolveBillStatusAfterOverride(
+  newAmount: number,
+  paidAmount: number,
+): string {
+  if (paidAmount <= 0) {
+    return "unpaid";
+  }
+  if (paidAmount >= newAmount) {
+    return "paid";
+  }
+  return "partiallyPaid";
 }
 
 async function createMonthlyUtilityBills({
@@ -956,25 +927,22 @@ async function createMonthlyUtilityBills({
 
   const periodKey = formatPeriod(billingPeriodStart);
 
-  const existingBillKeys = await loadExistingMonthlyBillKeys({
+  const existingBillsByKey = await loadExistingMonthlyBillsByKey({
     ownerId,
     propertyId,
     billingPeriodStart,
   });
 
-  let createdCount = 0;
+  let createdOrOverriddenCount = 0;
 
   for (const target of targets) {
     const applicableRules = resolveRulesForTarget(
       rules,
+      propertyId,
       target,
     );
 
-const automaticRules = applicableRules.filter(
-  (rule) => rule.valueType === "fixed",
-);
-
-   for (const rule of automaticRules) {
+    for (const rule of applicableRules) {
       const type = rule.chargeType;
 
       const candidateKey = buildBillKey(
@@ -983,9 +951,20 @@ const automaticRules = applicableRules.filter(
         type,
       );
 
-      // Same duplicate protection as GenerateMonthlyBills.
-      if (existingBillKeys.has(candidateKey)) {
-        continue;
+      const existingSummary = existingBillsByKey.get(candidateKey);
+
+      if (existingSummary !== undefined) {
+        const canOverrideFixed =
+          existingSummary.status !== "cancelled" &&
+          existingSummary.valueType === "fixed" &&
+          rule.valueType === "variable" &&
+          rule.amount >= existingSummary.paidAmount;
+
+        const isReplacingCancelled = existingSummary.status === "cancelled";
+
+        if (!canOverrideFixed && !isReplacingCancelled) {
+          continue;
+        }
       }
 
       const documentId = monthlyBillDocumentId({
@@ -1002,9 +981,9 @@ const automaticRules = applicableRules.filter(
         .doc(documentId);
 
       const now = Timestamp.now();
+      const ruleSnapshot = buildRuleSnapshot(rule);
 
-      // Same field names as MonthlyBillModel.toFirestore().
-      const billData = {
+      const initialBillData = {
         ownerId,
         propertyId,
         floorId: target.floorId,
@@ -1012,58 +991,101 @@ const automaticRules = applicableRules.filter(
         tenantId: target.tenantId,
         tenantUserId: target.tenantUserId,
         tenancyHistoryId: target.tenancyHistoryId,
+        title: rule.title,
+        ruleScopeType: rule.scopeType,
+        ruleScopeId: rule.scopeId,
+        ruleSnapshot,
+        overriddenFromRuleId: null,
+        overriddenFromAmount: null,
         sourceRuleId: rule.id,
         type,
         valueType: rule.valueType,
         amount: rule.amount,
         paidAmount: 0,
-        billingPeriodStart: Timestamp.fromDate(
-          billingPeriodStart,
-        ),
-        billingPeriodEnd: Timestamp.fromDate(
-          billingPeriodEnd,
-        ),
+        billingPeriodStart: Timestamp.fromDate(billingPeriodStart),
+        billingPeriodEnd: Timestamp.fromDate(billingPeriodEnd),
         dueDate: Timestamp.fromDate(dueDate),
         status: "unpaid",
         createdAt: now,
         updatedAt: now,
       };
 
-      try {
-        // create() fails if this exact document already exists.
-        // It never overwrites an existing payment/bill snapshot.
-        await billRef.create(billData);
+      const committed = await db.runTransaction(async (transaction) => {
+        const existingSnap = await transaction.get(billRef);
 
-        existingBillKeys.add(candidateKey);
-        createdCount++;
-      } catch (error) {
-        if (isAlreadyExists(error)) {
-          existingBillKeys.add(candidateKey);
-
-          logger.info("Monthly bill already exists.", {
-            documentId,
-          });
-
-          continue;
+        if (!existingSnap.exists) {
+          transaction.set(billRef, initialBillData);
+          return true;
         }
 
-        throw error;
+        const existingData = existingSnap.data()!;
+        const existingStatus = optionalString(existingData, "status") ?? "unpaid";
+        const existingValueType =
+          optionalString(existingData, "valueType") ?? "fixed";
+        const existingPaid =
+          typeof existingData.paidAmount === "number"
+            ? existingData.paidAmount
+            : 0;
+        const existingAmount =
+          typeof existingData.amount === "number" ? existingData.amount : 0;
+        const existingSourceRuleId =
+          optionalString(existingData, "sourceRuleId") ?? "";
+
+        if (existingStatus === "cancelled") {
+          transaction.set(billRef, initialBillData);
+          return true;
+        }
+
+        const canOverride =
+          existingValueType === "fixed" &&
+          rule.valueType === "variable" &&
+          rule.amount >= existingPaid;
+
+        if (!canOverride) {
+          return false;
+        }
+
+        const newStatus = resolveBillStatusAfterOverride(
+          rule.amount,
+          existingPaid,
+        );
+
+        transaction.update(billRef, {
+          sourceRuleId: rule.id,
+          title: rule.title,
+          ruleScopeType: rule.scopeType,
+          ruleScopeId: rule.scopeId,
+          ruleSnapshot,
+          overriddenFromRuleId: existingSourceRuleId,
+          overriddenFromAmount: existingAmount,
+          valueType: "variable",
+          amount: rule.amount,
+          dueDate: Timestamp.fromDate(dueDate),
+          status: newStatus,
+          updatedAt: now,
+        });
+
+        return true;
+      });
+
+      if (committed) {
+        existingBillsByKey.set(candidateKey, {
+          valueType: rule.valueType,
+          status: "unpaid",
+          paidAmount: existingSummary?.paidAmount ?? 0,
+          amount: rule.amount,
+          sourceRuleId: rule.id,
+        });
+        createdOrOverriddenCount++;
       }
     }
   }
 
-  return createdCount;
+  return createdOrOverriddenCount;
 }
 
 // ============================================================================
 // RENT RATE HISTORY
-//
-// Mirrors RentRateDataSource:
-// rentRates collection
-// ownerId + unitId
-// effectiveFrom / effectiveTo
-//
-// Rate interval: [effectiveFrom, effectiveTo)
 // ============================================================================
 
 function parseRentRate(
@@ -1220,7 +1242,6 @@ function resolveRentRateSegments({
     cursor = addDays(segmentEnd, 1);
   }
 
-  // Validate continuous coverage.
   if (
     segments.length === 0 ||
     !sameCalendarDate(segments[0].start, start) ||
@@ -1254,10 +1275,6 @@ function resolveRentRateSegments({
 
 // ============================================================================
 // EXISTING MONTHLY RENT RECORDS
-//
-// Mirrors MonthlyRentDataSource document ID:
-//
-// ownerId_unitId_tenantId_YYYY-MM_startDate_endDate
 // ============================================================================
 
 function monthlyRentDocumentId({
@@ -1350,15 +1367,6 @@ async function loadExistingMonthlyRents({
 
 // ============================================================================
 // MONTHLY RENT GENERATION
-//
-// Mirrors GenerateMonthlyRent + MonthlyRentGenerationCalculator.
-//
-// - Historical tenancy dates are inclusive.
-// - Billing period end is exclusive.
-// - Rent-rate periods are [effectiveFrom, effectiveTo).
-// - Proration uses calendar days in the full billing month.
-// - Each rent-rate segment creates a separate MonthlyRent.
-// - Existing rent snapshots are never modified.
 // ============================================================================
 
 async function createMonthlyRentsForTarget({
@@ -1479,7 +1487,6 @@ async function createMonthlyRentsForTarget({
 
     const now = Timestamp.now();
 
-    // Same fields as MonthlyRentModel.toFirestore().
     const rentData = {
       ownerId,
       propertyId,
@@ -1581,9 +1588,6 @@ async function processProperty({
   let generatedRents = 0;
   let failedRentTargets = 0;
 
-  // Process each target independently.
-  // One failed rent target must not prevent other tenants
-  // or utility bill generation.
   for (const target of targets) {
     try {
       generatedRents += await createMonthlyRentsForTarget({
@@ -1608,7 +1612,6 @@ async function processProperty({
     }
   }
 
-  // Utility bills are generated independently of rent generation.
   const generatedBills = await createMonthlyUtilityBills({
     ownerId,
     propertyId,
@@ -1629,14 +1632,6 @@ async function processProperty({
 
 // ============================================================================
 // SCHEDULED MONTHLY BILLING
-//
-// Runs at 00:10 on the first day of every month in Bangladesh.
-//
-// Example:
-// November 2026:
-// billingPeriodStart = 2026-11-01 00:00 Asia/Dhaka
-// billingPeriodEnd   = 2026-12-01 00:00 Asia/Dhaka
-// dueDate            = 2026-12-10 00:00 Asia/Dhaka
 // ============================================================================
 
 export const generateMonthlyBilling = onSchedule(
@@ -1675,8 +1670,6 @@ export const generateMonthlyBilling = onSchedule(
       dueDate: formatDate(dueDate),
     });
 
-    // PropertyModel uses:
-    // status: PropertyStatus.active.name
     const propertiesSnapshot = await db
       .collection(PROPERTY_COLLECTION)
       .where("status", "==", "active")

@@ -12,7 +12,7 @@ class BillingRuleResolver {
     String? tenantId,
     required BillingChargeType chargeType,
 
-    /// The date for which the billing rule must be resolved.
+    /// The billing period date for which the billing rule must be resolved.
     required DateTime effectiveAt,
   }) {
     final normalizedPropertyId = propertyId.trim();
@@ -22,13 +22,11 @@ class BillingRuleResolver {
     }
 
     final normalizedFloorId = _normalizeId(floorId);
-
     final normalizedUnitId = _normalizeId(unitId);
-
     final normalizedTenantId = _normalizeId(tenantId);
 
     final matchingRules = rules.where((rule) {
-      if (rule.propertyId != normalizedPropertyId) {
+      if (rule.propertyId.trim() != normalizedPropertyId) {
         return false;
       }
 
@@ -36,11 +34,9 @@ class BillingRuleResolver {
         return false;
       }
 
-      if (!_isEffectiveAt(rule: rule, date: effectiveAt)) {
-        return false;
-      }
-
-      if (!rule.isActive && rule.effectiveTo == null) {
+      // Ensures inactive rules and expired Variable rules are excluded,
+      // allowing Fixed rules to take effect again in subsequent months.
+      if (!rule.isEffectiveForMonth(effectiveAt)) {
         return false;
       }
 
@@ -57,48 +53,48 @@ class BillingRuleResolver {
       return null;
     }
 
-
-    matchingRules.sort((a, b) {
-      final priorityComparison = _priority(
-        b.scopeType,
-      ).compareTo(_priority(a.scopeType));
-
-      if (priorityComparison != 0) {
-        return priorityComparison;
-      }
-
-      return b.effectiveFrom.compareTo(a.effectiveFrom);
-    });
+    matchingRules.sort(compareRulesByPriority);
 
     final selectedRule = matchingRules.first;
 
     return ResolvedBillingRule(rule: selectedRule, amount: selectedRule.amount);
   }
 
-  // ==========================================================================
-  // EFFECTIVE DATE
-  // ==========================================================================
+  /// Deterministic priority comparator shared across rule resolution:
+  /// 1. Variable rules override Fixed rules for the target month.
+  /// 2. More specific scopes (tenant > unit > floor > property) win.
+  /// 3. Newer [effectiveFrom] wins.
+  /// 4. More recently updated rule wins.
+  static int compareRulesByPriority(BillingRule a, BillingRule b) {
+    final valueTypeComparison = _valueTypePriority(
+      b.valueType,
+    ).compareTo(_valueTypePriority(a.valueType));
 
-  bool _isEffectiveAt({required BillingRule rule, required DateTime date}) {
-    if (date.isBefore(rule.effectiveFrom)) {
-      return false;
+    if (valueTypeComparison != 0) {
+      return valueTypeComparison;
     }
 
-    // effectiveTo is EXCLUSIVE.
-    //
-    // Example:
-    //
-    // effectiveFrom = 2026-10-01
-    // effectiveTo   = 2026-11-01
-    //
-    // 2026-10-01 → effective
-    // 2026-10-31 → effective
-    // 2026-11-01 → NOT effective
-    if (rule.effectiveTo != null && !date.isBefore(rule.effectiveTo!)) {
-      return false;
+    final priorityComparison = _scopePriority(
+      b.scopeType,
+    ).compareTo(_scopePriority(a.scopeType));
+
+    if (priorityComparison != 0) {
+      return priorityComparison;
     }
 
-    return true;
+    final effectiveFromComparison = b.effectiveFrom.compareTo(a.effectiveFrom);
+
+    if (effectiveFromComparison != 0) {
+      return effectiveFromComparison;
+    }
+
+    final updatedAtComparison = b.updatedAt.compareTo(a.updatedAt);
+
+    if (updatedAtComparison != 0) {
+      return updatedAtComparison;
+    }
+
+    return a.id.compareTo(b.id);
   }
 
   // ==========================================================================
@@ -114,7 +110,7 @@ class BillingRuleResolver {
   }) {
     switch (rule.scopeType) {
       case BillingScopeType.property:
-        return rule.scopeId == propertyId;
+        return rule.scopeId.trim().isEmpty || rule.scopeId.trim() == propertyId;
 
       case BillingScopeType.floor:
         return _matchesId(rule.scopeId, floorId);
@@ -139,7 +135,7 @@ class BillingRuleResolver {
   // PRIORITY
   // ==========================================================================
 
-  int _priority(BillingScopeType scopeType) {
+  static int _scopePriority(BillingScopeType scopeType) {
     switch (scopeType) {
       case BillingScopeType.property:
         return 1;
@@ -152,6 +148,16 @@ class BillingRuleResolver {
 
       case BillingScopeType.tenant:
         return 4;
+    }
+  }
+
+  static int _valueTypePriority(BillingValueType valueType) {
+    switch (valueType) {
+      case BillingValueType.fixed:
+        return 1;
+
+      case BillingValueType.variable:
+        return 2;
     }
   }
 

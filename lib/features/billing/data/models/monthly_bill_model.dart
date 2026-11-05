@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../rents/domain/entities/monthly_rent.dart';
 import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/monthly_bill.dart';
+
+typedef JsonMap = Map<String, dynamic>;
 
 class MonthlyBillModel extends MonthlyBill {
   const MonthlyBillModel({
@@ -14,6 +17,12 @@ class MonthlyBillModel extends MonthlyBill {
     required super.tenantId,
     super.tenantUserId,
     super.tenancyHistoryId,
+    super.title,
+    super.ruleScopeType,
+    super.ruleScopeId,
+    super.ruleSnapshot,
+    super.overriddenFromRuleId,
+    super.overriddenFromAmount,
     required super.sourceRuleId,
     required super.type,
     required super.valueType,
@@ -31,9 +40,7 @@ class MonthlyBillModel extends MonthlyBill {
   // FROM FIRESTORE
   // ==========================================================================
 
-  factory MonthlyBillModel.fromFirestore(
-    DocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
+  factory MonthlyBillModel.fromFirestore(DocumentSnapshot<JsonMap> doc) {
     final data = doc.data();
 
     if (data == null) {
@@ -45,11 +52,17 @@ class MonthlyBillModel extends MonthlyBill {
       billCollection: 'monthlyBills',
       ownerId: _readRequiredString(data, 'ownerId'),
       propertyId: _readRequiredString(data, 'propertyId'),
-      floorId: _readRequiredString(data, 'floorId'),
+      floorId: _readOptionalString(data, 'floorId') ?? '',
       unitId: _readRequiredString(data, 'unitId'),
       tenantId: _readRequiredString(data, 'tenantId'),
       tenantUserId: _readOptionalString(data, 'tenantUserId'),
       tenancyHistoryId: _readOptionalString(data, 'tenancyHistoryId'),
+      title: _readOptionalString(data, 'title'),
+      ruleScopeType: _readOptionalScopeType(data, 'ruleScopeType'),
+      ruleScopeId: _readOptionalString(data, 'ruleScopeId'),
+      ruleSnapshot: _readOptionalMap(data, 'ruleSnapshot'),
+      overriddenFromRuleId: _readOptionalString(data, 'overriddenFromRuleId'),
+      overriddenFromAmount: _readOptionalDouble(data, 'overriddenFromAmount'),
       sourceRuleId: _readRequiredString(data, 'sourceRuleId'),
       type: _readBillType(data),
       valueType: _readBillValueType(data),
@@ -65,10 +78,72 @@ class MonthlyBillModel extends MonthlyBill {
   }
 
   // ==========================================================================
+  // FROM MONTHLY RENT (COMBINED RENT + BILL ADAPTER)
+  // ==========================================================================
+
+  factory MonthlyBillModel.fromMonthlyRent(
+    MonthlyRent rent, {
+    String floorId = '',
+  }) {
+    final rentTitle = rent.isProrated
+        ? 'House rent (${rent.chargeableDays}/${rent.daysInBillingPeriod} days)'
+        : 'House rent';
+
+    return MonthlyBillModel(
+      id: rent.id,
+      billCollection: 'monthlyRents',
+      ownerId: rent.ownerId,
+      propertyId: rent.propertyId,
+      floorId: floorId,
+      unitId: rent.unitId,
+      tenantId: rent.tenantId,
+      tenantUserId: rent.tenantUserId,
+      sourceRuleId: rent.rentRateId,
+      title: rentTitle,
+      ruleScopeType: BillingScopeType.unit,
+      ruleScopeId: rent.unitId,
+      ruleSnapshot: {
+        'rentRateId': rent.rentRateId,
+        'monthlyRate': rent.monthlyRate,
+        'chargeableDays': rent.chargeableDays,
+        'daysInBillingPeriod': rent.daysInBillingPeriod,
+        'prorationFactor': rent.prorationFactor,
+        'chargePeriodStart': rent.chargePeriodStart.toIso8601String(),
+        'chargePeriodEnd': rent.chargePeriodEnd.toIso8601String(),
+      },
+      type: MonthlyBillType.rent,
+      valueType: BillingValueType.fixed,
+      amount: rent.amount,
+      paidAmount: rent.paidAmount,
+      billingPeriodStart: rent.billingPeriodStart,
+      billingPeriodEnd: rent.billingPeriodEnd,
+      dueDate: rent.dueDate,
+      status: _mapRentStatus(rent.status),
+      createdAt: rent.createdAt,
+      updatedAt: rent.updatedAt,
+    );
+  }
+
+  static MonthlyBillStatus _mapRentStatus(MonthlyRentStatus rentStatus) {
+    switch (rentStatus) {
+      case MonthlyRentStatus.unpaid:
+        return MonthlyBillStatus.unpaid;
+      case MonthlyRentStatus.partiallyPaid:
+        return MonthlyBillStatus.partiallyPaid;
+      case MonthlyRentStatus.paid:
+        return MonthlyBillStatus.paid;
+      case MonthlyRentStatus.overdue:
+        return MonthlyBillStatus.overdue;
+      case MonthlyRentStatus.cancelled:
+        return MonthlyBillStatus.cancelled;
+    }
+  }
+
+  // ==========================================================================
   // TO FIRESTORE
   // ==========================================================================
 
-  Map<String, dynamic> toFirestore() {
+  JsonMap toFirestore() {
     return {
       'ownerId': ownerId,
       'propertyId': propertyId,
@@ -77,6 +152,12 @@ class MonthlyBillModel extends MonthlyBill {
       'tenantId': tenantId,
       'tenantUserId': tenantUserId,
       'tenancyHistoryId': tenancyHistoryId,
+      'title': title,
+      'ruleScopeType': ruleScopeType?.name,
+      'ruleScopeId': ruleScopeId,
+      'ruleSnapshot': ruleSnapshot,
+      'overriddenFromRuleId': overriddenFromRuleId,
+      'overriddenFromAmount': overriddenFromAmount,
       'sourceRuleId': sourceRuleId,
       'type': type.name,
       'valueType': valueType.name,
@@ -106,6 +187,13 @@ class MonthlyBillModel extends MonthlyBill {
     String? tenantUserId,
     String? tenancyHistoryId,
     bool clearTenancyHistoryId = false,
+    String? title,
+    bool clearTitle = false,
+    BillingScopeType? ruleScopeType,
+    String? ruleScopeId,
+    JsonMap? ruleSnapshot,
+    String? overriddenFromRuleId,
+    double? overriddenFromAmount,
     String? sourceRuleId,
     MonthlyBillType? type,
     BillingValueType? valueType,
@@ -133,6 +221,12 @@ class MonthlyBillModel extends MonthlyBill {
       tenancyHistoryId: clearTenancyHistoryId
           ? null
           : tenancyHistoryId ?? this.tenancyHistoryId,
+      title: clearTitle ? null : title ?? this.title,
+      ruleScopeType: ruleScopeType ?? this.ruleScopeType,
+      ruleScopeId: ruleScopeId ?? this.ruleScopeId,
+      ruleSnapshot: ruleSnapshot ?? this.ruleSnapshot,
+      overriddenFromRuleId: overriddenFromRuleId ?? this.overriddenFromRuleId,
+      overriddenFromAmount: overriddenFromAmount ?? this.overriddenFromAmount,
       sourceRuleId: sourceRuleId ?? this.sourceRuleId,
       type: type ?? this.type,
       valueType: valueType ?? this.valueType,
@@ -151,7 +245,7 @@ class MonthlyBillModel extends MonthlyBill {
   // READ HELPERS
   // ==========================================================================
 
-  static String _readRequiredString(Map<String, dynamic> data, String field) {
+  static String _readRequiredString(JsonMap data, String field) {
     final value = data[field];
 
     if (value is! String || value.trim().isEmpty) {
@@ -164,7 +258,7 @@ class MonthlyBillModel extends MonthlyBill {
     return value.trim();
   }
 
-  static String? _readOptionalString(Map<String, dynamic> data, String field) {
+  static String? _readOptionalString(JsonMap data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -180,7 +274,7 @@ class MonthlyBillModel extends MonthlyBill {
     return normalized.isEmpty ? null : normalized;
   }
 
-  static double _readRequiredDouble(Map<String, dynamic> data, String field) {
+  static double _readRequiredDouble(JsonMap data, String field) {
     final value = data[field];
 
     if (value is! num) {
@@ -202,10 +296,53 @@ class MonthlyBillModel extends MonthlyBill {
     return result;
   }
 
-  static DateTime _readRequiredDateTime(
-    Map<String, dynamic> data,
-    String field,
-  ) {
+  static double? _readOptionalDouble(JsonMap data, String field) {
+    final value = data[field];
+
+    if (value == null) {
+      return null;
+    }
+
+    if (value is! num) {
+      return null;
+    }
+
+    return value.toDouble();
+  }
+
+  static BillingScopeType? _readOptionalScopeType(JsonMap data, String field) {
+    final value = data[field];
+
+    if (value is! String || value.trim().isEmpty) {
+      return null;
+    }
+
+    for (final scope in BillingScopeType.values) {
+      if (scope.name == value.trim()) {
+        return scope;
+      }
+    }
+
+    return null;
+  }
+
+  static JsonMap? _readOptionalMap(JsonMap data, String field) {
+    final value = data[field];
+
+    if (value is JsonMap) {
+      return JsonMap.unmodifiable(value);
+    }
+
+    if (value is Map) {
+      return JsonMap.unmodifiable(
+        value.map((key, val) => MapEntry(key.toString(), val)),
+      );
+    }
+
+    return null;
+  }
+
+  static DateTime _readRequiredDateTime(JsonMap data, String field) {
     final value = data[field];
 
     if (value is Timestamp) {
@@ -222,7 +359,7 @@ class MonthlyBillModel extends MonthlyBill {
   // BILL TYPE
   // ==========================================================================
 
-  static MonthlyBillType _readBillType(Map<String, dynamic> data) {
+  static MonthlyBillType _readBillType(JsonMap data) {
     final value = data['type'];
 
     if (value is! String) {
@@ -244,7 +381,7 @@ class MonthlyBillModel extends MonthlyBill {
   // BILL VALUE TYPE
   // ==========================================================================
 
-  static BillingValueType _readBillValueType(Map<String, dynamic> data) {
+  static BillingValueType _readBillValueType(JsonMap data) {
     final value = data['valueType'];
 
     if (value is! String) {
@@ -266,7 +403,7 @@ class MonthlyBillModel extends MonthlyBill {
   // BILL STATUS
   // ==========================================================================
 
-  static MonthlyBillStatus _readBillStatus(Map<String, dynamic> data) {
+  static MonthlyBillStatus _readBillStatus(JsonMap data) {
     final value = data['status'];
 
     if (value is! String) {

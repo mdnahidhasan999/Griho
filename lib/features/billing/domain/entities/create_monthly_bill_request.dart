@@ -12,6 +12,12 @@ class CreateMonthlyBillRequest {
 
   final String sourceRuleId;
 
+  /// Optional immutable rule metadata captured at bill generation time.
+  final String? title;
+  final BillingScopeType? ruleScopeType;
+  final String? ruleScopeId;
+  final Map<String, dynamic>? ruleSnapshot;
+
   final MonthlyBillType type;
   final BillingValueType valueType;
 
@@ -32,6 +38,10 @@ class CreateMonthlyBillRequest {
     this.tenantUserId,
     this.tenancyHistoryId,
     required this.sourceRuleId,
+    this.title,
+    this.ruleScopeType,
+    this.ruleScopeId,
+    this.ruleSnapshot,
     required this.type,
     required this.valueType,
     required this.amount,

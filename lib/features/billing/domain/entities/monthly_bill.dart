@@ -1,12 +1,6 @@
 import 'package:griho/features/billing/domain/entities/billing_rule.dart';
 
-enum MonthlyBillStatus {
-  unpaid,
-  partiallyPaid,
-  paid,
-  overdue,
-  cancelled,
-}
+enum MonthlyBillStatus { unpaid, partiallyPaid, paid, overdue, cancelled }
 
 enum MonthlyBillType {
   rent,
@@ -49,6 +43,20 @@ class MonthlyBill {
   final BillingValueType valueType;
   final String? tenancyHistoryId;
 
+  /// Immutable snapshot of custom title at the time of bill generation.
+  final String? title;
+
+  /// Immutable snapshot of the rule scope at the time of bill generation.
+  final BillingScopeType? ruleScopeType;
+  final String? ruleScopeId;
+
+  /// Full immutable rule metadata snapshot so future rule edits never alter old bills.
+  final Map<String, dynamic>? ruleSnapshot;
+
+  /// Audit fields when a Variable bill overrides an existing Fixed bill.
+  final String? overriddenFromRuleId;
+  final double? overriddenFromAmount;
+
   /// Snapshot of the amount for this billing period.
   ///
   /// The amount is already known when the bill is generated.
@@ -83,6 +91,12 @@ class MonthlyBill {
     required this.sourceRuleId,
     required this.type,
     this.tenancyHistoryId,
+    this.title,
+    this.ruleScopeType,
+    this.ruleScopeId,
+    this.ruleSnapshot,
+    this.overriddenFromRuleId,
+    this.overriddenFromAmount,
     required this.valueType,
     required this.amount,
     required this.paidAmount,
@@ -93,6 +107,10 @@ class MonthlyBill {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  /// Whether this bill was updated by a Variable override replacing a Fixed bill.
+  bool get isOverriddenByVariable =>
+      overriddenFromRuleId != null && overriddenFromRuleId!.trim().isNotEmpty;
 
   /// Remaining amount that the tenant still needs to pay.
   double get remainingAmount {
@@ -115,14 +133,8 @@ class MonthlyBill {
     }
 
     final now = DateTime.now();
-
     final today = DateTime(now.year, now.month, now.day);
-
-    final deadline = DateTime(
-      dueDate.year,
-      dueDate.month,
-      dueDate.day,
-    );
+    final deadline = DateTime(dueDate.year, dueDate.month, dueDate.day);
 
     return today.isAfter(deadline);
   }
@@ -143,15 +155,13 @@ class MonthlyBill {
   }
 
   bool get isFullyPaid =>
-      status == MonthlyBillStatus.paid &&
-          remainingAmount == 0;
+      status == MonthlyBillStatus.paid && remainingAmount == 0;
 
   bool get isPartiallyPaid =>
       status == MonthlyBillStatus.partiallyPaid ||
-          (paidAmount > 0 && paidAmount < amount);
+      (paidAmount > 0 && paidAmount < amount);
 
-  bool get isUnpaid =>
-      status == MonthlyBillStatus.unpaid;
+  bool get isUnpaid => status == MonthlyBillStatus.unpaid;
 
   MonthlyBill copyWith({
     String? id,
@@ -166,6 +176,13 @@ class MonthlyBill {
     MonthlyBillType? type,
     String? tenancyHistoryId,
     bool clearTenancyHistoryId = false,
+    String? title,
+    bool clearTitle = false,
+    BillingScopeType? ruleScopeType,
+    String? ruleScopeId,
+    Map<String, dynamic>? ruleSnapshot,
+    String? overriddenFromRuleId,
+    double? overriddenFromAmount,
     BillingValueType? valueType,
     double? amount,
     double? paidAmount,
@@ -194,12 +211,16 @@ class MonthlyBill {
       tenancyHistoryId: clearTenancyHistoryId
           ? null
           : tenancyHistoryId ?? this.tenancyHistoryId,
+      title: clearTitle ? null : title ?? this.title,
+      ruleScopeType: ruleScopeType ?? this.ruleScopeType,
+      ruleScopeId: ruleScopeId ?? this.ruleScopeId,
+      ruleSnapshot: ruleSnapshot ?? this.ruleSnapshot,
+      overriddenFromRuleId: overriddenFromRuleId ?? this.overriddenFromRuleId,
+      overriddenFromAmount: overriddenFromAmount ?? this.overriddenFromAmount,
       amount: amount ?? this.amount,
       paidAmount: paidAmount ?? this.paidAmount,
-      billingPeriodStart:
-      billingPeriodStart ?? this.billingPeriodStart,
-      billingPeriodEnd:
-      billingPeriodEnd ?? this.billingPeriodEnd,
+      billingPeriodStart: billingPeriodStart ?? this.billingPeriodStart,
+      billingPeriodEnd: billingPeriodEnd ?? this.billingPeriodEnd,
       dueDate: dueDate ?? this.dueDate,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
