@@ -21,8 +21,8 @@ class ImageCompressionHelper {
       if (result == null) return null;
 
       var compressedFile = File(result.path);
-      int sizeInBytes = await compressedFile.length();
-      double sizeInKb = sizeInBytes / 1024;
+      final int sizeInBytes = await compressedFile.length();
+      final double sizeInKb = sizeInBytes / 1024;
 
       if (sizeInKb > 50) {
         final ultimatePath = '${dir.absolute.path}/ultimate_${DateTime.now().millisecondsSinceEpoch}.jpg';

@@ -302,8 +302,8 @@ class _PortfolioVaultCard extends ConsumerWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          colors: [const Color(0xFF1E222D), const Color(0xFF141720)],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E222D), Color(0xFF141720)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

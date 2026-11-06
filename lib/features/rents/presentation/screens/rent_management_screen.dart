@@ -467,16 +467,16 @@ class _RentManagementScreenState extends ConsumerState<RentManagementScreen> {
             ),
           ),
           if (_isChangingBulkRent)
-            Positioned.fill(
+            const Positioned.fill(
               child: ColoredBox(
                 color: Colors.black45,
                 child: Center(
                   child: Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: EdgeInsets.all(24),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
+                        children: [
                           CircularProgressIndicator(),
                           SizedBox(height: 16),
                           Text(
