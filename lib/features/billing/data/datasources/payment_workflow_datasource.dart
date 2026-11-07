@@ -9,8 +9,8 @@ enum PaymentReviewStatus { pending, confirmed, rejected }
 
 class PaymentWorkflowDataSource {
   PaymentWorkflowDataSource({FirebaseFirestore? firestore, FirebaseAuth? auth})
-    : _firestore = firestore ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -19,8 +19,8 @@ class PaymentWorkflowDataSource {
       _firestore.collection('paymentTransactions');
 
   CollectionReference<Map<String, dynamic>> _billCollection(
-    String collectionName,
-  ) {
+      String collectionName,
+      ) {
     if (collectionName != 'monthlyBills' && collectionName != 'monthlyRents') {
       throw ArgumentError('Unsupported bill collection.');
     }
@@ -53,10 +53,10 @@ class PaymentWorkflowDataSource {
   }
 
   double _readAmount(
-    Map<String, dynamic> data,
-    String field, {
-    double? defaultValue,
-  }) {
+      Map<String, dynamic> data,
+      String field, {
+        double? defaultValue,
+      }) {
     final value = data[field];
 
     if (value == null && defaultValue != null) {
@@ -157,12 +157,18 @@ class PaymentWorkflowDataSource {
     }
 
     final billRef = _billCollection(normalizedCollection).doc(normalizedBillId);
-
     final paymentRef = _payments.doc();
 
     final normalizedBatchId = batchId?.trim().isNotEmpty == true
         ? batchId!.trim()
         : paymentRef.id;
+
+    // Fetch tenant profile details to display Griho ID, Property & Unit names in Owner panel
+    final tenantDoc = await _firestore.collection('tenants').doc(uid).get();
+    final tenantData = tenantDoc.data() ?? {};
+    final grihoId = tenantData['grihoId'] ?? tenantData['phone'] ?? '—';
+    final propertyName = tenantData['propertyName'] ?? tenantData['propertyId'] ?? 'Property';
+    final unitName = tenantData['unitName'] ?? tenantData['unitId'] ?? 'Unit';
 
     await _firestore.runTransaction((transaction) async {
       final billSnapshot = await transaction.get(billRef);
@@ -182,9 +188,7 @@ class PaymentWorkflowDataSource {
       }
 
       final billAmount = _readAmount(bill, 'amount');
-
       final paidAmount = _readAmount(bill, 'paidAmount', defaultValue: 0);
-
       final pendingAmount = _readAmount(
         bill,
         'pendingPaymentAmount',
@@ -220,8 +224,11 @@ class PaymentWorkflowDataSource {
         'billId': normalizedBillId,
         'ownerId': ownerId,
         'propertyId': propertyId,
+        'propertyName': propertyName,
         'unitId': unitId,
+        'unitName': unitName,
         'tenantId': tenantId,
+        'grihoId': grihoId,
         'tenantUserId': uid,
         'amount': amount,
         'billCollection': normalizedCollection,
@@ -266,7 +273,6 @@ class PaymentWorkflowDataSource {
     }
 
     final batchId = _payments.doc().id;
-
     final createdPayments = <String, String>{};
 
     for (final entry in amountsByBillId.entries) {
@@ -291,10 +297,8 @@ class PaymentWorkflowDataSource {
   // ------------------------------------------------------------
   // CONFIRM PAYMENT (OWNER ACTION)
   // ------------------------------------------------------------
-
   Future<void> confirmPayment({required String paymentId}) async {
     final uid = _currentUid;
-
     final normalizedPaymentId = paymentId.trim();
 
     if (normalizedPaymentId.isEmpty) {
@@ -328,7 +332,6 @@ class PaymentWorkflowDataSource {
       }
 
       final paymentAmount = paymentAmountValue.toDouble();
-
       if (!paymentAmount.isFinite || paymentAmount <= 0) {
         throw StateError('Payment amount is invalid.');
       }
@@ -338,7 +341,6 @@ class PaymentWorkflowDataSource {
       );
 
       final billRef = _billCollection(billCollection).doc(billId);
-
       final billSnapshot = await transaction.get(billRef);
 
       if (!billSnapshot.exists) {
@@ -346,7 +348,6 @@ class PaymentWorkflowDataSource {
       }
 
       final bill = billSnapshot.data()!;
-
       _validatePaymentOwnership(bill: bill, payment: payment, ownerId: uid);
 
       if (_isClosedBill(bill)) {
@@ -354,16 +355,11 @@ class PaymentWorkflowDataSource {
       }
 
       if (payment['reservationApplied'] != true) {
-        throw StateError(
-          'Payment reservation is missing. '
-          'Please reconcile this payment before confirming.',
-        );
+        throw StateError('Payment reservation is missing.');
       }
 
       final billAmount = _readAmount(bill, 'amount');
-
       final paidAmount = _readAmount(bill, 'paidAmount', defaultValue: 0);
-
       final pendingAmount = _readAmount(
         bill,
         'pendingPaymentAmount',
@@ -379,7 +375,6 @@ class PaymentWorkflowDataSource {
       }
 
       final newPaidAmount = paidAmount + paymentAmount;
-
       final newPendingAmount = (pendingAmount - paymentAmount)
           .clamp(0.0, double.infinity)
           .toDouble();
@@ -409,13 +404,11 @@ class PaymentWorkflowDataSource {
   // ------------------------------------------------------------
   // REJECT PAYMENT (OWNER ACTION)
   // ------------------------------------------------------------
-
   Future<void> rejectPayment({
     required String paymentId,
     required String reason,
   }) async {
     final uid = _currentUid;
-
     final normalizedPaymentId = paymentId.trim();
     final normalizedReason = reason.trim();
 
@@ -454,7 +447,6 @@ class PaymentWorkflowDataSource {
       }
 
       final paymentAmount = paymentAmountValue.toDouble();
-
       if (!paymentAmount.isFinite || paymentAmount <= 0) {
         throw StateError('Payment amount is invalid.');
       }
@@ -464,7 +456,6 @@ class PaymentWorkflowDataSource {
       );
 
       final billRef = _billCollection(billCollection).doc(billId);
-
       final billSnapshot = await transaction.get(billRef);
 
       if (!billSnapshot.exists) {
@@ -472,7 +463,6 @@ class PaymentWorkflowDataSource {
       }
 
       final bill = billSnapshot.data()!;
-
       _validatePaymentOwnership(bill: bill, payment: payment, ownerId: uid);
 
       if (payment['reservationApplied'] == true) {
@@ -512,7 +502,6 @@ class PaymentWorkflowDataSource {
   // ------------------------------------------------------------
   Stream<QuerySnapshot<Map<String, dynamic>>> watchTenantPayments() {
     final uid = _currentUid;
-
     return _payments.where('tenantUserId', isEqualTo: uid).snapshots();
   }
 

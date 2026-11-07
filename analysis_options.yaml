@@ -6,6 +6,9 @@ analyzer:
     - ".dart_tool/**"
     - "**/*.g.dart"
     - "**/*.freezed.dart"
+    - android/**
+    - ios/**
+    - web/**
 
 linter:
   rules:

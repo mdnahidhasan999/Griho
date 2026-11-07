@@ -299,8 +299,7 @@ class _OwnerBillingRulesScreenState
         billingPeriodStart: billingPeriodStart,
         billingPeriodEnd: billingPeriodEnd,
         dueDate: dueDate,
-        generateRent: false,
-        onlyBillValueType: BillingValueType.variable,
+        generateRent: true,
       );
 
       if (!mounted) {
@@ -574,7 +573,7 @@ class _RulesTab extends ConsumerWidget {
               onPressed: onGenerateBills,
               icon: const Icon(Icons.calendar_month_outlined, size: 18),
               label: const Text(
-                'Generate Variable Bills / Override Fixed',
+                'Generate Pending Bills / Override Fixed',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
