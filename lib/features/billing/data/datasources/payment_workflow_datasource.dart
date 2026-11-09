@@ -9,8 +9,8 @@ enum PaymentReviewStatus { pending, confirmed, rejected }
 
 class PaymentWorkflowDataSource {
   PaymentWorkflowDataSource({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -19,8 +19,8 @@ class PaymentWorkflowDataSource {
       _firestore.collection('paymentTransactions');
 
   CollectionReference<Map<String, dynamic>> _billCollection(
-      String collectionName,
-      ) {
+    String collectionName,
+  ) {
     if (collectionName != 'monthlyBills' && collectionName != 'monthlyRents') {
       throw ArgumentError('Unsupported bill collection.');
     }
@@ -53,10 +53,10 @@ class PaymentWorkflowDataSource {
   }
 
   double _readAmount(
-      Map<String, dynamic> data,
-      String field, {
-        double? defaultValue,
-      }) {
+    Map<String, dynamic> data,
+    String field, {
+    double? defaultValue,
+  }) {
     final value = data[field];
 
     if (value == null && defaultValue != null) {
@@ -163,12 +163,65 @@ class PaymentWorkflowDataSource {
         ? batchId!.trim()
         : paymentRef.id;
 
-    // Fetch tenant profile details to display Griho ID, Property & Unit names in Owner panel
-    final tenantDoc = await _firestore.collection('tenants').doc(uid).get();
-    final tenantData = tenantDoc.data() ?? {};
-    final grihoId = tenantData['grihoId'] ?? tenantData['phone'] ?? '—';
-    final propertyName = tenantData['propertyName'] ?? tenantData['propertyId'] ?? 'Property';
-    final unitName = tenantData['unitName'] ?? tenantData['unitId'] ?? 'Unit';
+    // Fetch proper details from bill and related collections
+    final billDocSnap = await billRef.get();
+    String grihoId = '—';
+    String propertyName = 'Property';
+    String unitName = 'Unit';
+
+    if (billDocSnap.exists) {
+      final billData = billDocSnap.data()!;
+      final propertyId = billData['propertyId']?.toString();
+      final unitId = billData['unitId']?.toString();
+      final tenantId = billData['tenantId']?.toString();
+
+      // 1. Get Griho ID (publicId from users collection)
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        grihoId =
+            userDoc.data()?['publicId'] ??
+            userDoc.data()?['phoneNumber'] ??
+            '—';
+      }
+
+      // 2. Get Property Name
+      if (propertyId != null && propertyId.isNotEmpty) {
+        final propDoc = await _firestore
+            .collection('properties')
+            .doc(propertyId)
+            .get();
+        if (propDoc.exists) {
+          propertyName = propDoc.data()?['name'] ?? 'Property';
+        }
+      }
+
+      // 3. Get Unit Name
+      if (unitId != null && unitId.isNotEmpty) {
+        final unitDoc = await _firestore.collection('units').doc(unitId).get();
+        if (unitDoc.exists) {
+          final uData = unitDoc.data();
+          unitName =
+              uData?['name'] ??
+              (uData?['unitNumber'] != null
+                  ? 'Unit ${uData?['unitNumber']}'
+                  : 'Unit');
+        }
+      }
+
+      // Fallback to tenant doc if property/unit still default
+      if (tenantId != null && tenantId.isNotEmpty) {
+        final tenantDoc = await _firestore
+            .collection('tenants')
+            .doc(tenantId)
+            .get();
+        if (tenantDoc.exists) {
+          final tData = tenantDoc.data()!;
+          if (grihoId == '—') {
+            grihoId = tData['grihoId'] ?? tData['phone'] ?? '—';
+          }
+        }
+      }
+    }
 
     await _firestore.runTransaction((transaction) async {
       final billSnapshot = await transaction.get(billRef);

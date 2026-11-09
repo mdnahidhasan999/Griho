@@ -1403,26 +1403,28 @@ service cloud.firestore {
     }
 
 
-            // ============================================================
-            // MONTHLY BILLS
-            // ============================================================
+         // ============================================================
+         // MONTHLY BILLS
+         // ============================================================
+         match /monthlyBills/{monthlyBillId} {
+           allow get, list: if isAuthenticated();
 
-        match /monthlyBills/{monthlyBillId} {
-          allow get, list: if isAuthenticated();
+           allow create: if isAuthenticated()
+                         && request.resource.data.ownerId == request.auth.uid
+                         && isValidMonthlyBillCreate();
 
-          allow create: if isAuthenticated()
-                        && request.resource.data.ownerId == request.auth.uid
-                        && isValidMonthlyBillCreate();
+           // বাড়িওয়ালার ক্যানসেল, কনফার্ম/রিজেক্ট আপডেট অথবা টেন্যান্টের পেমেন্ট রিজার্ভ করার অনুমতি
+           allow update: if isAuthenticated()
+                         && (
+                           isValidMonthlyBillCancellation()
+                           || isValidMonthlyBillPaymentReservation()
+                           || isValidMonthlyBillOwnerPaymentReview()
+                         );
 
-          // Preserve existing cancellation validation.
-          // Also allow only a validated payment confirmation update.
-          allow update: if isAuthenticated()
-                        && (
-                          isValidMonthlyBillCancellation()
-                        );
+           allow delete: if false;
+         }
 
-          allow delete: if false;
-        }
+
 
     // ============================================================
     // PAYMENT TRANSACTIONS
@@ -2109,7 +2111,39 @@ service cloud.firestore {
        && request.resource.data.updatedAt >= resource.data.updatedAt
        && request.resource.data.updatedAt <= request.time;
    }
+    // ============================================================
+    // MONTHLY BILL — PAYMENT RESERVATION VALIDATION (TENANT)
+    // ============================================================
+    function isValidMonthlyBillPaymentReservation() {
+      let diff = request.resource.data.diff(resource.data);
+      return resource.data.tenantUserId == request.auth.uid
+             && resource.data.status != 'paid'
+             && resource.data.status != 'cancelled'
+             && diff.affectedKeys().hasOnly(['pendingPaymentAmount', 'updatedAt'])
+             && request.resource.data.pendingPaymentAmount > resource.data.get('pendingPaymentAmount', 0)
+             && request.resource.data.updatedAt is timestamp
+             && request.resource.data.updatedAt <= request.time;
+    }
 
+    // ============================================================
+    // MONTHLY BILL — OWNER PAYMENT CONFIRM / REJECT VALIDATION
+    // ============================================================
+    function isValidMonthlyBillOwnerPaymentReview() {
+      let diff = request.resource.data.diff(resource.data);
+      return resource.data.ownerId == request.auth.uid
+             && resource.data.status != 'cancelled'
+             && diff.affectedKeys().hasOnly([
+               'paidAmount',
+               'pendingPaymentAmount',
+               'status',
+               'updatedAt',
+               'lastPaymentId'
+             ])
+             && request.resource.data.get('paidAmount', 0) >= resource.data.get('paidAmount', 0)
+             && request.resource.data.get('pendingPaymentAmount', 0) >= 0
+             && request.resource.data.status in ['unpaid', 'partiallyPaid', 'paid']
+             && request.resource.data.updatedAt is timestamp;
+    }
 
     // ============================================================
     // VALIDATE TENANT ACCEPTANCE

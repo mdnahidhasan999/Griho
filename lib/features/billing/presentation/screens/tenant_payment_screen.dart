@@ -25,7 +25,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   final Set<String> _expandedPaymentGroupIds = <String>{};
 
   final Map<String, TextEditingController> _amountControllers =
-  <String, TextEditingController>{};
+      <String, TextEditingController>{};
 
   final _referenceController = TextEditingController();
   final _noteController = TextEditingController();
@@ -62,9 +62,14 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 
   bool _isPayable(MonthlyBill bill) {
-    return bill.status != MonthlyBillStatus.paid &&
-        bill.status != MonthlyBillStatus.cancelled &&
-        _remaining(bill) > 0.001;
+    // 1. যদি বিলটি ইতিমধ্যে সম্পূর্ণ পেইড বা ক্যানসেল হয়, তবে দেখাবে না।
+    if (bill.status == MonthlyBillStatus.paid ||
+        bill.status == MonthlyBillStatus.cancelled ||
+        _remaining(bill) <= 0.001) {
+      return false;
+    }
+
+    return true;
   }
 
   String _money(double amount) {
@@ -97,7 +102,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   TextEditingController _amountControllerFor(MonthlyBill bill) {
     return _amountControllers.putIfAbsent(
       bill.id,
-          () => TextEditingController(text: _remaining(bill).toStringAsFixed(2)),
+      () => TextEditingController(text: _remaining(bill).toStringAsFixed(2)),
     );
   }
 
@@ -158,14 +163,14 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       final createdPayments = await ref
           .read(paymentWorkflowDataSourceProvider)
           .submitPayments(
-        amountsByBillId: amountsByBillId,
-        collectionsByBillId: collectionsByBillId,
-        method: _method,
-        reference: reference.isEmpty ? null : reference,
-        note: _noteController.text.trim().isEmpty
-            ? null
-            : _noteController.text.trim(),
-      );
+            amountsByBillId: amountsByBillId,
+            collectionsByBillId: collectionsByBillId,
+            method: _method,
+            reference: reference.isEmpty ? null : reference,
+            note: _noteController.text.trim().isEmpty
+                ? null
+                : _noteController.text.trim(),
+          );
 
       if (!mounted) return;
 
@@ -184,7 +189,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
       _message(
         'Successfully submitted ${createdPayments.length} payment request(s). '
-            'They are pending owner verification.',
+        'They are pending owner verification.',
       );
 
       ref.invalidate(tenantPaymentTransactionsProvider);
@@ -248,8 +253,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       final statuses = payments
           .map(
             (doc) =>
-            (_docData(doc)['status'] ?? 'pending').toString().toLowerCase(),
-      )
+                (_docData(doc)['status'] ?? 'pending').toString().toLowerCase(),
+          )
           .toSet();
 
       final overallStatus = _resolveGroupStatus(statuses);
@@ -267,7 +272,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     }).toList();
 
     result.sort(
-          (a, b) => _createdAtMillisFromValue(
+      (a, b) => _createdAtMillisFromValue(
         b.createdAt,
       ).compareTo(_createdAtMillisFromValue(a.createdAt)),
     );
@@ -346,9 +351,9 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   // ------------------------------------------------------------
 
   Widget _buildPaymentHistory(
-      List<MonthlyBill> bills,
-      AsyncValue<QuerySnapshot> paymentHistory,
-      ) {
+    List<MonthlyBill> bills,
+    AsyncValue<QuerySnapshot> paymentHistory,
+  ) {
     final theme = Theme.of(context);
 
     return paymentHistory.when(
@@ -425,8 +430,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                         '৳${_money(group.totalAmount)}',
                                         style: theme.textTheme.titleMedium
                                             ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                       ),
                                     ),
                                     _StatusBadge(
@@ -438,8 +443,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 const SizedBox(height: 6),
                                 Text(
                                   '${group.payments.length} bill(s) • '
-                                      'Method: ${group.method.toUpperCase()}'
-                                      '${group.reference.isNotEmpty ? ' • Ref: ${group.reference}' : ''}',
+                                  'Method: ${group.method.toUpperCase()}'
+                                  '${group.reference.isNotEmpty ? ' • Ref: ${group.reference}' : ''}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
@@ -505,8 +510,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                             final billStatusColor = _statusColor(billStatus);
                             final billTitle = _paymentBillTitle(data, bills);
                             final collection =
-                            (data['billCollection'] ?? 'monthlyBills')
-                                .toString();
+                                (data['billCollection'] ?? 'monthlyBills')
+                                    .toString();
                             final reason = (data['rejectionReason'] ?? '')
                                 .toString();
 
@@ -528,16 +533,16 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                           billTitle,
                                           style: theme.textTheme.bodyMedium
                                               ?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                         ),
                                       ),
                                       Text(
                                         '৳${_money(paidAmount)}',
                                         style: theme.textTheme.bodyMedium
                                             ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -647,7 +652,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     final payableBills = allBills.where(_isPayable).toList();
 
     _selectedBillIds.removeWhere(
-          (id) => !payableBills.any((bill) => bill.id == id),
+      (id) => !payableBills.any((bill) => bill.id == id),
     );
 
     // Pre-initialize controllers so no new controller creation happens mid-frame
@@ -663,25 +668,25 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     }
 
     final monthlyGroups =
-    monthlyGroupsMap.entries.map((entry) {
-      final billsInMonth = entry.value;
+        monthlyGroupsMap.entries.map((entry) {
+          final billsInMonth = entry.value;
 
-      billsInMonth.sort((a, b) {
-        final isRentA = a.type == MonthlyBillType.rent ? 0 : 1;
-        final isRentB = b.type == MonthlyBillType.rent ? 0 : 1;
-        if (isRentA != isRentB) return isRentA.compareTo(isRentB);
-        return a.type.name.compareTo(b.type.name);
-      });
+          billsInMonth.sort((a, b) {
+            final isRentA = a.type == MonthlyBillType.rent ? 0 : 1;
+            final isRentB = b.type == MonthlyBillType.rent ? 0 : 1;
+            if (isRentA != isRentB) return isRentA.compareTo(isRentB);
+            return a.type.name.compareTo(b.type.name);
+          });
 
-      return _MonthlyPayableGroup(
-        periodKey: entry.key,
-        billingPeriodStart: billsInMonth.first.billingPeriodStart,
-        dueDate: billsInMonth.first.dueDate,
-        bills: billsInMonth,
-      );
-    }).toList()..sort(
+          return _MonthlyPayableGroup(
+            periodKey: entry.key,
+            billingPeriodStart: billsInMonth.first.billingPeriodStart,
+            dueDate: billsInMonth.first.dueDate,
+            bills: billsInMonth,
+          );
+        }).toList()..sort(
           (a, b) => a.billingPeriodStart.compareTo(b.billingPeriodStart),
-    );
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -760,23 +765,21 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                     onPressed: _submitting
                         ? null
                         : () {
-                      setState(() {
-                        if (_selectedBillIds.length ==
-                            payableBills.length) {
-                          _selectedBillIds.clear();
-                        } else {
-                          _selectedBillIds
-                            ..clear()
-                            ..addAll(
-                              payableBills.map((bill) => bill.id),
-                            );
-                          // Auto-expand all months when Select All is pressed
-                          _expandedMonthKeys.addAll(
-                            monthlyGroups.map((g) => g.periodKey),
-                          );
-                        }
-                      });
-                    },
+                            setState(() {
+                              if (_selectedBillIds.length ==
+                                  payableBills.length) {
+                                _selectedBillIds.clear();
+                              } else {
+                                _selectedBillIds
+                                  ..clear()
+                                  ..addAll(payableBills.map((bill) => bill.id));
+                                // Auto-expand all months when Select All is pressed
+                                _expandedMonthKeys.addAll(
+                                  monthlyGroups.map((g) => g.periodKey),
+                                );
+                              }
+                            });
+                          },
                     icon: Icon(
                       _selectedBillIds.length == payableBills.length
                           ? Icons.deselect_rounded
@@ -870,12 +873,12 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                           onChanged: _submitting
                               ? null
                               : (value) {
-                            if (value != null) {
-                              setState(() {
-                                _method = value;
-                              });
-                            }
-                          },
+                                  if (value != null) {
+                                    setState(() {
+                                      _method = value;
+                                    });
+                                  }
+                                },
                         ),
                         const SizedBox(height: 16),
                         TextField(
@@ -905,7 +908,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                           decoration: InputDecoration(
                             labelText: 'Note for Owner (Optional)',
                             hintText:
-                            'Add any details regarding this payment...',
+                                'Add any details regarding this payment...',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -1022,15 +1025,15 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
     final totalMonthAmount = group.bills.fold<double>(
       0.0,
-          (s, b) => s + b.amount,
+      (s, b) => s + b.amount,
     );
     final totalMonthDue = group.bills.fold<double>(
       0.0,
-          (s, b) => s + _remaining(b),
+      (s, b) => s + _remaining(b),
     );
 
     final allSelectedInMonth = group.bills.every(
-          (b) => _selectedBillIds.contains(b.id),
+      (b) => _selectedBillIds.contains(b.id),
     );
 
     final isExpanded = _expandedMonthKeys.contains(group.periodKey);
@@ -1169,18 +1172,18 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                         onPressed: _submitting
                             ? null
                             : () {
-                          setState(() {
-                            if (allSelectedInMonth) {
-                              for (final b in group.bills) {
-                                _selectedBillIds.remove(b.id);
-                              }
-                            } else {
-                              for (final b in group.bills) {
-                                _selectedBillIds.add(b.id);
-                              }
-                            }
-                          });
-                        },
+                                setState(() {
+                                  if (allSelectedInMonth) {
+                                    for (final b in group.bills) {
+                                      _selectedBillIds.remove(b.id);
+                                    }
+                                  } else {
+                                    for (final b in group.bills) {
+                                      _selectedBillIds.add(b.id);
+                                    }
+                                  }
+                                });
+                              },
                         child: Text(
                           allSelectedInMonth
                               ? 'Deselect Month'
@@ -1200,7 +1203,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                       decoration: BoxDecoration(
                         color: selected
                             ? theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.5)
+                                  .withValues(alpha: 0.5)
                             : theme.colorScheme.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
@@ -1225,37 +1228,37 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                   onChanged: _submitting
                                       ? null
                                       : (value) {
-                                    setState(() {
-                                      if (value == true) {
-                                        _selectedBillIds.add(bill.id);
-                                      } else {
-                                        _selectedBillIds.remove(bill.id);
-                                      }
-                                    });
-                                  },
+                                          setState(() {
+                                            if (value == true) {
+                                              _selectedBillIds.add(bill.id);
+                                            } else {
+                                              _selectedBillIds.remove(bill.id);
+                                            }
+                                          });
+                                        },
                                 ),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         _billTitle(bill),
                                         style: theme.textTheme.titleSmall
                                             ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         'Total: ৳${_money(bill.amount)} • Paid: ৳${_money(bill.paidAmount)}',
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                          fontSize: 11,
-                                        ),
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                              fontSize: 11,
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -1287,16 +1290,14 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 controller: controller,
                                 enabled: !_submitting,
                                 keyboardType:
-                                const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 decoration: InputDecoration(
                                   labelText: 'Enter Payment Amount (৳)',
                                   helperText:
-                                  'Maximum payable: ৳${_money(_remaining(bill))}',
-                                  prefixIcon: const Icon(
-                                    Icons.payment_rounded,
-                                  ),
+                                      'Maximum payable: ৳${_money(_remaining(bill))}',
+                                  prefixIcon: const Icon(Icons.payment_rounded),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
