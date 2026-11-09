@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/domain/entities/app_user.dart';
+import '../../features/auth/presentation/screens/change_password_screen.dart';
 import '../../features/auth/presentation/screens/create_account_screen.dart';
 import '../../features/auth/presentation/screens/edit_profile_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
@@ -509,6 +510,16 @@ abstract final class AppRouter {
             return EditProfileScreen(user: user);
           },
         ),
+        // ========================================================
+        // CHANGE PASSWORD
+        // ========================================================
+        GoRoute(
+          path: RouteNames.changePassword,
+          builder: (context, state) {
+            return const ChangePasswordScreen();
+          },
+        ),
+
       ],
     );
   }

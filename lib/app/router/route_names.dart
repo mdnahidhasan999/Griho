@@ -9,6 +9,8 @@ abstract final class RouteNames {
   static const linkWaiting = '/link-waiting';
   static const onboarding = '/onboarding';
   static const roleSelection = '/role-selection';
+  static const String changePassword = '/change-password';
+
 
   // ============================================================
   // HOME

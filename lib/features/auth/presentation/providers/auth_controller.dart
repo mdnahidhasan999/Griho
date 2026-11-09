@@ -10,13 +10,13 @@ import '../../domain/entities/app_user.dart';
 import '../../domain/entities/auth_result.dart';
 import 'auth_provider.dart';
 
-final firebaseAuthDataSourceProvider =
-Provider<FirebaseAuthDataSource>((ref) {
+final firebaseAuthDataSourceProvider = Provider<FirebaseAuthDataSource>((ref) {
   return FirebaseAuthDataSource();
 });
 
-final userRegistrationServiceProvider =
-Provider<UserRegistrationService>((ref) {
+final userRegistrationServiceProvider = Provider<UserRegistrationService>((
+  ref,
+) {
   return UserRegistrationService(
     userProfileDataSource: ref.watch(userProfileDataSourceProvider),
     tenantInvitationDataSource: TenantInvitationDataSource(),
@@ -24,9 +24,7 @@ Provider<UserRegistrationService>((ref) {
 });
 
 final authControllerProvider =
-NotifierProvider<AuthController, AuthControllerState>(
-  AuthController.new,
-);
+    NotifierProvider<AuthController, AuthControllerState>(AuthController.new);
 
 class AuthControllerState {
   final bool isLoading;
@@ -79,11 +77,7 @@ class AuthController extends Notifier<AuthControllerState> {
   }
 
   void resetStatus() {
-    state = state.copyWith(
-      isLoading: false,
-      clearError: true,
-      linkSent: false,
-    );
+    state = state.copyWith(isLoading: false, clearError: true, linkSent: false);
   }
 
   // ============================================================
@@ -96,11 +90,7 @@ class AuthController extends Notifier<AuthControllerState> {
     required String email,
     required String password,
   }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-      linkSent: false,
-    );
+    state = state.copyWith(isLoading: true, clearError: true, linkSent: false);
 
     User? createdFirebaseUser;
     bool profileCreated = false;
@@ -118,13 +108,10 @@ class AuthController extends Notifier<AuthControllerState> {
       }
 
       if (password.length < 6) {
-        throw ArgumentError(
-          'Password must contain at least 6 characters.',
-        );
+        throw ArgumentError('Password must contain at least 6 characters.');
       }
 
-      final credential =
-      await _firebaseAuth.createUserWithEmailAndPassword(
+      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
         email: normalizedEmail,
         password: password,
       );
@@ -164,9 +151,7 @@ class AuthController extends Notifier<AuthControllerState> {
         androidMinimumVersion: '1',
       );
 
-      await currentFirebaseUser.sendEmailVerification(
-        actionCodeSettings,
-      );
+      await currentFirebaseUser.sendEmailVerification(actionCodeSettings);
 
       await _firebaseAuth.signOut();
 
@@ -181,9 +166,7 @@ class AuthController extends Notifier<AuthControllerState> {
 
       return true;
     } catch (error, stackTrace) {
-      debugPrint(
-        'CREATE ACCOUNT ERROR: $error\n$stackTrace',
-      );
+      debugPrint('CREATE ACCOUNT ERROR: $error\n$stackTrace');
 
       // Delete a newly created Firebase account only if its profile
       // was not successfully created.
@@ -191,9 +174,7 @@ class AuthController extends Notifier<AuthControllerState> {
         try {
           await createdFirebaseUser.delete();
         } catch (cleanupError) {
-          debugPrint(
-            'ACCOUNT CLEANUP ERROR: $cleanupError',
-          );
+          debugPrint('ACCOUNT CLEANUP ERROR: $cleanupError');
         }
       }
 
@@ -211,10 +192,7 @@ class AuthController extends Notifier<AuthControllerState> {
   // ============================================================
 
   Future<bool> handleEmailVerificationCode(String oobCode) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final code = oobCode.trim();
@@ -223,27 +201,19 @@ class AuthController extends Notifier<AuthControllerState> {
         throw ArgumentError('The email verification code is missing.');
       }
 
-      final actionCodeInfo =
-      await _firebaseAuth.checkActionCode(code);
+      final actionCodeInfo = await _firebaseAuth.checkActionCode(code);
 
       if (actionCodeInfo.operation != ActionCodeInfoOperation.verifyEmail) {
-        throw StateError(
-          'This link is not an email verification link.',
-        );
+        throw StateError('This link is not an email verification link.');
       }
 
       await _firebaseAuth.applyActionCode(code);
 
-      state = state.copyWith(
-        isLoading: false,
-        clearError: true,
-      );
+      state = state.copyWith(isLoading: false, clearError: true);
 
       return true;
     } catch (error, stackTrace) {
-      debugPrint(
-        'EMAIL VERIFICATION ERROR: $error\n$stackTrace',
-      );
+      debugPrint('EMAIL VERIFICATION ERROR: $error\n$stackTrace');
 
       state = state.copyWith(
         isLoading: false,
@@ -269,8 +239,7 @@ class AuthController extends Notifier<AuthControllerState> {
     );
 
     try {
-      final credential =
-      await _firebaseAuth.signInWithEmailAndPassword(
+      final credential = await _firebaseAuth.signInWithEmailAndPassword(
         email: email.trim().toLowerCase(),
         password: password,
       );
@@ -284,13 +253,10 @@ class AuthController extends Notifier<AuthControllerState> {
       if (!firebaseUser.emailVerified) {
         await _firebaseAuth.signOut();
 
-        throw StateError(
-          'Please verify your email address before signing in.',
-        );
+        throw StateError('Please verify your email address before signing in.');
       }
 
-      final profile =
-      await _registrationService.getUserProfileByFirebaseUid(
+      final profile = await _registrationService.getUserProfileByFirebaseUid(
         firebaseUser.uid,
       );
 
@@ -308,11 +274,7 @@ class AuthController extends Notifier<AuthControllerState> {
         return const AuthResult.newUser();
       }
 
-      state = state.copyWith(
-        isLoading: false,
-        user: profile,
-        clearError: true,
-      );
+      state = state.copyWith(isLoading: false, user: profile, clearError: true);
 
       ref.invalidate(currentUserProfileProvider);
 
@@ -346,28 +308,26 @@ class AuthController extends Notifier<AuthControllerState> {
         _googleInitialized = true;
       }
 
-      final GoogleSignInAccount googleUser =
-      await GoogleSignIn.instance.authenticate();
+      final GoogleSignInAccount googleUser = await GoogleSignIn.instance
+          .authenticate();
 
-      final GoogleSignInAuthentication googleAuth =
-          googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
       final String? idToken = googleAuth.idToken;
 
       if (idToken == null || idToken.isEmpty) {
         throw StateError(
           'Google Sign-In did not return an ID token. '
-              'Check your Firebase and Google Sign-In configuration.',
+          'Check your Firebase and Google Sign-In configuration.',
         );
       }
 
-      final OAuthCredential credential =
-      GoogleAuthProvider.credential(
+      final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: idToken,
       );
 
-      final UserCredential userCredential =
-      await _firebaseAuth.signInWithCredential(credential);
+      final UserCredential userCredential = await _firebaseAuth
+          .signInWithCredential(credential);
 
       final firebaseUser = userCredential.user;
 
@@ -375,8 +335,7 @@ class AuthController extends Notifier<AuthControllerState> {
         throw StateError('Google Sign-In failed. Please try again.');
       }
 
-      final profile =
-      await _registrationService.getUserProfileByFirebaseUid(
+      final profile = await _registrationService.getUserProfileByFirebaseUid(
         firebaseUser.uid,
       );
 
@@ -394,11 +353,7 @@ class AuthController extends Notifier<AuthControllerState> {
         return const AuthResult.newUser();
       }
 
-      state = state.copyWith(
-        isLoading: false,
-        user: profile,
-        clearError: true,
-      );
+      state = state.copyWith(isLoading: false, user: profile, clearError: true);
 
       ref.invalidate(currentUserProfileProvider);
 
@@ -431,18 +386,13 @@ class AuthController extends Notifier<AuthControllerState> {
     required String name,
     required String phoneNumber,
   }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final firebaseUser = _firebaseAuth.currentUser;
 
       if (firebaseUser == null) {
-        throw StateError(
-          'Your session has expired. Please sign in again.',
-        );
+        throw StateError('Your session has expired. Please sign in again.');
       }
 
       final profile = await _registrationService.createOrUpdateUserProfile(
@@ -451,19 +401,13 @@ class AuthController extends Notifier<AuthControllerState> {
         phoneNumber: phoneNumber,
       );
 
-      state = state.copyWith(
-        isLoading: false,
-        user: profile,
-        clearError: true,
-      );
+      state = state.copyWith(isLoading: false, user: profile, clearError: true);
 
       ref.invalidate(currentUserProfileProvider);
 
       return profile;
     } catch (error, stackTrace) {
-      debugPrint(
-        'COMPLETE PROFILE ERROR: $error\n$stackTrace',
-      );
+      debugPrint('COMPLETE PROFILE ERROR: $error\n$stackTrace');
 
       state = state.copyWith(
         isLoading: false,
@@ -479,11 +423,7 @@ class AuthController extends Notifier<AuthControllerState> {
   // ============================================================
 
   Future<bool> sendPasswordResetEmail(String email) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-      linkSent: false,
-    );
+    state = state.copyWith(isLoading: true, clearError: true, linkSent: false);
 
     try {
       final normalizedEmail = email.trim().toLowerCase();
@@ -492,9 +432,7 @@ class AuthController extends Notifier<AuthControllerState> {
         throw ArgumentError('Please enter your email address.');
       }
 
-      await _firebaseAuth.sendPasswordResetEmail(
-        email: normalizedEmail,
-      );
+      await _firebaseAuth.sendPasswordResetEmail(email: normalizedEmail);
 
       state = state.copyWith(
         isLoading: false,
@@ -504,9 +442,7 @@ class AuthController extends Notifier<AuthControllerState> {
 
       return true;
     } catch (error, stackTrace) {
-      debugPrint(
-        'PASSWORD RESET ERROR: $error\n$stackTrace',
-      );
+      debugPrint('PASSWORD RESET ERROR: $error\n$stackTrace');
 
       state = state.copyWith(
         isLoading: false,
@@ -517,15 +453,32 @@ class AuthController extends Notifier<AuthControllerState> {
     }
   }
 
+  // ফায়ারবেজে পাসওয়ার্ড আপডেট করার জন্য (পুরাতন পাসওয়ার্ড দিয়ে রি-অথেন্টিケート করে নতুন পাসওয়ার্ড সেট করা)
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.email == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    // পুরনো পাসওয়ার্ড সঠিক আছে কিনা যাচাই করার জন্য রি-অথেন্টিকেট করা
+    final credential = EmailAuthProvider.credential(
+      email: user.email!,
+      password: currentPassword,
+    );
+
+    await user.reauthenticateWithCredential(credential);
+    await user.updatePassword(newPassword);
+  }
+
   // ============================================================
   // RESEND EMAIL VERIFICATION
   // ============================================================
 
   Future<bool> resendEmailVerification() async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final user = _firebaseAuth.currentUser;
@@ -551,9 +504,7 @@ class AuthController extends Notifier<AuthControllerState> {
 
       return true;
     } catch (error, stackTrace) {
-      debugPrint(
-        'RESEND VERIFICATION ERROR: $error\n$stackTrace',
-      );
+      debugPrint('RESEND VERIFICATION ERROR: $error\n$stackTrace');
 
       state = state.copyWith(
         isLoading: false,
@@ -578,13 +529,9 @@ class AuthController extends Notifier<AuthControllerState> {
 
       return _firebaseAuth.currentUser?.emailVerified ?? false;
     } catch (error, stackTrace) {
-      debugPrint(
-        'RELOAD EMAIL VERIFICATION ERROR: $error\n$stackTrace',
-      );
+      debugPrint('RELOAD EMAIL VERIFICATION ERROR: $error\n$stackTrace');
 
-      state = state.copyWith(
-        errorMessage: _friendlyAuthError(error),
-      );
+      state = state.copyWith(errorMessage: _friendlyAuthError(error));
 
       return false;
     }
@@ -595,10 +542,7 @@ class AuthController extends Notifier<AuthControllerState> {
   // ============================================================
 
   Future<void> signOut() async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       await _authDataSource.signOut();

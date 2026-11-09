@@ -90,6 +90,15 @@ class MoreScreen extends ConsumerWidget {
                 },
               ),
               MoreMenuItem(
+                icon: Icons.lock_outline_rounded,
+                title: 'Change Password',
+                subtitle: 'Update your account password',
+                onTap: () {
+                  context.push(RouteNames.changePassword);
+                },
+              ),
+              //
+              MoreMenuItem(
                 icon: Icons.home_outlined,
                 title: 'Default Account',
                 subtitle: 'Choose your default dashboard',
