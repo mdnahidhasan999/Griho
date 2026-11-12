@@ -166,22 +166,10 @@ service cloud.firestore {
     // PROPERTIES
     // ============================================================
 
-    match /properties/{propertyId} {
+       match /properties/{propertyId} {
 
-      allow get: if isAuthenticated();
+         allow get, list: if isAuthenticated();
 
-      allow list: if isAuthenticated()
-                  && (
-                    resource.data.ownerId == request.auth.uid
-
-                    ||
-
-                    (
-                      resource.data.tenantUserIds is list
-                      && request.auth.uid in resource.data.tenantUserIds
-                      && isValidPropertyTenantAccess(propertyId)
-                    )
-                  );
 
 
       allow create: if isAuthenticated()
@@ -321,25 +309,10 @@ service cloud.firestore {
     // UNITS
     // ============================================================
 
-    match /units/{unitId} {
+      match /units/{unitId} {
 
-      allow get: if isAuthenticated();
+        allow get, list: if isAuthenticated();
 
-      allow list: if isAuthenticated()
-                  && (
-                    isPropertyOwner(resource.data.propertyId)
-
-                    ||
-
-                    (
-                      resource.data.tenantUserId == request.auth.uid
-                      &&
-                      isActiveTenantAccessForUnit(
-                        resource.data.propertyId,
-                        unitId
-                      )
-                    )
-                  );
 
 
       allow create: if isAuthenticated()
@@ -348,75 +321,34 @@ service cloud.firestore {
                     );
 
 
-      allow update: if isAuthenticated()
-                    && (
-
-                      (
-                        isPropertyOwner(
-                          resource.data.propertyId
-                        )
-
-                        &&
-
-                        isPropertyOwner(
-                          resource.data.propertyId
-                        )
-                      )
-
-                      ||
-
-                      (
-                        (
-                          !resource.data.keys().hasAny(['tenantUserId'])
-                          ||
-                          resource.data.tenantUserId == null
-                        )
-
-                        &&
-
-                        request.resource.data.tenantUserId == request.auth.uid
-
-                        &&
-
-                        request.resource.data.propertyId
-                           == resource.data.propertyId
-
-                        &&
-
-                        request.resource.data.floorNumber
-                           == resource.data.floorNumber
-
-                        &&
-
-                        request.resource.data.unitNumber
-                           == resource.data.unitNumber
-
-                        &&
-
-                        (
-                          (!resource.data.keys().hasAny(['name']) && !request.resource.data.keys().hasAny(['name']))
-                          ||
-                          request.resource.data.name == resource.data.name
-                        )
-
-                        &&
-
-                        request.resource.data.createdAt
-                           == resource.data.createdAt
-
-                        &&
-
-                        request.resource.data.status == 'occupied'
-
-                        &&
-
-                        isValidTenantAcceptance(
-                          null,
-                          resource.data.propertyId,
-                          unitId
-                        )
-                      )
-                    );
+     allow update: if isAuthenticated()
+                         && (
+                           isPropertyOwner(resource.data.propertyId)
+                           || isPropertyManager(resource.data.propertyId)
+                           || (
+                             (
+                               !resource.data.keys().hasAny(['tenantUserId'])
+                               ||
+                               resource.data.tenantUserId == null
+                             )
+                             && request.resource.data.tenantUserId == request.auth.uid
+                             && request.resource.data.propertyId == resource.data.propertyId
+                             && request.resource.data.floorNumber == resource.data.floorNumber
+                             && request.resource.data.unitNumber == resource.data.unitNumber
+                             && (
+                               (!resource.data.keys().hasAny(['name']) && !request.resource.data.keys().hasAny(['name']))
+                               ||
+                               request.resource.data.name == resource.data.name
+                             )
+                             && request.resource.data.createdAt == resource.data.createdAt
+                             && request.resource.data.status == 'occupied'
+                             && isValidTenantAcceptance(
+                               null,
+                               resource.data.propertyId,
+                               unitId
+                             )
+                           )
+                         );
 
 
       allow delete: if isAuthenticated()
@@ -532,46 +464,28 @@ service cloud.firestore {
     // TENANTS
     // ============================================================
 
-    match /tenants/{tenantId} {
+     match /tenants/{tenantId} {
 
-      allow get: if isAuthenticated();
-
-        allow list: if isAuthenticated()
-              && (
-                resource.data.ownerId == request.auth.uid
-
-                ||
-
-                resource.data.userId == request.auth.uid
-
-                ||
-
-                (
-                  hasVerifiedEmail()
-                  && resource.data.get('email', null)
-                     == request.auth.token.email
-                )
-              );
+       allow get, list: if isAuthenticated();
 
 
-      allow create: if isAuthenticated()
-                    && request.resource.data.ownerId == request.auth.uid
-                    && isPropertyOwner(
-                      request.resource.data.propertyId
-                    );
-
+            allow create: if isAuthenticated()
+                          && (
+                            (
+                              request.resource.data.ownerId == request.auth.uid
+                              && isPropertyOwner(request.resource.data.propertyId)
+                            )
+                            || isPropertyManager(request.resource.data.propertyId)
+                          );
 
       allow update: if isAuthenticated()
-                    && (
-
-                      // OWNER — NORMAL UPDATE
-                      (
-                        resource.data.ownerId == request.auth.uid
-
-                        &&
-
-                        request.resource.data.ownerId
-                           == resource.data.ownerId
+                          && (
+                            isPropertyManager(resource.data.propertyId)
+                            ||
+                            // OWNER — NORMAL UPDATE
+                            (
+                              resource.data.ownerId == request.auth.uid
+                              && request.resource.data.ownerId == resource.data.ownerId
 
                         &&
 
@@ -1401,7 +1315,16 @@ service cloud.firestore {
                     )
                   );
     }
+  // ============================================================
+      // MANAGER INVITATIONS & ACCESS
+      // ============================================================
+      match /managerInvitations/{invitationId} {
+        allow read, list, create, update, delete: if isAuthenticated();
+      }
 
+      match /managerAccess/{accessId} {
+        allow read, list, create, update, delete: if isAuthenticated();
+      }
 
          // ============================================================
          // MONTHLY BILLS
@@ -1429,25 +1352,28 @@ service cloud.firestore {
     // ============================================================
     // PAYMENT TRANSACTIONS
     // ============================================================
-    match /paymentTransactions/{paymentId} {
-      allow get, list: if isAuthenticated()
-                       && (
-                         resource.data.ownerId == request.auth.uid
-                         || resource.data.tenantUserId == request.auth.uid
-                       );
+ match /paymentTransactions/{paymentId} {
+       allow get, list: if isAuthenticated()
+                        && (
+                          resource.data.ownerId == request.auth.uid
+                          || resource.data.tenantUserId == request.auth.uid
+                          || isPropertyManager(resource.data.propertyId)
+                        );
 
-      allow create: if isAuthenticated()
-                    && request.resource.data.tenantUserId == request.auth.uid
-                    && request.resource.data.amount is number
-                    && request.resource.data.amount > 0
-                    && request.resource.data.status == 'pending';
+       allow create: if isAuthenticated()
+                     && request.resource.data.tenantUserId == request.auth.uid
+                     && request.resource.data.amount is number
+                     && request.resource.data.amount > 0
+                     && request.resource.data.status == 'pending';
 
-      allow update: if isAuthenticated()
-                    && resource.data.ownerId == request.auth.uid;
+       allow update: if isAuthenticated()
+                     && (
+                       resource.data.ownerId == request.auth.uid
+                       || isPropertyManager(resource.data.propertyId)
+                     );
 
-      allow delete: if false;
-    }
-
+       allow delete: if false;
+     }
 
     // ============================================================
     // BILLING RULES
@@ -1926,6 +1852,13 @@ service cloud.firestore {
             )
           );
  }
+
+
+     function isPropertyManager(propertyId) {
+       return isAuthenticated()
+              && exists(/databases/$(database)/documents/managerAccess/$(request.auth.uid + '_' + propertyId))
+              && get(/databases/$(database)/documents/managerAccess/$(request.auth.uid + '_' + propertyId)).data.status == 'active';
+     }
     // ============================================================
     // PROPERTY OWNER
     // ============================================================
@@ -1944,35 +1877,7 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
-    // PROPERTY TENANT ACCESS
-    // ============================================================
 
-    function isValidPropertyTenantAccess(propertyId) {
-
-      return exists(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      )
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.userId == request.auth.uid
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.propertyId == propertyId
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.ownerId
-         == resource.data.ownerId;
-    }
 
 
     // ============================================================
@@ -2128,9 +2033,12 @@ service cloud.firestore {
     // ============================================================
     // MONTHLY BILL — OWNER PAYMENT CONFIRM / REJECT VALIDATION
     // ============================================================
-    function isValidMonthlyBillOwnerPaymentReview() {
+function isValidMonthlyBillOwnerPaymentReview() {
       let diff = request.resource.data.diff(resource.data);
-      return resource.data.ownerId == request.auth.uid
+      return (
+               resource.data.ownerId == request.auth.uid
+               || isPropertyManager(resource.data.propertyId)
+             )
              && resource.data.status != 'cancelled'
              && diff.affectedKeys().hasOnly([
                'paidAmount',
@@ -2183,37 +2091,6 @@ service cloud.firestore {
     }
 
 
-    // ============================================================
-    // TENANT UNIT / PROPERTY ACCESS
-    // ============================================================
-
-    function isActiveTenantAccessForUnit(
-      propertyId,
-      unitId
-    ) {
-
-      return exists(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      )
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.userId == request.auth.uid
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.propertyId == propertyId
-
-      &&
-
-      get(
-        /databases/$(database)/documents/tenantAccess/$(request.auth.uid)
-      ).data.unitId == unitId;
-    }
 
 
     // ============================================================

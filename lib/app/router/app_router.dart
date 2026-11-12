@@ -24,11 +24,14 @@ import '../../features/home/presentation/screens/owner_home_screen.dart';
 import '../../features/home/presentation/screens/owner_welcome_screen.dart';
 import '../../features/more/presentation/screens/more_screen.dart';
 import '../../features/properties/domain/entities/property.dart';
+import '../../features/properties/presentation/screens/add_manager_screen.dart';
 import '../../features/properties/presentation/screens/add_property_screen.dart';
 import '../../features/properties/presentation/screens/edit_property_screen.dart';
+import '../../features/properties/presentation/screens/manager_invitations_screen.dart';
 import '../../features/properties/presentation/screens/property_details_screen.dart';
 import '../../features/properties/presentation/screens/property_list_screen.dart';
 
+import '../../features/rents/presentation/screens/central_rent_control_screen.dart';
 import '../../features/rents/presentation/screens/change_unit_rent_screen.dart';
 import '../../features/rents/presentation/screens/monthly_rent_screen.dart';
 import '../../features/rents/presentation/screens/rent_management_screen.dart';
@@ -333,6 +336,10 @@ abstract final class AppRouter {
             return MonthlyRentScreen(unitId: unitId);
           },
         ),
+        GoRoute(
+          path: RouteNames.centralRentControl,
+          builder: (context, state) => const CentralRentControlScreen(),
+        ),
 
         // ========================================================
         // BILLING
@@ -490,6 +497,16 @@ abstract final class AppRouter {
             return const ElectricianHomeScreen();
           },
         ),
+
+        GoRoute(
+          path: RouteNames.ownerManagers,
+          builder: (context, state) => const ManagerInvitationsScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.addManager,
+          builder: (context, state) => const AddManagerScreen(),
+        ),
+
         // ========================================================
         // TENANT HOME
         // ========================================================
@@ -519,7 +536,6 @@ abstract final class AppRouter {
             return const ChangePasswordScreen();
           },
         ),
-
       ],
     );
   }

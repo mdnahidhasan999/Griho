@@ -298,6 +298,7 @@ class _PortfolioVaultCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final tenantsAsync = ref.watch(ownerTenantsProvider);
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
+    final currentUid = ref.watch(currentUserProfileProvider).value?.uid;
 
     return Container(
       decoration: BoxDecoration(
@@ -445,7 +446,12 @@ class _PortfolioVaultCard extends ConsumerWidget {
                   ),
                   error: (_, _) => const SizedBox.shrink(),
                   data: (properties) {
-                    final totalProperties = properties.length;
+                    final ownedProperties = currentUid == null
+                        ? properties
+                        : properties
+                              .where((p) => p.ownerId == currentUid)
+                              .toList();
+                    final totalProperties = ownedProperties.length;
 
                     return tenantsAsync.maybeWhen(
                       data: (tenants) {
@@ -553,6 +559,7 @@ class _OperationalPulseRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
     final tenantsAsync = ref.watch(ownerTenantsProvider);
+    final currentUid = ref.watch(currentUserProfileProvider).value?.uid;
 
     return Row(
       children: [
@@ -562,7 +569,12 @@ class _OperationalPulseRow extends ConsumerWidget {
             value: propertiesAsync.when(
               loading: () => '...',
               error: (_, _) => '0',
-              data: (properties) => '${properties.length}',
+              data: (properties) {
+                final ownedProperties = currentUid == null
+                    ? properties
+                    : properties.where((p) => p.ownerId == currentUid).toList();
+                return '${ownedProperties.length}';
+              },
             ),
             icon: Icons.domain_rounded,
             color: Colors.indigo,
@@ -771,7 +783,7 @@ class _CommandGrid extends ConsumerWidget {
 
         const SizedBox(height: 10),
 
-        // Sub Actions (3 Horizontal Tiles)
+        // Sub Actions (4 Horizontal Tiles)
         Row(
           children: [
             Expanded(
@@ -788,7 +800,18 @@ class _CommandGrid extends ConsumerWidget {
                 },
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SubActionTile(
+                icon: Icons.admin_panel_settings_outlined,
+                title: 'Managers',
+                color: Colors.indigo,
+                onTap: () {
+                  context.push(RouteNames.ownerManagers);
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
             Expanded(
               child: _SubActionTile(
                 icon: Icons.receipt_long_rounded,
@@ -797,7 +820,7 @@ class _CommandGrid extends ConsumerWidget {
                 onTap: () => context.push(RouteNames.ownerBillingRules),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: _SubActionTile(
                 icon: Icons.send_rounded,
@@ -877,6 +900,7 @@ class _PropertySnapshotSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
+    final currentUid = ref.watch(currentUserProfileProvider).value?.uid;
     final theme = Theme.of(context);
 
     return Column(
@@ -900,7 +924,11 @@ class _PropertySnapshotSection extends ConsumerWidget {
           loading: () => const LinearProgressIndicator(),
           error: (err, stack) => Text('Unable to load properties: $err'),
           data: (properties) {
-            if (properties.isEmpty) {
+            final ownedProperties = currentUid == null
+                ? properties
+                : properties.where((p) => p.ownerId == currentUid).toList();
+
+            if (ownedProperties.isEmpty) {
               return Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -944,10 +972,10 @@ class _PropertySnapshotSection extends ConsumerWidget {
               height: 140,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: properties.length,
+                itemCount: ownedProperties.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
-                  final property = properties[index];
+                  final property = ownedProperties[index];
                   return _PropertyMiniCard(property: property);
                 },
               ),
@@ -1089,6 +1117,25 @@ class _EnterpriseHub extends StatelessWidget {
             tag: 'Residents',
             onTap: () => context.push(RouteNames.ownerTenants),
           ),
+          const Divider(height: 1, indent: 64),
+          _HubActionTile(
+            icon: Icons.supervisor_account_outlined,
+            title: 'Property Managers & Staff',
+            subtitle: 'Assign operational managers and review permissions',
+            tag: 'Team',
+            onTap: () {
+              context.push(RouteNames.ownerManagers);
+            },
+          ),
+
+          _HubActionTile(
+            icon: Icons.price_change_outlined,
+            title: 'Rent & Tariff Control',
+            subtitle: 'Adjust rent across entire property, floor, or individual units',
+            tag: 'Rent',
+            onTap: () => context.push(RouteNames.centralRentControl),
+          ),
+
           const Divider(height: 1, indent: 64),
           _HubActionTile(
             icon: Icons.tune_rounded,

@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,7 @@ import '../../../../app/router/route_names.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
+import '../../../tenants/data/models/tenant_model.dart';
 import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/controllers/tenant_controller.dart';
@@ -18,10 +20,7 @@ import '../providers/unit_usecase_provider.dart';
 class UnitDetailsScreen extends ConsumerStatefulWidget {
   final String unitId;
 
-  const UnitDetailsScreen({
-    super.key,
-    required this.unitId,
-  });
+  const UnitDetailsScreen({super.key, required this.unitId});
 
   @override
   ConsumerState<UnitDetailsScreen> createState() => _UnitDetailsScreenState();
@@ -62,6 +61,19 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
       if (unit != null) {
         activeTenants = await getActiveTenantsByUnitId(unit.id);
+
+        // ম্যানেজার অ্যাকাউন্ট থেকে ownerId ফিল্টারের কারণে খালি আসলে সরাসরি unitId দিয়ে লোড করা
+        if (activeTenants.isEmpty && unit.status == UnitStatus.occupied) {
+          final snap = await FirebaseFirestore.instance
+              .collection('tenants')
+              .where('unitId', isEqualTo: unit.id)
+              .where('status', isEqualTo: 'active')
+              .get();
+
+          activeTenants = snap.docs
+              .map((doc) => TenantModel.fromFirestore(doc))
+              .toList();
+        }
       }
 
       if (!mounted) {
@@ -132,9 +144,8 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
         return AlertDialog(
           title: const Text('Delete Unit?'),
           content: Text(
-            'Are you sure you want to permanently delete "${unit
-                .unitNumber}"?\n\n'
-                'Associated billing rules and past tenancy references will be affected. This action cannot be undone.',
+            'Are you sure you want to permanently delete "${unit.unitNumber}"?\n\n'
+            'Associated billing rules and past tenancy references will be affected. This action cannot be undone.',
           ),
           actions: [
             TextButton(
@@ -145,10 +156,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme
-                    .of(context)
-                    .colorScheme
-                    .error,
+                backgroundColor: Theme.of(context).colorScheme.error,
               ),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
@@ -169,9 +177,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     });
 
     final controller = ref.read(unitControllerProvider.notifier);
-    final success = await controller.deleteUnit(
-      unitId: unit.id,
-    );
+    final success = await controller.deleteUnit(unitId: unit.id);
 
     if (!mounted) {
       return;
@@ -187,19 +193,12 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       _isDeleting = false;
     });
 
-    final errorMessage = ref
-        .read(unitControllerProvider)
-        .errorMessage;
+    final errorMessage = ref.read(unitControllerProvider).errorMessage;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          errorMessage ?? 'Unable to delete unit.',
-        ),
-        backgroundColor: Theme
-            .of(context)
-            .colorScheme
-            .error,
+        content: Text(errorMessage ?? 'Unable to delete unit.'),
+        backgroundColor: Theme.of(context).colorScheme.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -215,24 +214,15 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Unit Details'),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        appBar: AppBar(title: const Text('Unit Details')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_errorMessage != null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Unit Details'),
-        ),
-        body: _ErrorView(
-          message: _errorMessage!,
-          onRetry: _loadUnit,
-        ),
+        appBar: AppBar(title: const Text('Unit Details')),
+        body: _ErrorView(message: _errorMessage!, onRetry: _loadUnit),
       );
     }
 
@@ -240,16 +230,12 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
     if (unit == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Unit Details'),
-        ),
+        appBar: AppBar(title: const Text('Unit Details')),
         body: const _NotFoundView(),
       );
     }
 
-    final propertyAsync = ref.watch(
-      propertyByIdProvider(unit.propertyId),
-    );
+    final propertyAsync = ref.watch(propertyByIdProvider(unit.propertyId));
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -307,8 +293,8 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
 
               final historyAsync = ref.watch(
                 unitHistoryProvider((
-                unitId: unit.id,
-                ownerId: property.ownerId,
+                  unitId: unit.id,
+                  ownerId: property.ownerId,
                 )),
               );
 
@@ -376,15 +362,12 @@ class _UnitDetails extends ConsumerWidget {
         ref.invalidate(propertyByIdProvider(unit.propertyId));
         if (property != null) {
           ref.invalidate(
-            unitHistoryProvider((
-            unitId: unit.id,
-            ownerId: property!.ownerId,
-            )),
+            unitHistoryProvider((unitId: unit.id, ownerId: property!.ownerId)),
           );
           ref.invalidate(
             currentRentRateProvider((
-            unitId: unit.id,
-            ownerId: property!.ownerId,
+              unitId: unit.id,
+              ownerId: property!.ownerId,
             )),
           );
         }
@@ -395,10 +378,7 @@ class _UnitDetails extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
           // 1. Hero Unit Header
-          _HeroUnitHeader(
-            unit: unit,
-            property: property,
-          ),
+          _HeroUnitHeader(unit: unit, property: property),
 
           const SizedBox(height: 16),
 
@@ -409,10 +389,7 @@ class _UnitDetails extends ConsumerWidget {
             subtitle: 'Location and space identifiers',
             icon: Icons.meeting_room_outlined,
             children: [
-              _InfoRow(
-                label: 'Unit Number',
-                value: unit.unitNumber,
-              ),
+              _InfoRow(label: 'Unit Number', value: unit.unitNumber),
               const SizedBox(height: 10),
               _InfoRow(
                 label: 'Floor Level',
@@ -421,45 +398,29 @@ class _UnitDetails extends ConsumerWidget {
               const SizedBox(height: 10),
               _InfoRow(
                 label: 'Custom Name',
-                value: unit.name
-                    ?.trim()
-                    .isNotEmpty == true
+                value: unit.name?.trim().isNotEmpty == true
                     ? unit.name!
                     : 'Not provided',
               ),
               const SizedBox(height: 10),
-              _InfoRow(
-                label: 'Status',
-                value: _statusLabel(unit.status),
-              ),
+              _InfoRow(label: 'Status', value: _statusLabel(unit.status)),
               const SizedBox(height: 10),
               if (property != null)
-                _CurrentRentInfo(
-                  unitId: unit.id,
-                  ownerId: property!.ownerId,
-                )
+                _CurrentRentInfo(unitId: unit.id, ownerId: property!.ownerId)
               else
-                const _InfoRow(
-                  label: 'Current Rent',
-                  value: 'Unavailable',
-                ),
+                const _InfoRow(label: 'Current Rent', value: 'Unavailable'),
             ],
           ),
 
           const SizedBox(height: 18),
 
           // 3. Current Occupants Section
-          _TenantSection(
-            unit: unit,
-            tenants: activeTenants,
-          ),
+          _TenantSection(unit: unit, tenants: activeTenants),
 
           const SizedBox(height: 18),
 
           // 4. Rent Rate Management Card
-          _ManageRentCard(
-            unit: unit,
-          ),
+          _ManageRentCard(unit: unit),
 
           const SizedBox(height: 18),
 
@@ -473,7 +434,8 @@ class _UnitDetails extends ConsumerWidget {
     );
   }
 
-  Widget _buildSectionCard(BuildContext context, {
+  Widget _buildSectionCard(
+    BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,
@@ -558,10 +520,7 @@ class _HeroUnitHeader extends StatelessWidget {
   final Unit unit;
   final Property? property;
 
-  const _HeroUnitHeader({
-    required this.unit,
-    required this.property,
-  });
+  const _HeroUnitHeader({required this.unit, required this.property});
 
   String _floorLabel(int floor) {
     if (floor == 0) {
@@ -628,9 +587,7 @@ class _HeroUnitHeader extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      unit.name
-                          ?.trim()
-                          .isNotEmpty == true
+                      unit.name?.trim().isNotEmpty == true
                           ? unit.name!
                           : 'Residential Unit Space',
                       style: theme.textTheme.bodyMedium?.copyWith(
@@ -643,7 +600,9 @@ class _HeroUnitHeader extends StatelessWidget {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
@@ -711,34 +670,24 @@ class _CurrentRentInfo extends ConsumerWidget {
   final String unitId;
   final String ownerId;
 
-  const _CurrentRentInfo({
-    required this.unitId,
-    required this.ownerId,
-  });
+  const _CurrentRentInfo({required this.unitId, required this.ownerId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final rentAsync = ref.watch(
-      currentRentRateProvider((
-      unitId: unitId,
-      ownerId: ownerId,
-      )),
+      currentRentRateProvider((unitId: unitId, ownerId: ownerId)),
     );
 
     return rentAsync.when(
       loading: () => const _LoadingInfoRow(label: 'Current Rent'),
-      error: (error, _) =>
-      const _InfoRow(
+      error: (error, _) => const _InfoRow(
         label: 'Current Rent',
         value: 'Unable to load rent rate',
       ),
       data: (rentRate) {
         if (rentRate == null) {
-          return const _InfoRow(
-            label: 'Current Rent',
-            value: 'Not configured',
-          );
+          return const _InfoRow(label: 'Current Rent', value: 'Not configured');
         }
 
         return _InfoRow(
@@ -769,10 +718,7 @@ class _TenantSection extends StatelessWidget {
   final Unit unit;
   final List<Tenant> tenants;
 
-  const _TenantSection({
-    required this.unit,
-    required this.tenants,
-  });
+  const _TenantSection({required this.unit, required this.tenants});
 
   @override
   Widget build(BuildContext context) {
@@ -812,7 +758,9 @@ class _TenantSection extends StatelessWidget {
                 if (tenants.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
@@ -841,7 +789,8 @@ class _TenantSection extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest.withValues(
-                      alpha: 0.4),
+                    alpha: 0.4,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
@@ -868,9 +817,7 @@ class _TenantSection extends StatelessWidget {
             else
               for (var i = 0; i < tenants.length; i++) ...[
                 _TenantTile(tenant: tenants[i]),
-                if (i != tenants.length - 1) ...[
-                  const SizedBox(height: 10),
-                ],
+                if (i != tenants.length - 1) ...[const SizedBox(height: 10)],
               ],
           ],
         ),
@@ -882,9 +829,7 @@ class _TenantSection extends StatelessWidget {
 class _TenantTile extends StatelessWidget {
   final Tenant tenant;
 
-  const _TenantTile({
-    required this.tenant,
-  });
+  const _TenantTile({required this.tenant});
 
   @override
   Widget build(BuildContext context) {
@@ -900,10 +845,7 @@ class _TenantTile extends StatelessWidget {
       child: InkWell(
         onTap: () {
           context.push(
-            RouteNames.tenantDetails.replaceFirst(
-              ':tenantId',
-              tenant.id,
-            ),
+            RouteNames.tenantDetails.replaceFirst(':tenantId', tenant.id),
           );
         },
         child: Padding(
@@ -983,9 +925,7 @@ class _TenantTile extends StatelessWidget {
 class _ManageRentCard extends StatelessWidget {
   final Unit unit;
 
-  const _ManageRentCard({
-    required this.unit,
-  });
+  const _ManageRentCard({required this.unit});
 
   @override
   Widget build(BuildContext context) {
@@ -1090,27 +1030,19 @@ class _UnitHistorySection extends StatelessWidget {
     if (historyAsync == null) {
       return _buildHistoryContainer(
         context,
-        children: const [
-          LinearProgressIndicator(),
-        ],
+        children: const [LinearProgressIndicator()],
       );
     }
 
     return historyAsync!.when(
-      loading: () =>
-          _buildHistoryContainer(
-            context,
-            children: const [
-              LinearProgressIndicator(),
-            ],
-          ),
-      error: (_, _) =>
-          _buildHistoryContainer(
-            context,
-            children: const [
-              Text('Unable to load historical tenancy records.'),
-            ],
-          ),
+      loading: () => _buildHistoryContainer(
+        context,
+        children: const [LinearProgressIndicator()],
+      ),
+      error: (_, _) => _buildHistoryContainer(
+        context,
+        children: const [Text('Unable to load historical tenancy records.')],
+      ),
       data: (histories) {
         if (histories.isEmpty) {
           return _buildHistoryContainer(
@@ -1131,12 +1063,8 @@ class _UnitHistorySection extends StatelessWidget {
           count: histories.length,
           children: [
             for (var index = 0; index < histories.length; index++) ...[
-              _UnitHistoryItem(
-                history: histories[index],
-              ),
-              if (index != histories.length - 1) ...[
-                const Divider(height: 24),
-              ],
+              _UnitHistoryItem(history: histories[index]),
+              if (index != histories.length - 1) ...[const Divider(height: 24)],
             ],
           ],
         );
@@ -1144,7 +1072,8 @@ class _UnitHistorySection extends StatelessWidget {
     );
   }
 
-  Widget _buildHistoryContainer(BuildContext context, {
+  Widget _buildHistoryContainer(
+    BuildContext context, {
     int? count,
     required List<Widget> children,
   }) {
@@ -1183,8 +1112,10 @@ class _UnitHistorySection extends StatelessWidget {
                 ),
                 if (count != null)
                   Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(12),
@@ -1218,9 +1149,7 @@ class _UnitHistorySection extends StatelessWidget {
 class _UnitHistoryItem extends StatelessWidget {
   final TenancyHistory history;
 
-  const _UnitHistoryItem({
-    required this.history,
-  });
+  const _UnitHistoryItem({required this.history});
 
   @override
   Widget build(BuildContext context) {
@@ -1286,7 +1215,7 @@ class _UnitHistoryItem extends StatelessWidget {
         _HistoryDetailRow(
           label: 'Stayed',
           value:
-          '${_formatDate(history.startedAt)} – ${_formatDate(history.endedAt)}',
+              '${_formatDate(history.startedAt)} – ${_formatDate(history.endedAt)}',
         ),
       ],
     );
@@ -1333,9 +1262,7 @@ class _UnitHistoryItem extends StatelessWidget {
 class _TenantStatusChip extends StatelessWidget {
   final TenantStatus status;
 
-  const _TenantStatusChip({
-    required this.status,
-  });
+  const _TenantStatusChip({required this.status});
 
   @override
   Widget build(BuildContext context) {
@@ -1364,13 +1291,12 @@ class _TenantStatusChip extends StatelessWidget {
 class _AccountStatusChip extends StatelessWidget {
   final String label;
 
-  const _AccountStatusChip({
-    required this.label,
-  });
+  const _AccountStatusChip({required this.label});
 
   @override
   Widget build(BuildContext context) {
-    final isRegistered = label.toLowerCase().contains('registered') &&
+    final isRegistered =
+        label.toLowerCase().contains('registered') &&
         !label.toLowerCase().contains('not');
 
     return Container(
@@ -1379,10 +1305,7 @@ class _AccountStatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         color: isRegistered
             ? Colors.teal.withValues(alpha: 0.12)
-            : Theme
-            .of(context)
-            .colorScheme
-            .surfaceContainerHighest,
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
       child: Text(
         label,
@@ -1391,10 +1314,7 @@ class _AccountStatusChip extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: isRegistered
               ? Colors.teal.shade800
-              : Theme
-              .of(context)
-              .colorScheme
-              .onSurfaceVariant,
+              : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );
@@ -1410,11 +1330,7 @@ class _InfoRow extends StatelessWidget {
   final String value;
   final TextStyle? valueStyle;
 
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.valueStyle,
-  });
+  const _InfoRow({required this.label, required this.value, this.valueStyle});
 
   @override
   Widget build(BuildContext context) {
@@ -1438,7 +1354,8 @@ class _InfoRow extends StatelessWidget {
           child: Text(
             value,
             textAlign: TextAlign.end,
-            style: valueStyle ??
+            style:
+                valueStyle ??
                 theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -1453,10 +1370,7 @@ class _HistoryDetailRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _HistoryDetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _HistoryDetailRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -1488,9 +1402,7 @@ class _HistoryDetailRow extends StatelessWidget {
 class _LoadingInfoRow extends StatelessWidget {
   final String label;
 
-  const _LoadingInfoRow({
-    required this.label,
-  });
+  const _LoadingInfoRow({required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -1527,10 +1439,7 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1552,10 +1461,7 @@ class _ErrorView extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

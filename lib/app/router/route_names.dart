@@ -11,7 +11,6 @@ abstract final class RouteNames {
   static const roleSelection = '/role-selection';
   static const String changePassword = '/change-password';
 
-
   // ============================================================
   // HOME
   // ============================================================
@@ -31,6 +30,8 @@ abstract final class RouteNames {
   static const propertyList = '/owner/properties';
   static const propertyDetails = '/owner/properties/:propertyId';
   static const editProperty = '/owner/properties/:propertyId/edit';
+  static const String ownerManagers = '/owner/managers';
+  static const String addManager = '/owner/add-manager';
 
   // ============================================================
   // UNITS
@@ -47,6 +48,7 @@ abstract final class RouteNames {
   static const changeUnitRent = '/owner/units/:unitId/rent/change';
   static const unitRentRateHistory = '/owner/units/:unitId/rent/history';
   static const unitMonthlyRent = '/owner/units/:unitId/monthly-rent';
+  static const String centralRentControl = '/owner/rent-control';
 
   // ============================================================
   // TENANTS
@@ -57,10 +59,9 @@ abstract final class RouteNames {
   static const editTenant = '/owner/tenants/:tenantId/edit';
   static const propertyTenants = '/owner/properties/:propertyId/tenants';
 
-
-// ============================================================
-// TENANT ACCOUNT LINK & INVITATION
-// ============================================================
+  // ============================================================
+  // TENANT ACCOUNT LINK & INVITATION
+  // ============================================================
 
   static const tenantAccountLink = '/tenant-account-link';
 
@@ -70,9 +71,7 @@ abstract final class RouteNames {
     final token = invitationToken.trim();
 
     if (token.isEmpty) {
-      throw ArgumentError(
-        'Invitation token cannot be empty.',
-      );
+      throw ArgumentError('Invitation token cannot be empty.');
     }
 
     return '/i/${Uri.encodeComponent(token)}';
