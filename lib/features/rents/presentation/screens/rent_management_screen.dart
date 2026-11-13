@@ -1,11 +1,16 @@
+// noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
+import '../../../tenants/data/models/tenant_model.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/controllers/tenant_controller.dart';
 import '../../../units/domain/entities/unit.dart';
@@ -64,7 +69,20 @@ class _RentManagementScreenState extends ConsumerState<RentManagementScreen> {
       }
 
       final getActiveTenants = ref.read(getActiveTenantsByUnitIdProvider);
-      final tenants = await getActiveTenants(unit.id);
+      var tenants = await getActiveTenants(unit.id);
+
+      // ম্যানেজার অ্যাকাউন্ট থেকে ownerId ফিল্টারের কারণে খালি আসলে সরাসরি unitId দিয়ে লোড করা
+      if (tenants.isEmpty && unit.status == UnitStatus.occupied) {
+        final snap = await FirebaseFirestore.instance
+            .collection('tenants')
+            .where('unitId', isEqualTo: unit.id)
+            .where('status', isEqualTo: 'active')
+            .get();
+
+        tenants = snap.docs
+            .map((doc) => TenantModel.fromFirestore(doc))
+            .toList();
+      }
 
       final rentRate = await ref.read(
         currentRentRateProvider((
@@ -385,7 +403,8 @@ class _RentManagementScreenState extends ConsumerState<RentManagementScreen> {
       );
     }
 
-    final isOccupied = _activeTenants.isNotEmpty;
+    final isOccupied =
+        _activeTenants.isNotEmpty || unit.status == UnitStatus.occupied;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -423,7 +442,6 @@ class _RentManagementScreenState extends ConsumerState<RentManagementScreen> {
 
                 const SizedBox(height: 24),
 
-                // Fixed: _RentScopeCard now uses Material
                 _RentScopeCard(
                   floorNumber: unit.floorNumber,
                   propertyName: property.name,
@@ -776,7 +794,7 @@ class _CurrentRentCard extends StatelessWidget {
 }
 
 // ================================================================
-// 4. RENT SCOPE SELECTOR CARD (Fixed with Material)
+// 4. RENT SCOPE SELECTOR CARD
 // ================================================================
 
 class _RentScopeCard extends StatelessWidget {

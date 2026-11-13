@@ -1,5 +1,9 @@
+// noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -287,7 +291,7 @@ class _ExecutiveHeader extends StatelessWidget {
 }
 
 // ============================================================================
-// 2. PORTFOLIO VAULT & FINANCIAL HERO CARD
+// 2. PORTFOLIO VAULT & FINANCIAL HERO CARD (WITH LIVE METRICS)
 // ============================================================================
 
 class _PortfolioVaultCard extends ConsumerWidget {
@@ -299,207 +303,271 @@ class _PortfolioVaultCard extends ConsumerWidget {
     final tenantsAsync = ref.watch(ownerTenantsProvider);
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
     final currentUid = ref.watch(currentUserProfileProvider).value?.uid;
+    final firestore = FirebaseFirestore.instance;
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E222D), Color(0xFF141720)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          // Ambient Glow Background Element
-          Positioned(
-            right: -20,
-            top: -20,
-            child: Container(
-              width: 140,
-              height: 140,
+    final rentRatesStream = currentUid == null
+        ? const Stream<QuerySnapshot>.empty()
+        : firestore
+              .collection('rentRates')
+              .where('ownerId', isEqualTo: currentUid)
+              .snapshots();
+
+    final billsStream = currentUid == null
+        ? const Stream<QuerySnapshot>.empty()
+        : firestore
+              .collection('monthlyBills')
+              .where('ownerId', isEqualTo: currentUid)
+              .snapshots();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: rentRatesStream,
+      builder: (context, ratesSnap) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: billsStream,
+          builder: (context, billsSnap) {
+            var projectedMonthlyRent = 0.0;
+            final rateDocs = ratesSnap.data?.docs ?? [];
+            for (final doc in rateDocs) {
+              final data = doc.data() as Map<String, dynamic>;
+              if (data['effectiveTo'] == null) {
+                final amount = (data['amount'] is num)
+                    ? (data['amount'] as num).toDouble()
+                    : 0.0;
+                projectedMonthlyRent += amount;
+              }
+            }
+
+            var unsettledInvoices = 0;
+            final billDocs = billsSnap.data?.docs ?? [];
+            for (final doc in billDocs) {
+              final data = doc.data() as Map<String, dynamic>;
+              final status = (data['status'] ?? 'unpaid').toString();
+              if (status != 'paid' && status != 'cancelled') {
+                unsettledInvoices++;
+              }
+            }
+
+            final formattedRent =
+                projectedMonthlyRent == projectedMonthlyRent.roundToDouble()
+                ? projectedMonthlyRent.toStringAsFixed(0)
+                : projectedMonthlyRent.toStringAsFixed(2);
+
+            return Container(
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: theme.colorScheme.primary.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(24),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E222D), Color(0xFF141720)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
               ),
-            ),
-          ),
+              child: Stack(
+                children: [
+                  // Ambient Glow Background Element
+                  Positioned(
+                    right: -20,
+                    top: -20,
+                    child: Container(
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.22,
+                        ),
+                      ),
+                    ),
+                  ),
 
-          Padding(
-            padding: const EdgeInsets.all(22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+                  Padding(
+                    padding: const EdgeInsets.all(22),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(7),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.shield_outlined,
-                            size: 16,
-                            color: Colors.white70,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.shield_outlined,
+                                    size: 16,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'PORTFOLIO REVENUE VAULT',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.75),
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.0,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.teal.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.teal.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: const Text(
+                                'Live Run-Rate',
+                                style: TextStyle(
+                                  color: Colors.tealAccent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        // Primary Estimated Revenue
+                        Text(
+                          'Projected Monthly Rent',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'PORTFOLIO REVENUE VAULT',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.75),
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.0,
-                            fontSize: 11,
+                        const SizedBox(height: 4),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            const Text(
+                              '৳ ',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              formattedRent,
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '/ month',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 18),
+                        Divider(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          height: 1,
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Secondary Metrics Row: Occupancy Health
+                        propertiesAsync.when(
+                          loading: () => const SizedBox(
+                            height: 18,
+                            child: LinearProgressIndicator(),
                           ),
+                          error: (_, _) => const SizedBox.shrink(),
+                          data: (properties) {
+                            final ownedProperties = currentUid == null
+                                ? properties
+                                : properties
+                                      .where((p) => p.ownerId == currentUid)
+                                      .toList();
+                            final totalProperties = ownedProperties.length;
+
+                            return tenantsAsync.maybeWhen(
+                              data: (tenants) {
+                                final activeTenants = tenants
+                                    .where(
+                                      (t) => t.status == TenantStatus.active,
+                                    )
+                                    .length;
+
+                                return Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    _VaultSubMetric(
+                                      label: 'Active Leases',
+                                      value: '$activeTenants Tenancies',
+                                      icon: Icons.verified_user_outlined,
+                                    ),
+                                    Container(
+                                      width: 1,
+                                      height: 28,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                    ),
+                                    _VaultSubMetric(
+                                      label: 'Real Estate Assets',
+                                      value:
+                                          '$totalProperties ${totalProperties == 1 ? 'Building' : 'Buildings'}',
+                                      icon: Icons.domain_rounded,
+                                    ),
+                                    Container(
+                                      width: 1,
+                                      height: 28,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                    ),
+                                    _VaultSubMetric(
+                                      label: 'Pending Invoices',
+                                      value: '$unsettledInvoices Unsettled',
+                                      icon: Icons.receipt_long_outlined,
+                                    ),
+                                  ],
+                                );
+                              },
+                              orElse: () => const SizedBox.shrink(),
+                            );
+                          },
                         ),
                       ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.teal.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: const Text(
-                        'Live Run-Rate',
-                        style: TextStyle(
-                          color: Colors.tealAccent,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 18),
-
-                // Primary Estimated Revenue
-                Text(
-                  'Projected Monthly Rent',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    const Text(
-                      '৳ ',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      '0.00',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '/ month',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 18),
-                Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
-                const SizedBox(height: 14),
-
-                // Secondary Metrics Row: Occupancy Health
-                propertiesAsync.when(
-                  loading: () => const SizedBox(
-                    height: 18,
-                    child: LinearProgressIndicator(),
-                  ),
-                  error: (_, _) => const SizedBox.shrink(),
-                  data: (properties) {
-                    final ownedProperties = currentUid == null
-                        ? properties
-                        : properties
-                              .where((p) => p.ownerId == currentUid)
-                              .toList();
-                    final totalProperties = ownedProperties.length;
-
-                    return tenantsAsync.maybeWhen(
-                      data: (tenants) {
-                        final activeTenants = tenants
-                            .where((t) => t.status == TenantStatus.active)
-                            .length;
-
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _VaultSubMetric(
-                              label: 'Active Leases',
-                              value: '$activeTenants Tenancies',
-                              icon: Icons.verified_user_outlined,
-                            ),
-                            Container(
-                              width: 1,
-                              height: 28,
-                              color: Colors.white.withValues(alpha: 0.12),
-                            ),
-                            _VaultSubMetric(
-                              label: 'Real Estate Estate',
-                              value:
-                                  '$totalProperties ${totalProperties == 1 ? 'Building' : 'Buildings'}',
-                              icon: Icons.domain_rounded,
-                            ),
-                            Container(
-                              width: 1,
-                              height: 28,
-                              color: Colors.white.withValues(alpha: 0.12),
-                            ),
-                            const _VaultSubMetric(
-                              label: 'Pending Invoices',
-                              value: '0 Unsettled',
-                              icon: Icons.receipt_long_outlined,
-                            ),
-                          ],
-                        );
-                      },
-                      orElse: () => const SizedBox.shrink(),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -814,19 +882,19 @@ class _CommandGrid extends ConsumerWidget {
             const SizedBox(width: 8),
             Expanded(
               child: _SubActionTile(
-                icon: Icons.receipt_long_rounded,
-                title: 'Billing Rules',
+                icon: Icons.price_change_outlined,
+                title: 'Rent Control',
                 color: Colors.deepPurpleAccent,
-                onTap: () => context.push(RouteNames.ownerBillingRules),
+                onTap: () => context.push(RouteNames.centralRentControl),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _SubActionTile(
-                icon: Icons.send_rounded,
-                title: 'Invitations',
+                icon: Icons.receipt_long_rounded,
+                title: 'Billing Rules',
                 color: Colors.amber.shade900,
-                onTap: () => context.push(RouteNames.ownerTenants),
+                onTap: () => context.push(RouteNames.ownerBillingRules),
               ),
             ),
           ],
@@ -1127,15 +1195,15 @@ class _EnterpriseHub extends StatelessWidget {
               context.push(RouteNames.ownerManagers);
             },
           ),
-
+          const Divider(height: 1, indent: 64),
           _HubActionTile(
             icon: Icons.price_change_outlined,
             title: 'Rent & Tariff Control',
-            subtitle: 'Adjust rent across entire property, floor, or individual units',
+            subtitle:
+                'Adjust rent across entire property, floor, or individual units',
             tag: 'Rent',
             onTap: () => context.push(RouteNames.centralRentControl),
           ),
-
           const Divider(height: 1, indent: 64),
           _HubActionTile(
             icon: Icons.tune_rounded,

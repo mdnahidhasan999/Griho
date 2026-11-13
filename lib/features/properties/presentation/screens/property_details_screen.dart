@@ -1,12 +1,15 @@
+// noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_arguments.dart';
 import '../../../../app/router/route_names.dart';
-import '../../../rents/domain/entities/rent_adjustment.dart';
-import '../../../rents/presentation/providers/rent_rate_provider.dart';
+import '../../../tenants/data/models/tenant_model.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/property_tenants_provider.dart';
 import '../../../units/domain/entities/unit.dart';
@@ -106,7 +109,7 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
           title: const Text('Delete Property?'),
           content: Text(
             'Are you sure you want to delete "${property.name}"?\n\n'
-                'All associated units, resident assignments, and recurring billing rules will be permanently affected.',
+            'All associated units, resident assignments, and recurring billing rules will be permanently affected.',
           ),
           actions: [
             TextButton(
@@ -117,10 +120,7 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme
-                    .of(context)
-                    .colorScheme
-                    .error,
+                backgroundColor: Theme.of(context).colorScheme.error,
               ),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
@@ -157,17 +157,12 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
       _isDeleting = false;
     });
 
-    final errorMessage = ref
-        .read(propertyControllerProvider)
-        .errorMessage;
+    final errorMessage = ref.read(propertyControllerProvider).errorMessage;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(errorMessage ?? 'Unable to delete property.'),
-        backgroundColor: Theme
-            .of(context)
-            .colorScheme
-            .error,
+        backgroundColor: Theme.of(context).colorScheme.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -221,10 +216,7 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
       ),
       body: Stack(
         children: [
-          _PropertyDetailsContent(
-            property: property,
-            onReload: _loadProperty,
-          ),
+          _PropertyDetailsContent(property: property, onReload: _loadProperty),
           if (_isDeleting)
             Positioned.fill(
               child: ColoredBox(
@@ -312,7 +304,7 @@ class _PropertyDetailsContent extends ConsumerWidget {
 
           const SizedBox(height: 20),
 
-          // 5. Bulk Rent Management Card
+          // 5. Unified Rent & Tariff Control Card
           _PropertyRentManagementCard(property: property),
 
           const SizedBox(height: 20),
@@ -448,9 +440,7 @@ class _HeroPropertyHeader extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  property.address
-                      ?.trim()
-                      .isNotEmpty == true
+                  property.address?.trim().isNotEmpty == true
                       ? property.address!
                       : 'No physical address provided',
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -497,10 +487,9 @@ class _PropertyMetricRow extends StatelessWidget {
       error: (err, stack) => const SizedBox.shrink(),
       data: (units) {
         final totalUnits = units.length;
-        final occupiedUnits =
-            units
-                .where((u) => u.status == UnitStatus.occupied)
-                .length;
+        final occupiedUnits = units
+            .where((u) => u.status == UnitStatus.occupied)
+            .length;
         final vacantUnits = totalUnits - occupiedUnits;
 
         return Row(
@@ -829,6 +818,15 @@ class _TenantsSection extends ConsumerWidget {
     ref.invalidate(propertyTenantsProvider(propertyId));
   }
 
+  Future<List<Tenant>> _loadFallbackTenants() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('tenants')
+        .where('propertyId', isEqualTo: propertyId)
+        .where('status', isEqualTo: 'active')
+        .get();
+    return snap.docs.map((doc) => TenantModel.fromFirestore(doc)).toList();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -859,7 +857,9 @@ class _TenantsSection extends ConsumerWidget {
                     IconButton(
                       tooltip: 'Assign Tenant',
                       icon: const Icon(
-                          Icons.person_add_alt_1_outlined, size: 20),
+                        Icons.person_add_alt_1_outlined,
+                        size: 20,
+                      ),
                       onPressed: () {
                         _addTenant(context, ref);
                       },
@@ -883,43 +883,65 @@ class _TenantsSection extends ConsumerWidget {
                     .where((t) => t.status == TenantStatus.active)
                     .toList();
 
-                if (activeTenants.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.people_outline_rounded,
-                            size: 36,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(height: 8),
-                          const Text('No active tenants assigned yet.'),
-                          const SizedBox(height: 12),
-                          FilledButton.icon(
-                            onPressed: () {
-                              _addTenant(context, ref);
-                            },
-                            icon: const Icon(Icons.person_add, size: 18),
-                            label: const Text('Assign Tenant'),
-                          ),
-                        ],
-                      ),
-                    ),
+                if (activeTenants.isNotEmpty) {
+                  final previewTenants = activeTenants.take(4).toList();
+                  return Column(
+                    children: [
+                      for (var i = 0; i < previewTenants.length; i++) ...[
+                        _TenantCard(tenant: previewTenants[i]),
+                        if (i != previewTenants.length - 1)
+                          const Divider(height: 1, indent: 56),
+                      ],
+                    ],
                   );
                 }
 
-                final previewTenants = activeTenants.take(4).toList();
+                // ম্যানেজার অ্যাকাউন্ট থেকে ownerId ফিল্টারের কারণে খালি আসলে সরাসরি propertyId দিয়ে লোড করা
+                return FutureBuilder<List<Tenant>>(
+                  future: _loadFallbackTenants(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const LinearProgressIndicator();
+                    }
+                    final fallbackList = snapshot.data ?? [];
+                    if (fallbackList.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.people_outline_rounded,
+                                size: 36,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text('No active tenants assigned yet.'),
+                              const SizedBox(height: 12),
+                              FilledButton.icon(
+                                onPressed: () {
+                                  _addTenant(context, ref);
+                                },
+                                icon: const Icon(Icons.person_add, size: 18),
+                                label: const Text('Assign Tenant'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
 
-                return Column(
-                  children: [
-                    for (var i = 0; i < previewTenants.length; i++) ...[
-                      _TenantCard(tenant: previewTenants[i]),
-                      if (i != previewTenants.length - 1)
-                        const Divider(height: 1, indent: 56),
-                    ],
-                  ],
+                    final preview = fallbackList.take(4).toList();
+                    return Column(
+                      children: [
+                        for (var i = 0; i < preview.length; i++) ...[
+                          _TenantCard(tenant: preview[i]),
+                          if (i != preview.length - 1)
+                            const Divider(height: 1, indent: 56),
+                        ],
+                      ],
+                    );
+                  },
                 );
               },
             ),
@@ -967,105 +989,13 @@ class _TenantCard extends StatelessWidget {
 }
 
 // ============================================================================
-// PROPERTY RENT MANAGEMENT CARD
+// UNIFIED PROPERTY RENT & TARIFF MANAGEMENT CARD
 // ============================================================================
 
-class _PropertyRentManagementCard extends ConsumerStatefulWidget {
+class _PropertyRentManagementCard extends StatelessWidget {
   final Property property;
 
   const _PropertyRentManagementCard({required this.property});
-
-  @override
-  ConsumerState<_PropertyRentManagementCard> createState() =>
-      _PropertyRentManagementCardState();
-}
-
-class _PropertyRentManagementCardState
-    extends ConsumerState<_PropertyRentManagementCard> {
-  bool _isChanging = false;
-
-  Future<void> _changePropertyRent() async {
-    final result = await showDialog<_PropertyRentChangeResult>(
-      context: context,
-      builder: (dialogContext) {
-        return const _PropertyRentAdjustmentDialog();
-      },
-    );
-
-    if (!mounted || result == null) {
-      return;
-    }
-
-    await _submitPropertyRentChange(
-      amount: result.amount,
-      adjustmentType: result.adjustmentType,
-      effectiveFrom: result.effectiveFrom,
-    );
-  }
-
-  Future<void> _submitPropertyRentChange({
-    required double amount,
-    required RentAdjustmentType adjustmentType,
-    required DateTime effectiveFrom,
-  }) async {
-    if (_isChanging) {
-      return;
-    }
-
-    setState(() {
-      _isChanging = true;
-    });
-
-    final controller = ref.read(rentRateControllerProvider.notifier);
-
-    final rentRates = await controller.changePropertyRent(
-      propertyId: widget.property.id,
-      ownerId: widget.property.ownerId,
-      amount: amount,
-      adjustmentType: adjustmentType,
-      effectiveFrom: effectiveFrom,
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _isChanging = false;
-    });
-
-    if (rentRates == null) {
-      final error = ref
-          .read(rentRateControllerProvider)
-          .whenOrNull(error: (err, stack) => err.toString());
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error ?? 'Unable to adjust property rent.'),
-          backgroundColor: Theme
-              .of(context)
-              .colorScheme
-              .error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final action = adjustmentType == RentAdjustmentType.increase
-        ? 'increased'
-        : 'decreased';
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Rent $action by ৳${_formatPropertyRentAmount(amount)} for ${rentRates
-              .length} occupied unit(s).',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1099,7 +1029,7 @@ class _PropertyRentManagementCardState
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Bulk Rent Adjustment',
+                  'Rent & Tariff Control',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -1108,9 +1038,10 @@ class _PropertyRentManagementCardState
             ),
             const SizedBox(height: 10),
             Text(
-              'Apply an increase or reduction in monthly rent across all occupied units simultaneously.',
+              'Adjust recurring monthly rent across all occupied units in "${property.name}", specific floors, or individual units, and generate monthly rent invoices.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
               ),
             ),
             const SizedBox(height: 16),
@@ -1118,212 +1049,21 @@ class _PropertyRentManagementCardState
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _isChanging ? null : _changePropertyRent,
+                onPressed: () {
+                  context.push(RouteNames.centralRentControl);
+                },
                 icon: const Icon(Icons.tune_rounded, size: 18),
-                label: const Text('Adjust Rent Rates'),
+                label: const Text(
+                  'Open Rent & Tariff Control Hub',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
-            if (_isChanging) ...[
-              const SizedBox(height: 12),
-              const LinearProgressIndicator(),
-            ],
           ],
         ),
       ),
     );
   }
-}
-
-// ============================================================================
-// PROPERTY RENT ADJUSTMENT DIALOG
-// ============================================================================
-
-class _PropertyRentAdjustmentDialog extends StatefulWidget {
-  const _PropertyRentAdjustmentDialog();
-
-  @override
-  State<_PropertyRentAdjustmentDialog> createState() =>
-      _PropertyRentAdjustmentDialogState();
-}
-
-class _PropertyRentAdjustmentDialogState
-    extends State<_PropertyRentAdjustmentDialog> {
-  late final TextEditingController _amountController;
-  DateTime _effectiveFrom = DateTime.now();
-  RentAdjustmentType _adjustmentType = RentAdjustmentType.increase;
-
-  @override
-  void initState() {
-    super.initState();
-    _amountController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _selectEffectiveDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _effectiveFrom,
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2100),
-    );
-
-    if (picked == null || !mounted) {
-      return;
-    }
-
-    setState(() {
-      _effectiveFrom = DateTime(picked.year, picked.month, picked.day);
-    });
-  }
-
-  void _submit() {
-    final amount = double.tryParse(_amountController.text.trim());
-    if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid adjustment amount.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    Navigator.of(context).pop(
-      _PropertyRentChangeResult(
-        amount: amount,
-        adjustmentType: _adjustmentType,
-        effectiveFrom: _effectiveFrom,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isIncrease = _adjustmentType == RentAdjustmentType.increase;
-
-    return AlertDialog(
-      title: const Text('Adjust Property Rent'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select adjustment type and amount to apply across all occupied units.',
-            ),
-            const SizedBox(height: 20),
-            SegmentedButton<RentAdjustmentType>(
-              segments: const [
-                ButtonSegment(
-                  value: RentAdjustmentType.increase,
-                  icon: Icon(Icons.arrow_upward),
-                  label: Text('Increase'),
-                ),
-                ButtonSegment(
-                  value: RentAdjustmentType.decrease,
-                  icon: Icon(Icons.arrow_downward),
-                  label: Text('Decrease'),
-                ),
-              ],
-              selected: {_adjustmentType},
-              onSelectionChanged: (selection) {
-                setState(() {
-                  _adjustmentType = selection.first;
-                });
-              },
-            ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-              ],
-              decoration: const InputDecoration(
-                labelText: 'Adjustment Amount',
-                hintText: 'e.g. 1000',
-                prefixText: '৳ ',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: _selectEffectiveDate,
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Effective Date',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.calendar_today_outlined),
-                ),
-                child: Text(_formatPropertyRentDate(_effectiveFrom)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: Theme
-                    .of(context)
-                    .colorScheme
-                    .surfaceContainerHighest,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    isIncrease ? Icons.trending_up : Icons.trending_down,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isIncrease
-                          ? 'Example: An apartment renting at ৳12,000 will become ৳13,000 with a ৳1,000 increase.'
-                          : 'Example: An apartment renting at ৳12,000 will become ৳11,000 with a ৳1,000 reduction.',
-                      style: Theme
-                          .of(context)
-                          .textTheme
-                          .bodySmall,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Apply Changes')),
-      ],
-    );
-  }
-}
-
-class _PropertyRentChangeResult {
-  final double amount;
-  final RentAdjustmentType adjustmentType;
-  final DateTime effectiveFrom;
-
-  const _PropertyRentChangeResult({
-    required this.amount,
-    required this.adjustmentType,
-    required this.effectiveFrom,
-  });
 }
 
 // ============================================================================
@@ -1359,9 +1099,7 @@ class _PropertyInfoOverview extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              property.description
-                  ?.trim()
-                  .isNotEmpty == true
+              property.description?.trim().isNotEmpty == true
                   ? property.description!
                   : 'No instructions or description added for this property.',
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -1380,20 +1118,6 @@ class _PropertyInfoOverview extends StatelessWidget {
 // HELPERS & ERROR VIEWS
 // ============================================================================
 
-String _formatPropertyRentDate(DateTime dateTime) {
-  final date = dateTime.toLocal();
-  return '${date.day.toString().padLeft(2, '0')}/${date.month
-      .toString()
-      .padLeft(2, '0')}/${date.year}';
-}
-
-String _formatPropertyRentAmount(double amount) {
-  if (amount == amount.roundToDouble()) {
-    return amount.toStringAsFixed(0);
-  }
-  return amount.toStringAsFixed(2);
-}
-
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -1409,7 +1133,10 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-                Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
+              Icons.error_outline_rounded,
+              size: 48,
+              color: Colors.redAccent,
+            ),
             const SizedBox(height: 16),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),

@@ -1,5 +1,8 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 
@@ -303,6 +306,18 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     final unit = _selectedUnit;
 
     if (property == null || unit == null) {
+      return;
+    }
+
+    if (unit.status != UnitStatus.available) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Selected unit is not vacant. Please choose an available unit.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 
@@ -677,8 +692,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     const SizedBox(height: 18),
 
                     _buildSectionCard(
-                      title: '1. Allocation & Unit',
-                      subtitle: 'Choose target building and unit space',
+                      title: '1. Allocation & Vacant Unit',
+                      subtitle:
+                          'Choose target building and available unit space',
                       icon: Icons.apartment_rounded,
                       children: [
                         DropdownButtonFormField<Property>(
@@ -722,7 +738,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                             if (_selectedProperty == null) {
                               return const InputDecorator(
                                 decoration: InputDecoration(
-                                  labelText: 'Unit / Space',
+                                  labelText: 'Vacant Unit / Space',
                                   prefixIcon: Icon(
                                     Icons.door_front_door_outlined,
                                   ),
@@ -735,49 +751,132 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                             if (units.isEmpty) {
                               return const InputDecorator(
                                 decoration: InputDecoration(
-                                  labelText: 'Unit / Space',
+                                  labelText: 'Vacant Unit / Space',
                                   prefixIcon: Icon(
                                     Icons.door_front_door_outlined,
                                   ),
                                   border: OutlineInputBorder(),
                                 ),
                                 child: Text(
-                                  'No units available in this property',
+                                  'No units configured in this property yet',
                                 ),
                               );
                             }
 
-                            return DropdownButtonFormField<Unit>(
-                              initialValue: _selectedUnit,
-                              decoration: const InputDecoration(
-                                labelText: 'Unit / Space',
-                                prefixIcon: Icon(
-                                  Icons.door_front_door_outlined,
+                            // শুধুমাত্র খালি (available) ইউনিটগুলো ফিল্টার করা
+                            final vacantUnits = units
+                                .where((u) => u.status == UnitStatus.available)
+                                .toList();
+                            final occupiedCount =
+                                units.length - vacantUnits.length;
+
+                            if (vacantUnits.isEmpty) {
+                              return Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.amber.shade700.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                  ),
                                 ),
-                                border: OutlineInputBorder(),
-                              ),
-                              items: units
-                                  .map(
-                                    (unit) => DropdownMenuItem<Unit>(
-                                      value: unit,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.meeting_room_outlined,
+                                      color: Colors.amber.shade900,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
                                       child: Text(
-                                        'Unit ${unit.unitNumber} • '
-                                        'Floor ${unit.floorNumber}',
+                                        'All ${units.length} unit(s) in this building are currently occupied. No vacant unit is available for assignment.',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color:
+                                                  theme.colorScheme.onSurface,
+                                            ),
                                       ),
                                     ),
-                                  )
-                                  .toList(),
-                              onChanged: (unit) {
-                                setState(() {
-                                  _selectedUnit = unit;
-                                });
-                              },
-                              validator: (value) {
-                                if (value == null) {
-                                  return 'Please select a unit.';
-                                }
-                                return null;
-                              },
+                                  ],
+                                ),
+                              );
+                            }
+
+                            final safeSelectedUnit =
+                                (_selectedUnit != null &&
+                                    vacantUnits.any(
+                                      (u) => u.id == _selectedUnit!.id,
+                                    ))
+                                ? _selectedUnit
+                                : null;
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                DropdownButtonFormField<Unit>(
+                                  key: ValueKey(_selectedProperty?.id),
+                                  initialValue: safeSelectedUnit,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Vacant Unit / Space',
+                                    prefixIcon: Icon(
+                                      Icons.door_front_door_outlined,
+                                    ),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: vacantUnits
+                                      .map(
+                                        (unit) => DropdownMenuItem<Unit>(
+                                          value: unit,
+                                          child: Text(
+                                            'Unit ${unit.unitNumber} • '
+                                            'Floor ${unit.floorNumber}'
+                                            '${unit.name?.trim().isNotEmpty == true ? " (${unit.name!.trim()})" : ""} — Vacant',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (unit) {
+                                    setState(() {
+                                      _selectedUnit = unit;
+                                    });
+                                  },
+                                  validator: (value) {
+                                    if (value == null) {
+                                      return 'Please select a vacant unit.';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle_outline_rounded,
+                                      size: 14,
+                                      color: Colors.green.shade700,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '${vacantUnits.length} vacant unit(s) available'
+                                        '${occupiedCount > 0 ? " • $occupiedCount occupied unit(s) hidden" : ""}',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             );
                           },
                         ),

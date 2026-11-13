@@ -1,9 +1,14 @@
+// noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../billing/presentation/providers/tenancy_billing_target_provider.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
-import '../../../billing/presentation/providers/tenancy_billing_target_provider.dart';
+import '../../../tenants/data/models/tenant_model.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/controllers/tenant_controller.dart';
 import '../../../units/domain/entities/unit.dart';
@@ -15,14 +20,10 @@ import '../providers/monthly_rent_provider.dart';
 class MonthlyRentScreen extends ConsumerStatefulWidget {
   final String unitId;
 
-  const MonthlyRentScreen({
-    super.key,
-    required this.unitId,
-  });
+  const MonthlyRentScreen({super.key, required this.unitId});
 
   @override
-  ConsumerState<MonthlyRentScreen> createState() =>
-      _MonthlyRentScreenState();
+  ConsumerState<MonthlyRentScreen> createState() => _MonthlyRentScreenState();
 }
 
 class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
@@ -59,9 +60,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
     });
 
     try {
-      final unit = await ref.read(
-        unitByIdProvider(widget.unitId).future,
-      );
+      final unit = await ref.read(unitByIdProvider(widget.unitId).future);
 
       if (unit == null) {
         throw StateError('Unit not found.');
@@ -75,17 +74,28 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
         throw StateError('Property not found.');
       }
 
-      final getActiveTenants = ref.read(
-        getActiveTenantsByUnitIdProvider,
-      );
+      final getActiveTenants = ref.read(getActiveTenantsByUnitIdProvider);
 
-      final activeTenants = await getActiveTenants(unit.id);
+      var activeTenants = await getActiveTenants(unit.id);
+
+      // ম্যানেজার অ্যাকাউন্ট থেকে ownerId ফিল্টারের কারণে খালি আসলে সরাসরি unitId দিয়ে লোড করা
+      if (activeTenants.isEmpty && unit.status == UnitStatus.occupied) {
+        final snap = await FirebaseFirestore.instance
+            .collection('tenants')
+            .where('unitId', isEqualTo: unit.id)
+            .where('status', isEqualTo: 'active')
+            .get();
+
+        activeTenants = snap.docs
+            .map((doc) => TenantModel.fromFirestore(doc))
+            .toList();
+      }
 
       final monthlyRents = await ref.read(
         monthlyRentByUnitAndPeriodProvider((
-        unitId: unit.id,
-        ownerId: property.ownerId,
-        billingPeriodStart: _billingPeriodStart,
+          unitId: unit.id,
+          ownerId: property.ownerId,
+          billingPeriodStart: _billingPeriodStart,
         )).future,
       );
 
@@ -130,9 +140,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
 
     final lastDay = end.subtract(const Duration(days: 1));
     final desiredDay = _dueDate.day;
-    final safeDay = desiredDay > lastDay.day
-        ? lastDay.day
-        : desiredDay;
+    final safeDay = desiredDay > lastDay.day ? lastDay.day : desiredDay;
 
     setState(() {
       _billingPeriodStart = start;
@@ -152,9 +160,9 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
     try {
       final monthlyRents = await ref.read(
         monthlyRentByUnitAndPeriodProvider((
-        unitId: unit.id,
-        ownerId: property.ownerId,
-        billingPeriodStart: _billingPeriodStart,
+          unitId: unit.id,
+          ownerId: property.ownerId,
+          billingPeriodStart: _billingPeriodStart,
         )).future,
       );
 
@@ -177,9 +185,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
   Future<void> _selectDueDate() async {
     if (_isGenerating) return;
 
-    final lastDay = _billingPeriodEnd.subtract(
-      const Duration(days: 1),
-    );
+    final lastDay = _billingPeriodEnd.subtract(const Duration(days: 1));
 
     final selected = await showDatePicker(
       context: context,
@@ -196,11 +202,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
     if (!mounted || selected == null) return;
 
     setState(() {
-      _dueDate = DateTime(
-        selected.year,
-        selected.month,
-        selected.day,
-      );
+      _dueDate = DateTime(selected.year, selected.month, selected.day);
     });
   }
 
@@ -221,9 +223,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
 
     if (_dueDate.isBefore(_billingPeriodStart) ||
         !_dueDate.isBefore(_billingPeriodEnd)) {
-      _showError(
-        'Due date must be within the selected billing month.',
-      );
+      _showError('Due date must be within the selected billing month.');
       return;
     }
 
@@ -232,11 +232,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
     });
 
     try {
-      // Resolve tenancy periods using the shared resolver.
-      // This includes historical and current tenancies.
-      final resolver = ref.read(
-        tenancyBillingTargetResolverProvider,
-      );
+      final resolver = ref.read(tenancyBillingTargetResolverProvider);
 
       final tenancyTargets = await resolver.resolve(
         ownerId: property.ownerId,
@@ -244,12 +240,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
         billingPeriodStart: _billingPeriodStart,
         billingPeriodEnd: _billingPeriodEnd,
         currentTenants: _activeTenants,
-        units: [
-          (
-          unitId: unit.id.trim(),
-          floorId: unit.floorNumber.toString(),
-          ),
-        ],
+        units: [(unitId: unit.id.trim(), floorId: unit.floorNumber.toString())],
       );
 
       if (tenancyTargets.isEmpty) {
@@ -259,20 +250,15 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
           _isGenerating = false;
         });
 
-        _showError(
-          'No tenancy period overlaps the selected billing month.',
-        );
+        _showError('No tenancy period overlaps the selected billing month.');
         return;
       }
 
-      final generateMonthlyRent = ref.read(
-        generateMonthlyRentProvider,
-      );
+      final generateMonthlyRent = ref.read(generateMonthlyRentProvider);
 
       final generatedRents = <MonthlyRent>[];
 
       for (final target in tenancyTargets) {
-        // Only generate rent for the unit opened on this screen.
         if (target.unitId != unit.id) continue;
 
         final request = GenerateMonthlyRentRequest(
@@ -294,16 +280,14 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
 
       if (!mounted) return;
 
-      // Refresh the selected billing period.
       await _loadBillingPeriodData();
 
       if (!mounted) return;
 
-      // Refresh the complete rent history.
       ref.invalidate(
         unitMonthlyRentHistoryProvider((
-        unitId: unit.id,
-        ownerId: property.ownerId,
+          unitId: unit.id,
+          ownerId: property.ownerId,
         )),
       );
 
@@ -314,7 +298,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
       if (generatedRents.isEmpty) {
         _showError(
           'No new rent records were generated. '
-              'Records may already exist for the selected tenancy periods.',
+          'Records may already exist for the selected tenancy periods.',
         );
         return;
       }
@@ -323,8 +307,8 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
         SnackBar(
           content: Text(
             '${generatedRents.length} monthly rent '
-                '${generatedRents.length == 1 ? 'record' : 'records'} '
-                'generated successfully.',
+            '${generatedRents.length == 1 ? 'record' : 'records'} '
+            'generated successfully.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -340,26 +324,15 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
     }
   }
 
-  // ==========================================================================
-  // ERROR MESSAGE
-  // ==========================================================================
-
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Theme
-            .of(context)
-            .colorScheme
-            .error,
+        backgroundColor: Theme.of(context).colorScheme.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
-
-  // ==========================================================================
-  // BUILD
-  // ==========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -367,24 +340,15 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
 
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Monthly Rent'),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        appBar: AppBar(title: const Text('Monthly Rent')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_errorMessage != null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Monthly Rent'),
-        ),
-        body: _ErrorView(
-          message: _errorMessage!,
-          onRetry: _loadData,
-        ),
+        appBar: AppBar(title: const Text('Monthly Rent')),
+        body: _ErrorView(message: _errorMessage!, onRetry: _loadData),
       );
     }
 
@@ -393,12 +357,8 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
 
     if (unit == null || property == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Monthly Rent'),
-        ),
-        body: const Center(
-          child: Text('Required information not found.'),
-        ),
+        appBar: AppBar(title: const Text('Monthly Rent')),
+        body: const Center(child: Text('Required information not found.')),
       );
     }
 
@@ -409,9 +369,7 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
       appBar: AppBar(
         title: const Text(
           'Monthly Rent Invoice',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       body: RefreshIndicator(
@@ -436,19 +394,12 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
             const SizedBox(height: 16),
 
             if (hasGeneratedRent) ...[
-              _MonthlyRentSummaryCard(
-                monthlyRents: _monthlyRents,
-              ),
+              _MonthlyRentSummaryCard(monthlyRents: _monthlyRents),
               const SizedBox(height: 16),
-              _GeneratedMonthlyRentsCard(
-                monthlyRents: _monthlyRents,
-              ),
+              _GeneratedMonthlyRentsCard(monthlyRents: _monthlyRents),
               const SizedBox(height: 16),
             ],
 
-            // Keep this card visible even when some rent records exist.
-            // The use case must skip existing records and create only missing
-            // tenancy segments.
             _GenerateMonthlyRentCard(
               tenants: _activeTenants,
               dueDate: _dueDate,
@@ -496,9 +447,7 @@ class _UnitPropertyOverviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -539,9 +488,7 @@ class _UnitPropertyOverviewCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _OccupancyChip(
-                isOccupied: hasActiveTenant,
-              ),
+              _OccupancyChip(isOccupied: hasActiveTenant),
             ],
           ),
           const SizedBox(height: 16),
@@ -566,9 +513,7 @@ class _UnitPropertyOverviewCard extends StatelessWidget {
                   hasActiveTenant
                       ? activeTenants.map((t) => t.name).join(', ')
                       : 'No tenant assigned',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -582,19 +527,14 @@ class _UnitPropertyOverviewCard extends StatelessWidget {
 class _OccupancyChip extends StatelessWidget {
   final bool isOccupied;
 
-  const _OccupancyChip({
-    required this.isOccupied,
-  });
+  const _OccupancyChip({required this.isOccupied});
 
   @override
   Widget build(BuildContext context) {
     final color = isOccupied ? Colors.green : Colors.blue;
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 4,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
@@ -604,9 +544,7 @@ class _OccupancyChip extends StatelessWidget {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: isOccupied
-              ? Colors.green.shade800
-              : Colors.blue.shade800,
+          color: isOccupied ? Colors.green.shade800 : Colors.blue.shade800,
         ),
       ),
     );
@@ -633,18 +571,14 @@ class _BillingPeriodSelectorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final periodEnd = billingPeriodEnd.subtract(
-      const Duration(days: 1),
-    );
+    final periodEnd = billingPeriodEnd.subtract(const Duration(days: 1));
 
     return Card(
       elevation: 0,
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -679,7 +613,7 @@ class _BillingPeriodSelectorCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${_formatDate(billingPeriodStart)} to '
-                          '${_formatDate(periodEnd)}',
+                      '${_formatDate(periodEnd)}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -721,22 +655,22 @@ class _BillingPeriodSelectorCard extends StatelessWidget {
 class _MonthlyRentSummaryCard extends StatelessWidget {
   final List<MonthlyRent> monthlyRents;
 
-  const _MonthlyRentSummaryCard({
-    required this.monthlyRents,
-  });
+  const _MonthlyRentSummaryCard({required this.monthlyRents});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     final total = monthlyRents.fold<double>(
-      0,
-          (sum, rent) => sum + rent.amount,
+      0.0,
+      (double accumulatedTotal, MonthlyRent rent) =>
+          accumulatedTotal + rent.amount,
     );
 
     final chargeableDays = monthlyRents.fold<int>(
       0,
-          (sum, rent) => sum + rent.chargeableDays,
+      (int accumulatedDays, MonthlyRent rent) =>
+          accumulatedDays + rent.chargeableDays,
     );
 
     return Container(
@@ -744,9 +678,7 @@ class _MonthlyRentSummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -761,10 +693,7 @@ class _MonthlyRentSummaryCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.green.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
@@ -845,27 +774,21 @@ class _MonthlyRentSummaryCard extends StatelessWidget {
 class _GeneratedMonthlyRentsCard extends StatelessWidget {
   final List<MonthlyRent> monthlyRents;
 
-  const _GeneratedMonthlyRentsCard({
-    required this.monthlyRents,
-  });
+  const _GeneratedMonthlyRentsCard({required this.monthlyRents});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     final sorted = [...monthlyRents]
-      ..sort(
-            (a, b) => a.chargePeriodStart.compareTo(b.chargePeriodStart),
-      );
+      ..sort((a, b) => a.chargePeriodStart.compareTo(b.chargePeriodStart));
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -878,11 +801,8 @@ class _GeneratedMonthlyRentsCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           for (var index = 0; index < sorted.length; index++) ...[
-            _GeneratedRentItem(
-              monthlyRent: sorted[index],
-            ),
-            if (index != sorted.length - 1)
-              const Divider(height: 24),
+            _GeneratedRentItem(monthlyRent: sorted[index]),
+            if (index != sorted.length - 1) const Divider(height: 24),
           ],
         ],
       ),
@@ -893,9 +813,7 @@ class _GeneratedMonthlyRentsCard extends StatelessWidget {
 class _GeneratedRentItem extends StatelessWidget {
   final MonthlyRent monthlyRent;
 
-  const _GeneratedRentItem({
-    required this.monthlyRent,
-  });
+  const _GeneratedRentItem({required this.monthlyRent});
 
   @override
   Widget build(BuildContext context) {
@@ -919,12 +837,14 @@ class _GeneratedRentItem extends StatelessWidget {
         const SizedBox(height: 8),
         _DataRow(
           label: 'Charge Period',
-          value: '${_formatDate(monthlyRent.chargePeriodStart)} - '
+          value:
+              '${_formatDate(monthlyRent.chargePeriodStart)} - '
               '${_formatDate(monthlyRent.chargePeriodEnd)}',
         ),
         _DataRow(
           label: 'Billing Ratio',
-          value: '${monthlyRent.chargeableDays} of '
+          value:
+              '${monthlyRent.chargeableDays} of '
               '${monthlyRent.daysInBillingPeriod} days',
         ),
         _DataRow(
@@ -971,9 +891,7 @@ class _GenerateMonthlyRentCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1008,8 +926,8 @@ class _GenerateMonthlyRentCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Calculate rent using the tenancy periods and applicable '
-                'rent rates. Existing records should be skipped by the '
-                'generation use case.',
+            'rent rates. Existing records should be skipped by the '
+            'generation use case.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
               height: 1.4,
@@ -1028,9 +946,7 @@ class _GenerateMonthlyRentCard extends StatelessWidget {
               ),
               child: Text(
                 _formatDate(dueDate),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
           ),
@@ -1042,9 +958,7 @@ class _GenerateMonthlyRentCard extends StatelessWidget {
                 alpha: 0.5,
               ),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: theme.colorScheme.outlineVariant,
-              ),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1058,8 +972,8 @@ class _GenerateMonthlyRentCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'If a tenancy starts or ends during the month, '
-                        'the amount should be prorated according to the '
-                        'tenancy dates.',
+                    'the amount should be prorated according to the '
+                    'tenancy dates.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                       fontSize: 11,
@@ -1074,22 +988,19 @@ class _GenerateMonthlyRentCard extends StatelessWidget {
             width: double.infinity,
             height: 50,
             child: FilledButton.icon(
-              onPressed: isGenerating || !hasTenant && !hasGeneratedRent
+              onPressed: isGenerating || (!hasTenant && !hasGeneratedRent)
                   ? null
                   : onGenerate,
               icon: isGenerating
                   ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-                  : const Icon(
-                Icons.flash_on_rounded,
-                size: 20,
-              ),
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.flash_on_rounded, size: 20),
               label: Text(
                 isGenerating
                     ? 'Calculating & Generating...'
@@ -1098,9 +1009,7 @@ class _GenerateMonthlyRentCard extends StatelessWidget {
                     : hasTenant
                     ? 'Generate Monthly Rent'
                     : 'No Active Tenant',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -1128,10 +1037,7 @@ class _MonthlyRentHistorySection extends ConsumerWidget {
     final theme = Theme.of(context);
 
     final historyAsync = ref.watch(
-      unitMonthlyRentHistoryProvider((
-      unitId: unitId,
-      ownerId: ownerId,
-      )),
+      unitMonthlyRentHistoryProvider((unitId: unitId, ownerId: ownerId)),
     );
 
     return Container(
@@ -1139,9 +1045,7 @@ class _MonthlyRentHistorySection extends ConsumerWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1156,16 +1060,12 @@ class _MonthlyRentHistorySection extends ConsumerWidget {
           historyAsync.when(
             loading: () => const LinearProgressIndicator(),
             error: (error, stackTrace) =>
-                Text(
-                  'Unable to load history: $error',
-                ),
+                Text('Unable to load history: $error'),
             data: (history) {
               if (history.isEmpty) {
                 return Center(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 16,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
                       'No past rent records found for this unit.',
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -1179,11 +1079,8 @@ class _MonthlyRentHistorySection extends ConsumerWidget {
               return Column(
                 children: [
                   for (var index = 0; index < history.length; index++) ...[
-                    _MonthlyHistoryItem(
-                      monthlyRent: history[index],
-                    ),
-                    if (index != history.length - 1)
-                      const Divider(height: 20),
+                    _MonthlyHistoryItem(monthlyRent: history[index]),
+                    if (index != history.length - 1) const Divider(height: 20),
                   ],
                 ],
               );
@@ -1198,9 +1095,7 @@ class _MonthlyRentHistorySection extends ConsumerWidget {
 class _MonthlyHistoryItem extends StatelessWidget {
   final MonthlyRent monthlyRent;
 
-  const _MonthlyHistoryItem({
-    required this.monthlyRent,
-  });
+  const _MonthlyHistoryItem({required this.monthlyRent});
 
   @override
   Widget build(BuildContext context) {
@@ -1228,9 +1123,7 @@ class _MonthlyHistoryItem extends StatelessWidget {
             children: [
               Text(
                 _formatMonth(monthlyRent.billingPeriodStart),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 2),
               Text(
@@ -1247,14 +1140,10 @@ class _MonthlyHistoryItem extends StatelessWidget {
           children: [
             Text(
               '৳ ${_formatAmount(monthlyRent.amount)}',
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
-            _StatusChip(
-              status: monthlyRent.status,
-            ),
+            _StatusChip(status: monthlyRent.status),
           ],
         ),
       ],
@@ -1269,19 +1158,14 @@ class _MonthlyHistoryItem extends StatelessWidget {
 class _StatusChip extends StatelessWidget {
   final MonthlyRentStatus status;
 
-  const _StatusChip({
-    required this.status,
-  });
+  const _StatusChip({required this.status});
 
   @override
   Widget build(BuildContext context) {
     final (label, color) = _statusStyle(status);
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 3,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         color: color.withValues(alpha: 0.12),
@@ -1321,10 +1205,7 @@ class _DataRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _DataRow({
-    required this.label,
-    required this.value,
-  });
+  const _DataRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -1418,10 +1299,7 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1437,15 +1315,9 @@ class _ErrorView extends StatelessWidget {
               color: Colors.redAccent,
             ),
             const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-            ),
+            Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

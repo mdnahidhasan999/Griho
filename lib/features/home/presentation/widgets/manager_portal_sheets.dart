@@ -1,3 +1,4 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -427,7 +428,7 @@ void showManagerUnitsSheet({
   required BuildContext context,
   required List<QueryDocumentSnapshot> unitDocs,
   required Map<String, String> propertyNames,
-  String initialFilter = 'all', // 'all', 'available', 'occupied'
+  String initialFilter = 'all',
 }) {
   showModalBottomSheet(
     context: context,
@@ -494,22 +495,24 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Units & Vacancy (${filteredDocs.length})',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Units & Vacancy (${filteredDocs.length})',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Tap any unit to inspect details, rent, or assign a tenant',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        Text(
+                          'Tap any unit to inspect details, rent, or assign a tenant',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
@@ -561,153 +564,168 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                             widget.propertyNames[propId] ?? 'Assigned Building';
                         final isAvailable = status == 'available';
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Material(
                             color: theme.colorScheme.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isAvailable
-                                  ? Colors.green.withValues(alpha: 0.5)
-                                  : theme.colorScheme.outlineVariant,
-                              width: isAvailable ? 1.5 : 1.0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(
+                                color: isAvailable
+                                    ? Colors.green.withValues(alpha: 0.5)
+                                    : theme.colorScheme.outlineVariant,
+                                width: isAvailable ? 1.5 : 1.0,
+                              ),
                             ),
-                          ),
-                          child: Column(
-                            children: [
-                              InkWell(
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  context.push(
-                                    RouteNames.unitDetails.replaceFirst(
-                                      ':unitId',
-                                      unitId,
-                                    ),
-                                  );
-                                },
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            (isAvailable
-                                                    ? Colors.green
-                                                    : Colors.indigo)
-                                                .withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Icon(
-                                        isAvailable
-                                            ? Icons.meeting_room_outlined
-                                            : Icons.door_front_door_rounded,
-                                        color: isAvailable
-                                            ? Colors.green.shade700
-                                            : Colors.indigo,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            name.isNotEmpty
-                                                ? '$name (Unit $unitNum)'
-                                                : 'Unit $unitNum',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 15,
+                            clipBehavior: Clip.antiAlias,
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Column(
+                                children: [
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      context.push(
+                                        RouteNames.unitDetails.replaceFirst(
+                                          ':unitId',
+                                          unitId,
+                                        ),
+                                      );
+                                    },
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                (isAvailable
+                                                        ? Colors.green
+                                                        : Colors.indigo)
+                                                    .withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '$propName • Floor $floor',
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                ),
+                                          child: Icon(
+                                            isAvailable
+                                                ? Icons.meeting_room_outlined
+                                                : Icons.door_front_door_rounded,
+                                            color: isAvailable
+                                                ? Colors.green.shade700
+                                                : Colors.indigo,
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            (isAvailable
-                                                    ? Colors.green
-                                                    : Colors.blueGrey)
-                                                .withValues(alpha: 0.14),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        isAvailable ? 'VACANT' : 'OCCUPIED',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w900,
-                                          color: isAvailable
-                                              ? Colors.green.shade800
-                                              : Colors.blueGrey.shade800,
                                         ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pop(context);
-                                        context.push(
-                                          RouteNames.unitDetails.replaceFirst(
-                                            ':unitId',
-                                            unitId,
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                name.isNotEmpty
+                                                    ? '$name (Unit $unitNum)'
+                                                    : 'Unit $unitNum',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '$propName • Floor $floor',
+                                                style: theme.textTheme.bodySmall
+                                                    ?.copyWith(
+                                                      color: theme
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                              ),
+                                            ],
                                           ),
-                                        );
-                                      },
-                                      icon: const Icon(
-                                        Icons.info_outline_rounded,
-                                        size: 16,
-                                      ),
-                                      label: const Text('Unit & Rent Info'),
-                                      style: OutlinedButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                      ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                (isAvailable
+                                                        ? Colors.green
+                                                        : Colors.blueGrey)
+                                                    .withValues(alpha: 0.14),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            isAvailable ? 'VACANT' : 'OCCUPIED',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w900,
+                                              color: isAvailable
+                                                  ? Colors.green.shade800
+                                                  : Colors.blueGrey.shade800,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  if (isAvailable) ...[
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: FilledButton.tonalIcon(
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                          context.push(RouteNames.addTenant);
-                                        },
-                                        icon: const Icon(
-                                          Icons.person_add_rounded,
-                                          size: 16,
-                                        ),
-                                        label: const Text('Assign Tenant'),
-                                        style: FilledButton.styleFrom(
-                                          visualDensity: VisualDensity.compact,
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: () {
+                                            Navigator.pop(context);
+                                            context.push(
+                                              RouteNames.unitDetails
+                                                  .replaceFirst(
+                                                    ':unitId',
+                                                    unitId,
+                                                  ),
+                                            );
+                                          },
+                                          icon: const Icon(
+                                            Icons.info_outline_rounded,
+                                            size: 16,
+                                          ),
+                                          label: const Text('Unit & Rent Info'),
+                                          style: OutlinedButton.styleFrom(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                      if (isAvailable) ...[
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: FilledButton.tonalIcon(
+                                            onPressed: () {
+                                              Navigator.pop(context);
+                                              context.push(
+                                                RouteNames.addTenant,
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.person_add_rounded,
+                                              size: 16,
+                                            ),
+                                            label: const Text('Assign Tenant'),
+                                            style: FilledButton.styleFrom(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ],
                               ),
-                            ],
+                            ),
                           ),
                         );
                       },
@@ -759,7 +777,7 @@ class _ManagerTenantsSheetContent extends StatefulWidget {
 
 class _ManagerTenantsSheetContentState
     extends State<_ManagerTenantsSheetContent> {
-  String _statusFilter = 'active'; // 'active', 'inactive', 'all'
+  String _statusFilter = 'active';
 
   @override
   Widget build(BuildContext context) {
@@ -786,22 +804,24 @@ class _ManagerTenantsSheetContentState
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Tenants Directory (${filtered.length})',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tenants Directory (${filtered.length})',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Tap a resident to view lease, edit details, or end tenancy',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        Text(
+                          'Tap a resident to view lease, edit details, or end tenancy',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
@@ -853,66 +873,72 @@ class _ManagerTenantsSheetContentState
                             widget.propertyNames[propId] ?? 'Assigned Building';
                         final isActive = status == 'active';
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
+                        // FIX: Container(BoxDecoration)-এর বদলে Material ব্যবহার করা হয়েছে
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Material(
                             color: theme.colorScheme.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: theme.colorScheme.outlineVariant,
-                            ),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  theme.colorScheme.primaryContainer,
-                              child: Text(
-                                name.isNotEmpty ? name[0].toUpperCase() : 'T',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.onPrimaryContainer,
-                                ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(
+                                color: theme.colorScheme.outlineVariant,
                               ),
                             ),
-                            title: Text(
-                              name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
+                            clipBehavior: Clip.antiAlias,
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
                               ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 2),
-                                Text('$propName • $phone'),
-                                const SizedBox(height: 2),
-                                Text(
-                                  isActive
-                                      ? 'Active Tenancy • Tap to Manage / End Lease'
-                                      : 'Former Tenant • Tap to View / Re-activate',
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    theme.colorScheme.primaryContainer,
+                                child: Text(
+                                  name.isNotEmpty ? name[0].toUpperCase() : 'T',
                                   style: TextStyle(
-                                    color: isActive ? Colors.teal : Colors.grey,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 11,
+                                    color: theme.colorScheme.onPrimaryContainer,
                                   ),
                                 ),
-                              ],
-                            ),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () {
-                              Navigator.pop(context);
-                              context.push(
-                                RouteNames.tenantDetails.replaceFirst(
-                                  ':tenantId',
-                                  tenantId,
+                              ),
+                              title: Text(
+                                name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
                                 ),
-                              );
-                            },
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 2),
+                                  Text('$propName • $phone'),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isActive
+                                        ? 'Active Tenancy • Tap to Manage / End Lease'
+                                        : 'Former Tenant • Tap to View / Re-activate',
+                                    style: TextStyle(
+                                      color: isActive
+                                          ? Colors.teal
+                                          : Colors.grey,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () {
+                                Navigator.pop(context);
+                                context.push(
+                                  RouteNames.tenantDetails.replaceFirst(
+                                    ':tenantId',
+                                    tenantId,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         );
                       },

@@ -62,7 +62,6 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       if (unit != null) {
         activeTenants = await getActiveTenantsByUnitId(unit.id);
 
-        // ম্যানেজার অ্যাকাউন্ট থেকে ownerId ফিল্টারের কারণে খালি আসলে সরাসরি unitId দিয়ে লোড করা
         if (activeTenants.isEmpty && unit.status == UnitStatus.occupied) {
           final snap = await FirebaseFirestore.instance
               .collection('tenants')
@@ -419,8 +418,12 @@ class _UnitDetails extends ConsumerWidget {
 
           const SizedBox(height: 18),
 
-          // 4. Rent Rate Management Card
-          _ManageRentCard(unit: unit),
+          // 4. Direct Rent Invoices, Rate Update & History Card
+          _ManageRentCard(
+            unit: unit,
+            hasActiveTenant: activeTenants.isNotEmpty,
+            onReload: onReload,
+          ),
 
           const SizedBox(height: 18),
 
@@ -919,13 +922,19 @@ class _TenantTile extends StatelessWidget {
 }
 
 // ============================================================================
-// MANAGE RENT CARD
+// MANAGE RENT & INVOICES QUICK ACTIONS CARD
 // ============================================================================
 
 class _ManageRentCard extends StatelessWidget {
   final Unit unit;
+  final bool hasActiveTenant;
+  final VoidCallback onReload;
 
-  const _ManageRentCard({required this.unit});
+  const _ManageRentCard({
+    required this.unit,
+    required this.hasActiveTenant,
+    required this.onReload,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -959,7 +968,7 @@ class _ManageRentCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Rent Rate Management',
+                  'Rent & Billing Operations',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -968,31 +977,81 @@ class _ManageRentCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Update current rent terms, set scheduled adjustments, and view complete historical rental rates for this unit.',
+              'Generate monthly rent invoices, update recurring rent for this unit, or view historical rate changes.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 height: 1.35,
               ),
             ),
             const SizedBox(height: 16),
+
+            // 1. Primary Action: Monthly Rent Invoices
             SizedBox(
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
                 onPressed: () {
                   context.push(
-                    RouteNames.unitRentManagement.replaceFirst(
-                      ':unitId',
-                      unit.id,
-                    ),
+                    RouteNames.unitMonthlyRent.replaceFirst(':unitId', unit.id),
                   );
                 },
-                icon: const Icon(Icons.tune_rounded, size: 18),
+                icon: const Icon(Icons.receipt_long_rounded, size: 18),
                 label: const Text(
-                  'Configure Rent Rates',
+                  'Monthly Rent Invoices',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
+            ),
+            const SizedBox(height: 10),
+
+            // 2. Secondary Actions: Update Unit Rent & Rate History
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: FilledButton.tonalIcon(
+                      onPressed: hasActiveTenant
+                          ? () async {
+                              await context.push(
+                                RouteNames.changeUnitRent.replaceFirst(
+                                  ':unitId',
+                                  unit.id,
+                                ),
+                              );
+                              onReload();
+                            }
+                          : null,
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text(
+                        'Update Rent',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        context.push(
+                          RouteNames.unitRentRateHistory.replaceFirst(
+                            ':unitId',
+                            unit.id,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.history_rounded, size: 16),
+                      label: const Text(
+                        'Rate History',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

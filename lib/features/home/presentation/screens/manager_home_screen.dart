@@ -1,5 +1,8 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -460,7 +463,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Direct property administration and tenancy actions',
+                                'Direct property administration, rent & utility billing actions',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -542,40 +545,50 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                               ),
                               const SizedBox(height: 12),
 
+                              // 4 Sub-Action Shortcuts (Payments, Rent Control, Billing Rules, Units)
                               Row(
                                 children: [
                                   Expanded(
                                     child: ManagerSubActionTile(
                                       icon: Icons.payments_outlined,
-                                      title: 'Payment Reviews',
+                                      title: 'Payments',
                                       color: Colors.blueAccent,
                                       onTap: () => context.push(
                                         RouteNames.ownerPayments,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ManagerSubActionTile(
+                                      icon: Icons.price_change_outlined,
+                                      title: 'Rent Control',
+                                      color: Colors.deepPurpleAccent,
+                                      onTap: () => context.push(
+                                        RouteNames.centralRentControl,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ManagerSubActionTile(
+                                      icon: Icons.receipt_long_rounded,
+                                      title: 'Billing Rules',
+                                      color: Colors.amber.shade900,
+                                      onTap: () => context.push(
+                                        RouteNames.ownerBillingRules,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: ManagerSubActionTile(
                                       icon: Icons.meeting_room_outlined,
-                                      title: 'Units Explorer',
+                                      title: 'Units',
                                       color: Colors.green,
                                       onTap: () => showManagerUnitsSheet(
                                         context: context,
                                         unitDocs: myUnits,
-                                        propertyNames: propertyNames,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: ManagerSubActionTile(
-                                      icon: Icons.people_outline_rounded,
-                                      title: 'Tenants Directory',
-                                      color: Colors.teal,
-                                      onTap: () => showManagerTenantsSheet(
-                                        context: context,
-                                        tenantDocs: myTenants,
                                         propertyNames: propertyNames,
                                       ),
                                     ),
@@ -645,6 +658,54 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         context: context,
                                         tenantDocs: myTenants,
                                         propertyNames: propertyNames,
+                                      ),
+                                    ),
+                                    const Divider(height: 1, indent: 56),
+                                    ListTile(
+                                      leading: Icon(
+                                        Icons.price_change_outlined,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                      title: const Text(
+                                        'Rent & Tariff Control',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        'Adjust rent across building, floor, or unit & generate invoices',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                      trailing: const Icon(
+                                        Icons.chevron_right_rounded,
+                                      ),
+                                      onTap: () => context.push(
+                                        RouteNames.centralRentControl,
+                                      ),
+                                    ),
+                                    const Divider(height: 1, indent: 56),
+                                    ListTile(
+                                      leading: Icon(
+                                        Icons.tune_rounded,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                      title: const Text(
+                                        'Automated Billing & Invoicing Engine',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        'Create utility rules, generate monthly bills & cancel unpaid errors',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                      trailing: const Icon(
+                                        Icons.chevron_right_rounded,
+                                      ),
+                                      onTap: () => context.push(
+                                        RouteNames.ownerBillingRules,
                                       ),
                                     ),
                                     const Divider(height: 1, indent: 56),

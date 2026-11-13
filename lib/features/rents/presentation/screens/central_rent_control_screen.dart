@@ -56,27 +56,11 @@ class _CentralRentControlScreenState
     }
   }
 
-  Future<void> _applyRentAdjustment() async {
+  Future<void> _applyBulkAdjustment() async {
     if (!_formKey.currentState!.validate()) return;
 
     final property = _selectedProperty;
     if (property == null) return;
-
-    if (_scope == _RentTargetScope.unit && _selectedUnit != null) {
-      // নির্দিষ্ট ইউনিটের জন্য সরাসরি আপনার বিদ্যমান ChangeUnitRentScreen-এ পাঠানো সবচেয়ে নিরাপদ
-      await context.push(
-        RouteNames.changeUnitRent.replaceFirst(':unitId', _selectedUnit!.id),
-      );
-      if (mounted) {
-        ref.invalidate(
-          currentRentRateProvider((
-            unitId: _selectedUnit!.id,
-            ownerId: property.ownerId,
-          )),
-        );
-      }
-      return;
-    }
 
     final amount = double.tryParse(_amountController.text.trim());
     if (amount == null || amount <= 0) return;
@@ -203,9 +187,16 @@ class _CentralRentControlScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '1. Select Adjustment Scope',
+                          '1. Select Operation Scope',
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Choose whether to adjust rent for a whole building, a specific floor, or manage a single unit.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -243,7 +234,7 @@ class _CentralRentControlScreenState
 
                   const SizedBox(height: 16),
 
-                  // 2. Target Perimeter Selection
+                  // 2. Target Location Card
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -358,8 +349,8 @@ class _CentralRentControlScreenState
 
                   const SizedBox(height: 16),
 
-                  // 3. Adjustment Parameters (For Property & Floor Bulk Updates)
-                  if (_scope != _RentTargetScope.unit)
+                  // 3A. Bulk Adjustment Form (For Property & Floor)
+                  if (_scope != _RentTargetScope.unit) ...[
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -373,7 +364,7 @@ class _CentralRentControlScreenState
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '3. Adjustment Details',
+                            '3. Bulk Adjustment Parameters',
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
@@ -409,7 +400,8 @@ class _CentralRentControlScreenState
                               ),
                             ],
                             decoration: const InputDecoration(
-                              labelText: 'Adjustment Amount (per unit)',
+                              labelText:
+                                  'Adjustment Amount (per occupied unit)',
                               hintText: 'e.g. 500',
                               prefixText: '৳ ',
                               border: OutlineInputBorder(),
@@ -441,53 +433,127 @@ class _CentralRentControlScreenState
                         ],
                       ),
                     ),
-
-                  const SizedBox(height: 24),
-
-                  SizedBox(
-                    height: 52,
-                    child: FilledButton.icon(
-                      onPressed: _isSubmitting ? null : _applyRentAdjustment,
-                      icon: _isSubmitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Icon(
-                              _scope == _RentTargetScope.unit
-                                  ? Icons.arrow_forward_rounded
-                                  : Icons.check_circle_outline_rounded,
-                            ),
-                      label: Text(
-                        _scope == _RentTargetScope.unit
-                            ? 'Proceed to Unit Rent Editor'
-                            : 'Apply Bulk Rent Adjustment',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: _isSubmitting ? null : _applyBulkAdjustment,
+                        icon: _isSubmitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.check_circle_outline_rounded),
+                        label: Text(
+                          _scope == _RentTargetScope.property
+                              ? 'Apply Property-Wide Rent Adjustment'
+                              : 'Apply Floor-Wide Rent Adjustment',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
 
+                  // 3B. Single Unit Complete Operations Card (All 3 Screens Accessible)
                   if (_scope == _RentTargetScope.unit &&
                       _selectedUnit != null) ...[
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        context.push(
-                          RouteNames.unitRentRateHistory.replaceFirst(
-                            ':unitId',
-                            _selectedUnit!.id,
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            '3. Unit ${_selectedUnit!.unitNumber} Rent Operations',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.history_rounded, size: 18),
-                      label: const Text('View Selected Unit Rent History'),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Manage monthly rent invoices, update unit rent rate, or inspect historical rate changes.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 1. Monthly Rent Invoices Screen Button
+                          SizedBox(
+                            height: 50,
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                context.push(
+                                  RouteNames.unitMonthlyRent.replaceFirst(
+                                    ':unitId',
+                                    _selectedUnit!.id,
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.receipt_long_rounded),
+                              label: const Text(
+                                'Monthly Rent Invoices (Generate & View)',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // 2. Update Unit Rent Screen Button
+                          SizedBox(
+                            height: 50,
+                            child: FilledButton.tonalIcon(
+                              onPressed: () {
+                                context.push(
+                                  RouteNames.changeUnitRent.replaceFirst(
+                                    ':unitId',
+                                    _selectedUnit!.id,
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.edit_outlined),
+                              label: const Text(
+                                'Update Unit Monthly Rent Rate',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // 3. Rent Rate History Screen Button
+                          SizedBox(
+                            height: 50,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                context.push(
+                                  RouteNames.unitRentRateHistory.replaceFirst(
+                                    ':unitId',
+                                    _selectedUnit!.id,
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.history_rounded),
+                              label: const Text(
+                                'View Rate Adjustment History',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ],
