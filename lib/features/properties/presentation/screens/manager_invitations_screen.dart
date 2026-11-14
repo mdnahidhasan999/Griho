@@ -21,44 +21,52 @@ class _ManagerInvitationsScreenState
     extends ConsumerState<ManagerInvitationsScreen> {
   bool _processing = false;
 
-  bool _matchesManager(Map<String, dynamic> data, dynamic profile) {
-    if (profile == null) return false;
+  Future<List<QueryDocumentSnapshot>> _fetchManagerInvites(
+    dynamic profile,
+  ) async {
+    final firestore = FirebaseFirestore.instance;
+    final col = firestore.collection('managerInvitations');
+    final Map<String, QueryDocumentSnapshot> results = {};
+
     final uid = profile.uid.toString().trim();
     final phone = (profile.phoneNumber ?? '').toString().trim();
-    final digitsOnlyPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
-    final localPhone = digitsOnlyPhone.startsWith('880')
-        ? digitsOnlyPhone.substring(2)
-        : digitsOnlyPhone;
-    final publicId = profile.publicId.toString().trim().toUpperCase();
-    final email = (profile.email ?? '').toString().trim().toLowerCase();
+    final publicId = profile.publicId.toString().trim();
+    final email = (profile.email ?? '').toString().trim();
 
-    final invIdentifier = (data['identifier'] ?? '').toString().trim();
-    final invPhone = (data['phone'] ?? '').toString().trim();
-    final invRawPhone = (data['rawPhone'] ?? '').toString().trim();
-    final invGrihoId = (data['targetGrihoId'] ?? '')
-        .toString()
-        .trim()
-        .toUpperCase();
-    final invEmail = (data['targetEmail'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
-    final invUserId = (data['targetUserId'] ?? '').toString().trim();
-    final managerUid = (data['managerUserId'] ?? '').toString().trim();
+    final queries = <Future<QuerySnapshot>>[
+      if (uid.isNotEmpty) col.where('managerUserId', isEqualTo: uid).get(),
+      if (uid.isNotEmpty) col.where('targetUserId', isEqualTo: uid).get(),
+      if (phone.isNotEmpty) col.where('phone', isEqualTo: phone).get(),
+      if (phone.isNotEmpty) col.where('identifier', isEqualTo: phone).get(),
+      if (publicId.isNotEmpty)
+        col.where('targetGrihoId', isEqualTo: publicId).get(),
+      if (publicId.isNotEmpty)
+        col.where('identifier', isEqualTo: publicId).get(),
+      if (email.isNotEmpty) col.where('targetEmail', isEqualTo: email).get(),
+    ];
 
-    return (managerUid.isNotEmpty && managerUid == uid) ||
-        (invUserId.isNotEmpty && invUserId == uid) ||
-        (publicId.isNotEmpty &&
-            (invGrihoId == publicId ||
-                invIdentifier.toUpperCase() == publicId)) ||
-        (email.isNotEmpty &&
-            (invEmail == email || invIdentifier.toLowerCase() == email)) ||
-        (phone.isNotEmpty &&
-            (invPhone == phone ||
-                invIdentifier == phone ||
-                invIdentifier == localPhone ||
-                invRawPhone == localPhone ||
-                invRawPhone == digitsOnlyPhone));
+    for (final future in queries) {
+      try {
+        final snap = await future;
+        for (final doc in snap.docs) {
+          results[doc.id] = doc;
+        }
+      } catch (_) {}
+    }
+
+    final list = results.values.toList();
+    list.sort((a, b) {
+      final aT =
+          ((a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)
+              ?.millisecondsSinceEpoch ??
+          0;
+      final bT =
+          ((b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)
+              ?.millisecondsSinceEpoch ??
+          0;
+      return bT.compareTo(aT);
+    });
+    return list;
   }
 
   Future<void> _respondToInvitation(
@@ -106,11 +114,22 @@ class _ManagerInvitationsScreenState
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        final currentRoles = List<String>.from(profile.availableRoles ?? []);
+        if (!currentRoles.contains('manager')) {
+          batch.update(firestore.collection('users').doc(profile.uid), {
+            'availableRoles': FieldValue.arrayUnion(['manager']),
+            'defaultDashboard': 'manager',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
       }
 
       await batch.commit();
+      ref.invalidate(currentUserProfileProvider);
 
       if (!mounted) return;
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -310,6 +329,277 @@ class _ManagerInvitationsScreenState
     }
   }
 
+  Widget _buildInviteList(
+    BuildContext context,
+    ThemeData theme,
+    dynamic profile,
+    bool isOwnerView,
+    List<QueryDocumentSnapshot> docs,
+  ) {
+    final visibleDocs = docs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      return (data['status'] ?? '').toString() != 'revoked';
+    }).toList();
+
+    if (visibleDocs.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.admin_panel_settings_outlined,
+                size: 56,
+                color: theme.colorScheme.outlineVariant,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isOwnerView
+                    ? 'No manager invitations sent yet.'
+                    : 'No invitations found for your account.',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                isOwnerView
+                    ? 'Tap the button below to assign a manager to one of your buildings.'
+                    : 'When a property owner invites you via your Phone (${profile?.phoneNumber}) or Griho ID (${profile?.publicId}), it will appear here.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (isOwnerView) ...[
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: () => context.push(RouteNames.addManager),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Invite Manager'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+      itemCount: visibleDocs.length,
+      itemBuilder: (context, index) {
+        final doc = visibleDocs[index];
+        final data = doc.data() as Map<String, dynamic>;
+        final name = (data['managerName'] ?? data['name'] ?? 'Manager')
+            .toString();
+        final identifier = (data['identifier'] ?? '').toString();
+        final propertyName = (data['propertyName'] ?? 'Assigned Building')
+            .toString();
+        final propertyId = (data['propertyId'] ?? '').toString();
+        final managerUserId = (data['managerUserId'] ?? '').toString();
+        final status = (data['status'] ?? 'pending').toString();
+        final accessStatus = (data['accessStatus'] ?? 'active').toString();
+
+        final isPending = status == 'pending';
+        final isAccepted = status == 'accepted';
+        final isSuspended = isAccepted && accessStatus == 'suspended';
+
+        final badgeLabel = isSuspended ? 'SUSPENDED' : status.toUpperCase();
+
+        final statusColor = isSuspended
+            ? Colors.orange.shade800
+            : isAccepted
+            ? Colors.green
+            : isPending
+            ? Colors.amber.shade900
+            : Colors.red;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isSuspended
+                  ? Colors.orange.shade700
+                  : theme.colorScheme.outlineVariant,
+              width: isSuspended ? 1.5 : 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: statusColor.withValues(alpha: 0.14),
+                    child: Icon(
+                      isSuspended
+                          ? Icons.pause_circle_filled_rounded
+                          : isAccepted
+                          ? Icons.verified_user_rounded
+                          : isPending
+                          ? Icons.hourglass_top_rounded
+                          : Icons.cancel_outlined,
+                      color: statusColor,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Building: $propertyName',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        if (identifier.isNotEmpty)
+                          Text(
+                            'Contact / ID: $identifier',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      badgeLabel,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (!isOwnerView && isPending) ...[
+                const Divider(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _processing
+                            ? null
+                            : () => _respondToInvitation(doc, profile, false),
+                        child: const Text('Decline'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _processing
+                            ? null
+                            : () => _respondToInvitation(doc, profile, true),
+                        child: const Text('Accept & Manage'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (isOwnerView && isAccepted) ...[
+                const Divider(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _processing
+                            ? null
+                            : () => _toggleManagerStatus(
+                                invitationId: doc.id,
+                                managerUserId: managerUserId,
+                                propertyId: propertyId,
+                                managerName: name,
+                                currentlyActive: !isSuspended,
+                              ),
+                        icon: Icon(
+                          isSuspended
+                              ? Icons.play_arrow_rounded
+                              : Icons.pause_rounded,
+                          size: 18,
+                        ),
+                        label: Text(isSuspended ? 'Reactivate' : 'Suspend'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
+                          foregroundColor: theme.colorScheme.error,
+                          backgroundColor: theme.colorScheme.error.withValues(
+                            alpha: 0.12,
+                          ),
+                        ),
+                        onPressed: _processing
+                            ? null
+                            : () => _revokeManagerAccess(
+                                invitationId: doc.id,
+                                managerUserId: managerUserId,
+                                propertyId: propertyId,
+                                managerName: name,
+                              ),
+                        icon: const Icon(
+                          Icons.person_remove_outlined,
+                          size: 18,
+                        ),
+                        label: const Text('Revoke Access'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (isOwnerView && isPending) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _processing
+                        ? null
+                        : () async {
+                            await doc.reference.delete();
+                          },
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: Colors.red,
+                    ),
+                    label: const Text(
+                      'Cancel Invite',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -321,7 +611,10 @@ class _ManagerInvitationsScreenState
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (err, _) => Scaffold(body: Center(child: Text('Error: $err'))),
       data: (profile) {
-        final isOwnerView = profile?.defaultDashboard == 'owner';
+        if (profile == null) {
+          return const Scaffold(body: Center(child: Text('Profile not found')));
+        }
+        final isOwnerView = profile.defaultDashboard == 'owner';
 
         return Scaffold(
           appBar: AppBar(
@@ -332,320 +625,54 @@ class _ManagerInvitationsScreenState
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          body: StreamBuilder<QuerySnapshot>(
-            stream: firestore
-                .collection('managerInvitations')
-                .orderBy('createdAt', descending: true)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              if (snapshot.hasError) {
-                return Center(
-                  child: Text('Error loading invitations: ${snapshot.error}'),
-                );
-              }
-
-              final allDocs = snapshot.data?.docs ?? [];
-              final docs = allDocs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final status = (data['status'] ?? '').toString();
-                if (status == 'revoked') return false;
-
-                if (isOwnerView) {
-                  final ownerId = (data['ownerId'] ?? '').toString().trim();
-                  return ownerId.isEmpty || ownerId == profile?.uid;
-                } else {
-                  return _matchesManager(data, profile);
-                }
-              }).toList();
-
-              if (docs.isEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.admin_panel_settings_outlined,
-                          size: 56,
-                          color: theme.colorScheme.outlineVariant,
+          body: isOwnerView
+              ? StreamBuilder<QuerySnapshot>(
+                  stream: firestore
+                      .collection('managerInvitations')
+                      .where('ownerId', isEqualTo: profile.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Error loading invitations: ${snapshot.error}',
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          isOwnerView
-                              ? 'No manager invitations sent yet.'
-                              : 'No invitations found for your account.',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                      );
+                    }
+                    return _buildInviteList(
+                      context,
+                      theme,
+                      profile,
+                      true,
+                      snapshot.data?.docs ?? [],
+                    );
+                  },
+                )
+              : FutureBuilder<List<QueryDocumentSnapshot>>(
+                  future: _fetchManagerInvites(profile),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Error loading invitations: ${snapshot.error}',
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          isOwnerView
-                              ? 'Tap the button below to assign a manager to one of your buildings.'
-                              : 'When a property owner invites you via your Phone (${profile?.phoneNumber}) or Griho ID (${profile?.publicId}), it will appear here.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        if (isOwnerView) ...[
-                          const SizedBox(height: 20),
-                          FilledButton.icon(
-                            onPressed: () =>
-                                context.push(RouteNames.addManager),
-                            icon: const Icon(Icons.add),
-                            label: const Text('Invite Manager'),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
-                itemCount: docs.length,
-                itemBuilder: (context, index) {
-                  final doc = docs[index];
-                  final data = doc.data() as Map<String, dynamic>;
-                  final name =
-                      (data['managerName'] ?? data['name'] ?? 'Manager')
-                          .toString();
-                  final identifier = (data['identifier'] ?? '').toString();
-                  final propertyName =
-                      (data['propertyName'] ?? 'All Properties').toString();
-                  final propertyId = (data['propertyId'] ?? '').toString();
-                  final managerUserId = (data['managerUserId'] ?? '')
-                      .toString();
-                  final status = (data['status'] ?? 'pending').toString();
-                  final accessStatus = (data['accessStatus'] ?? 'active')
-                      .toString();
-
-                  final isPending = status == 'pending';
-                  final isAccepted = status == 'accepted';
-                  final isSuspended = isAccepted && accessStatus == 'suspended';
-
-                  final badgeLabel = isSuspended
-                      ? 'SUSPENDED'
-                      : status.toUpperCase();
-
-                  final statusColor = isSuspended
-                      ? Colors.orange.shade800
-                      : isAccepted
-                      ? Colors.green
-                      : isPending
-                      ? Colors.amber.shade900
-                      : Colors.red;
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: isSuspended
-                            ? Colors.orange.shade700
-                            : theme.colorScheme.outlineVariant,
-                        width: isSuspended ? 1.5 : 1.0,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: statusColor.withValues(
-                                alpha: 0.14,
-                              ),
-                              child: Icon(
-                                isSuspended
-                                    ? Icons.pause_circle_filled_rounded
-                                    : isAccepted
-                                    ? Icons.verified_user_rounded
-                                    : isPending
-                                    ? Icons.hourglass_top_rounded
-                                    : Icons.cancel_outlined,
-                                color: statusColor,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    name,
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w800),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Building: $propertyName',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: theme.colorScheme.primary,
-                                    ),
-                                  ),
-                                  if (identifier.isNotEmpty)
-                                    Text(
-                                      'Contact / ID: $identifier',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: theme
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                          ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                badgeLabel,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  color: statusColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // ম্যানেজার ভিউ: পেন্ডিং ইনভাইটেশন Accept / Decline
-                        if (!isOwnerView && isPending) ...[
-                          const Divider(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: _processing
-                                      ? null
-                                      : () => _respondToInvitation(
-                                          doc,
-                                          profile,
-                                          false,
-                                        ),
-                                  child: const Text('Decline'),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: FilledButton(
-                                  onPressed: _processing
-                                      ? null
-                                      : () => _respondToInvitation(
-                                          doc,
-                                          profile,
-                                          true,
-                                        ),
-                                  child: const Text('Accept & Manage'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-
-                        // ওনার ভিউ: অ্যাক্সেপ্ট করা ম্যানেজারের জন্য Suspend / Reactivate ও Revoke Access
-                        if (isOwnerView && isAccepted) ...[
-                          const Divider(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _processing
-                                      ? null
-                                      : () => _toggleManagerStatus(
-                                          invitationId: doc.id,
-                                          managerUserId: managerUserId,
-                                          propertyId: propertyId,
-                                          managerName: name,
-                                          currentlyActive: !isSuspended,
-                                        ),
-                                  icon: Icon(
-                                    isSuspended
-                                        ? Icons.play_arrow_rounded
-                                        : Icons.pause_rounded,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    isSuspended ? 'Reactivate' : 'Suspend',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: FilledButton.tonalIcon(
-                                  style: FilledButton.styleFrom(
-                                    foregroundColor: theme.colorScheme.error,
-                                    backgroundColor: theme.colorScheme.error
-                                        .withValues(alpha: 0.12),
-                                  ),
-                                  onPressed: _processing
-                                      ? null
-                                      : () => _revokeManagerAccess(
-                                          invitationId: doc.id,
-                                          managerUserId: managerUserId,
-                                          propertyId: propertyId,
-                                          managerName: name,
-                                        ),
-                                  icon: const Icon(
-                                    Icons.person_remove_outlined,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Revoke Access'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-
-                        // ওনার ভিউ: পেন্ডিং ইনভাইটেশন বাতিল করা
-                        if (isOwnerView && isPending) ...[
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              onPressed: _processing
-                                  ? null
-                                  : () async {
-                                      await doc.reference.delete();
-                                    },
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                size: 16,
-                                color: Colors.red,
-                              ),
-                              label: const Text(
-                                'Cancel Invite',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                      );
+                    }
+                    return _buildInviteList(
+                      context,
+                      theme,
+                      profile,
+                      false,
+                      snapshot.data ?? [],
+                    );
+                  },
+                ),
           floatingActionButton: isOwnerView
               ? FloatingActionButton.extended(
                   onPressed: () => context.push(RouteNames.addManager),

@@ -16,8 +16,6 @@ service cloud.firestore {
                     && request.auth.uid == userId
                     && request.resource.data.uid == request.auth.uid;
 
-      // Allow users to update their own profile without changing
-      // immutable identity fields or unauthorized role assignments.
       allow update: if isAuthenticated()
                     && request.auth.uid == userId
                     && request.resource.data.uid == resource.data.uid
@@ -36,7 +34,6 @@ service cloud.firestore {
                       )
                     )
                     && (
-                      // Preserve a legacy role field if it exists.
                       (
                         !resource.data.keys().hasAny(['role'])
                         && !request.resource.data.keys().hasAny(['role'])
@@ -62,7 +59,7 @@ service cloud.firestore {
                           ])
                       )
                       ||
-                      // Initial owner role selection.
+                      // Initial role selection (owner, tenant, or manager).
                       (
                         request.resource.data.diff(resource.data)
                           .affectedKeys()
@@ -86,62 +83,67 @@ service cloud.firestore {
                         && request.resource.data.availableRoles[0] in [
                           'owner',
                           'tenant',
-                          'manager',
-                          'caretaker',
-                          'electrician'
+                          'manager'
                         ]
                         && request.resource.data.defaultDashboard
                            == request.resource.data.availableRoles[0]
                       )
                       ||
-                                           // Change the default dashboard to an authorized role.
-                                           (
-                                             request.resource.data.diff(resource.data)
-                                               .affectedKeys()
-                                               .hasOnly([
-                                                 'defaultDashboard',
-                                                 'updatedAt'
-                                               ])
-                                             && resource.data.keys().hasAny(['availableRoles'])
-                                             && resource.data.availableRoles is list
-                                             && request.resource.data.keys().hasAny(['defaultDashboard'])
-                                             && request.resource.data.defaultDashboard is string
-                                             && request.resource.data.defaultDashboard in resource.data.availableRoles
-                                           )
-                                           ||
-                                           // Allow existing Tenant / Manager to unlock the Owner role.
-                                           (
-                                             request.resource.data.diff(resource.data)
-                                               .affectedKeys()
-                                               .hasOnly([
-                                                 'availableRoles',
-                                                 'defaultDashboard',
-                                                 'updatedAt'
-                                               ])
-                                             && resource.data.keys().hasAny(['availableRoles'])
-                                             && resource.data.availableRoles is list
-                                             && !('owner' in resource.data.availableRoles)
-                                             && request.resource.data.availableRoles is list
-                                             && request.resource.data.availableRoles.hasAll(resource.data.availableRoles)
-                                             && request.resource.data.availableRoles.size() == resource.data.availableRoles.size() + 1
-                                             && 'owner' in request.resource.data.availableRoles
-                                             && request.resource.data.defaultDashboard == 'owner'
-                                           )
-                                         );
-
-
+                      // Change default dashboard to an authorized role.
+                      (
+                        request.resource.data.diff(resource.data)
+                          .affectedKeys()
+                          .hasOnly([
+                            'defaultDashboard',
+                            'updatedAt'
+                          ])
+                        && resource.data.keys().hasAny(['availableRoles'])
+                        && resource.data.availableRoles is list
+                        && request.resource.data.keys().hasAny(['defaultDashboard'])
+                        && request.resource.data.defaultDashboard is string
+                        && request.resource.data.defaultDashboard in resource.data.availableRoles
+                      )
+                      ||
+                      // Self-upgrade to Owner or unlock Manager role upon invitation acceptance.
+                      (
+                        request.resource.data.diff(resource.data)
+                          .affectedKeys()
+                          .hasOnly([
+                            'availableRoles',
+                            'defaultDashboard',
+                            'updatedAt'
+                          ])
+                        && resource.data.keys().hasAny(['availableRoles'])
+                        && resource.data.availableRoles is list
+                        && request.resource.data.availableRoles is list
+                        && request.resource.data.availableRoles.hasAll(resource.data.availableRoles)
+                        && request.resource.data.availableRoles.size() == resource.data.availableRoles.size() + 1
+                        && (
+                          (
+                            !('owner' in resource.data.availableRoles)
+                            && 'owner' in request.resource.data.availableRoles
+                            && request.resource.data.defaultDashboard == 'owner'
+                          )
+                          ||
+                          (
+                            !('manager' in resource.data.availableRoles)
+                            && 'manager' in request.resource.data.availableRoles
+                            && request.resource.data.defaultDashboard == 'manager'
+                          )
+                        )
+                      )
+                    );
 
       allow delete: if false;
     }
 
-
     // ============================================================
-    // PHONE LOOKUPS
+    // PHONE LOOKUPS & PUBLIC IDS (NO LISTING ALLOWED)
     // ============================================================
 
     match /phone_lookups/{phoneNumber} {
-
       allow get: if isAuthenticated();
+      allow list: if false;
 
       allow create: if isAuthenticated()
                     && request.resource.data.uid == request.auth.uid
@@ -157,14 +159,9 @@ service cloud.firestore {
                     && resource.data.uid == request.auth.uid;
     }
 
-
-    // ============================================================
-    // PUBLIC IDS
-    // ============================================================
-
     match /public_ids/{publicId} {
-
       allow get: if isAuthenticated();
+      allow list: if false;
 
       allow create: if isAuthenticated()
                     && request.resource.data.publicId == publicId
@@ -182,34 +179,43 @@ service cloud.firestore {
                     && resource.data.createdBy == request.auth.uid;
     }
 
-
     // ============================================================
-    // PROPERTIES
+    // PROPERTIES (STRICT SCOPED READ)
     // ============================================================
 
     match /properties/{propertyId} {
+      allow get: if isAuthenticated()
+                 && (
+                   resource.data.ownerId == request.auth.uid
+                   || isPropertyManager(propertyId)
+                   || (
+                     resource.data.tenantUserIds is list
+                     && request.auth.uid in resource.data.tenantUserIds
+                   )
+                   || hasPendingManagerInviteForProperty(propertyId)
+                   || hasPendingTenantInviteForProperty(propertyId)
+                 );
 
-      allow get, list: if isAuthenticated();
+      allow list: if isAuthenticated()
+                  && (
+                    resource.data.ownerId == request.auth.uid
+                    || isPropertyManager(propertyId)
+                    || (
+                      resource.data.tenantUserIds is list
+                      && request.auth.uid in resource.data.tenantUserIds
+                    )
+                  );
 
       allow create: if isAuthenticated()
                     && request.resource.data.ownerId == request.auth.uid;
 
       allow update: if isAuthenticated()
                     && (
-
-                      // ------------------------------------------------
-                      // OWNER
-                      // ------------------------------------------------
                       (
                         resource.data.ownerId == request.auth.uid
                         && request.resource.data.ownerId == resource.data.ownerId
                       )
-
                       ||
-
-                      // ------------------------------------------------
-                      // PROPERTY MANAGER (ONLY TENANT LIST SYNC)
-                      // ------------------------------------------------
                       (
                         isPropertyManager(propertyId)
                         && request.resource.data.ownerId == resource.data.ownerId
@@ -217,12 +223,7 @@ service cloud.firestore {
                              .affectedKeys()
                              .hasOnly(['tenantUserIds', 'updatedAt'])
                       )
-
                       ||
-
-                      // ------------------------------------------------
-                      // TENANT ACCEPTANCE — FIRST ACCESS
-                      // ------------------------------------------------
                       (
                         resource.data.tenantUserIds is list
                         && resource.data.tenantUserIds.size() == 0
@@ -244,12 +245,7 @@ service cloud.firestore {
                           null
                         )
                       )
-
                       ||
-
-                      // ------------------------------------------------
-                      // TENANT ACCEPTANCE — ADD ACCESS
-                      // ------------------------------------------------
                       (
                         resource.data.tenantUserIds is list
                         && request.resource.data.tenantUserIds is list
@@ -280,14 +276,17 @@ service cloud.firestore {
                     && resource.data.ownerId == request.auth.uid;
     }
 
-
     // ============================================================
-    // UNITS
+    // UNITS (STRICT SCOPED READ)
     // ============================================================
 
     match /units/{unitId} {
-
-      allow get, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         isPropertyOwner(resource.data.propertyId)
+                         || isPropertyManager(resource.data.propertyId)
+                         || resource.data.get('tenantUserId', null) == request.auth.uid
+                       );
 
       allow create: if isAuthenticated()
                     && isPropertyOwner(request.resource.data.propertyId);
@@ -323,13 +322,11 @@ service cloud.firestore {
                     && isPropertyOwner(resource.data.propertyId);
     }
 
-
     // ============================================================
     // TENANT ACCESS
     // ============================================================
 
     match /tenantAccess/{userId} {
-
       allow get: if isAuthenticated()
                  && request.auth.uid == userId;
 
@@ -382,14 +379,17 @@ service cloud.firestore {
                     );
     }
 
-
     // ============================================================
-    // TENANTS
+    // TENANTS (STRICT PRIVACY: NO CROSS-OWNER / CROSS-TENANT LEAK)
     // ============================================================
 
     match /tenants/{tenantId} {
-
-      allow get, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                         || resource.data.get('userId', null) == request.auth.uid
+                       );
 
       allow create: if isAuthenticated()
                     && (
@@ -404,7 +404,6 @@ service cloud.firestore {
                     && (
                       isPropertyManager(resource.data.propertyId)
                       ||
-                      // OWNER — NORMAL UPDATE
                       (
                         resource.data.ownerId == request.auth.uid
                         && request.resource.data.ownerId == resource.data.ownerId
@@ -414,7 +413,6 @@ service cloud.firestore {
                         && isPropertyOwner(request.resource.data.propertyId)
                       )
                       ||
-                      // OWNER — START NEW TENANCY
                       (
                         resource.data.ownerId == request.auth.uid
                         && resource.data.status == 'inactive'
@@ -427,7 +425,6 @@ service cloud.firestore {
                         && isValidOwnerStartNewTenancyTenant(tenantId)
                       )
                       ||
-                      // OWNER — END TENANCY
                       (
                         resource.data.ownerId == request.auth.uid
                         && resource.data.status == 'active'
@@ -441,7 +438,6 @@ service cloud.firestore {
                         && isValidOwnerEndTenancy()
                       )
                       ||
-                      // ALREADY LINKED TENANT — NORMAL UPDATE
                       (
                         resource.data.userId == request.auth.uid
                         && request.resource.data.userId == resource.data.userId
@@ -455,7 +451,6 @@ service cloud.firestore {
                         && request.resource.data.createdAt == resource.data.createdAt
                       )
                       ||
-                      // ALREADY LINKED INACTIVE TENANT — INVITATION
                       (
                         resource.data.userId == request.auth.uid
                         && resource.data.status == 'inactive'
@@ -472,7 +467,6 @@ service cloud.firestore {
                         && isValidLinkedTenantInvitationAcceptance(tenantId)
                       )
                       ||
-                      // FIRST-TIME TENANT LINK (E.164 Global Direct Match)
                       (
                         (
                           !resource.data.keys().hasAny(['userId'])
@@ -497,14 +491,17 @@ service cloud.firestore {
                     && resource.data.ownerId == request.auth.uid;
     }
 
-
     // ============================================================
-    // TENANCY HISTORIES
+    // TENANCY HISTORIES (SCOPED READ)
     // ============================================================
 
     match /tenancyHistories/{historyId} {
-
-      allow read, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                         || resource.data.get('tenantUserId', null) == request.auth.uid
+                       );
 
       allow create: if isAuthenticated()
                     && (
@@ -515,18 +512,20 @@ service cloud.firestore {
                     );
 
       allow update: if false;
-
       allow delete: if false;
     }
 
-
     // ============================================================
-    // RENT RATES
+    // RENT RATES (SCOPED READ)
     // ============================================================
 
     match /rentRates/{rentRateId} {
-
-      allow read, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                         || isUnitTenant(resource.data.unitId)
+                       );
 
       allow create: if isAuthenticated()
                     && request.resource.data.ownerId is string
@@ -576,21 +575,6 @@ service cloud.firestore {
                     && request.resource.data.amount == resource.data.amount
                     && request.resource.data.effectiveFrom == resource.data.effectiveFrom
                     && request.resource.data.source == resource.data.source
-                    && (
-                      (
-                        !resource.data.keys().hasAny(['previousRentRateId'])
-                        && (
-                          !request.resource.data.keys().hasAny(['previousRentRateId'])
-                          || request.resource.data.previousRentRateId == null
-                        )
-                      )
-                      ||
-                      (
-                        resource.data.keys().hasAny(['previousRentRateId'])
-                        && request.resource.data.keys().hasAny(['previousRentRateId'])
-                        && request.resource.data.previousRentRateId == resource.data.previousRentRateId
-                      )
-                    )
                     && request.resource.data.createdAt == resource.data.createdAt
                     && resource.data.effectiveTo == null
                     && request.resource.data.effectiveTo is timestamp
@@ -616,46 +600,55 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-
     // ============================================================
-    // MONTHLY RENTS
+    // MONTHLY RENTS (HARDENED READ & UPDATE)
     // ============================================================
 
     match /monthlyRents/{monthlyRentId} {
-      allow get, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                         || resource.data.get('tenantUserId', null) == request.auth.uid
+                       );
 
       allow create: if isAuthenticated()
                     && isValidMonthlyRentCreate();
 
-      allow update: if isAuthenticated();
+      allow update: if isAuthenticated()
+                    && (
+                      isValidMonthlyBillOwnerPaymentReview()
+                      || isValidMonthlyBillPaymentReservation()
+                      || isValidMonthlyBillCancellation()
+                    );
 
       allow delete: if false;
     }
 
-
     // ============================================================
-    // RENTS
+    // RENTS (SCOPED READ)
     // ============================================================
 
     match /rents/{rentId} {
-
-      allow read, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                         || resource.data.get('tenantUserId', null) == request.auth.uid
+                       );
 
       allow create: if isAuthenticated()
                     && isValidOwnerCreateRent();
 
       allow update: if false;
-
       allow delete: if false;
     }
-
 
     // ============================================================
     // TENANT INVITATIONS
     // ============================================================
 
     match /tenantInvitations/{invitationId} {
-
       allow create: if isAuthenticated()
                     && (
                       request.resource.data.ownerId == request.auth.uid
@@ -674,7 +667,6 @@ service cloud.firestore {
 
       allow update: if isAuthenticated()
                     && (
-                      // OWNER OR MANAGER
                       (
                         (
                           resource.data.ownerId == request.auth.uid
@@ -691,7 +683,6 @@ service cloud.firestore {
                         && request.resource.data.expiresAt == resource.data.expiresAt
                       )
                       ||
-                      // TENANT ACCEPTANCE (E.164 Global Direct Match)
                       (
                         isInvitationRecipient(resource.data)
                         && request.resource.data.get('targetEmail', null) == resource.data.get('targetEmail', null)
@@ -715,7 +706,6 @@ service cloud.firestore {
                         && getAfter(/databases/$(database)/documents/tenantAccess/$(request.auth.uid)).data.invitationId == invitationId
                       )
                       ||
-                      // TENANT REJECTION
                       (
                         isInvitationRecipient(resource.data)
                         && request.resource.data.get('targetEmail', null) == resource.data.get('targetEmail', null)
@@ -745,42 +735,139 @@ service cloud.firestore {
                     );
     }
 
-
     // ============================================================
-    // MANAGER INVITATIONS & ACCESS
+    // MANAGER INVITATIONS (HARDENED SECURITY)
     // ============================================================
 
     match /managerInvitations/{invitationId} {
-      allow read, list, create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated()
+                    && request.resource.data.ownerId == request.auth.uid
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.propertyId != ''
+                    && isPropertyOwner(request.resource.data.propertyId)
+                    && request.resource.data.status == 'pending';
+
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isManagerInvitationRecipient(resource.data)
+                       );
+
+      allow update: if isAuthenticated()
+                    && (
+                      (
+                        resource.data.ownerId == request.auth.uid
+                        && isPropertyOwner(resource.data.propertyId)
+                        && request.resource.data.ownerId == resource.data.ownerId
+                        && request.resource.data.propertyId == resource.data.propertyId
+                      )
+                      ||
+                      (
+                        isManagerInvitationRecipient(resource.data)
+                        && resource.data.status == 'pending'
+                        && request.resource.data.status in ['accepted', 'rejected']
+                        && request.resource.data.ownerId == resource.data.ownerId
+                        && request.resource.data.propertyId == resource.data.propertyId
+                        && request.resource.data.managerUserId == request.auth.uid
+                      )
+                    );
+
+      allow delete: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid
+                    && isPropertyOwner(resource.data.propertyId);
     }
+
+    // ============================================================
+    // MANAGER ACCESS (CRITICAL SECURITY LOCKDOWN)
+    // ============================================================
 
     match /managerAccess/{accessId} {
-      allow read, list, create, update, delete: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || resource.data.userId == request.auth.uid
+                       );
+
+      allow create: if isAuthenticated()
+                    && accessId == (request.auth.uid + '_' + request.resource.data.propertyId)
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.propertyId != ''
+                    && request.resource.data.ownerId is string
+                    && request.resource.data.invitationId is string
+                    && request.resource.data.invitationId != ''
+                    && request.resource.data.status == 'active'
+                    && get(
+                         /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+                       ).data.ownerId == request.resource.data.ownerId
+                    && get(
+                         /databases/$(database)/documents/managerInvitations/$(request.resource.data.invitationId)
+                       ).data.status == 'pending'
+                    && get(
+                         /databases/$(database)/documents/managerInvitations/$(request.resource.data.invitationId)
+                       ).data.propertyId == request.resource.data.propertyId
+                    && get(
+                         /databases/$(database)/documents/managerInvitations/$(request.resource.data.invitationId)
+                       ).data.ownerId == request.resource.data.ownerId
+                    && isManagerInvitationRecipient(
+                         get(/databases/$(database)/documents/managerInvitations/$(request.resource.data.invitationId)).data
+                       )
+                    && getAfter(
+                         /databases/$(database)/documents/managerInvitations/$(request.resource.data.invitationId)
+                       ).data.status == 'accepted'
+                    && getAfter(
+                         /databases/$(database)/documents/managerInvitations/$(request.resource.data.invitationId)
+                       ).data.managerUserId == request.auth.uid;
+
+      allow update: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid
+                    && isPropertyOwner(resource.data.propertyId)
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.propertyId == resource.data.propertyId
+                    && request.resource.data.status in ['active', 'suspended', 'revoked'];
+
+      allow delete: if isAuthenticated()
+                    && resource.data.ownerId == request.auth.uid
+                    && isPropertyOwner(resource.data.propertyId);
     }
 
-
-// ============================================================
-    // ACTIVITY & AUDIT LOGS (IMMUTABLE)
     // ============================================================
+    // ACTIVITY & AUDIT LOGS (IMMUTABLE & SCOPED)
+    // ============================================================
+
     match /activityLogs/{logId} {
-      allow read, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                       );
+
       allow create: if isAuthenticated()
-                    && request.resource.data.actorUid == request.auth.uid;
+                    && request.resource.data.actorUid == request.auth.uid
+                    && (
+                      request.resource.data.ownerId == request.auth.uid
+                      || isPropertyManager(request.resource.data.propertyId)
+                    );
+
       allow update, delete: if false;
     }
 
-
     // ============================================================
-    // MONTHLY BILLS
+    // MONTHLY BILLS (SCOPED READ + GUARDRAILED UPDATE)
     // ============================================================
 
     match /monthlyBills/{monthlyBillId} {
-      allow get, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                         || resource.data.get('tenantUserId', null) == request.auth.uid
+                       );
 
       allow create: if isAuthenticated()
                     && isValidMonthlyBillCreate();
 
-      // বাড়িওয়ালা ও ম্যানেজারের ক্যানসেল, কনফার্ম/রিজেক্ট আপডেট অথবা টেন্যান্টের পেমেন্ট রিজার্ভ করার অনুমতি
       allow update: if isAuthenticated()
                     && (
                       isValidMonthlyBillCancellation()
@@ -791,9 +878,8 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-
     // ============================================================
-    // PAYMENT TRANSACTIONS
+    // PAYMENT TRANSACTIONS (STRICT BILL OWNERSHIP VALIDATION)
     // ============================================================
 
     match /paymentTransactions/{paymentId} {
@@ -808,7 +894,15 @@ service cloud.firestore {
                     && request.resource.data.tenantUserId == request.auth.uid
                     && request.resource.data.amount is number
                     && request.resource.data.amount > 0
-                    && request.resource.data.status == 'pending';
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.billId is string
+                    && request.resource.data.billId != ''
+                    && isValidTenantPaymentTarget(
+                      request.resource.data.billId,
+                      request.resource.data.get('billCollection', 'monthlyBills'),
+                      request.resource.data.ownerId,
+                      request.resource.data.propertyId
+                    );
 
       allow update: if isAuthenticated()
                     && (
@@ -819,13 +913,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-
     // ============================================================
-    // BILLING RULES
+    // BILLING RULES (SCOPED READ)
     // ============================================================
 
     match /billingRules/{ruleId} {
-      allow read, list: if isAuthenticated();
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                       );
 
       allow create: if isAuthenticated()
                     && isValidBillingRuleCreate();
@@ -836,9 +933,8 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-
     // ============================================================
-    // BILLING RULE — CREATE VALIDATION (OWNER & MANAGER)
+    // BILLING RULE — CREATE & UPDATE VALIDATIONS
     // ============================================================
 
     function isValidBillingRuleCreate() {
@@ -919,11 +1015,6 @@ service cloud.firestore {
         );
     }
 
-
-    // ============================================================
-    // BILLING RULE — UPDATE VALIDATION (OWNER & MANAGER)
-    // ============================================================
-
     function isValidBillingRuleUpdate() {
       return
         (
@@ -972,9 +1063,8 @@ service cloud.firestore {
         && request.resource.data.updatedAt <= request.time;
     }
 
-
     // ============================================================
-    // MONTHLY BILL — CREATE VALIDATION (OWNER & MANAGER)
+    // MONTHLY BILL — CREATE VALIDATION
     // ============================================================
 
     function isValidMonthlyBillCreate() {
@@ -1071,7 +1161,6 @@ service cloud.firestore {
         && request.resource.data.status == 'unpaid';
     }
 
-
     // ============================================================
     // SECURITY HELPERS
     // ============================================================
@@ -1087,11 +1176,71 @@ service cloud.firestore {
              && request.auth.token.email_verified == true;
     }
 
+    function isManagerInvitationRecipient(invitation) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return isAuthenticated()
+             && (
+               invitation.get('managerUserId', null) == request.auth.uid
+               || invitation.get('targetUserId', null) == request.auth.uid
+               || (
+                 invitation.get('phone', null) is string
+                 && invitation.get('phone', null) != ''
+                 && userDoc.get('phoneNumber', null) == invitation.get('phone', null)
+               )
+               || (
+                 invitation.get('identifier', null) is string
+                 && invitation.get('identifier', null) != ''
+                 && (
+                   userDoc.get('phoneNumber', null) == invitation.get('identifier', null)
+                   || userDoc.get('publicId', null) == invitation.get('identifier', null)
+                   || (hasVerifiedEmail() && request.auth.token.email == invitation.get('identifier', null))
+                 )
+               )
+               || (
+                 invitation.get('targetGrihoId', null) is string
+                 && invitation.get('targetGrihoId', null) != ''
+                 && userDoc.get('publicId', null) == invitation.get('targetGrihoId', null)
+               )
+               || (
+                 hasVerifiedEmail()
+                 && invitation.get('targetEmail', null) is string
+                 && invitation.get('targetEmail', null) == request.auth.token.email
+               )
+             );
+    }
+
+    function isValidTenantPaymentTarget(billId, collectionName, ownerId, propertyId) {
+      let targetPath = collectionName == 'monthlyRents'
+        ? /databases/$(database)/documents/monthlyRents/$(billId)
+        : /databases/$(database)/documents/monthlyBills/$(billId);
+      let billData = get(targetPath).data;
+
+      return exists(targetPath)
+             && billData.get('tenantUserId', null) == request.auth.uid
+             && billData.ownerId == ownerId
+             && billData.propertyId == propertyId
+             && billData.status != 'paid'
+             && billData.status != 'cancelled';
+    }
+
+    function isUnitTenant(unitId) {
+      return isAuthenticated()
+             && exists(/databases/$(database)/documents/units/$(unitId))
+             && get(/databases/$(database)/documents/units/$(unitId)).data.get('tenantUserId', null) == request.auth.uid;
+    }
+
+    function hasPendingManagerInviteForProperty(propertyId) {
+      return false;
+    }
+
+    function hasPendingTenantInviteForProperty(propertyId) {
+      return false;
+    }
+
     function isInvitationRecipient(invitation) {
       return isAuthenticated()
              && hasVerifiedEmail()
              && (
-               // Match by phone number.
                (
                  invitation.get('phone', null) is string
                  && invitation.get('phone', null) != ''
@@ -1100,14 +1249,12 @@ service cloud.firestore {
                     == invitation.get('phone', null)
                )
                ||
-               // Match by verified email.
                (
                  invitation.get('targetEmail', null) is string
                  && invitation.get('targetEmail', null) != ''
                  && invitation.get('targetEmail', null) == request.auth.token.email
                )
                ||
-               // Match by Griho ID (stored as publicId).
                (
                  invitation.get('targetGrihoId', null) is string
                  && invitation.get('targetGrihoId', null) != ''
@@ -1116,7 +1263,6 @@ service cloud.firestore {
                     == invitation.get('targetGrihoId', null)
                )
                ||
-               // Match an invitation linked to the user's tenant account.
                (
                  invitation.get('tenantId', null) is string
                  && exists(/databases/$(database)/documents/tenants/$(invitation.tenantId))
@@ -1132,19 +1278,10 @@ service cloud.firestore {
              && get(/databases/$(database)/documents/managerAccess/$(request.auth.uid + '_' + propertyId)).data.status == 'active';
     }
 
-    // ============================================================
-    // PROPERTY OWNER
-    // ============================================================
-
     function isPropertyOwner(propertyId) {
       return exists(/databases/$(database)/documents/properties/$(propertyId))
              && get(/databases/$(database)/documents/properties/$(propertyId)).data.ownerId == request.auth.uid;
     }
-
-
-    // ============================================================
-    // MONTHLY BILL TYPE ↔ BILLING RULE CHARGE TYPE
-    // ============================================================
 
     function isMatchingMonthlyBillType(chargeType, billType) {
       return
@@ -1156,11 +1293,6 @@ service cloud.firestore {
         || (chargeType == 'other' && billType == 'other');
     }
 
-
-    // ============================================================
-    // BILLING RULE SCOPE VALIDATION
-    // ============================================================
-
     function isBillingRuleApplicableToMonthlyBill(rule, bill) {
       return
         (rule.scopeType == 'property' && rule.scopeId == bill.propertyId)
@@ -1168,11 +1300,6 @@ service cloud.firestore {
         || (rule.scopeType == 'unit' && rule.scopeId == bill.unitId)
         || (rule.scopeType == 'tenant' && rule.scopeId == bill.tenantId);
     }
-
-
-    // ============================================================
-    // MONTHLY BILL CANCELLATION (GUARDRAILED FOR OWNER & MANAGER)
-    // ============================================================
 
     function isValidMonthlyBillCancellation() {
       return isAuthenticated()
@@ -1183,14 +1310,11 @@ service cloud.firestore {
           )
           || isPropertyManager(resource.data.propertyId)
         )
-        // Do not cancel an already paid or cancelled bill.
         && resource.data.status != 'paid'
         && resource.data.status != 'cancelled'
-        // Do not cancel a bill that already has payments or pending payment verification.
         && resource.data.paidAmount is number
         && resource.data.paidAmount == 0
         && resource.data.get('pendingPaymentAmount', 0) == 0
-        // Only status and updatedAt may change.
         && request.resource.data.diff(resource.data)
              .affectedKeys()
              .hasOnly(['status', 'updatedAt'])
@@ -1199,11 +1323,6 @@ service cloud.firestore {
         && request.resource.data.updatedAt >= resource.data.updatedAt
         && request.resource.data.updatedAt <= request.time;
     }
-
-
-    // ============================================================
-    // MONTHLY BILL — PAYMENT RESERVATION VALIDATION (TENANT)
-    // ============================================================
 
     function isValidMonthlyBillPaymentReservation() {
       let diff = request.resource.data.diff(resource.data);
@@ -1215,11 +1334,6 @@ service cloud.firestore {
              && request.resource.data.updatedAt is timestamp
              && request.resource.data.updatedAt <= request.time;
     }
-
-
-    // ============================================================
-    // MONTHLY BILL — OWNER & MANAGER PAYMENT CONFIRM / REJECT
-    // ============================================================
 
     function isValidMonthlyBillOwnerPaymentReview() {
       let diff = request.resource.data.diff(resource.data);
@@ -1241,9 +1355,8 @@ service cloud.firestore {
              && request.resource.data.updatedAt is timestamp;
     }
 
-
     // ============================================================
-    // VALIDATE TENANT ACCEPTANCE
+    // TENANCY LIFECYCLE & RENT VALIDATION HELPERS
     // ============================================================
 
     function isValidTenantAcceptance(ownerId, propertyId, unitId) {
@@ -1256,11 +1369,6 @@ service cloud.firestore {
              && (propertyId == null || access.propertyId == propertyId)
              && (unitId == null || access.unitId == unitId);
     }
-
-
-    // ============================================================
-    // INVITATION TENANT ACCESS
-    // ============================================================
 
     function isValidInvitationTenantAccess() {
       let tenantAfter = getAfter(
@@ -1281,11 +1389,6 @@ service cloud.firestore {
              && invitationAfter.unitId == request.resource.data.unitId
              && invitationAfter.ownerId == request.resource.data.ownerId;
     }
-
-
-    // ============================================================
-    // LINKED TENANT — INVITATION ACCEPTANCE
-    // ============================================================
 
     function isValidLinkedTenantInvitationAcceptance(tenantId) {
       let accessAfter = getAfter(
@@ -1322,22 +1425,11 @@ service cloud.firestore {
         && tenantAfter.tenancyStartedAt is timestamp;
     }
 
-
-    // ============================================================
-    // UNIT ASSIGNMENT STATE
-    // ============================================================
-
     function isUnitUnassigned(unitData) {
       return !unitData.keys().hasAny(['tenantUserId'])
              || unitData.tenantUserId == null
              || (unitData.tenantUserId is string && unitData.tenantUserId == '');
     }
-
-
-    // ============================================================
-    // OWNER — START NEW TENANCY
-    // TENANT ACCESS VALIDATION
-    // ============================================================
 
     function isValidOwnerStartNewTenancyAccess() {
       let tenantBefore = get(
@@ -1385,12 +1477,6 @@ service cloud.firestore {
              && unitAfter.tenantUserId == request.resource.data.userId;
     }
 
-
-    // ============================================================
-    // OWNER — START NEW TENANCY
-    // TENANT DOCUMENT VALIDATION
-    // ============================================================
-
     function isValidOwnerStartNewTenancyTenant(tenantId) {
       let tenantBefore = get(
         /databases/$(database)/documents/tenants/$(tenantId)
@@ -1427,12 +1513,6 @@ service cloud.firestore {
              && accessAfter.invitationId == null;
     }
 
-
-    // ============================================================
-    // OWNER / MANAGER — END TENANCY
-    // TENANT DOCUMENT VALIDATION
-    // ============================================================
-
     function isValidOwnerEndTenancy() {
       let propertyAfter = getAfter(
         /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
@@ -1456,12 +1536,6 @@ service cloud.firestore {
                 );
     }
 
-
-    // ============================================================
-    // OWNER / MANAGER — END TENANCY
-    // TENANT ACCESS DELETE VALIDATION
-    // ============================================================
-
     function isValidOwnerEndTenancyAccessDelete() {
       let tenantAfter = getAfter(
         /databases/$(database)/documents/tenants/$(resource.data.tenantId)
@@ -1476,12 +1550,6 @@ service cloud.firestore {
              && tenantAfter.unitId == resource.data.unitId
              && tenantAfter.status == 'inactive';
     }
-
-
-    // ============================================================
-    // OWNER / MANAGER — END TENANCY
-    // TENANCY HISTORY VALIDATION
-    // ============================================================
 
     function isValidOwnerEndTenancyHistory() {
       let tenantAfter = getAfter(
@@ -1508,21 +1576,6 @@ service cloud.firestore {
         && tenantAfter.propertyId == request.resource.data.propertyId
         && tenantAfter.unitId == request.resource.data.unitId
         && request.resource.data.tenantName == tenantAfter.name
-        && (
-          (
-            (
-              !tenantAfter.keys().hasAny(['userId'])
-              || tenantAfter.userId == null
-            )
-            && request.resource.data.tenantUserId == null
-          )
-          ||
-          (
-            tenantAfter.userId is string
-            && tenantAfter.userId != ''
-            && request.resource.data.tenantUserId == tenantAfter.userId
-          )
-        )
         && tenantAfter.tenancyStartedAt != null
         && request.resource.data.startedAt == tenantAfter.tenancyStartedAt
         && request.resource.data.endedAt is timestamp
@@ -1535,71 +1588,18 @@ service cloud.firestore {
         && propertyAfter.ownerId == request.resource.data.ownerId
         && request.resource.data.propertyName == propertyAfter.name
         && request.resource.data.propertyCode == propertyAfter.propertyCode
-        && (
-          (
-            !propertyAfter.keys().hasAny(['address'])
-            && request.resource.data.propertyAddress == null
-          )
-          ||
-          (
-            propertyAfter.address == null
-            && request.resource.data.propertyAddress == null
-          )
-          ||
-          (
-            propertyAfter.address is string
-            && request.resource.data.propertyAddress == propertyAfter.address
-          )
-        )
-        && propertyAfter.tenantUserIds is list
-        && (
-          request.resource.data.tenantUserId == null
-          || !(request.resource.data.tenantUserId in propertyAfter.tenantUserIds)
-        )
         && unitAfter.propertyId == request.resource.data.propertyId
         && request.resource.data.unitNumber == unitAfter.unitNumber
-        && (
-          (
-            !unitAfter.keys().hasAny(['name'])
-            && request.resource.data.unitName == null
-          )
-          ||
-          (
-            unitAfter.name == null
-            && request.resource.data.unitName == null
-          )
-          ||
-          (
-            unitAfter.name is string
-            && request.resource.data.unitName == unitAfter.name
-          )
-        )
         && request.resource.data.floorNumber == unitAfter.floorNumber
         && unitAfter.status == 'available'
         && isUnitUnassigned(unitAfter)
-        && (
-          request.resource.data.tenantUserId == null
-          || !existsAfter(
-            /databases/$(database)/documents/tenantAccess/$(request.resource.data.tenantUserId)
-          )
-        )
         && request.resource.data.createdAt == request.time;
     }
-
-
-    // ============================================================
-    // RENT RATE — INITIAL CREATE
-    // ============================================================
 
     function isValidInitialRentRateCreate() {
       return isValidOwnerInitialRentRateCreate()
              || isValidInvitationInitialRentRateCreate();
     }
-
-
-    // ============================================================
-    // RENT RATE — INITIAL CREATE (OWNER START)
-    // ============================================================
 
     function isValidOwnerInitialRentRateCreate() {
       let unitAfter = getAfter(
@@ -1640,11 +1640,6 @@ service cloud.firestore {
         && propertyAfter.tenantUserIds is list
         && unitAfter.tenantUserId in propertyAfter.tenantUserIds;
     }
-
-
-    // ============================================================
-    // RENT RATE — INITIAL CREATE (INVITATION ACCEPTANCE)
-    // ============================================================
 
     function isValidInvitationInitialRentRateCreate() {
       let unitAfter = getAfter(
@@ -1696,11 +1691,6 @@ service cloud.firestore {
         && request.resource.data.amount == invitationAfter.rentAmount
         && propertyAfter.ownerId == request.resource.data.ownerId;
     }
-
-
-    // ============================================================
-    // RENT RATE — CHANGED RATE CREATE (OWNER & MANAGER)
-    // ============================================================
 
     function isValidChangedRentRateCreate() {
       let previousRateBefore = get(
@@ -1759,11 +1749,6 @@ service cloud.firestore {
         && request.resource.data.updatedAt <= request.time;
     }
 
-
-    // ============================================================
-    // RENT RATE — END TENANCY CLOSE (OWNER & MANAGER)
-    // ============================================================
-
     function isValidEndTenancyRentRateClose() {
       let unitBefore = get(
         /databases/$(database)/documents/units/$(resource.data.unitId)
@@ -1798,11 +1783,6 @@ service cloud.firestore {
         && request.resource.data.effectiveTo <= request.time
         && request.resource.data.effectiveTo >= resource.data.effectiveFrom;
     }
-
-
-    // ============================================================
-    // RENT RATE — NORMAL RATE CHANGE CLOSE (OWNER & MANAGER)
-    // ============================================================
 
     function isValidChangedRentRateClose() {
       let unit = get(
@@ -1848,11 +1828,6 @@ service cloud.firestore {
         && nextRate.createdAt <= request.time
         && nextRate.updatedAt <= request.time;
     }
-
-
-    // ============================================================
-    // MONTHLY RENT — CREATE VALIDATION (OWNER & MANAGER)
-    // ============================================================
 
     function isValidMonthlyRentCreate() {
       let property = get(
@@ -1918,11 +1893,6 @@ service cloud.firestore {
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp;
     }
-
-
-    // ============================================================
-    // OWNER & MANAGER — CREATE RENT
-    // ============================================================
 
     function isValidOwnerCreateRent() {
       let property = get(

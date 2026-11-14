@@ -21,43 +21,40 @@ class ManagerHomeScreen extends ConsumerStatefulWidget {
 class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
   bool _busy = false;
 
-  bool _isInviteForUser(Map<String, dynamic> data, dynamic profile) {
+  Future<List<QueryDocumentSnapshot>> _fetchScopedManagerInvitations(
+    dynamic profile,
+  ) async {
+    final firestore = FirebaseFirestore.instance;
+    final col = firestore.collection('managerInvitations');
+    final Map<String, QueryDocumentSnapshot> results = {};
+
     final uid = profile.uid.toString().trim();
     final phone = (profile.phoneNumber ?? '').toString().trim();
-    final digitsOnly = phone.replaceAll(RegExp(r'[^\d]'), '');
-    final localPhone = digitsOnly.startsWith('880')
-        ? digitsOnly.substring(2)
-        : digitsOnly;
-    final publicId = profile.publicId.toString().trim().toUpperCase();
-    final email = (profile.email ?? '').toString().trim().toLowerCase();
+    final publicId = profile.publicId.toString().trim();
+    final email = (profile.email ?? '').toString().trim();
 
-    final invIdentifier = (data['identifier'] ?? '').toString().trim();
-    final invPhone = (data['phone'] ?? '').toString().trim();
-    final invRawPhone = (data['rawPhone'] ?? '').toString().trim();
-    final invGrihoId = (data['targetGrihoId'] ?? '')
-        .toString()
-        .trim()
-        .toUpperCase();
-    final invEmail = (data['targetEmail'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
-    final invUserId = (data['targetUserId'] ?? '').toString().trim();
-    final managerUid = (data['managerUserId'] ?? '').toString().trim();
+    final queries = <Future<QuerySnapshot>>[
+      if (uid.isNotEmpty) col.where('managerUserId', isEqualTo: uid).get(),
+      if (uid.isNotEmpty) col.where('targetUserId', isEqualTo: uid).get(),
+      if (phone.isNotEmpty) col.where('phone', isEqualTo: phone).get(),
+      if (phone.isNotEmpty) col.where('identifier', isEqualTo: phone).get(),
+      if (publicId.isNotEmpty)
+        col.where('targetGrihoId', isEqualTo: publicId).get(),
+      if (publicId.isNotEmpty)
+        col.where('identifier', isEqualTo: publicId).get(),
+      if (email.isNotEmpty) col.where('targetEmail', isEqualTo: email).get(),
+    ];
 
-    return (managerUid.isNotEmpty && managerUid == uid) ||
-        (invUserId.isNotEmpty && invUserId == uid) ||
-        (publicId.isNotEmpty &&
-            (invGrihoId == publicId ||
-                invIdentifier.toUpperCase() == publicId)) ||
-        (email.isNotEmpty &&
-            (invEmail == email || invIdentifier.toLowerCase() == email)) ||
-        (phone.isNotEmpty &&
-            (invPhone == phone ||
-                invIdentifier == phone ||
-                invIdentifier == localPhone ||
-                invRawPhone == localPhone ||
-                invRawPhone == digitsOnly));
+    for (final future in queries) {
+      try {
+        final snap = await future;
+        for (final doc in snap.docs) {
+          results[doc.id] = doc;
+        }
+      } catch (_) {}
+    }
+
+    return results.values.toList();
   }
 
   Future<void> _handleInvitation(
@@ -105,11 +102,22 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        final currentRoles = List<String>.from(profile.availableRoles ?? []);
+        if (!currentRoles.contains('manager')) {
+          batch.update(firestore.collection('users').doc(profile.uid), {
+            'availableRoles': FieldValue.arrayUnion(['manager']),
+            'defaultDashboard': 'manager',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
       }
 
       await batch.commit();
+      ref.invalidate(currentUserProfileProvider);
 
       if (!mounted) return;
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -211,578 +219,621 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
           }
 
           return StreamBuilder<QuerySnapshot>(
-            stream: firestore.collection('managerInvitations').snapshots(),
-            builder: (context, inviteSnapshot) {
-              final allInviteDocs = inviteSnapshot.data?.docs ?? [];
-              final myInvites = allInviteDocs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return _isInviteForUser(data, profile);
-              }).toList();
+            stream: firestore
+                .collection('managerAccess')
+                .where('userId', isEqualTo: profile.uid)
+                .snapshots(),
+            builder: (context, accessSnap) {
+              return FutureBuilder<List<QueryDocumentSnapshot>>(
+                future: _fetchScopedManagerInvitations(profile),
+                builder: (context, inviteSnapshot) {
+                  final myInvites = inviteSnapshot.data ?? [];
+                  final accessDocs = accessSnap.data?.docs ?? [];
 
-              final pendingInvites = myInvites.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return (data['status'] ?? 'pending') == 'pending';
-              }).toList();
+                  final pendingInvites = myInvites.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return (data['status'] ?? 'pending') == 'pending';
+                  }).toList();
 
-              final acceptedInvites = myInvites.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final status = (data['status'] ?? '').toString();
-                final accessStatus = (data['accessStatus'] ?? 'active')
-                    .toString();
-                return status == 'accepted' && accessStatus != 'revoked';
-              }).toList();
+                  final activeAccessDocs = accessDocs.where((doc) {
+                    final d = doc.data() as Map<String, dynamic>;
+                    return (d['status'] ?? 'active') == 'active';
+                  }).toList();
 
-              final activeInvites = acceptedInvites.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return (data['accessStatus'] ?? 'active') == 'active';
-              }).toList();
+                  final suspendedAccessDocs = accessDocs.where((doc) {
+                    final d = doc.data() as Map<String, dynamic>;
+                    return (d['status'] ?? '') == 'suspended';
+                  }).toList();
 
-              final suspendedInvites = acceptedInvites.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return (data['accessStatus'] ?? 'active') == 'suspended';
-              }).toList();
+                  final managedPropertyIds = <String>{};
+                  final propertyNames = <String, String>{};
 
-              final managedPropertyIds = <String>{};
-              final propertyNames = <String, String>{};
+                  for (final doc in activeAccessDocs) {
+                    final d = doc.data() as Map<String, dynamic>;
+                    final pId = (d['propertyId'] ?? '').toString().trim();
+                    final pName = (d['propertyName'] ?? '').toString().trim();
+                    if (pId.isNotEmpty) {
+                      managedPropertyIds.add(pId);
+                      if (pName.isNotEmpty) propertyNames[pId] = pName;
+                    }
+                  }
 
-              for (final doc in activeInvites) {
-                final d = doc.data() as Map<String, dynamic>;
-                final pId = (d['propertyId'] ?? '').toString().trim();
-                final pName = (d['propertyName'] ?? '').toString().trim();
-                if (pId.isNotEmpty) {
-                  managedPropertyIds.add(pId);
-                  if (pName.isNotEmpty) propertyNames[pId] = pName;
-                }
-              }
+                  final propIdList = managedPropertyIds.take(10).toList();
 
-              final propIdList = managedPropertyIds.take(10).toList();
+                  final unitsStream = propIdList.isEmpty
+                      ? const Stream<QuerySnapshot>.empty()
+                      : firestore
+                            .collection('units')
+                            .where('propertyId', whereIn: propIdList)
+                            .snapshots();
 
-              final unitsStream = propIdList.isEmpty
-                  ? const Stream<QuerySnapshot>.empty()
-                  : firestore
-                        .collection('units')
-                        .where('propertyId', whereIn: propIdList)
-                        .snapshots();
+                  final tenantsStream = propIdList.isEmpty
+                      ? const Stream<QuerySnapshot>.empty()
+                      : firestore
+                            .collection('tenants')
+                            .where('propertyId', whereIn: propIdList)
+                            .snapshots();
 
-              final tenantsStream = propIdList.isEmpty
-                  ? const Stream<QuerySnapshot>.empty()
-                  : firestore
-                        .collection('tenants')
-                        .where('propertyId', whereIn: propIdList)
-                        .snapshots();
+                  final billsStream = propIdList.isEmpty
+                      ? const Stream<QuerySnapshot>.empty()
+                      : firestore
+                            .collection('monthlyBills')
+                            .where('propertyId', whereIn: propIdList)
+                            .snapshots();
 
-              final billsStream = propIdList.isEmpty
-                  ? const Stream<QuerySnapshot>.empty()
-                  : firestore
-                        .collection('monthlyBills')
-                        .where('propertyId', whereIn: propIdList)
-                        .snapshots();
-
-              return StreamBuilder<QuerySnapshot>(
-                stream: unitsStream,
-                builder: (context, unitsSnap) {
                   return StreamBuilder<QuerySnapshot>(
-                    stream: tenantsStream,
-                    builder: (context, tenantsSnap) {
+                    stream: unitsStream,
+                    builder: (context, unitsSnap) {
                       return StreamBuilder<QuerySnapshot>(
-                        stream: billsStream,
-                        builder: (context, billsSnap) {
-                          final myUnits = unitsSnap.data?.docs ?? [];
-                          final myTenants = tenantsSnap.data?.docs ?? [];
-                          final myBills = billsSnap.data?.docs ?? [];
+                        stream: tenantsStream,
+                        builder: (context, tenantsSnap) {
+                          return StreamBuilder<QuerySnapshot>(
+                            stream: billsStream,
+                            builder: (context, billsSnap) {
+                              final myUnits = unitsSnap.data?.docs ?? [];
+                              final myTenants = tenantsSnap.data?.docs ?? [];
+                              final myBills = billsSnap.data?.docs ?? [];
 
-                          final vacantUnitsCount = myUnits.where((doc) {
-                            final d = doc.data() as Map<String, dynamic>;
-                            return (d['status'] ?? 'available') == 'available';
-                          }).length;
+                              final vacantUnitsCount = myUnits.where((doc) {
+                                final d = doc.data() as Map<String, dynamic>;
+                                return (d['status'] ?? 'available') ==
+                                    'available';
+                              }).length;
 
-                          final occupiedUnitsCount =
-                              myUnits.length - vacantUnitsCount;
+                              final occupiedUnitsCount =
+                                  myUnits.length - vacantUnitsCount;
 
-                          final activeTenants = myTenants.where((doc) {
-                            final d = doc.data() as Map<String, dynamic>;
-                            return d['status'] == 'active';
-                          }).toList();
+                              final activeTenants = myTenants.where((doc) {
+                                final d = doc.data() as Map<String, dynamic>;
+                                return d['status'] == 'active';
+                              }).toList();
 
-                          var totalUnpaidDue = 0.0;
-                          var unpaidInvoicesCount = 0;
+                              var totalUnpaidDue = 0.0;
+                              var unpaidInvoicesCount = 0;
 
-                          for (final doc in myBills) {
-                            final d = doc.data() as Map<String, dynamic>;
-                            final status = (d['status'] ?? 'unpaid').toString();
-                            if (status != 'paid' && status != 'cancelled') {
-                              final amount = (d['amount'] is num)
-                                  ? (d['amount'] as num).toDouble()
-                                  : 0.0;
-                              final paid = (d['paidAmount'] is num)
-                                  ? (d['paidAmount'] as num).toDouble()
-                                  : 0.0;
-                              final rem = amount - paid;
-                              if (rem > 0) {
-                                totalUnpaidDue += rem;
-                                unpaidInvoicesCount++;
+                              for (final doc in myBills) {
+                                final d = doc.data() as Map<String, dynamic>;
+                                final status = (d['status'] ?? 'unpaid')
+                                    .toString();
+                                if (status != 'paid' && status != 'cancelled') {
+                                  final amount = (d['amount'] is num)
+                                      ? (d['amount'] as num).toDouble()
+                                      : 0.0;
+                                  final paid = (d['paidAmount'] is num)
+                                      ? (d['paidAmount'] as num).toDouble()
+                                      : 0.0;
+                                  final rem = amount - paid;
+                                  if (rem > 0) {
+                                    totalUnpaidDue += rem;
+                                    unpaidInvoicesCount++;
+                                  }
+                                }
                               }
-                            }
-                          }
 
-                          return ListView(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                            children: [
-                              ManagerExecutiveHeader(
-                                name: profile.name,
-                                publicId: profile.publicId,
-                              ),
-                              const SizedBox(height: 18),
-
-                              // Pending Invitations Banner
-                              if (pendingInvites.isNotEmpty)
-                                ...pendingInvites.map((inviteDoc) {
-                                  final d =
-                                      inviteDoc.data() as Map<String, dynamic>;
-                                  final propName =
-                                      (d['propertyName'] ?? 'Owner Property')
-                                          .toString();
-                                  final ownerName =
-                                      (d['ownerName'] ?? 'Property Owner')
-                                          .toString();
-
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 16),
-                                    padding: const EdgeInsets.all(18),
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.shade700.withValues(
-                                        alpha: 0.12,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: Colors.amber.shade800,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'New Manager Assignment: $propName',
-                                          style: theme.textTheme.titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text('Invited by $ownerName'),
-                                        const SizedBox(height: 12),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: OutlinedButton(
-                                                onPressed: _busy
-                                                    ? null
-                                                    : () => _handleInvitation(
-                                                        inviteDoc,
-                                                        profile,
-                                                        false,
-                                                      ),
-                                                child: const Text('Decline'),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: FilledButton(
-                                                onPressed: _busy
-                                                    ? null
-                                                    : () => _handleInvitation(
-                                                        inviteDoc,
-                                                        profile,
-                                                        true,
-                                                      ),
-                                                child: const Text(
-                                                  'Accept Role',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }),
-
-                              // Suspended Warning Banner
-                              if (suspendedInvites.isNotEmpty)
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 16),
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(
-                                      alpha: 0.14,
-                                    ),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: Colors.orange.shade800,
-                                    ),
+                              return RefreshIndicator(
+                                onRefresh: () async {
+                                  setState(() {});
+                                },
+                                child: ListView(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    8,
+                                    16,
+                                    40,
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.pause_circle_filled_rounded,
-                                        color: Colors.orange.shade900,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          'Access to ${suspendedInvites.length} building(s) is temporarily suspended by the owner.',
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w700,
-                                                color: Colors.orange.shade900,
-                                              ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                              ManagerVaultCard(
-                                unpaidDue: totalUnpaidDue,
-                                activeTenantsCount: activeTenants.length,
-                                buildingsCount: managedPropertyIds.length,
-                                unpaidInvoicesCount: unpaidInvoicesCount,
-                              ),
-                              const SizedBox(height: 16),
-
-                              // Pulse Row
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ManagerPulseTile(
-                                      title: 'Vacant Units',
-                                      value: '$vacantUnitsCount',
-                                      icon: Icons.meeting_room_rounded,
-                                      color: Colors.green,
-                                      onTap: () => showManagerUnitsSheet(
-                                        context: context,
-                                        unitDocs: myUnits,
-                                        propertyNames: propertyNames,
-                                        initialFilter: 'available',
-                                      ),
+                                  children: [
+                                    ManagerExecutiveHeader(
+                                      name: profile.name,
+                                      publicId: profile.publicId,
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: ManagerPulseTile(
-                                      title: 'Occupied',
-                                      value: '$occupiedUnitsCount',
-                                      icon: Icons.door_front_door_rounded,
-                                      color: Colors.indigo,
-                                      onTap: () => showManagerUnitsSheet(
-                                        context: context,
-                                        unitDocs: myUnits,
-                                        propertyNames: propertyNames,
-                                        initialFilter: 'occupied',
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: ManagerPulseTile(
-                                      title: 'Residents',
-                                      value: '${activeTenants.length}',
-                                      icon: Icons.groups_rounded,
-                                      color: Colors.teal,
-                                      onTap: () => showManagerTenantsSheet(
-                                        context: context,
-                                        tenantDocs: myTenants,
-                                        propertyNames: propertyNames,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 24),
+                                    const SizedBox(height: 18),
 
-                              Text(
-                                'Command Center',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Direct property administration, rent & utility billing actions',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
+                                    // Pending Invitations Banner
+                                    if (pendingInvites.isNotEmpty)
+                                      ...pendingInvites.map((inviteDoc) {
+                                        final d =
+                                            inviteDoc.data()
+                                                as Map<String, dynamic>;
+                                        final propName =
+                                            (d['propertyName'] ??
+                                                    'Owner Property')
+                                                .toString();
+                                        final ownerName =
+                                            (d['ownerName'] ?? 'Property Owner')
+                                                .toString();
 
-                              // Register New Resident Button
-                              Material(
-                                color: theme.colorScheme.primaryContainer
-                                    .withValues(alpha: 0.45),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                  side: BorderSide(
-                                    color: theme.colorScheme.primary.withValues(
-                                      alpha: 0.4,
-                                    ),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                clipBehavior: Clip.antiAlias,
-                                child: InkWell(
-                                  onTap: () =>
-                                      context.push(RouteNames.addTenant),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(12),
+                                        return Container(
+                                          margin: const EdgeInsets.only(
+                                            bottom: 16,
+                                          ),
+                                          padding: const EdgeInsets.all(18),
                                           decoration: BoxDecoration(
-                                            color: theme.colorScheme.primary,
+                                            color: Colors.amber.shade700
+                                                .withValues(alpha: 0.12),
                                             borderRadius: BorderRadius.circular(
-                                              14,
+                                              20,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.amber.shade800,
+                                              width: 1.5,
                                             ),
                                           ),
-                                          child: const Icon(
-                                            Icons.person_add_alt_1_rounded,
-                                            size: 24,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 14),
-                                        Expanded(
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'Register New Resident',
+                                                'New Manager Assignment: $propName',
                                                 style: theme
                                                     .textTheme
                                                     .titleMedium
                                                     ?.copyWith(
                                                       fontWeight:
-                                                          FontWeight.w800,
+                                                          FontWeight.w900,
                                                     ),
                                               ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                'Assign vacant units and dispatch tenancy invites',
+                                              const SizedBox(height: 4),
+                                              Text('Invited by $ownerName'),
+                                              const SizedBox(height: 12),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: OutlinedButton(
+                                                      onPressed: _busy
+                                                          ? null
+                                                          : () =>
+                                                                _handleInvitation(
+                                                                  inviteDoc,
+                                                                  profile,
+                                                                  false,
+                                                                ),
+                                                      child: const Text(
+                                                        'Decline',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: FilledButton(
+                                                      onPressed: _busy
+                                                          ? null
+                                                          : () =>
+                                                                _handleInvitation(
+                                                                  inviteDoc,
+                                                                  profile,
+                                                                  true,
+                                                                ),
+                                                      child: const Text(
+                                                        'Accept Role',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+
+                                    // Suspended Warning Banner
+                                    if (suspendedAccessDocs.isNotEmpty)
+                                      Container(
+                                        margin: const EdgeInsets.only(
+                                          bottom: 16,
+                                        ),
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.withValues(
+                                            alpha: 0.14,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.orange.shade800,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.pause_circle_filled_rounded,
+                                              color: Colors.orange.shade900,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                'Access to ${suspendedAccessDocs.length} building(s) is temporarily suspended by the owner.',
                                                 style: theme.textTheme.bodySmall
                                                     ?.copyWith(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: Colors
+                                                          .orange
+                                                          .shade900,
                                                     ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                    ManagerVaultCard(
+                                      unpaidDue: totalUnpaidDue,
+                                      activeTenantsCount: activeTenants.length,
+                                      buildingsCount: managedPropertyIds.length,
+                                      unpaidInvoicesCount: unpaidInvoicesCount,
+                                    ),
+                                    const SizedBox(height: 16),
+
+                                    // Pulse Row
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ManagerPulseTile(
+                                            title: 'Vacant Units',
+                                            value: '$vacantUnitsCount',
+                                            icon: Icons.meeting_room_rounded,
+                                            color: Colors.green,
+                                            onTap: () => showManagerUnitsSheet(
+                                              context: context,
+                                              unitDocs: myUnits,
+                                              propertyNames: propertyNames,
+                                              initialFilter: 'available',
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: ManagerPulseTile(
+                                            title: 'Occupied',
+                                            value: '$occupiedUnitsCount',
+                                            icon: Icons.door_front_door_rounded,
+                                            color: Colors.indigo,
+                                            onTap: () => showManagerUnitsSheet(
+                                              context: context,
+                                              unitDocs: myUnits,
+                                              propertyNames: propertyNames,
+                                              initialFilter: 'occupied',
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: ManagerPulseTile(
+                                            title: 'Residents',
+                                            value: '${activeTenants.length}',
+                                            icon: Icons.groups_rounded,
+                                            color: Colors.teal,
+                                            onTap: () =>
+                                                showManagerTenantsSheet(
+                                                  context: context,
+                                                  tenantDocs: myTenants,
+                                                  propertyNames: propertyNames,
+                                                ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 24),
+
+                                    Text(
+                                      'Command Center',
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Direct property administration, rent & utility billing actions',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    // Register New Resident Button
+                                    Material(
+                                      color: theme.colorScheme.primaryContainer
+                                          .withValues(alpha: 0.45),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(18),
+                                        side: BorderSide(
+                                          color: theme.colorScheme.primary
+                                              .withValues(alpha: 0.4),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: InkWell(
+                                        onTap: () =>
+                                            context.push(RouteNames.addTenant),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(
+                                                  12,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      theme.colorScheme.primary,
+                                                  borderRadius:
+                                                      BorderRadius.circular(14),
+                                                ),
+                                                child: const Icon(
+                                                  Icons
+                                                      .person_add_alt_1_rounded,
+                                                  size: 24,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 14),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Register New Resident',
+                                                      style: theme
+                                                          .textTheme
+                                                          .titleMedium
+                                                          ?.copyWith(
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      'Assign vacant units and dispatch tenancy invites',
+                                                      style: theme
+                                                          .textTheme
+                                                          .bodySmall
+                                                          ?.copyWith(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .onSurfaceVariant,
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Icon(
+                                                Icons.arrow_forward_rounded,
+                                                color:
+                                                    theme.colorScheme.primary,
                                               ),
                                             ],
                                           ),
                                         ),
-                                        Icon(
-                                          Icons.arrow_forward_rounded,
-                                          color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    // 4 Sub-Action Shortcuts
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ManagerSubActionTile(
+                                            icon: Icons.payments_outlined,
+                                            title: 'Payments',
+                                            color: Colors.blueAccent,
+                                            onTap: () => context.push(
+                                              RouteNames.ownerPayments,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: ManagerSubActionTile(
+                                            icon: Icons.price_change_outlined,
+                                            title: 'Rent Control',
+                                            color: Colors.deepPurpleAccent,
+                                            onTap: () => context.push(
+                                              RouteNames.centralRentControl,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: ManagerSubActionTile(
+                                            icon: Icons.receipt_long_rounded,
+                                            title: 'Billing Rules',
+                                            color: Colors.amber.shade900,
+                                            onTap: () => context.push(
+                                              RouteNames.ownerBillingRules,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: ManagerSubActionTile(
+                                            icon: Icons.meeting_room_outlined,
+                                            title: 'Units',
+                                            color: Colors.green,
+                                            onTap: () => showManagerUnitsSheet(
+                                              context: context,
+                                              unitDocs: myUnits,
+                                              propertyNames: propertyNames,
+                                            ),
+                                          ),
                                         ),
                                       ],
                                     ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
+                                    const SizedBox(height: 24),
 
-                              // 4 Sub-Action Shortcuts
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ManagerSubActionTile(
-                                      icon: Icons.payments_outlined,
-                                      title: 'Payments',
-                                      color: Colors.blueAccent,
-                                      onTap: () => context.push(
-                                        RouteNames.ownerPayments,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: ManagerSubActionTile(
-                                      icon: Icons.price_change_outlined,
-                                      title: 'Rent Control',
-                                      color: Colors.deepPurpleAccent,
-                                      onTap: () => context.push(
-                                        RouteNames.centralRentControl,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: ManagerSubActionTile(
-                                      icon: Icons.receipt_long_rounded,
-                                      title: 'Billing Rules',
-                                      color: Colors.amber.shade900,
-                                      onTap: () => context.push(
-                                        RouteNames.ownerBillingRules,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: ManagerSubActionTile(
-                                      icon: Icons.meeting_room_outlined,
-                                      title: 'Units',
-                                      color: Colors.green,
-                                      onTap: () => showManagerUnitsSheet(
-                                        context: context,
-                                        unitDocs: myUnits,
-                                        propertyNames: propertyNames,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 24),
-
-                              // Management Hub
-                              Material(
-                                color: theme.colorScheme.surfaceContainerLow,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                  side: BorderSide(
-                                    color: theme.colorScheme.outlineVariant,
-                                  ),
-                                ),
-                                clipBehavior: Clip.antiAlias,
-                                child: Column(
-                                  children: [
-                                    ListTile(
-                                      leading: Icon(
-                                        Icons.meeting_room_outlined,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      title: const Text(
-                                        'Units & Vacancy Explorer',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
+                                    // Management Hub
+                                    Material(
+                                      color:
+                                          theme.colorScheme.surfaceContainerLow,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                        side: BorderSide(
+                                          color:
+                                              theme.colorScheme.outlineVariant,
                                         ),
                                       ),
-                                      subtitle: Text(
-                                        '$vacantUnitsCount Vacant • $occupiedUnitsCount Occupied units',
-                                        style: theme.textTheme.bodySmall,
-                                      ),
-                                      trailing: const Icon(
-                                        Icons.chevron_right_rounded,
-                                      ),
-                                      onTap: () => showManagerUnitsSheet(
-                                        context: context,
-                                        unitDocs: myUnits,
-                                        propertyNames: propertyNames,
-                                      ),
-                                    ),
-                                    const Divider(height: 1, indent: 56),
-                                    ListTile(
-                                      leading: Icon(
-                                        Icons.badge_outlined,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      title: const Text(
-                                        'Residents & Leases Directory',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      subtitle: Text(
-                                        '${activeTenants.length} Active leases • Manage agreements & move-outs',
-                                        style: theme.textTheme.bodySmall,
-                                      ),
-                                      trailing: const Icon(
-                                        Icons.chevron_right_rounded,
-                                      ),
-                                      onTap: () => showManagerTenantsSheet(
-                                        context: context,
-                                        tenantDocs: myTenants,
-                                        propertyNames: propertyNames,
-                                      ),
-                                    ),
-                                    const Divider(height: 1, indent: 56),
-                                    ListTile(
-                                      leading: Icon(
-                                        Icons.price_change_outlined,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      title: const Text(
-                                        'Rent & Tariff Control',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      subtitle: Text(
-                                        'Adjust rent across building, floor, or unit & generate invoices',
-                                        style: theme.textTheme.bodySmall,
-                                      ),
-                                      trailing: const Icon(
-                                        Icons.chevron_right_rounded,
-                                      ),
-                                      onTap: () => context.push(
-                                        RouteNames.centralRentControl,
-                                      ),
-                                    ),
-                                    const Divider(height: 1, indent: 56),
-                                    ListTile(
-                                      leading: Icon(
-                                        Icons.tune_rounded,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      title: const Text(
-                                        'Automated Billing & Invoicing Engine',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      subtitle: Text(
-                                        'Create utility rules, generate monthly bills & cancel unpaid errors',
-                                        style: theme.textTheme.bodySmall,
-                                      ),
-                                      trailing: const Icon(
-                                        Icons.chevron_right_rounded,
-                                      ),
-                                      onTap: () => context.push(
-                                        RouteNames.ownerBillingRules,
-                                      ),
-                                    ),
-                                    const Divider(height: 1, indent: 56),
-                                    ListTile(
-                                      leading: Icon(
-                                        Icons.mail_outline_rounded,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      title: const Text(
-                                        'Manager Invitations & Access',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      subtitle: Text(
-                                        '${pendingInvites.length} Pending • ${activeInvites.length} Active assignments',
-                                        style: theme.textTheme.bodySmall,
-                                      ),
-                                      trailing: const Icon(
-                                        Icons.chevron_right_rounded,
-                                      ),
-                                      onTap: () => context.push(
-                                        RouteNames.ownerManagers,
+                                      clipBehavior: Clip.antiAlias,
+                                      child: Column(
+                                        children: [
+                                          ListTile(
+                                            leading: Icon(
+                                              Icons.meeting_room_outlined,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                            title: const Text(
+                                              'Units & Vacancy Explorer',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              '$vacantUnitsCount Vacant • $occupiedUnitsCount Occupied units',
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                            trailing: const Icon(
+                                              Icons.chevron_right_rounded,
+                                            ),
+                                            onTap: () => showManagerUnitsSheet(
+                                              context: context,
+                                              unitDocs: myUnits,
+                                              propertyNames: propertyNames,
+                                            ),
+                                          ),
+                                          const Divider(height: 1, indent: 56),
+                                          ListTile(
+                                            leading: Icon(
+                                              Icons.badge_outlined,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                            title: const Text(
+                                              'Residents & Leases Directory',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              '${activeTenants.length} Active leases • Manage agreements & move-outs',
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                            trailing: const Icon(
+                                              Icons.chevron_right_rounded,
+                                            ),
+                                            onTap: () =>
+                                                showManagerTenantsSheet(
+                                                  context: context,
+                                                  tenantDocs: myTenants,
+                                                  propertyNames: propertyNames,
+                                                ),
+                                          ),
+                                          const Divider(height: 1, indent: 56),
+                                          ListTile(
+                                            leading: Icon(
+                                              Icons.price_change_outlined,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                            title: const Text(
+                                              'Rent & Tariff Control',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              'Adjust rent across building, floor, or unit & generate invoices',
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                            trailing: const Icon(
+                                              Icons.chevron_right_rounded,
+                                            ),
+                                            onTap: () => context.push(
+                                              RouteNames.centralRentControl,
+                                            ),
+                                          ),
+                                          const Divider(height: 1, indent: 56),
+                                          ListTile(
+                                            leading: Icon(
+                                              Icons.tune_rounded,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                            title: const Text(
+                                              'Automated Billing & Invoicing Engine',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              'Create utility rules, generate monthly bills & cancel unpaid errors',
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                            trailing: const Icon(
+                                              Icons.chevron_right_rounded,
+                                            ),
+                                            onTap: () => context.push(
+                                              RouteNames.ownerBillingRules,
+                                            ),
+                                          ),
+                                          const Divider(height: 1, indent: 56),
+                                          ListTile(
+                                            leading: Icon(
+                                              Icons.mail_outline_rounded,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                            title: const Text(
+                                              'Manager Invitations & Access',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              '${pendingInvites.length} Pending • ${activeAccessDocs.length} Active assignments',
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                            trailing: const Icon(
+                                              Icons.chevron_right_rounded,
+                                            ),
+                                            onTap: () => context.push(
+                                              RouteNames.ownerManagers,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
+                              );
+                            },
                           );
                         },
                       );

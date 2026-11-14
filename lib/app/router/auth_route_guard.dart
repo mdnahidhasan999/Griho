@@ -1,4 +1,8 @@
+// noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/presentation/controllers/auth_role_resolver.dart';
@@ -10,6 +14,20 @@ class AuthRouteGuard {
   final Ref ref;
 
   const AuthRouteGuard(this.ref);
+
+  Future<bool> _hasActiveManagerAccess(String uid) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('managerAccess')
+          .where('userId', isEqualTo: uid)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+      return snap.docs.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<String?> redirect(String location) async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -26,21 +44,32 @@ class AuthRouteGuard {
     final isRoleSelectionRoute = path == RouteNames.roleSelection;
     final isOwnerWelcomeRoute = path == RouteNames.ownerWelcome;
     final isTenantInvitationRoute = path.startsWith('/i/');
-    final isTenantAccountLinkRoute =
-        path == RouteNames.tenantAccountLink;
+    final isTenantAccountLinkRoute = path == RouteNames.tenantAccountLink;
 
-    final isOwnerRoute = path == RouteNames.ownerHome;
-    final isManagerRoute = path == RouteNames.managerHome;
-    final isCaretakerRoute = path == RouteNames.caretakerHome;
-    final isElectricianRoute = path == RouteNames.electricianHome;
-    final isTenantRoute = path == RouteNames.tenantHome;
+    // ড্যাশবোর্ড এবং সব সাব-রুট শনাক্তকরণ
+    final isOwnerSection =
+        path == RouteNames.ownerHome || path.startsWith('/owner/');
+    final isManagerSection =
+        path == RouteNames.managerHome || path.startsWith('/manager/');
+    final isTenantSection =
+        path == RouteNames.tenantHome || path.startsWith('/tenant/');
+    final isCaretakerSection =
+        path == RouteNames.caretakerHome || path.startsWith('/caretaker/');
+    final isElectricianSection =
+        path == RouteNames.electricianHome || path.startsWith('/electrician/');
 
-    final isProtectedRoute =
-        isOwnerRoute ||
-            isManagerRoute ||
-            isCaretakerRoute ||
-            isElectricianRoute ||
-            isTenantRoute;
+    // শুধুমাত্র মালিকের একক রুট (ম্যানেজার এখানে ঢুকতে পারবে না)
+    final isOwnerExclusiveRoute =
+        path == RouteNames.addProperty ||
+        path == RouteNames.addManager ||
+        path == RouteNames.editProperty;
+
+    final isProtectedSection =
+        isOwnerSection ||
+        isManagerSection ||
+        isTenantSection ||
+        isCaretakerSection ||
+        isElectricianSection;
 
     if (isSplashRoute) {
       return null;
@@ -77,8 +106,7 @@ class AuthRouteGuard {
       return RouteNames.splash;
     }
 
-    final userProfileRepository =
-    ref.read(userProfileRepositoryProvider);
+    final userProfileRepository = ref.read(userProfileRepositoryProvider);
 
     if (isOnboardingRoute) {
       final profile = await userProfileRepository.getUserByUid(
@@ -90,7 +118,6 @@ class AuthRouteGuard {
       }
 
       final destination = AuthRoleResolver.resolve(profile);
-
       return AuthDestinationMapper.routeFor(destination);
     }
 
@@ -104,13 +131,11 @@ class AuthRouteGuard {
       }
 
       final phoneNumber = profile.phoneNumber?.trim() ?? '';
-
       if (phoneNumber.isEmpty) {
         return RouteNames.onboarding;
       }
 
       final destination = AuthRoleResolver.resolve(profile);
-
       if (destination == AuthUserDestination.roleSelection) {
         return null;
       }
@@ -128,7 +153,6 @@ class AuthRouteGuard {
       }
 
       final phoneNumber = profile.phoneNumber?.trim() ?? '';
-
       if (phoneNumber.isEmpty) {
         return RouteNames.onboarding;
       }
@@ -139,18 +163,16 @@ class AuthRouteGuard {
 
       if (!availableRoles.contains('owner')) {
         final destination = AuthRoleResolver.resolve(profile);
-
         if (destination == AuthUserDestination.roleSelection) {
           return RouteNames.roleSelection;
         }
-
         return AuthDestinationMapper.routeFor(destination);
       }
 
       return null;
     }
 
-    if (isProtectedRoute) {
+    if (isProtectedSection) {
       final profile = await userProfileRepository.getUserByUid(
         firebaseUser.uid,
       );
@@ -160,19 +182,68 @@ class AuthRouteGuard {
       }
 
       final phoneNumber = profile.phoneNumber?.trim() ?? '';
-
       if (phoneNumber.isEmpty) {
         return RouteNames.onboarding;
       }
 
-      final destination = AuthRoleResolver.resolve(profile);
-      final correctRoute = AuthDestinationMapper.routeFor(destination);
+      final roles = profile.availableRoles
+          .map((role) => role.trim().toLowerCase())
+          .toSet();
 
-      if (path == correctRoute) {
-        return null;
+      final hasActiveManager =
+          roles.contains('manager') ||
+          await _hasActiveManagerAccess(firebaseUser.uid);
+
+      if (hasActiveManager) {
+        roles.add('manager');
       }
 
-      return correctRoute;
+      final destination = AuthRoleResolver.resolve(profile);
+      final defaultFallbackRoute = AuthDestinationMapper.routeFor(destination);
+
+      // ১. শুধুমাত্র মালিকের একক রুট (Add Property, Add Manager, Edit Property)
+      if (isOwnerExclusiveRoute) {
+        if (roles.contains('owner')) return null;
+        return hasActiveManager ? RouteNames.managerHome : defaultFallbackRoute;
+      }
+
+      // ২. /owner এবং /owner/* সাব-রুট (Owner এবং Active Manager উভয়ের জন্য অনুমোদিত)
+      if (isOwnerSection) {
+        if (path == RouteNames.ownerHome) {
+          if (roles.contains('owner')) return null;
+          return hasActiveManager
+              ? RouteNames.managerHome
+              : defaultFallbackRoute;
+        }
+        if (roles.contains('owner') || hasActiveManager) {
+          return null;
+        }
+        return defaultFallbackRoute;
+      }
+
+      // ৩. /manager এবং /manager/* সাব-রুট
+      if (isManagerSection) {
+        if (roles.contains('manager') || hasActiveManager) {
+          return null;
+        }
+        return defaultFallbackRoute;
+      }
+
+      // ৪. /tenant এবং /tenant/* সাব-রুট
+      if (isTenantSection) {
+        if (roles.contains('tenant')) {
+          return null;
+        }
+        return defaultFallbackRoute;
+      }
+
+      // ৫. Caretaker / Electrician সেকশন
+      if (isCaretakerSection) {
+        return roles.contains('caretaker') ? null : defaultFallbackRoute;
+      }
+      if (isElectricianSection) {
+        return roles.contains('electrician') ? null : defaultFallbackRoute;
+      }
     }
 
     return null;
