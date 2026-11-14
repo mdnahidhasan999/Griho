@@ -78,6 +78,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
 
       batch.update(doc.reference, {
         'status': accept ? 'accepted' : 'rejected',
+        'accessStatus': accept ? 'active' : 'rejected',
         'managerUserId': profile.uid,
         'managerName': profile.name,
         'managerGrihoId': profile.publicId,
@@ -225,13 +226,26 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
 
               final acceptedInvites = myInvites.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
-                return data['status'] == 'accepted';
+                final status = (data['status'] ?? '').toString();
+                final accessStatus = (data['accessStatus'] ?? 'active')
+                    .toString();
+                return status == 'accepted' && accessStatus != 'revoked';
+              }).toList();
+
+              final activeInvites = acceptedInvites.where((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return (data['accessStatus'] ?? 'active') == 'active';
+              }).toList();
+
+              final suspendedInvites = acceptedInvites.where((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return (data['accessStatus'] ?? 'active') == 'suspended';
               }).toList();
 
               final managedPropertyIds = <String>{};
               final propertyNames = <String, String>{};
 
-              for (final doc in acceptedInvites) {
+              for (final doc in activeInvites) {
                 final d = doc.data() as Map<String, dynamic>;
                 final pId = (d['propertyId'] ?? '').toString().trim();
                 final pName = (d['propertyName'] ?? '').toString().trim();
@@ -395,12 +409,45 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                   );
                                 }),
 
+                              // Suspended Warning Banner
+                              if (suspendedInvites.isNotEmpty)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(
+                                      alpha: 0.14,
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.orange.shade800,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.pause_circle_filled_rounded,
+                                        color: Colors.orange.shade900,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Access to ${suspendedInvites.length} building(s) is temporarily suspended by the owner.',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.orange.shade900,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
                               ManagerVaultCard(
                                 unpaidDue: totalUnpaidDue,
                                 activeTenantsCount: activeTenants.length,
-                                buildingsCount: managedPropertyIds.isNotEmpty
-                                    ? managedPropertyIds.length
-                                    : acceptedInvites.length,
+                                buildingsCount: managedPropertyIds.length,
                                 unpaidInvoicesCount: unpaidInvoicesCount,
                               ),
                               const SizedBox(height: 16),
@@ -545,7 +592,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                               ),
                               const SizedBox(height: 12),
 
-                              // 4 Sub-Action Shortcuts (Payments, Rent Control, Billing Rules, Units)
+                              // 4 Sub-Action Shortcuts
                               Row(
                                 children: [
                                   Expanded(
@@ -722,7 +769,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         ),
                                       ),
                                       subtitle: Text(
-                                        '${pendingInvites.length} Pending • ${acceptedInvites.length} Active assignments',
+                                        '${pendingInvites.length} Pending • ${activeInvites.length} Active assignments',
                                         style: theme.textTheme.bodySmall,
                                       ),
                                       trailing: const Icon(

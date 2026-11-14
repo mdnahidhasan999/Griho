@@ -94,21 +94,42 @@ service cloud.firestore {
                            == request.resource.data.availableRoles[0]
                       )
                       ||
-                      // Change the default dashboard to an authorized role.
-                      (
-                        request.resource.data.diff(resource.data)
-                          .affectedKeys()
-                          .hasOnly([
-                            'defaultDashboard',
-                            'updatedAt'
-                          ])
-                        && resource.data.keys().hasAny(['availableRoles'])
-                        && resource.data.availableRoles is list
-                        && request.resource.data.keys().hasAny(['defaultDashboard'])
-                        && request.resource.data.defaultDashboard is string
-                        && request.resource.data.defaultDashboard in resource.data.availableRoles
-                      )
-                    );
+                                           // Change the default dashboard to an authorized role.
+                                           (
+                                             request.resource.data.diff(resource.data)
+                                               .affectedKeys()
+                                               .hasOnly([
+                                                 'defaultDashboard',
+                                                 'updatedAt'
+                                               ])
+                                             && resource.data.keys().hasAny(['availableRoles'])
+                                             && resource.data.availableRoles is list
+                                             && request.resource.data.keys().hasAny(['defaultDashboard'])
+                                             && request.resource.data.defaultDashboard is string
+                                             && request.resource.data.defaultDashboard in resource.data.availableRoles
+                                           )
+                                           ||
+                                           // Allow existing Tenant / Manager to unlock the Owner role.
+                                           (
+                                             request.resource.data.diff(resource.data)
+                                               .affectedKeys()
+                                               .hasOnly([
+                                                 'availableRoles',
+                                                 'defaultDashboard',
+                                                 'updatedAt'
+                                               ])
+                                             && resource.data.keys().hasAny(['availableRoles'])
+                                             && resource.data.availableRoles is list
+                                             && !('owner' in resource.data.availableRoles)
+                                             && request.resource.data.availableRoles is list
+                                             && request.resource.data.availableRoles.hasAll(resource.data.availableRoles)
+                                             && request.resource.data.availableRoles.size() == resource.data.availableRoles.size() + 1
+                                             && 'owner' in request.resource.data.availableRoles
+                                             && request.resource.data.defaultDashboard == 'owner'
+                                           )
+                                         );
+
+
 
       allow delete: if false;
     }
@@ -735,6 +756,17 @@ service cloud.firestore {
 
     match /managerAccess/{accessId} {
       allow read, list, create, update, delete: if isAuthenticated();
+    }
+
+
+// ============================================================
+    // ACTIVITY & AUDIT LOGS (IMMUTABLE)
+    // ============================================================
+    match /activityLogs/{logId} {
+      allow read, list: if isAuthenticated();
+      allow create: if isAuthenticated()
+                    && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
     }
 
 

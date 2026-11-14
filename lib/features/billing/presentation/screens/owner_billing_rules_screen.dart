@@ -1,10 +1,17 @@
+// noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/services/audit_logger_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+import '../../../tenants/data/models/tenant_model.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/property_tenants_provider.dart';
 import '../../../units/domain/entities/unit.dart';
@@ -73,14 +80,27 @@ class _OwnerBillingRulesScreenState
 
           if (!context.mounted || result == null) return;
 
-          final propertyId = _selectedPropertyId;
-          if (propertyId == null || propertyId.isEmpty) return;
+          final properties =
+              ref.read(currentOwnerPropertiesProvider).value ?? [];
+          final selectedProperty = properties
+              .where((p) => p.id == _selectedPropertyId)
+              .firstOrNull;
 
-          final ownerId = ref.read(currentUserProfileProvider).value?.uid ?? '';
+          if (selectedProperty == null) return;
+
+          await AuditLoggerService.log(
+            ownerId: selectedProperty.ownerId,
+            propertyId: selectedProperty.id,
+            propertyName: selectedProperty.name,
+            category: 'billing',
+            actionTitle: 'Billing Rule Created',
+            details:
+                'A new utility billing rule was configured for ${selectedProperty.name}.',
+          );
 
           _invalidatePropertyBillingData(
-            ownerId: ownerId,
-            propertyId: propertyId,
+            ownerId: selectedProperty.ownerId,
+            propertyId: selectedProperty.id,
           );
         },
         icon: const Icon(Icons.add_rounded),
@@ -107,11 +127,6 @@ class _OwnerBillingRulesScreenState
             );
           }
 
-          final ownerId = profile.uid.trim();
-          if (ownerId.isEmpty) {
-            return const _ErrorView(message: 'Unable to determine owner ID.');
-          }
-
           return propertiesAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, stackTrace) => _ErrorView(
@@ -126,14 +141,19 @@ class _OwnerBillingRulesScreenState
                   icon: Icons.apartment_rounded,
                   title: 'No properties available',
                   message:
-                      'Add a property before creating and assigning billing rules.',
+                      'Add or get assigned to a property before managing billing rules.',
                 );
               }
 
-              final selectedPropertyId =
-                  properties.any((p) => p.id == _selectedPropertyId)
-                  ? _selectedPropertyId!
-                  : properties.first.id;
+              final selectedProperty =
+                  properties
+                      .where((p) => p.id == _selectedPropertyId)
+                      .firstOrNull ??
+                  properties.first;
+
+              final selectedPropertyId = selectedProperty.id;
+              // গুরুত্বপূর্ণ ফিক্স: ম্যানেজার ঢুকলেও যেন বিল্ডিংয়ের আসল মালিকের ownerId ব্যবহৃত হয়
+              final effectiveOwnerId = selectedProperty.ownerId.trim();
 
               if (_selectedPropertyId != selectedPropertyId) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -148,8 +168,9 @@ class _OwnerBillingRulesScreenState
                 controller: _tabController,
                 children: [
                   _RulesTab(
-                    ownerId: ownerId,
+                    ownerId: effectiveOwnerId,
                     propertyId: selectedPropertyId,
+                    propertyName: selectedProperty.name,
                     properties: properties,
                     onPropertyChanged: (value) {
                       if (value == null || value.isEmpty) {
@@ -161,14 +182,15 @@ class _OwnerBillingRulesScreenState
                     },
                     onGenerateBills: () {
                       _generateMonthlyChargesManually(
-                        ownerId: ownerId,
-                        propertyId: selectedPropertyId,
+                        ownerId: effectiveOwnerId,
+                        property: selectedProperty,
                       );
                     },
                   ),
                   _GeneratedBillsTab(
-                    ownerId: ownerId,
+                    ownerId: effectiveOwnerId,
                     propertyId: selectedPropertyId,
+                    propertyName: selectedProperty.name,
                     properties: properties,
                     selectedPropertyId: selectedPropertyId,
                     onPropertyChanged: (value) {
@@ -205,13 +227,14 @@ class _OwnerBillingRulesScreenState
   }
 
   // ==========================================================================
-  // MANUAL BILL GENERATION (FOR CUSTOM MONTHS / DUE DATES & VARIABLE OVERRIDES)
+  // MANUAL BILL GENERATION (WITH MANAGER TENANT FALLBACK & AUDIT LOG)
   // ==========================================================================
 
   Future<void> _generateMonthlyChargesManually({
     required String ownerId,
-    required String propertyId,
+    required Property property,
   }) async {
+    final propertyId = property.id;
     final now = DateTime.now();
 
     final selectedMonth = await showDatePicker(
@@ -261,9 +284,18 @@ class _OwnerBillingRulesScreenState
       _showMessage('Calculating charges and resolving tenancies...');
 
       final units = await ref.read(propertyUnitsProvider(propertyId).future);
-      final tenants = await ref.read(
-        propertyTenantsProvider(propertyId).future,
-      );
+      var tenants = await ref.read(propertyTenantsProvider(propertyId).future);
+
+      // ম্যানেজার ফলব্যাক: যদি propertyTenantsProvider শুধু currentUser.uid খোঁজে
+      if (tenants.isEmpty) {
+        final snap = await FirebaseFirestore.instance
+            .collection('tenants')
+            .where('propertyId', isEqualTo: propertyId)
+            .get();
+        tenants = snap.docs
+            .map((doc) => TenantModel.fromFirestore(doc))
+            .toList();
+      }
 
       final tenancyResolver = ref.read(tenancyBillingTargetResolverProvider);
       final tenancyTargets = await tenancyResolver.resolve(
@@ -316,6 +348,16 @@ class _OwnerBillingRulesScreenState
         );
         return;
       }
+
+      await AuditLoggerService.log(
+        ownerId: ownerId,
+        propertyId: propertyId,
+        propertyName: property.name,
+        category: 'billing',
+        actionTitle: 'Monthly Utility Bills Generated',
+        details:
+            '$billCount bill(s) generated/overridden for ${_formatMonth(billingPeriodStart)}.',
+      );
 
       _showMessage(
         '$billCount variable bill(s) generated/updated successfully.',
@@ -371,7 +413,7 @@ class _OwnerBillingRulesScreenState
 }
 
 // ============================================================================
-// RULE GENERATION PROGRESS EVALUATION (FIXES PROBLEM 4)
+// RULE GENERATION PROGRESS EVALUATION
 // ============================================================================
 
 enum _RuleSyncState {
@@ -436,19 +478,21 @@ class _RuleMonthEvaluation {
 }
 
 // ============================================================================
-// RULES TAB (ACCURATE MULTI-TARGET & OVERRIDE-AWARE STATUS)
+// RULES TAB
 // ============================================================================
 
 class _RulesTab extends ConsumerWidget {
   final String ownerId;
   final String propertyId;
-  final List<dynamic> properties;
+  final String propertyName;
+  final List<Property> properties;
   final ValueChanged<String?> onPropertyChanged;
   final VoidCallback onGenerateBills;
 
   const _RulesTab({
     required this.ownerId,
     required this.propertyId,
+    required this.propertyName,
     required this.properties,
     required this.onPropertyChanged,
     required this.onGenerateBills,
@@ -725,6 +769,7 @@ class _RulesTab extends ConsumerWidget {
                       _BillingRuleCard(
                         rule: rule,
                         ownerId: ownerId,
+                        propertyName: propertyName,
                         evaluation: evaluationsByRuleId[rule.id]!,
                       ),
                       const SizedBox(height: 12),
@@ -743,6 +788,7 @@ class _RulesTab extends ConsumerWidget {
                       _BillingRuleCard(
                         rule: rule,
                         ownerId: ownerId,
+                        propertyName: propertyName,
                         evaluation: evaluationsByRuleId[rule.id]!,
                       ),
                       const SizedBox(height: 12),
@@ -774,7 +820,6 @@ class _RulesTab extends ConsumerWidget {
 
     for (final tenant in tenants) {
       if (tenant.status != TenantStatus.active) continue;
-      if (tenant.ownerId.trim() != ownerId.trim()) continue;
       if (tenant.propertyId.trim() != propertyId.trim()) continue;
 
       final unitId = tenant.unitId.trim();
@@ -911,7 +956,6 @@ class _RulesTab extends ConsumerWidget {
           pendingOverrideCount++;
         }
       } else {
-        // Fixed rule evaluation
         final isProducedOrOverriddenFromThisRule =
             existingBill != null &&
             (existingBill.sourceRuleId == rule.id ||
@@ -923,9 +967,7 @@ class _RulesTab extends ConsumerWidget {
             generatedCount++;
           }
         } else {
-          // A higher-priority Fixed or Variable rule exists for this target
           if (existingBill != null && existingBill.sourceRuleId == rule.id) {
-            // Fixed bill was already generated before Variable override ran
             effectiveTargetCount++;
             generatedCount++;
           } else {
@@ -962,19 +1004,21 @@ class _RulesTab extends ConsumerWidget {
 }
 
 // ============================================================================
-// GENERATED BILLS TAB (COMBINES RENT + UTILITY BILLS)
+// GENERATED BILLS TAB (WITH SAFE CANCEL FOR UNPAID BILLS)
 // ============================================================================
 
 class _GeneratedBillsTab extends ConsumerWidget {
   final String ownerId;
   final String propertyId;
-  final List<dynamic> properties;
+  final String propertyName;
+  final List<Property> properties;
   final String selectedPropertyId;
   final ValueChanged<String?> onPropertyChanged;
 
   const _GeneratedBillsTab({
     required this.ownerId,
     required this.propertyId,
+    required this.propertyName,
     required this.properties,
     required this.selectedPropertyId,
     required this.onPropertyChanged,
@@ -1117,10 +1161,21 @@ class _GeneratedBillsTab extends ConsumerWidget {
                   const SizedBox(height: 12),
                   for (final entry in monthlyGroups.entries) ...[
                     _MonthBatchCard(
+                      ownerId: ownerId,
+                      propertyId: propertyId,
+                      propertyName: propertyName,
                       periodKey: entry.key,
                       bills: entry.value,
                       units: units,
                       tenants: tenants,
+                      onBillChanged: () {
+                        ref.invalidate(
+                          propertyMonthlyBillHistoryProvider((
+                            ownerId: ownerId,
+                            propertyId: propertyId,
+                          )),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -1139,16 +1194,24 @@ class _GeneratedBillsTab extends ConsumerWidget {
 // ============================================================================
 
 class _MonthBatchCard extends StatelessWidget {
+  final String ownerId;
+  final String propertyId;
+  final String propertyName;
   final String periodKey;
   final List<MonthlyBill> bills;
   final List<Unit> units;
   final List<Tenant> tenants;
+  final VoidCallback onBillChanged;
 
   const _MonthBatchCard({
+    required this.ownerId,
+    required this.propertyId,
+    required this.propertyName,
     required this.periodKey,
     required this.bills,
     required this.units,
     required this.tenants,
+    required this.onBillChanged,
   });
 
   String _formatMonthYear(DateTime date) {
@@ -1173,7 +1236,13 @@ class _MonthBatchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final firstBill = bills.first;
-    final totalAmount = bills.fold<double>(0, (sum, b) => sum + b.amount);
+    final activeBills = bills
+        .where((b) => b.status != MonthlyBillStatus.cancelled)
+        .toList();
+    final totalAmount = activeBills.fold<double>(
+      0.0,
+      (double total, MonthlyBill b) => total + b.amount,
+    );
     final rentCount = bills.where((b) => b.type == MonthlyBillType.rent).length;
     final utilityCount = bills.length - rentCount;
 
@@ -1241,7 +1310,7 @@ class _MonthBatchCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Total Billed (Rent + Bills)',
+                        'Active Billed Total',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -1260,7 +1329,7 @@ class _MonthBatchCard extends StatelessWidget {
                       _showBatchDetails(context);
                     },
                     icon: const Icon(Icons.visibility_outlined, size: 16),
-                    label: const Text('View All'),
+                    label: const Text('Inspect / Cancel'),
                   ),
                 ],
               ),
@@ -1303,22 +1372,24 @@ class _MonthBatchCard extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _formatMonthYear(bills.first.billingPeriodStart),
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _formatMonthYear(bills.first.billingPeriodStart),
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
-                          Text(
-                            'Unit & Tenant Rent + Bills (${bills.length})',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                            Text(
+                              'Unit & Tenant Rent + Bills (${bills.length})',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       IconButton(
                         onPressed: () {
@@ -1338,9 +1409,16 @@ class _MonthBatchCard extends StatelessWidget {
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (_, index) {
                       return _DetailedBillItem(
+                        ownerId: ownerId,
+                        propertyId: propertyId,
+                        propertyName: propertyName,
                         bill: bills[index],
                         units: units,
                         tenants: tenants,
+                        onCancelled: () {
+                          Navigator.pop(ctx);
+                          onBillChanged();
+                        },
                       );
                     },
                   ),
@@ -1355,43 +1433,144 @@ class _MonthBatchCard extends StatelessWidget {
 }
 
 // ============================================================================
-// DETAILED BILL ITEM
+// DETAILED BILL ITEM (WITH GUARDRAILED CANCEL ACTION FOR UNPAID BILLS)
 // ============================================================================
 
-class _DetailedBillItem extends StatelessWidget {
+class _DetailedBillItem extends StatefulWidget {
+  final String ownerId;
+  final String propertyId;
+  final String propertyName;
   final MonthlyBill bill;
   final List<Unit> units;
   final List<Tenant> tenants;
+  final VoidCallback onCancelled;
 
   const _DetailedBillItem({
+    required this.ownerId,
+    required this.propertyId,
+    required this.propertyName,
     required this.bill,
     required this.units,
     required this.tenants,
+    required this.onCancelled,
   });
 
+  @override
+  State<_DetailedBillItem> createState() => _DetailedBillItemState();
+}
+
+class _DetailedBillItemState extends State<_DetailedBillItem> {
+  bool _cancelling = false;
+
   String _resolveTargetLabel() {
-    final matchedUnit = units.where((u) => u.id == bill.unitId).firstOrNull;
+    final matchedUnit = widget.units
+        .where((u) => u.id == widget.bill.unitId)
+        .firstOrNull;
     final unitText = matchedUnit != null
         ? (matchedUnit.name?.isNotEmpty == true
               ? '${matchedUnit.name} (Unit ${matchedUnit.unitNumber})'
               : 'Unit ${matchedUnit.unitNumber}')
-        : 'Unit ${bill.unitId}';
+        : 'Unit ${widget.bill.unitId}';
 
-    final matchedTenant = tenants
-        .where((t) => t.id == bill.tenantId)
+    final matchedTenant = widget.tenants
+        .where((t) => t.id == widget.bill.tenantId)
         .firstOrNull;
     final tenantText = matchedTenant != null ? ' • ${matchedTenant.name}' : '';
 
     return '$unitText$tenantText';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Future<void> _cancelUnpaidBill() async {
+    if (_cancelling) return;
+
+    final bill = widget.bill;
     final customTitle = bill.title?.trim();
     final displayTitle = (customTitle != null && customTitle.isNotEmpty)
         ? customTitle
         : _billTypeLabel(bill.type);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Unpaid Bill?'),
+        content: Text(
+          'Cancel "$displayTitle" (৳${bill.amount.toStringAsFixed(0)}) for ${_resolveTargetLabel()}?\n\n'
+          'Note: Only unpaid bills with zero payment can be cancelled.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Bill'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancelling = true);
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('monthlyBills')
+          .doc(bill.id)
+          .update({
+            'status': 'cancelled',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      await AuditLoggerService.log(
+        ownerId: widget.ownerId,
+        propertyId: widget.propertyId,
+        propertyName: widget.propertyName,
+        category: 'billing',
+        actionTitle: 'Unpaid Bill Cancelled',
+        details:
+            '$displayTitle (৳${bill.amount.toStringAsFixed(0)}) cancelled for ${_resolveTargetLabel()}.',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unpaid bill cancelled successfully.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      widget.onCancelled();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cannot cancel bill: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bill = widget.bill;
+    final customTitle = bill.title?.trim();
+    final displayTitle = (customTitle != null && customTitle.isNotEmpty)
+        ? customTitle
+        : _billTypeLabel(bill.type);
+
+    final canCancel =
+        bill.type != MonthlyBillType.rent &&
+        bill.status == MonthlyBillStatus.unpaid &&
+        bill.paidAmount == 0;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1400,67 +1579,96 @@ class _DetailedBillItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              _billTypeIcon(bill.type),
-              size: 20,
-              color: theme.colorScheme.primary,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _billTypeIcon(bill.type),
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayTitle,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _resolveTargetLabel(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (bill.isOverriddenByVariable) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Variable Override (Replaced Fixed ৳${bill.overriddenFromAmount?.toStringAsFixed(0) ?? ''})',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '৳${bill.amount.toStringAsFixed(2)}',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  _BillStatusChip(status: bill.effectiveStatus),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayTitle,
-                  style: theme.textTheme.titleSmall?.copyWith(
+          if (canCancel) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _cancelling ? null : _cancelUnpaidBill,
+                icon: Icon(
+                  Icons.cancel_outlined,
+                  size: 16,
+                  color: theme.colorScheme.error,
+                ),
+                label: Text(
+                  _cancelling ? 'Cancelling...' : 'Cancel Unpaid Bill',
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  _resolveTargetLabel(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (bill.isOverriddenByVariable) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Variable Override (Replaced Fixed ৳${bill.overriddenFromAmount?.toStringAsFixed(0) ?? ''})',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '৳${bill.amount.toStringAsFixed(2)}',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
                 ),
               ),
-              const SizedBox(height: 4),
-              _BillStatusChip(status: bill.effectiveStatus),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -1512,11 +1720,13 @@ class _DetailedBillItem extends StatelessWidget {
 class _BillingRuleCard extends ConsumerWidget {
   final BillingRule rule;
   final String ownerId;
+  final String propertyName;
   final _RuleMonthEvaluation evaluation;
 
   const _BillingRuleCard({
     required this.rule,
     required this.ownerId,
+    required this.propertyName,
     required this.evaluation,
   });
 
@@ -1542,6 +1752,15 @@ class _BillingRuleCard extends ConsumerWidget {
             extra: rule,
           );
           if (result == true) {
+            await AuditLoggerService.log(
+              ownerId: ownerId,
+              propertyId: rule.propertyId,
+              propertyName: propertyName,
+              category: 'billing',
+              actionTitle: 'Billing Rule Updated',
+              details:
+                  '$chargeName rule (৳${rule.amount.toStringAsFixed(0)}) was modified.',
+            );
             ref.invalidate(
               propertyBillingRulesProvider((
                 ownerId: ownerId,

@@ -32,6 +32,7 @@ abstract final class RouteNames {
   static const editProperty = '/owner/properties/:propertyId/edit';
   static const String ownerManagers = '/owner/managers';
   static const String addManager = '/owner/add-manager';
+  static const String activityLogs = '/owner/activity-logs';
 
   // ============================================================
   // UNITS

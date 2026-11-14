@@ -1,9 +1,14 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/audit_logger_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../providers/payment_workflow_provider.dart';
 
 typedef _DocList = List<QueryDocumentSnapshot>;
@@ -98,7 +103,6 @@ class _OwnerPaymentManagementScreenState
         String? phone;
         String? tenantName;
 
-        // 1. Fetch from tenants collection
         if (tenantId.isNotEmpty) {
           final tDoc = await firestore
               .collection('tenants')
@@ -118,7 +122,6 @@ class _OwnerPaymentManagementScreenState
           }
         }
 
-        // 2. Resolve via phone_lookups
         if (!_tenantGrihoIds.containsKey(userKey) &&
             phone != null &&
             phone.isNotEmpty) {
@@ -157,7 +160,6 @@ class _OwnerPaymentManagementScreenState
           }
         }
 
-        // 3. Fallback: check tenantInvitations for targetGrihoId
         if (!_tenantGrihoIds.containsKey(userKey) && tenantId.isNotEmpty) {
           final invQuery = await firestore
               .collection('tenantInvitations')
@@ -186,7 +188,6 @@ class _OwnerPaymentManagementScreenState
       } catch (_) {}
     }
 
-    // Property name resolution
     if (propertyId.isNotEmpty &&
         !_propertyNames.containsKey(propertyId) &&
         !_loadingMetaIds.contains('prop_$propertyId')) {
@@ -207,7 +208,6 @@ class _OwnerPaymentManagementScreenState
       } catch (_) {}
     }
 
-    // Unit name resolution
     if (unitId.isNotEmpty &&
         !_unitNames.containsKey(unitId) &&
         !_loadingMetaIds.contains('unit_$unitId')) {
@@ -256,7 +256,7 @@ class _OwnerPaymentManagementScreenState
         return bMillis.compareTo(aMillis);
       });
 
-      final totalAmount = payments.fold<double>(0.0, (total, doc) {
+      final totalAmount = payments.fold<double>(0.0, (double total, doc) {
         final amount = _docData(doc)['amount'];
         return total + (amount is num ? amount.toDouble() : 0.0);
       });
@@ -271,6 +271,7 @@ class _OwnerPaymentManagementScreenState
       final overallStatus = _resolveGroupStatus(statuses);
       final firstData = _docData(payments.first);
 
+      final ownerId = (firstData['ownerId'] ?? '').toString().trim();
       final tenantUserId = (firstData['tenantUserId'] ?? '').toString().trim();
       final tenantId = (firstData['tenantId'] ?? '').toString().trim();
       final propertyId = (firstData['propertyId'] ?? '').toString().trim();
@@ -288,7 +289,7 @@ class _OwnerPaymentManagementScreenState
       } else if (_tenantGrihoIds.containsKey(userKey)) {
         resolvedGrihoId = _tenantGrihoIds[userKey]!;
       } else {
-        resolvedGrihoId = 'GRI-KG5T4EGD';
+        resolvedGrihoId = 'GRI-MEMBER';
       }
 
       final resolvedTenantName =
@@ -321,6 +322,8 @@ class _OwnerPaymentManagementScreenState
 
       return _PaymentGroup(
         id: entry.key,
+        ownerId: ownerId,
+        propertyId: propertyId,
         payments: payments,
         totalAmount: totalAmount,
         status: overallStatus,
@@ -388,10 +391,7 @@ class _OwnerPaymentManagementScreenState
     if (lower.contains('_gas_')) return Icons.local_fire_department_rounded;
     if (lower.contains('_electricity_')) return Icons.bolt_rounded;
     if (lower.contains('_garbage_')) return Icons.delete_outline_rounded;
-    if (lower.contains(
-      '_service'
-      'charge_',
-    )) {
+    if (lower.contains('_servicecharge_')) {
       return Icons.room_service_outlined;
     }
     return Icons.receipt_long_rounded;
@@ -406,10 +406,7 @@ class _OwnerPaymentManagementScreenState
     if (lower.contains('_gas_')) return Colors.deepOrange;
     if (lower.contains('_electricity_')) return Colors.amber.shade700;
     if (lower.contains('_garbage_')) return Colors.teal;
-    if (lower.contains(
-      '_service'
-      'charge_',
-    )) {
+    if (lower.contains('_servicecharge_')) {
       return Colors.purple;
     }
     return Colors.blueGrey;
@@ -424,10 +421,7 @@ class _OwnerPaymentManagementScreenState
     if (lower.contains('_gas_')) return 'Gas Bill';
     if (lower.contains('_electricity_')) return 'Electricity Bill';
     if (lower.contains('_garbage_')) return 'Garbage Bill';
-    if (lower.contains(
-      '_service'
-      'charge_',
-    )) {
+    if (lower.contains('_servicecharge_')) {
       return 'Service Charge';
     }
     return 'Utility Bill';
@@ -518,7 +512,7 @@ class _OwnerPaymentManagementScreenState
             ),
             content: Text(
               'Confirm total ৳${_money(group.totalAmount)} received from ${group.tenantName} (${group.grihoId})?\n\n'
-              'Only confirm after verifying the money has reached your account.',
+              'Only confirm after verifying the money has reached the account.',
             ),
             actions: [
               TextButton(
@@ -567,6 +561,19 @@ class _OwnerPaymentManagementScreenState
         }
       }
 
+      await AuditLoggerService.log(
+        ownerId: group.ownerId,
+        propertyId: group.propertyId,
+        propertyName: group.propertyName,
+        category: 'payment',
+        actionTitle: confirm
+            ? 'Payment Confirmed (৳${_money(group.totalAmount)})'
+            : 'Payment Rejected (৳${_money(group.totalAmount)})',
+        details: confirm
+            ? 'Confirmed ${group.payments.length} charge(s) from ${group.tenantName} (${group.unitName}) via ${group.method.toUpperCase()}.'
+            : 'Rejected payment from ${group.tenantName} (${group.unitName}). Reason: $reason',
+      );
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -600,6 +607,7 @@ class _OwnerPaymentManagementScreenState
   @override
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(currentUserProfileProvider);
+    final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -615,625 +623,698 @@ class _OwnerPaymentManagementScreenState
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>
-            Center(child: Text('Unable to load owner profile: $error')),
+            Center(child: Text('Unable to load user profile: $error')),
         data: (profile) {
           if (profile == null || profile.uid.trim().isEmpty) {
-            return const Center(child: Text('Owner profile not found.'));
+            return const Center(child: Text('User profile not found.'));
           }
 
-          final paymentsAsync = ref.watch(
-            ownerPaymentTransactionsProvider((
-              ownerId: profile.uid,
-              pendingOnly: false,
-            )),
-          );
+          return propertiesAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, _) =>
+                Center(child: Text('Unable to load properties: $err')),
+            data: (properties) {
+              final propIds = properties.map((p) => p.id).take(10).toList();
+              final isOwnerDashboard = profile.defaultDashboard == 'owner';
 
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'all', label: Text('All')),
-                    ButtonSegment(value: 'pending', label: Text('Pending')),
-                    ButtonSegment(value: 'confirmed', label: Text('Confirmed')),
-                    ButtonSegment(value: 'rejected', label: Text('Rejected')),
-                  ],
-                  selected: {_filter},
-                  onSelectionChanged: (selection) {
-                    setState(() {
-                      _filter = selection.first;
-                    });
-                  },
-                ),
-              ),
-              Expanded(
-                child: paymentsAsync.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (error, _) => Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Unable to load payments: $error',
-                        textAlign: TextAlign.center,
-                      ),
+              final Stream<QuerySnapshot> paymentsStream;
+              if (isOwnerDashboard) {
+                paymentsStream = FirebaseFirestore.instance
+                    .collection('paymentTransactions')
+                    .where('ownerId', isEqualTo: profile.uid)
+                    .snapshots();
+              } else if (propIds.isNotEmpty) {
+                paymentsStream = FirebaseFirestore.instance
+                    .collection('paymentTransactions')
+                    .where('propertyId', whereIn: propIds)
+                    .snapshots();
+              } else {
+                paymentsStream = const Stream<QuerySnapshot>.empty();
+              }
+
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'all', label: Text('All')),
+                        ButtonSegment(value: 'pending', label: Text('Pending')),
+                        ButtonSegment(
+                          value: 'confirmed',
+                          label: Text('Confirmed'),
+                        ),
+                        ButtonSegment(
+                          value: 'rejected',
+                          label: Text('Rejected'),
+                        ),
+                      ],
+                      selected: {_filter},
+                      onSelectionChanged: (selection) {
+                        setState(() {
+                          _filter = selection.first;
+                        });
+                      },
                     ),
                   ),
-                  data: (snapshot) {
-                    final allDocs = snapshot.docs.toList();
-                    final allGroups = _groupPayments(allDocs);
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: paymentsStream,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
 
-                    final pendingCount = allGroups
-                        .where((g) => g.status == 'pending')
-                        .length;
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                'Unable to load payments: ${snapshot.error}',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          );
+                        }
 
-                    final confirmedTotal = allDocs
-                        .where((doc) => _docData(doc)['status'] == 'confirmed')
-                        .fold<double>(0.0, (total, doc) {
-                          final amount = _docData(doc)['amount'];
-                          return total +
-                              (amount is num ? amount.toDouble() : 0.0);
-                        });
+                        final allDocs = snapshot.data?.docs.toList() ?? [];
+                        final allGroups = _groupPayments(allDocs);
 
-                    final filteredGroups = allGroups.where((g) {
-                      return _filter == 'all' || g.status == _filter;
-                    }).toList();
+                        final pendingCount = allGroups
+                            .where((g) => g.status == 'pending')
+                            .length;
 
-                    return ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                      children: [
-                        Row(
+                        final confirmedTotal = allDocs
+                            .where(
+                              (doc) => _docData(doc)['status'] == 'confirmed',
+                            )
+                            .fold<double>(0.0, (double total, doc) {
+                              final amount = _docData(doc)['amount'];
+                              return total +
+                                  (amount is num ? amount.toDouble() : 0.0);
+                            });
+
+                        final filteredGroups = allGroups.where((g) {
+                          return _filter == 'all' || g.status == _filter;
+                        }).toList();
+
+                        return ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                           children: [
-                            Expanded(
-                              child: _MetricCard(
-                                label: 'Pending Batches',
-                                value: '$pendingCount',
-                                icon: Icons.hourglass_top_rounded,
-                                iconColor: Colors.amber.shade800,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _MetricCard(
-                                label: 'Confirmed Total',
-                                value: '৳${_money(confirmedTotal)}',
-                                icon: Icons.verified_rounded,
-                                iconColor: Colors.green,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        if (filteredGroups.isEmpty)
-                          Container(
-                            padding: const EdgeInsets.all(40),
-                            alignment: Alignment.center,
-                            child: Column(
+                            Row(
                               children: [
-                                Icon(
-                                  Icons.receipt_long_outlined,
-                                  size: 48,
-                                  color: theme.colorScheme.outlineVariant,
+                                Expanded(
+                                  child: _MetricCard(
+                                    label: 'Pending Batches',
+                                    value: '$pendingCount',
+                                    icon: Icons.hourglass_top_rounded,
+                                    iconColor: Colors.amber.shade800,
+                                  ),
                                 ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'No payments in this category.',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onSurfaceVariant,
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _MetricCard(
+                                    label: 'Confirmed Total',
+                                    value: '৳${_money(confirmedTotal)}',
+                                    icon: Icons.verified_rounded,
+                                    iconColor: Colors.green,
                                   ),
                                 ),
                               ],
                             ),
-                          )
-                        else
-                          ...filteredGroups.map((group) {
-                            final isExpanded = _expandedGroupIds.contains(
-                              group.id,
-                            );
-                            final statusColor = _statusColor(
-                              context,
-                              group.status,
-                            );
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 14),
-                              decoration: BoxDecoration(
-                                color: isExpanded
-                                    ? theme.colorScheme.surfaceContainerLowest
-                                    : theme.colorScheme.surface,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: isExpanded
-                                      ? theme.colorScheme.primary.withValues(
-                                          alpha: 0.35,
-                                        )
-                                      : theme.colorScheme.outlineVariant
-                                            .withValues(alpha: 0.6),
-                                  width: isExpanded ? 1.5 : 1,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(
-                                      alpha: isExpanded ? 0.05 : 0.02,
+                            const SizedBox(height: 16),
+                            if (filteredGroups.isEmpty)
+                              Container(
+                                padding: const EdgeInsets.all(40),
+                                alignment: Alignment.center,
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      Icons.receipt_long_outlined,
+                                      size: 48,
+                                      color: theme.colorScheme.outlineVariant,
                                     ),
-                                    blurRadius: isExpanded ? 16 : 6,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                children: [
-                                  InkWell(
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'No payments in this category.',
+                                      style: TextStyle(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              ...filteredGroups.map((group) {
+                                final isExpanded = _expandedGroupIds.contains(
+                                  group.id,
+                                );
+                                final statusColor = _statusColor(
+                                  context,
+                                  group.status,
+                                );
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 14),
+                                  decoration: BoxDecoration(
+                                    color: isExpanded
+                                        ? theme
+                                              .colorScheme
+                                              .surfaceContainerLowest
+                                        : theme.colorScheme.surface,
                                     borderRadius: BorderRadius.circular(20),
-                                    onTap: () {
-                                      setState(() {
-                                        if (isExpanded) {
-                                          _expandedGroupIds.remove(group.id);
-                                        } else {
-                                          _expandedGroupIds.add(group.id);
-                                        }
-                                      });
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
+                                    border: Border.all(
+                                      color: isExpanded
+                                          ? theme.colorScheme.primary
+                                                .withValues(alpha: 0.35)
+                                          : theme.colorScheme.outlineVariant
+                                                .withValues(alpha: 0.6),
+                                      width: isExpanded ? 1.5 : 1,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: isExpanded ? 0.05 : 0.02,
+                                        ),
+                                        blurRadius: isExpanded ? 16 : 6,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(20),
+                                        onTap: () {
+                                          setState(() {
+                                            if (isExpanded) {
+                                              _expandedGroupIds.remove(
+                                                group.id,
+                                              );
+                                            } else {
+                                              _expandedGroupIds.add(group.id);
+                                            }
+                                          });
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
                                                       children: [
-                                                        Text(
-                                                          '৳${_money(group.totalAmount)}',
-                                                          style: theme
-                                                              .textTheme
-                                                              .headlineSmall
-                                                              ?.copyWith(
+                                                        Row(
+                                                          children: [
+                                                            Text(
+                                                              '৳${_money(group.totalAmount)}',
+                                                              style: theme
+                                                                  .textTheme
+                                                                  .headlineSmall
+                                                                  ?.copyWith(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w900,
+                                                                  ),
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 10,
+                                                            ),
+                                                            _StatusBadge(
+                                                              status:
+                                                                  group.status,
+                                                              color:
+                                                                  statusColor,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(
+                                                          height: 6,
+                                                        ),
+                                                        Row(
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .badge_outlined,
+                                                              size: 14,
+                                                              color: theme
+                                                                  .colorScheme
+                                                                  .primary,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 5,
+                                                            ),
+                                                            Text(
+                                                              group.grihoId,
+                                                              style: TextStyle(
+                                                                fontSize: 12,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w900,
+                                                                letterSpacing:
+                                                                    0.5,
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .primary,
                                                               ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 10,
-                                                        ),
-                                                        _StatusBadge(
-                                                          status: group.status,
-                                                          color: statusColor,
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Row(
-                                                      children: [
-                                                        Icon(
-                                                          Icons.badge_outlined,
-                                                          size: 14,
-                                                          color: theme
-                                                              .colorScheme
-                                                              .primary,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 5,
-                                                        ),
-                                                        Text(
-                                                          group.grihoId,
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                            fontWeight:
-                                                                FontWeight.w900,
-                                                            letterSpacing: 0.5,
-                                                            color: theme
-                                                                .colorScheme
-                                                                .primary,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Text(
-                                                          '•  ${group.tenantName}',
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                            color: theme
-                                                                .colorScheme
-                                                                .onSurfaceVariant,
-                                                          ),
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 8,
+                                                            ),
+                                                            Text(
+                                                              '•  ${group.tenantName}',
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .onSurfaceVariant,
+                                                              ),
+                                                            ),
+                                                          ],
                                                         ),
                                                       ],
                                                     ),
-                                                  ],
-                                                ),
+                                                  ),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.all(6),
+                                                    decoration: BoxDecoration(
+                                                      color: theme
+                                                          .colorScheme
+                                                          .surfaceContainerHighest
+                                                          .withValues(
+                                                            alpha: 0.4,
+                                                          ),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: Icon(
+                                                      isExpanded
+                                                          ? Icons
+                                                                .keyboard_arrow_up_rounded
+                                                          : Icons
+                                                                .keyboard_arrow_down_rounded,
+                                                      size: 20,
+                                                      color: theme
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
+                                              const SizedBox(height: 10),
                                               Container(
-                                                padding: const EdgeInsets.all(
-                                                  6,
-                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 6,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: theme
                                                       .colorScheme
-                                                      .surfaceContainerHighest
-                                                      .withValues(alpha: 0.4),
-                                                  shape: BoxShape.circle,
+                                                      .surfaceContainerLow,
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
                                                 ),
-                                                child: Icon(
-                                                  isExpanded
-                                                      ? Icons
-                                                            .keyboard_arrow_up_rounded
-                                                      : Icons
-                                                            .keyboard_arrow_down_rounded,
-                                                  size: 20,
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.apartment_rounded,
+                                                      size: 14,
+                                                      color: theme
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(
+                                                      child: Text(
+                                                        '${group.propertyName} • ${group.unitName}',
+                                                        style: theme
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                            ),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      '${group.payments.length} bill(s) • ${group.method.toUpperCase()}',
+                                                      style: theme
+                                                          .textTheme
+                                                          .labelSmall
+                                                          ?.copyWith(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .onSurfaceVariant,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ],
                                           ),
-                                          const SizedBox(height: 10),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: theme
-                                                  .colorScheme
-                                                  .surfaceContainerLow,
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.apartment_rounded,
-                                                  size: 14,
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Expanded(
-                                                  child: Text(
-                                                    '${group.propertyName} • ${group.unitName}',
-                                                    style: theme
-                                                        .textTheme
-                                                        .bodySmall
-                                                        ?.copyWith(
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  '${group.payments.length} bill(s) • ${group.method.toUpperCase()}',
-                                                  style: theme
-                                                      .textTheme
-                                                      .labelSmall
-                                                      ?.copyWith(
-                                                        color: theme
-                                                            .colorScheme
-                                                            .onSurfaceVariant,
-                                                        fontWeight:
-                                                            FontWeight.bold,
+                                        ),
+                                      ),
+                                      if (isExpanded)
+                                        Container(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            16,
+                                            0,
+                                            16,
+                                            16,
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const Divider(height: 20),
+                                              _DetailLine(
+                                                label: 'Griho ID',
+                                                value: group.grihoId,
+                                                isHighlight: true,
+                                                onCopy: () {
+                                                  Clipboard.setData(
+                                                    ClipboardData(
+                                                      text: group.grihoId,
+                                                    ),
+                                                  );
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Griho ID copied.',
                                                       ),
+                                                      duration: Duration(
+                                                        seconds: 1,
+                                                      ),
+                                                      behavior: SnackBarBehavior
+                                                          .floating,
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              _DetailLine(
+                                                label: 'Resident Name',
+                                                value: group.tenantName,
+                                              ),
+                                              _DetailLine(
+                                                label: 'Property & Unit',
+                                                value:
+                                                    '${group.propertyName} (${group.unitName})',
+                                              ),
+                                              _DetailLine(
+                                                label: 'Transaction ID',
+                                                value: group.reference.isEmpty
+                                                    ? 'Not provided'
+                                                    : group.reference,
+                                              ),
+                                              _DetailLine(
+                                                label: 'Submitted Time',
+                                                value: _date(group.createdAt),
+                                              ),
+                                              if (group.note.isNotEmpty)
+                                                _DetailLine(
+                                                  label: 'Tenant Note',
+                                                  value: group.note,
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  if (isExpanded)
-                                    Container(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        16,
-                                        0,
-                                        16,
-                                        16,
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Divider(height: 20),
-                                          _DetailLine(
-                                            label: 'Griho ID',
-                                            value: group.grihoId,
-                                            isHighlight: true,
-                                            onCopy: () {
-                                              Clipboard.setData(
-                                                ClipboardData(
-                                                  text: group.grihoId,
-                                                ),
-                                              );
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Griho ID copied.',
-                                                  ),
-                                                  duration: Duration(
-                                                    seconds: 1,
-                                                  ),
-                                                  behavior:
-                                                      SnackBarBehavior.floating,
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                          _DetailLine(
-                                            label: 'Resident Name',
-                                            value: group.tenantName,
-                                          ),
-                                          _DetailLine(
-                                            label: 'Property & Unit',
-                                            value:
-                                                '${group.propertyName} (${group.unitName})',
-                                          ),
-                                          _DetailLine(
-                                            label: 'Transaction ID',
-                                            value: group.reference.isEmpty
-                                                ? 'Not provided'
-                                                : group.reference,
-                                          ),
-                                          _DetailLine(
-                                            label: 'Submitted Time',
-                                            value: _date(group.createdAt),
-                                          ),
-                                          if (group.note.isNotEmpty)
-                                            _DetailLine(
-                                              label: 'Tenant Note',
-                                              value: group.note,
-                                            ),
-                                          const SizedBox(height: 14),
-                                          Text(
-                                            'Included Charges (${group.payments.length})',
-                                            style: theme.textTheme.titleSmall
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.w800,
-                                                ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          ...group.payments.map((doc) {
-                                            final data = _docData(doc);
-                                            final amount = data['amount'];
-                                            final billId =
-                                                (data['billId'] ?? '')
-                                                    .toString();
-                                            final monthTitle =
-                                                _formatBillingMonth(billId);
-                                            final collection =
-                                                (data['billCollection'] ??
-                                                        'monthlyBills')
-                                                    .toString();
-                                            final chargeType =
-                                                _formatChargeType(
+                                              const SizedBox(height: 14),
+                                              Text(
+                                                'Included Charges (${group.payments.length})',
+                                                style: theme
+                                                    .textTheme
+                                                    .titleSmall
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              ...group.payments.map((doc) {
+                                                final data = _docData(doc);
+                                                final amount = data['amount'];
+                                                final billId =
+                                                    (data['billId'] ?? '')
+                                                        .toString();
+                                                final monthTitle =
+                                                    _formatBillingMonth(billId);
+                                                final collection =
+                                                    (data['billCollection'] ??
+                                                            'monthlyBills')
+                                                        .toString();
+                                                final chargeType =
+                                                    _formatChargeType(
+                                                      billId,
+                                                      collection,
+                                                    );
+                                                final icon = _chargeIcon(
                                                   billId,
                                                   collection,
                                                 );
-                                            final icon = _chargeIcon(
-                                              billId,
-                                              collection,
-                                            );
-                                            final color = _chargeColor(
-                                              billId,
-                                              collection,
-                                            );
-                                            final reason =
-                                                (data['rejectionReason'] ?? '')
-                                                    .toString();
+                                                final color = _chargeColor(
+                                                  billId,
+                                                  collection,
+                                                );
+                                                final reason =
+                                                    (data['rejectionReason'] ??
+                                                            '')
+                                                        .toString();
 
-                                            return Container(
-                                              margin: const EdgeInsets.only(
-                                                bottom: 8,
-                                              ),
-                                              padding: const EdgeInsets.all(12),
-                                              decoration: BoxDecoration(
-                                                color: theme
-                                                    .colorScheme
-                                                    .surfaceContainerHighest
-                                                    .withValues(alpha: 0.3),
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
-                                                border: Border.all(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .outlineVariant
-                                                      .withValues(alpha: 0.5),
-                                                ),
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(
+                                                return Container(
+                                                  margin: const EdgeInsets.only(
+                                                    bottom: 8,
+                                                  ),
+                                                  padding: const EdgeInsets.all(
+                                                    12,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .surfaceContainerHighest
+                                                        .withValues(alpha: 0.3),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          14,
+                                                        ),
+                                                    border: Border.all(
+                                                      color: theme
+                                                          .colorScheme
+                                                          .outlineVariant
+                                                          .withValues(
+                                                            alpha: 0.5,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
                                                     children: [
-                                                      Container(
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              8,
-                                                            ),
-                                                        decoration: BoxDecoration(
-                                                          color: color
-                                                              .withValues(
-                                                                alpha: 0.12,
-                                                              ),
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                10,
-                                                              ),
-                                                        ),
-                                                        child: Icon(
-                                                          icon,
-                                                          size: 18,
-                                                          color: color,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 12),
-                                                      Expanded(
-                                                        child: Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                            Text(
-                                                              chargeType,
-                                                              style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                fontSize: 14,
-                                                              ),
-                                                            ),
-                                                            Text(
-                                                              'Period: $monthTitle',
-                                                              style: theme
-                                                                  .textTheme
-                                                                  .bodySmall
-                                                                  ?.copyWith(
-                                                                    color: theme
-                                                                        .colorScheme
-                                                                        .onSurfaceVariant,
+                                                      Row(
+                                                        children: [
+                                                          Container(
+                                                            padding:
+                                                                const EdgeInsets.all(
+                                                                  8,
+                                                                ),
+                                                            decoration: BoxDecoration(
+                                                              color: color
+                                                                  .withValues(
+                                                                    alpha: 0.12,
+                                                                  ),
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    10,
                                                                   ),
                                                             ),
-                                                          ],
-                                                        ),
+                                                            child: Icon(
+                                                              icon,
+                                                              size: 18,
+                                                              color: color,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 12,
+                                                          ),
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                Text(
+                                                                  chargeType,
+                                                                  style: const TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                    fontSize:
+                                                                        14,
+                                                                  ),
+                                                                ),
+                                                                Text(
+                                                                  'Period: $monthTitle',
+                                                                  style: theme
+                                                                      .textTheme
+                                                                      .bodySmall
+                                                                      ?.copyWith(
+                                                                        color: theme
+                                                                            .colorScheme
+                                                                            .onSurfaceVariant,
+                                                                      ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            '৳${_money(amount)}',
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w900,
+                                                                  fontSize: 15,
+                                                                ),
+                                                          ),
+                                                        ],
                                                       ),
-                                                      Text(
-                                                        '৳${_money(amount)}',
-                                                        style: const TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w900,
-                                                          fontSize: 15,
+                                                      if (reason
+                                                          .isNotEmpty) ...[
+                                                        const SizedBox(
+                                                          height: 6,
                                                         ),
-                                                      ),
+                                                        Text(
+                                                          'Rejection reason: $reason',
+                                                          style: TextStyle(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .error,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ],
                                                   ),
-                                                  if (reason.isNotEmpty) ...[
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Rejection reason: $reason',
-                                                      style: TextStyle(
-                                                        color: theme
-                                                            .colorScheme
-                                                            .error,
-                                                        fontSize: 12,
+                                                );
+                                              }),
+                                              if (group.status ==
+                                                  'pending') ...[
+                                                const SizedBox(height: 16),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: OutlinedButton.icon(
+                                                        onPressed: _busy
+                                                            ? null
+                                                            : () =>
+                                                                  _reviewGroupPayment(
+                                                                    group,
+                                                                    false,
+                                                                  ),
+                                                        icon: const Icon(
+                                                          Icons.close_rounded,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          'Reject',
+                                                        ),
+                                                        style: OutlinedButton.styleFrom(
+                                                          foregroundColor: theme
+                                                              .colorScheme
+                                                              .error,
+                                                          side: BorderSide(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .error
+                                                                .withValues(
+                                                                  alpha: 0.5,
+                                                                ),
+                                                          ),
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
+                                                                ),
+                                                          ),
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                vertical: 12,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    Expanded(
+                                                      child: FilledButton.icon(
+                                                        onPressed: _busy
+                                                            ? null
+                                                            : () =>
+                                                                  _reviewGroupPayment(
+                                                                    group,
+                                                                    true,
+                                                                  ),
+                                                        icon: const Icon(
+                                                          Icons
+                                                              .check_circle_rounded,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          'Confirm',
+                                                        ),
+                                                        style: FilledButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.green,
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
+                                                                ),
+                                                          ),
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                vertical: 12,
+                                                              ),
+                                                        ),
                                                       ),
                                                     ),
                                                   ],
-                                                ],
-                                              ),
-                                            );
-                                          }),
-                                          if (group.status == 'pending') ...[
-                                            const SizedBox(height: 16),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: OutlinedButton.icon(
-                                                    onPressed: _busy
-                                                        ? null
-                                                        : () =>
-                                                              _reviewGroupPayment(
-                                                                group,
-                                                                false,
-                                                              ),
-                                                    icon: const Icon(
-                                                      Icons.close_rounded,
-                                                      size: 18,
-                                                    ),
-                                                    label: const Text('Reject'),
-                                                    style: OutlinedButton.styleFrom(
-                                                      foregroundColor: theme
-                                                          .colorScheme
-                                                          .error,
-                                                      side: BorderSide(
-                                                        color: theme
-                                                            .colorScheme
-                                                            .error
-                                                            .withValues(
-                                                              alpha: 0.5,
-                                                            ),
-                                                      ),
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              12,
-                                                            ),
-                                                      ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            vertical: 12,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: FilledButton.icon(
-                                                    onPressed: _busy
-                                                        ? null
-                                                        : () =>
-                                                              _reviewGroupPayment(
-                                                                group,
-                                                                true,
-                                                              ),
-                                                    icon: const Icon(
-                                                      Icons
-                                                          .check_circle_rounded,
-                                                      size: 18,
-                                                    ),
-                                                    label: const Text(
-                                                      'Confirm',
-                                                    ),
-                                                    style: FilledButton.styleFrom(
-                                                      backgroundColor:
-                                                          Colors.green,
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              12,
-                                                            ),
-                                                      ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            vertical: 12,
-                                                          ),
-                                                    ),
-                                                  ),
                                                 ),
                                               ],
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            );
-                          }),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -1243,6 +1324,8 @@ class _OwnerPaymentManagementScreenState
 
 class _PaymentGroup {
   final String id;
+  final String ownerId;
+  final String propertyId;
   final _DocList payments;
   final double totalAmount;
   final String status;
@@ -1257,6 +1340,8 @@ class _PaymentGroup {
 
   const _PaymentGroup({
     required this.id,
+    required this.ownerId,
+    required this.propertyId,
     required this.payments,
     required this.totalAmount,
     required this.status,

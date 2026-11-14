@@ -1,9 +1,13 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/services/audit_logger_service.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../../../units/domain/entities/unit.dart';
@@ -103,10 +107,24 @@ class _CentralRentControlScreenState
           ? 'increased'
           : 'decreased';
 
+      await AuditLoggerService.log(
+        ownerId: property.ownerId,
+        propertyId: property.id,
+        propertyName: property.name,
+        category: 'rent',
+        actionTitle: _scope == _RentTargetScope.property
+            ? 'Property-Wide Rent Adjusted'
+            : 'Floor $_selectedFloor Rent Adjusted',
+        details:
+            'Monthly rent $actionText by ৳${amount.toStringAsFixed(0)} across${updatedList.length} occupied unit(s).',
+      );
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Rent $actionText by ৳${amount.toStringAsFixed(0)} for ${updatedList.length} occupied unit(s).',
+            'Rent $actionText by ৳${amount.toStringAsFixed(0)} for${updatedList.length} occupied unit(s).',
           ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
@@ -154,7 +172,10 @@ class _CentralRentControlScreenState
             );
           }
 
-          _selectedProperty ??= properties.first;
+          if (_selectedProperty == null ||
+              !properties.any((p) => p.id == _selectedProperty!.id)) {
+            _selectedProperty = properties.first;
+          }
           final property = _selectedProperty!;
           final unitsAsync = ref.watch(propertyUnitsProvider(property.id));
 
@@ -331,7 +352,7 @@ class _CentralRentControlScreenState
                                       (u) => DropdownMenuItem(
                                         value: u,
                                         child: Text(
-                                          'Unit ${u.unitNumber} (Floor ${u.floorNumber}) • ${u.status == UnitStatus.occupied ? "Occupied" : "Vacant"}',
+                                          'Unit ${u.unitNumber} (Floor ${u.floorNumber}) •${u.status == UnitStatus.occupied ? "Occupied" : "Vacant"}',
                                         ),
                                       ),
                                     )
@@ -461,7 +482,7 @@ class _CentralRentControlScreenState
                     ),
                   ],
 
-                  // 3B. Single Unit Complete Operations Card (All 3 Screens Accessible)
+                  // 3B. Single Unit Complete Operations Card
                   if (_scope == _RentTargetScope.unit &&
                       _selectedUnit != null) ...[
                     Container(
@@ -491,7 +512,6 @@ class _CentralRentControlScreenState
                           ),
                           const SizedBox(height: 16),
 
-                          // 1. Monthly Rent Invoices Screen Button
                           SizedBox(
                             height: 50,
                             child: FilledButton.icon(
@@ -512,7 +532,6 @@ class _CentralRentControlScreenState
                           ),
                           const SizedBox(height: 12),
 
-                          // 2. Update Unit Rent Screen Button
                           SizedBox(
                             height: 50,
                             child: FilledButton.tonalIcon(
@@ -533,7 +552,6 @@ class _CentralRentControlScreenState
                           ),
                           const SizedBox(height: 12),
 
-                          // 3. Rent Rate History Screen Button
                           SizedBox(
                             height: 50,
                             child: OutlinedButton.icon(

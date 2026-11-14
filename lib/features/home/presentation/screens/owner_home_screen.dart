@@ -1213,6 +1213,15 @@ class _EnterpriseHub extends StatelessWidget {
             tag: 'Billing',
             onTap: () => context.push(RouteNames.ownerBillingRules),
           ),
+
+          const Divider(height: 1, indent: 64),
+          _HubActionTile(
+            icon: Icons.history_edu_rounded,
+            title: 'Activity & Audit Trail',
+            subtitle: 'Track manager actions, rent changes, and billing logs',
+            tag: 'Audit',
+            onTap: () => context.push(RouteNames.activityLogs),
+          ),
         ],
       ),
     );

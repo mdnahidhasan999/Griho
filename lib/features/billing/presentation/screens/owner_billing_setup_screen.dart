@@ -1,9 +1,14 @@
+// noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+import '../../../tenants/data/models/tenant_model.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/property_tenants_provider.dart';
 import '../../../units/domain/entities/unit.dart';
@@ -139,7 +144,7 @@ class _OwnerBillingSetupScreenState
   String _unitLabel(Unit unit) {
     final unitNumber = unit.unitNumber.trim();
     if (unit.name != null && unit.name!.trim().isNotEmpty) {
-      return '${unit.name!.trim()} - Unit $unitNumber';
+      return '${unit.name!.trim()} (Unit $unitNumber)';
     }
     return 'Unit $unitNumber';
   }
@@ -150,6 +155,15 @@ class _OwnerBillingSetupScreenState
       return '$name (${tenant.phone.trim()})';
     }
     return name;
+  }
+
+  Future<List<Tenant>> _loadFallbackActiveTenants(String propertyId) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('tenants')
+        .where('propertyId', isEqualTo: propertyId)
+        .where('status', isEqualTo: 'active')
+        .get();
+    return snap.docs.map((doc) => TenantModel.fromFirestore(doc)).toList();
   }
 
   Future<void> _save() async {
@@ -180,7 +194,13 @@ class _OwnerBillingSetupScreenState
       return;
     }
 
-    final ownerId = firebaseUser.uid.trim();
+    final properties = ref.read(currentOwnerPropertiesProvider).value ?? [];
+    final selectedProperty = properties
+        .where((p) => p.id == _selectedPropertyId!.trim())
+        .firstOrNull;
+
+    // ম্যানেজার রুল তৈরি করলেও যেন প্রপার্টির আসল মালিকের ownerId ব্যবহৃত হয়
+    final ownerId = (selectedProperty?.ownerId ?? firebaseUser.uid).trim();
     final amount = double.tryParse(_amountController.text.trim());
 
     if (amount == null || amount < 0) {
@@ -401,6 +421,18 @@ class _OwnerBillingSetupScreenState
                       return const Text(
                         'No properties found. Please add a property first.',
                       );
+                    }
+
+                    if (_selectedPropertyId == null && properties.length == 1) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        setState(() {
+                          _selectedPropertyId = properties.first.id;
+                          if (_scopeType == BillingScopeType.property) {
+                            _selectedScopeId = properties.first.id;
+                          }
+                        });
+                      });
                     }
 
                     return DropdownButtonFormField<String>(
@@ -822,33 +854,78 @@ class _OwnerBillingSetupScreenState
       loading: () => const LinearProgressIndicator(),
       error: (err, stack) => const Text('Error loading tenants.'),
       data: (tenants) {
-        if (tenants.isEmpty) {
-          return const Text('No active tenants found in this property.');
+        final activeTenants = tenants
+            .where((t) => t.status == TenantStatus.active)
+            .toList();
+
+        if (activeTenants.isNotEmpty) {
+          return DropdownButtonFormField<String>(
+            initialValue: activeTenants.any((t) => t.id == _selectedScopeId)
+                ? _selectedScopeId
+                : null,
+            decoration: const InputDecoration(
+              labelText: 'Target Tenant',
+              prefixIcon: Icon(Icons.person_outline_rounded),
+              border: OutlineInputBorder(),
+            ),
+            items: activeTenants
+                .map(
+                  (t) => DropdownMenuItem(
+                    value: t.id,
+                    child: Text(_tenantLabel(t)),
+                  ),
+                )
+                .toList(),
+            onChanged: _isSaving
+                ? null
+                : (val) => setState(() => _selectedScopeId = val),
+            validator: (val) {
+              if (val == null) {
+                return 'Please select a tenant.';
+              }
+              return null;
+            },
+          );
         }
 
-        return DropdownButtonFormField<String>(
-          initialValue: tenants.any((t) => t.id == _selectedScopeId)
-              ? _selectedScopeId
-              : null,
-          decoration: const InputDecoration(
-            labelText: 'Target Tenant',
-            prefixIcon: Icon(Icons.person_outline_rounded),
-            border: OutlineInputBorder(),
-          ),
-          items: tenants
-              .map(
-                (t) =>
-                    DropdownMenuItem(value: t.id, child: Text(_tenantLabel(t))),
-              )
-              .toList(),
-          onChanged: _isSaving
-              ? null
-              : (val) => setState(() => _selectedScopeId = val),
-          validator: (val) {
-            if (val == null) {
-              return 'Please select a tenant.';
+        return FutureBuilder<List<Tenant>>(
+          future: _loadFallbackActiveTenants(propertyId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const LinearProgressIndicator();
             }
-            return null;
+            final fallbackTenants = snapshot.data ?? [];
+            if (fallbackTenants.isEmpty) {
+              return const Text('No active tenants found in this property.');
+            }
+
+            return DropdownButtonFormField<String>(
+              initialValue: fallbackTenants.any((t) => t.id == _selectedScopeId)
+                  ? _selectedScopeId
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Target Tenant',
+                prefixIcon: Icon(Icons.person_outline_rounded),
+                border: OutlineInputBorder(),
+              ),
+              items: fallbackTenants
+                  .map(
+                    (t) => DropdownMenuItem(
+                      value: t.id,
+                      child: Text(_tenantLabel(t)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _isSaving
+                  ? null
+                  : (val) => setState(() => _selectedScopeId = val),
+              validator: (val) {
+                if (val == null) {
+                  return 'Please select a tenant.';
+                }
+                return null;
+              },
+            );
           },
         );
       },

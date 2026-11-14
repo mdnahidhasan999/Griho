@@ -1,7 +1,11 @@
+// noinspection SpellCheckingInspection
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,6 +16,90 @@ import '../widgets/more_menu_item.dart';
 
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
+
+  Future<List<String>> _resolveEffectiveRoles(
+    String uid,
+    List<String> storedRoles,
+  ) async {
+    final roles = <String>{...storedRoles};
+
+    try {
+      final activeManagerAccess = await FirebaseFirestore.instance
+          .collection('managerAccess')
+          .where('userId', isEqualTo: uid)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      if (activeManagerAccess.docs.isNotEmpty) {
+        roles.add('manager');
+      }
+    } catch (_) {}
+
+    return roles.toList();
+  }
+
+  Future<void> _activateOwnerRole(
+    BuildContext context,
+    WidgetRef ref,
+    String uid,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Become a Property Owner?'),
+        content: const Text(
+          'Unlock the Owner Console to register your own buildings, manage units, and invite tenants or managers.\n\n'
+          'You will still keep your existing Resident or Manager access and can switch between consoles anytime.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.add_home_work_rounded, size: 18),
+            label: const Text('Activate Owner Console'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'availableRoles': FieldValue.arrayUnion(['owner']),
+        'defaultDashboard': 'owner',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      ref.invalidate(currentUserProfileProvider);
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Owner Console activated! You can now add your property.',
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      context.go(RouteNames.ownerHome);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to activate Owner role: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,128 +130,197 @@ class MoreScreen extends ConsumerWidget {
             return const Center(child: Text('User profile not found.'));
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      _ProfileAvatar(
-                        name: profile.name,
-                        photoUrl: profile.photoUrl,
+          return FutureBuilder<List<String>>(
+            future: _resolveEffectiveRoles(profile.uid, profile.availableRoles),
+            builder: (context, rolesSnapshot) {
+              final effectiveRoles =
+                  rolesSnapshot.data ?? profile.availableRoles;
+              final isOwnerOrManager =
+                  profile.defaultDashboard == 'owner' ||
+                  profile.defaultDashboard == 'manager' ||
+                  effectiveRoles.contains('owner') ||
+                  effectiveRoles.contains('manager');
+
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          _ProfileAvatar(
+                            name: profile.name,
+                            photoUrl: profile.photoUrl,
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  profile.name,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(profile.publicId),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Active Console: ${_roleLabel(profile.defaultDashboard)}',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              profile.name,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                    ),
+                  ),
+                  if (!effectiveRoles.contains('owner'))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 14, bottom: 2),
+                      child: Material(
+                        color: theme.colorScheme.primaryContainer.withValues(
+                          alpha: 0.45,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.4,
                             ),
-                            const SizedBox(height: 4),
-                            Text(profile.publicId),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Default: ${_roleLabel(profile.defaultDashboard)}',
-                              style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: theme.colorScheme.primary,
+                            child: const Icon(
+                              Icons.add_home_work_rounded,
+                              color: Colors.white,
+                              size: 20,
                             ),
-                          ],
+                          ),
+                          title: const Text(
+                            'Become a Property Owner',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: const Text(
+                            'Register your own buildings & manage tenants',
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_rounded),
+                          onTap: () =>
+                              _activateOwnerRole(context, ref, profile.uid),
                         ),
                       ),
-                    ],
+                    ),
+                  const SizedBox(height: 20),
+                  Text('Account', style: theme.textTheme.titleSmall),
+                  MoreMenuItem(
+                    icon: Icons.person_outline_rounded,
+                    title: 'Profile',
+                    subtitle: 'View and edit your profile',
+                    onTap: () {
+                      context.push(RouteNames.editProfile, extra: profile);
+                    },
                   ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text('Account', style: theme.textTheme.titleSmall),
-              MoreMenuItem(
-                icon: Icons.person_outline_rounded,
-                title: 'Profile',
-                subtitle: 'View and edit your profile',
-                onTap: () {
-                  context.push(RouteNames.editProfile, extra: profile);
-                },
-              ),
-              MoreMenuItem(
-                icon: Icons.lock_outline_rounded,
-                title: 'Change Password',
-                subtitle: 'Update your account password',
-                onTap: () {
-                  context.push(RouteNames.changePassword);
-                },
-              ),
-              //
-              MoreMenuItem(
-                icon: Icons.home_outlined,
-                title: 'Default Account',
-                subtitle: 'Choose your default dashboard',
-                onTap: () {
-                  _showDefaultAccountDialog(
-                    context,
-                    ref,
-                    profile.uid,
-                    profile.availableRoles,
-                    profile.defaultDashboard,
-                  );
-                },
-              ),
-              if (profile.availableRoles.length > 1)
-                MoreMenuItem(
-                  icon: Icons.swap_horiz_rounded,
-                  title: 'Switch Account',
-                  subtitle: 'Switch between authorized roles',
-                  onTap: () {
-                    _showSwitchAccountDialog(
-                      context,
-                      ref,
-                      profile.uid,
-                      profile.availableRoles,
-                      profile.defaultDashboard,
-                    );
-                  },
-                ),
-              const Divider(height: 32),
-              Text('Activities', style: theme.textTheme.titleSmall),
-              MoreMenuItem(
-                icon: Icons.mail_outline_rounded,
-                title: 'Invitations',
-                subtitle: 'View your invitations',
-                onTap: () {
-                  context.push(RouteNames.tenantInvitations);
-                },
-              ),
-              const Divider(height: 32),
-              Text('Preferences', style: theme.textTheme.titleSmall),
-              MoreMenuItem(
-                icon: Icons.settings_outlined,
-                title: 'Settings',
-                onTap: () {
-                  _showComingSoon(context, 'Settings');
-                },
-              ),
-              MoreMenuItem(
-                icon: Icons.help_outline_rounded,
-                title: 'Help & Support',
-                onTap: () {
-                  _showComingSoon(context, 'Help & Support');
-                },
-              ),
-              const Divider(height: 32),
-              MoreMenuItem(
-                icon: Icons.logout_rounded,
-                title: 'Logout',
-                subtitle: 'Sign out of your account',
-                isDestructive: true,
-                onTap: () {
-                  _confirmLogout(context, ref);
-                },
-              ),
-            ],
+                  MoreMenuItem(
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Change Password',
+                    subtitle: 'Update your account password',
+                    onTap: () {
+                      context.push(RouteNames.changePassword);
+                    },
+                  ),
+                  MoreMenuItem(
+                    icon: Icons.home_outlined,
+                    title: 'Default Account',
+                    subtitle: 'Choose your default dashboard',
+                    onTap: () {
+                      _showDefaultAccountDialog(
+                        context,
+                        ref,
+                        profile.uid,
+                        effectiveRoles,
+                        profile.defaultDashboard,
+                      );
+                    },
+                  ),
+                  if (effectiveRoles.length > 1)
+                    MoreMenuItem(
+                      icon: Icons.swap_horiz_rounded,
+                      title: 'Switch Account Console',
+                      subtitle:
+                          'Switch between Owner, Manager & Resident views',
+                      onTap: () {
+                        _showSwitchAccountDialog(
+                          context,
+                          ref,
+                          profile.uid,
+                          effectiveRoles,
+                          profile.defaultDashboard,
+                        );
+                      },
+                    ),
+                  const Divider(height: 32),
+                  Text('Activities & Audit', style: theme.textTheme.titleSmall),
+                  if (isOwnerOrManager)
+                    MoreMenuItem(
+                      icon: Icons.history_edu_rounded,
+                      title: 'Activity & Audit Trail',
+                      subtitle:
+                          'Track manager actions, rent changes & billing logs',
+                      onTap: () {
+                        context.push(RouteNames.activityLogs);
+                      },
+                    ),
+                  MoreMenuItem(
+                    icon: Icons.admin_panel_settings_outlined,
+                    title: 'Manager Invitations',
+                    subtitle: 'Manage property manager roles & invitations',
+                    onTap: () {
+                      context.push(RouteNames.ownerManagers);
+                    },
+                  ),
+                  MoreMenuItem(
+                    icon: Icons.mail_outline_rounded,
+                    title: 'Tenancy Invitations',
+                    subtitle: 'View your residential invitations',
+                    onTap: () {
+                      context.push(RouteNames.tenantInvitations);
+                    },
+                  ),
+                  const Divider(height: 32),
+                  Text('Preferences', style: theme.textTheme.titleSmall),
+                  MoreMenuItem(
+                    icon: Icons.settings_outlined,
+                    title: 'Settings',
+                    onTap: () {
+                      _showComingSoon(context, 'Settings');
+                    },
+                  ),
+                  MoreMenuItem(
+                    icon: Icons.help_outline_rounded,
+                    title: 'Help & Support',
+                    onTap: () {
+                      _showComingSoon(context, 'Help & Support');
+                    },
+                  ),
+                  const Divider(height: 32),
+                  MoreMenuItem(
+                    icon: Icons.logout_rounded,
+                    title: 'Logout',
+                    subtitle: 'Sign out of your account',
+                    isDestructive: true,
+                    onTap: () {
+                      _confirmLogout(context, ref);
+                    },
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -257,7 +414,7 @@ class MoreScreen extends ConsumerWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Switch Account'),
+          title: const Text('Switch Account Console'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: availableRoles.map((role) {
@@ -317,6 +474,10 @@ class MoreScreen extends ConsumerWidget {
         );
       }
     } catch (error) {
+      if (openDashboard && context.mounted) {
+        context.go(_routeForRole(role));
+        return;
+      }
       messenger.showSnackBar(
         const SnackBar(content: Text('Unable to change account.')),
       );
@@ -360,8 +521,6 @@ class MoreScreen extends ConsumerWidget {
   }
 }
 
-/// Shows the saved profile photo (base64 data URL or network URL).
-/// Falls back to the first letter of the name when there is no photo.
 class _ProfileAvatar extends StatefulWidget {
   const _ProfileAvatar({required this.name, required this.photoUrl});
 

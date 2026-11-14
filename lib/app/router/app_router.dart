@@ -16,6 +16,7 @@ import '../../features/billing/domain/entities/billing_rule.dart';
 import '../../features/billing/presentation/screens/edit_billing_rule_screen.dart';
 import '../../features/billing/presentation/screens/owner_billing_rules_screen.dart';
 import '../../features/billing/presentation/screens/owner_billing_setup_screen.dart';
+import '../../features/home/presentation/screens/activity_audit_log_screen.dart';
 import '../../features/home/presentation/screens/caretaker_home_screen.dart';
 import '../../features/home/presentation/screens/electrician_home_screen.dart';
 import '../../features/home/presentation/screens/manager_home_screen.dart';
@@ -340,7 +341,10 @@ abstract final class AppRouter {
           path: RouteNames.centralRentControl,
           builder: (context, state) => const CentralRentControlScreen(),
         ),
-
+        GoRoute(
+          path: RouteNames.activityLogs,
+          builder: (context, state) => const ActivityAuditLogScreen(),
+        ),
         // ========================================================
         // BILLING
         // ========================================================
