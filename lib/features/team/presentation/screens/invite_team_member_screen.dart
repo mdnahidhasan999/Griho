@@ -376,8 +376,9 @@ class _InviteTeamMemberScreenState
                     validator: (v) {
                       final t = v?.trim() ?? '';
                       if (t.isEmpty) return 'Please enter full name.';
-                      if (t.length < 2)
+                      if (t.length < 2) {
                         return 'Name must be at least 2 characters.';
+                      }
                       return null;
                     },
                   ),
@@ -452,8 +453,9 @@ class _InviteTeamMemberScreenState
                       ),
                       validator: (v) {
                         final email = v?.trim() ?? '';
-                        if (email.isEmpty)
+                        if (email.isEmpty) {
                           return 'Please enter recipient email.';
+                        }
                         if (!RegExp(
                           r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                         ).hasMatch(email)) {
@@ -478,8 +480,9 @@ class _InviteTeamMemberScreenState
                       ),
                       validator: (v) {
                         final id = v?.trim().toUpperCase() ?? '';
-                        if (id.isEmpty)
+                        if (id.isEmpty) {
                           return 'Please enter recipient Griho ID.';
+                        }
                         if (!RegExp(
                           r'^[A-Z0-9][A-Z0-9_-]{2,39}$',
                         ).hasMatch(id)) {

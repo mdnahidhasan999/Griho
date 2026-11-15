@@ -568,28 +568,28 @@ class _ManageGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <_GridItem>[
-      _GridItem(
+      const _GridItem(
         Icons.groups_rounded,
         'Residents',
         'Tenants & leases',
         Colors.teal,
         RouteNames.ownerTenants,
       ),
-      _GridItem(
+      const _GridItem(
         Icons.domain_rounded,
         'Buildings',
         'Units & floors',
         Colors.indigo,
         RouteNames.propertyList,
       ),
-      _GridItem(
+      const _GridItem(
         Icons.payments_outlined,
         'Payments',
         'Review & confirm',
         Colors.green,
         RouteNames.ownerPayments,
       ),
-      _GridItem(
+      const _GridItem(
         Icons.price_change_outlined,
         'Rent control',
         'Change rates',
@@ -603,7 +603,7 @@ class _ManageGrid extends StatelessWidget {
         Colors.amber.shade900,
         RouteNames.ownerBillingRules,
       ),
-      _GridItem(
+      const _GridItem(
         Icons.history_edu_rounded,
         'Audit trail',
         'Who did what',

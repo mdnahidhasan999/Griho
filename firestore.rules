@@ -130,19 +130,28 @@ service cloud.firestore {
                           (
                             !('manager' in resource.data.availableRoles)
                             && 'manager' in request.resource.data.availableRoles
-                            && request.resource.data.defaultDashboard == 'manager'
+                            && (
+                              request.resource.data.get('defaultDashboard', null) == 'manager'
+                              || request.resource.data.get('defaultDashboard', null) == resource.data.get('defaultDashboard', null)
+                            )
                           )
                           ||
                           (
                             !('caretaker' in resource.data.availableRoles)
                             && 'caretaker' in request.resource.data.availableRoles
-                            && request.resource.data.defaultDashboard == 'caretaker'
+                            && (
+                              request.resource.data.get('defaultDashboard', null) == 'caretaker'
+                              || request.resource.data.get('defaultDashboard', null) == resource.data.get('defaultDashboard', null)
+                            )
                           )
                           ||
                           (
                             !('electrician' in resource.data.availableRoles)
                             && 'electrician' in request.resource.data.availableRoles
-                            && request.resource.data.defaultDashboard == 'electrician'
+                            && (
+                              request.resource.data.get('defaultDashboard', null) == 'electrician'
+                              || request.resource.data.get('defaultDashboard', null) == resource.data.get('defaultDashboard', null)
+                            )
                           )
                         )
                       )
@@ -957,7 +966,7 @@ service cloud.firestore {
                         )
                         && request.resource.data.ownerId == resource.data.ownerId
                         && request.resource.data.propertyId == resource.data.propertyId
-                        && request.resource.data.staffRole == resource.data.staffRole
+                        && request.resource.data.get('staffRole', null) == resource.data.get('staffRole', null)
                         && request.resource.data.get('staffUserId', null) == resource.data.get('staffUserId', null)
                         && (
                           request.resource.data.status == resource.data.status
@@ -972,7 +981,7 @@ service cloud.firestore {
                         && request.resource.data.status in ['accepted', 'rejected']
                         && request.resource.data.ownerId == resource.data.ownerId
                         && request.resource.data.propertyId == resource.data.propertyId
-                        && request.resource.data.staffRole == resource.data.staffRole
+                        && request.resource.data.get('staffRole', null) == resource.data.get('staffRole', null)
                         && request.resource.data.staffUserId == request.auth.uid
                         && request.resource.data.diff(resource.data).affectedKeys()
                              .hasOnly([
@@ -1631,7 +1640,7 @@ service cloud.firestore {
              && get(invPath).data.status == 'pending'
              && get(invPath).data.propertyId == request.resource.data.propertyId
              && get(invPath).data.ownerId == request.resource.data.ownerId
-             && get(invPath).data.staffRole == request.resource.data.staffRole
+             && get(invPath).data.get('staffRole', get(invPath).data.get('role', 'caretaker')) == request.resource.data.staffRole
              && isStaffInvitationRecipient(get(invPath).data)
              && getAfter(invPath).data.status == 'accepted'
              && getAfter(invPath).data.staffUserId == request.auth.uid;

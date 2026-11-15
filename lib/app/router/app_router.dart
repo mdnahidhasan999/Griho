@@ -63,6 +63,7 @@ import 'auth_route_guard.dart';
 import 'auth_state_refresh_notifier.dart';
 import 'route_arguments.dart';
 import 'route_names.dart';
+import '../../features/invitations/presentation/screens/my_invitations_screen.dart';
 
 abstract final class AppRouter {
   static GoRouter create(Ref ref) {
@@ -472,6 +473,11 @@ abstract final class AppRouter {
               invitationToken: invitationToken,
             );
           },
+        ),
+
+        GoRoute(
+          path: RouteNames.myInvitations,
+          builder: (context, state) => const MyInvitationsScreen(),
         ),
 
         GoRoute(

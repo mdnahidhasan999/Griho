@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../billing/presentation/widgets/tenant_current_bills_card.dart';
+import '../../../invitations/presentation/providers/work_invitations_providers.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
 import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
@@ -101,13 +102,20 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [theme.colorScheme.primary, theme.colorScheme.tertiary],
+                  colors: [
+                    theme.colorScheme.primary,
+                    theme.colorScheme.tertiary,
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.apartment_rounded, size: 20, color: Colors.white),
+              child: const Icon(
+                Icons.apartment_rounded,
+                size: 20,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(width: 12),
             Column(
@@ -153,10 +161,48 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                 if (dashboard.hasPendingInvitation) ...[
                   _PendingInvitationCard(
                     invitation: dashboard.pendingInvitation!,
-                    onReview: () => _openInvitation(dashboard.pendingInvitation!),
+                    onReview: () =>
+                        _openInvitation(dashboard.pendingInvitation!),
                   ),
                   const SizedBox(height: 16),
                 ],
+
+                Consumer(
+                  builder: (context, ref, _) {
+                    final n =
+                        ref
+                            .watch(pendingWorkInvitationsProvider)
+                            .value
+                            ?.length ??
+                        0;
+                    if (n == 0) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Material(
+                        color: theme.colorScheme.tertiaryContainer,
+                        borderRadius: BorderRadius.circular(16),
+                        clipBehavior: Clip.antiAlias,
+                        child: ListTile(
+                          leading: const Icon(Icons.work_outline_rounded),
+                          title: Text(
+                            n == 1
+                                ? '1 work invitation'
+                                : '$n work invitations',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          subtitle: const Text(
+                            'Manager / caretaker / electrician offer',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () async {
+                            await context.push(RouteNames.myInvitations);
+                            ref.invalidate(pendingWorkInvitationsProvider);
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
 
                 if (active)
                   _DigitalResidencyPass(dashboard: dashboard)
@@ -199,7 +245,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                         'Report issue',
                         'Plumbing, electric…',
                         Colors.deepOrange,
-                            () => _reportIssue(dashboard),
+                        () => _reportIssue(dashboard),
                       ),
                     if (active)
                       _ActionItem(
@@ -215,7 +261,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                         'Notices',
                         'From your building',
                         Colors.amber.shade800,
-                            () => _openNotices(dashboard),
+                        () => _openNotices(dashboard),
                       ),
                     _ActionItem(
                       Icons.mark_email_read_outlined,
@@ -236,7 +282,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                       'Share ID',
                       'Copy your Griho ID',
                       Colors.deepPurpleAccent,
-                          () => _copyId(publicId),
+                      () => _copyId(publicId),
                     ),
                   ],
                 ),
@@ -341,7 +387,14 @@ class _Header extends StatelessWidget {
 // ============================================================================
 
 class _ActionItem {
-  const _ActionItem(this.icon, this.title, this.subtitle, this.color, this.onTap);
+  const _ActionItem(
+    this.icon,
+    this.title,
+    this.subtitle,
+    this.color,
+    this.onTap,
+  );
+
   final IconData icon;
   final String title;
   final String subtitle;
@@ -351,6 +404,7 @@ class _ActionItem {
 
 class _ActionGrid extends StatelessWidget {
   const _ActionGrid({required this.items});
+
   final List<_ActionItem> items;
 
   @override
@@ -429,6 +483,7 @@ class _ActionGrid extends StatelessWidget {
 
 class _ReportIssueSheet extends StatefulWidget {
   const _ReportIssueSheet({required this.dashboard});
+
   final TenantDashboardData dashboard;
 
   @override
@@ -577,10 +632,10 @@ class _ReportIssueSheetState extends State<_ReportIssueSheet> {
               onPressed: _saving ? null : _submit,
               icon: _saving
                   ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.send_rounded, size: 18),
               label: const Text('Send request'),
             ),
@@ -626,91 +681,96 @@ class _MyRequestsSheet extends StatelessWidget {
         child: uid == null
             ? const Center(child: Text('Please sign in again.'))
             : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('maintenanceRequests')
-              .where('tenantUserId', isEqualTo: uid)
-              .snapshots(),
-          builder: (context, snap) {
-            if (snap.hasError) {
-              return Center(child: Text('Unable to load: ${snap.error}'));
-            }
-            if (!snap.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final docs = [...snap.data!.docs];
-            docs.sort((a, b) {
-              final at = a.data()['createdAt'];
-              final bt = b.data()['createdAt'];
-              final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
-              final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
-              return bm.compareTo(am);
-            });
+                stream: FirebaseFirestore.instance
+                    .collection('maintenanceRequests')
+                    .where('tenantUserId', isEqualTo: uid)
+                    .snapshots(),
+                builder: (context, snap) {
+                  if (snap.hasError) {
+                    return Center(child: Text('Unable to load: ${snap.error}'));
+                  }
+                  if (!snap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = [...snap.data!.docs];
+                  docs.sort((a, b) {
+                    final at = a.data()['createdAt'];
+                    final bt = b.data()['createdAt'];
+                    final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
+                    final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
+                    return bm.compareTo(am);
+                  });
 
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              children: [
-                const Text(
-                  'My requests',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-                ),
-                const SizedBox(height: 10),
-                if (docs.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 32),
-                    child: Center(
-                      child: Text(
-                        'No requests yet.',
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    children: [
+                      const Text(
+                        'My requests',
                         style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
                         ),
                       ),
-                    ),
-                  ),
-                for (final doc in docs)
-                  Builder(
-                    builder: (context) {
-                      final d = doc.data();
-                      final status = (d['status'] ?? 'open').toString();
-                      final note = (d['resolutionNote'] ?? '').toString();
-                      final color = _color(status);
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: ListTile(
-                          title: Text(
-                            (d['title'] ?? '').toString(),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          subtitle: Text(
-                            note.isEmpty
-                                ? (d['category'] ?? '').toString()
-                                : note,
-                          ),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                      const SizedBox(height: 10),
+                      if (docs.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 32),
+                          child: Center(
                             child: Text(
-                              _label(status),
+                              'No requests yet.',
                               style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: color,
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),
                         ),
-                      );
-                    },
-                  ),
-              ],
-            );
-          },
-        ),
+                      for (final doc in docs)
+                        Builder(
+                          builder: (context) {
+                            final d = doc.data();
+                            final status = (d['status'] ?? 'open').toString();
+                            final note = (d['resolutionNote'] ?? '').toString();
+                            final color = _color(status);
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: ListTile(
+                                title: Text(
+                                  (d['title'] ?? '').toString(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  note.isEmpty
+                                      ? (d['category'] ?? '').toString()
+                                      : note,
+                                ),
+                                trailing: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    _label(status),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: color,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  );
+                },
+              ),
       ),
     );
   }
@@ -722,6 +782,7 @@ class _MyRequestsSheet extends StatelessWidget {
 
 class _NoticesSheet extends StatelessWidget {
   const _NoticesSheet({required this.propertyId});
+
   final String propertyId;
 
   @override
@@ -766,7 +827,9 @@ class _NoticesSheet extends StatelessWidget {
                     child: Center(
                       child: Text(
                         'No notices right now.',
-                        style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ),
@@ -774,7 +837,8 @@ class _NoticesSheet extends StatelessWidget {
                   Builder(
                     builder: (context) {
                       final d = doc.data();
-                      final urgent = (d['priority'] ?? '').toString() == 'high' ||
+                      final urgent =
+                          (d['priority'] ?? '').toString() == 'high' ||
                           (d['priority'] ?? '').toString() == 'urgent';
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
@@ -783,7 +847,9 @@ class _NoticesSheet extends StatelessWidget {
                             urgent
                                 ? Icons.priority_high_rounded
                                 : Icons.campaign_outlined,
-                            color: urgent ? Colors.red : theme.colorScheme.primary,
+                            color: urgent
+                                ? Colors.red
+                                : theme.colorScheme.primary,
                           ),
                           title: Text(
                             (d['title'] ?? '').toString(),
@@ -978,36 +1044,33 @@ class _DigitalResidencyPass extends ConsumerWidget {
                         const SizedBox(height: 3),
                         rentAsync == null
                             ? const Text(
-                          '—',
-                          style: TextStyle(color: Colors.white),
-                        )
+                                '—',
+                                style: TextStyle(color: Colors.white),
+                              )
                             : rentAsync.when(
-                          loading: () =>
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: Colors.white70,
-                            ),
-                          ),
-                          error: (_, _) =>
-                          const Text(
-                            'Not set',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          data: (rent) =>
-                              Text(
-                                rent != null
-                                    ? '৳ ${_formatAmount(rent.amount)}'
-                                    : 'Not Set',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
+                                loading: () => const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                                error: (_, _) => const Text(
+                                  'Not set',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                data: (rent) => Text(
+                                  rent != null
+                                      ? '৳ ${_formatAmount(rent.amount)}'
+                                      : 'Not Set',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                  ),
                                 ),
                               ),
-                        ),
                       ],
                     ),
                     Container(
@@ -1134,8 +1197,7 @@ class _PendingInvitationCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'You are invited to finalize lease terms for "$propertyName" ($unitName) with agreed monthly rent of ৳ ${_formatAmount(
-                invitation.rentAmount)}.',
+            'You are invited to finalize lease terms for "$propertyName" ($unitName) with agreed monthly rent of ৳ ${_formatAmount(invitation.rentAmount)}.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onTertiaryContainer,
               height: 1.4,
@@ -1333,9 +1395,7 @@ class _RecentActivityCard extends StatelessWidget {
   List<_ActivityData> _buildActivities(TenantDashboardData dashboard) {
     final activities = <_ActivityData>[];
     final invitation = dashboard.pendingInvitation;
-    if (invitation != null &&
-        invitation.isPending &&
-        !invitation.isExpired) {
+    if (invitation != null && invitation.isPending && !invitation.isExpired) {
       activities.add(
         _ActivityData(
           icon: Icons.mail_outline_rounded,
@@ -1523,8 +1583,7 @@ class _TenancyHistoryPreview extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Unit ${item.unitNumber} • ৳ ${_formatAmount(
-                                item.monthlyRent)} / mo',
+                            'Unit ${item.unitNumber} • ৳ ${_formatAmount(item.monthlyRent)} / mo',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -1566,9 +1625,9 @@ class _SectionHeader extends StatelessWidget {
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w900,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
         ?trailing,
       ],

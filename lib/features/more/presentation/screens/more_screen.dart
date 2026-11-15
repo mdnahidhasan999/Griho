@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../invitations/presentation/providers/work_invitations_providers.dart';
 import '../widgets/more_menu_item.dart';
 
 class MoreScreen extends ConsumerWidget {
@@ -33,6 +34,18 @@ class MoreScreen extends ConsumerWidget {
 
       if (activeManagerAccess.docs.isNotEmpty) {
         roles.add('manager');
+      }
+    } catch (_) {}
+
+    try {
+      final staff = await FirebaseFirestore.instance
+          .collection('staffAccess')
+          .where('userId', isEqualTo: uid)
+          .where('status', isEqualTo: 'active')
+          .get();
+      for (final d in staff.docs) {
+        final r = (d.data()['staffRole'] ?? '').toString();
+        if (r == 'caretaker' || r == 'electrician') roles.add(r);
       }
     } catch (_) {}
 
@@ -253,7 +266,7 @@ class MoreScreen extends ConsumerWidget {
                       icon: Icons.swap_horiz_rounded,
                       title: 'Switch Account Console',
                       subtitle:
-                          'Switch between Owner, Manager & Resident views',
+                          'Switch between your Owner, Manager, Staff & Resident views',
                       onTap: () {
                         _showSwitchAccountDialog(
                           context,
@@ -276,12 +289,35 @@ class MoreScreen extends ConsumerWidget {
                         context.push(RouteNames.activityLogs);
                       },
                     ),
-                  MoreMenuItem(
-                    icon: Icons.admin_panel_settings_outlined,
-                    title: 'Manager Invitations',
-                    subtitle: 'Manage property manager roles & invitations',
-                    onTap: () {
-                      context.push(RouteNames.ownerManagers);
+                  if (effectiveRoles.contains('owner'))
+                    MoreMenuItem(
+                      icon: Icons.groups_rounded,
+                      title: 'Team & Work Orders',
+                      subtitle: 'Managers, caretakers, electricians & tasks',
+                      onTap: () {
+                        context.push(RouteNames.ownerTeam);
+                      },
+                    ),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final count =
+                          ref
+                              .watch(pendingWorkInvitationsProvider)
+                              .value
+                              ?.length ??
+                          0;
+                      return MoreMenuItem(
+                        icon: Icons.work_outline_rounded,
+                        title: count > 0
+                            ? 'Work Invitations ($count new)'
+                            : 'Work Invitations',
+                        subtitle:
+                            'Manager, caretaker & electrician offers from owners',
+                        onTap: () async {
+                          await context.push(RouteNames.myInvitations);
+                          ref.invalidate(pendingWorkInvitationsProvider);
+                        },
+                      );
                     },
                   ),
                   MoreMenuItem(
