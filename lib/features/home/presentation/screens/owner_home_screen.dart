@@ -107,25 +107,15 @@ class OwnerHomeScreen extends ConsumerWidget {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
               children: [
-                // 1. Personalized Executive Greeting Header
                 _ExecutiveHeader(
                   name: profile.name,
                   publicId: profile.publicId,
                 ),
-
                 const SizedBox(height: 18),
-
-                // 2. Portfolio Vault & Financial Intelligence Card
                 const _PortfolioVaultCard(),
-
                 const SizedBox(height: 16),
-
-                // 3. Operational Pulse Metrics
                 const _OperationalPulseRow(),
-
                 const SizedBox(height: 24),
-
-                // 4. Command Strip (Quick Action Matrix)
                 const _SectionTitle(
                   title: 'Command Center',
                   subtitle: 'Quick operational actions and workflows',
@@ -133,7 +123,6 @@ class OwnerHomeScreen extends ConsumerWidget {
                 const SizedBox(height: 12),
                 const _CommandGrid(),
                 const SizedBox(height: 12),
-
                 OutlinedButton.icon(
                   onPressed: () {
                     context.push(RouteNames.ownerPayments);
@@ -142,13 +131,8 @@ class OwnerHomeScreen extends ConsumerWidget {
                   label: const Text('Payment Management'),
                 ),
                 const SizedBox(height: 24),
-
-                // 5. Active Property Portfolio Snapshot (Horizontal Deck)
                 const _PropertySnapshotSection(),
-
                 const SizedBox(height: 24),
-
-                // 6. Management Hub (Navigation Modules)
                 const _SectionTitle(
                   title: 'Enterprise Management',
                   subtitle:
@@ -174,10 +158,6 @@ class OwnerHomeScreen extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// 1. EXECUTIVE HEADER
-// ============================================================================
-
 class _ExecutiveHeader extends StatelessWidget {
   final String name;
   final String publicId;
@@ -186,12 +166,8 @@ class _ExecutiveHeader extends StatelessWidget {
 
   String _greetingText() {
     final hour = DateTime.now().hour;
-    if (hour < 12) {
-      return 'Good Morning';
-    }
-    if (hour < 17) {
-      return 'Good Afternoon';
-    }
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
     return 'Good Evening';
   }
 
@@ -290,10 +266,6 @@ class _ExecutiveHeader extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// 2. PORTFOLIO VAULT & FINANCIAL HERO CARD (WITH LIVE METRICS)
-// ============================================================================
-
 class _PortfolioVaultCard extends ConsumerWidget {
   const _PortfolioVaultCard();
 
@@ -328,7 +300,7 @@ class _PortfolioVaultCard extends ConsumerWidget {
             var projectedMonthlyRent = 0.0;
             final rateDocs = ratesSnap.data?.docs ?? [];
             for (final doc in rateDocs) {
-              final data = doc.data() as Map<String, dynamic>;
+              final data = doc.data() as Map<String, dynamic>? ?? {};
               if (data['effectiveTo'] == null) {
                 final amount = (data['amount'] is num)
                     ? (data['amount'] as num).toDouble()
@@ -340,7 +312,7 @@ class _PortfolioVaultCard extends ConsumerWidget {
             var unsettledInvoices = 0;
             final billDocs = billsSnap.data?.docs ?? [];
             for (final doc in billDocs) {
-              final data = doc.data() as Map<String, dynamic>;
+              final data = doc.data() as Map<String, dynamic>? ?? {};
               final status = (data['status'] ?? 'unpaid').toString();
               if (status != 'paid' && status != 'cancelled') {
                 unsettledInvoices++;
@@ -370,7 +342,6 @@ class _PortfolioVaultCard extends ConsumerWidget {
               ),
               child: Stack(
                 children: [
-                  // Ambient Glow Background Element
                   Positioned(
                     right: -20,
                     top: -20,
@@ -385,7 +356,6 @@ class _PortfolioVaultCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-
                   Padding(
                     padding: const EdgeInsets.all(22),
                     child: Column(
@@ -443,10 +413,7 @@ class _PortfolioVaultCard extends ConsumerWidget {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 18),
-
-                        // Primary Estimated Revenue
                         Text(
                           'Projected Monthly Rent',
                           style: TextStyle(
@@ -487,15 +454,12 @@ class _PortfolioVaultCard extends ConsumerWidget {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 18),
                         Divider(
                           color: Colors.white.withValues(alpha: 0.1),
                           height: 1,
                         ),
                         const SizedBox(height: 14),
-
-                        // Secondary Metrics Row: Occupancy Health
                         propertiesAsync.when(
                           loading: () => const SizedBox(
                             height: 18,
@@ -615,10 +579,6 @@ class _VaultSubMetric extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// 3. OPERATIONAL PULSE ROW
-// ============================================================================
 
 class _OperationalPulseRow extends ConsumerWidget {
   const _OperationalPulseRow();
@@ -768,10 +728,6 @@ class _PulseTile extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// 4. COMMAND GRID (ASYMMETRIC QUICK ACTIONS)
-// ============================================================================
-
 class _CommandGrid extends ConsumerWidget {
   const _CommandGrid();
 
@@ -781,7 +737,6 @@ class _CommandGrid extends ConsumerWidget {
 
     return Column(
       children: [
-        // Primary Action Hero Strip: Register New Resident
         Material(
           color: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
           shape: RoundedRectangleBorder(
@@ -848,10 +803,7 @@ class _CommandGrid extends ConsumerWidget {
             ),
           ),
         ),
-
         const SizedBox(height: 10),
-
-        // Sub Actions (4 Horizontal Tiles)
         Row(
           children: [
             Expanded(
@@ -861,9 +813,7 @@ class _CommandGrid extends ConsumerWidget {
                 color: Colors.teal,
                 onTap: () async {
                   await context.push(RouteNames.addProperty);
-                  if (!context.mounted) {
-                    return;
-                  }
+                  if (!context.mounted) return;
                   ref.invalidate(currentOwnerPropertiesProvider);
                 },
               ),
@@ -874,9 +824,7 @@ class _CommandGrid extends ConsumerWidget {
                 icon: Icons.admin_panel_settings_outlined,
                 title: 'Managers',
                 color: Colors.indigo,
-                onTap: () {
-                  context.push(RouteNames.ownerManagers);
-                },
+                onTap: () => context.push(RouteNames.ownerManagers),
               ),
             ),
             const SizedBox(width: 8),
@@ -957,10 +905,6 @@ class _SubActionTile extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// 5. PROPERTY SNAPSHOT SECTION (HORIZONTAL PREVIEW CAROUSEL)
-// ============================================================================
 
 class _PropertySnapshotSection extends ConsumerWidget {
   const _PropertySnapshotSection();
@@ -1149,10 +1093,6 @@ class _PropertyMiniCard extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// 6. ENTERPRISE MANAGEMENT HUB
-// ============================================================================
-
 class _EnterpriseHub extends StatelessWidget {
   const _EnterpriseHub();
 
@@ -1191,9 +1131,7 @@ class _EnterpriseHub extends StatelessWidget {
             title: 'Property Managers & Staff',
             subtitle: 'Assign operational managers and review permissions',
             tag: 'Team',
-            onTap: () {
-              context.push(RouteNames.ownerManagers);
-            },
+            onTap: () => context.push(RouteNames.ownerManagers),
           ),
           const Divider(height: 1, indent: 64),
           _HubActionTile(
@@ -1213,7 +1151,6 @@ class _EnterpriseHub extends StatelessWidget {
             tag: 'Billing',
             onTap: () => context.push(RouteNames.ownerBillingRules),
           ),
-
           const Divider(height: 1, indent: 64),
           _HubActionTile(
             icon: Icons.history_edu_rounded,
@@ -1222,7 +1159,254 @@ class _EnterpriseHub extends StatelessWidget {
             tag: 'Audit',
             onTap: () => context.push(RouteNames.activityLogs),
           ),
+          const Divider(height: 1, indent: 64),
+          _HubActionTile(
+            icon: Icons.engineering_outlined,
+            title: 'Caretaker, Electrician & Maintenance',
+            subtitle:
+                'Invite building caretaker/electrician & dispatch repair work orders',
+            tag: 'Staff',
+            onTap: () => _showStaffAndMaintenanceSheet(context),
+          ),
         ],
+      ),
+    );
+  }
+
+  void _showStaffAndMaintenanceSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Consumer(
+        builder: (context, ref, _) {
+          final properties =
+              ref.watch(currentOwnerPropertiesProvider).value ?? [];
+          final profile = ref.watch(currentUserProfileProvider).value;
+
+          if (properties.isEmpty || profile == null) {
+            return const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: Text(
+                  'Add a building first to assign Caretaker or Electrician.',
+                ),
+              ),
+            );
+          }
+
+          Property selectedProperty = properties.first;
+          String selectedRole = 'caretaker';
+          final idCtrl = TextEditingController();
+          final ticketTitleCtrl = TextEditingController();
+          final ticketUnitCtrl = TextEditingController();
+          String ticketCategory = 'electrical';
+
+          return StatefulBuilder(
+            builder: (context, setSheetState) {
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  MediaQuery.of(context).viewInsets.bottom + 28,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Staff & Maintenance Operations',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<Property>(
+                      initialValue: selectedProperty,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Building',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: properties
+                          .map(
+                            (p) =>
+                                DropdownMenuItem(value: p, child: Text(p.name)),
+                          )
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setSheetState(() => selectedProperty = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      '1. Invite Caretaker or Electrician',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 'caretaker',
+                          label: Text('Caretaker'),
+                          icon: Icon(Icons.handyman_outlined),
+                        ),
+                        ButtonSegment(
+                          value: 'electrician',
+                          label: Text('Electrician'),
+                          icon: Icon(Icons.electrical_services_outlined),
+                        ),
+                      ],
+                      selected: {selectedRole},
+                      onSelectionChanged: (s) =>
+                          setSheetState(() => selectedRole = s.first),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: idCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Staff Phone or Griho ID (e.g. GRI-...)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton.icon(
+                      onPressed: () async {
+                        final input = idCtrl.text.trim();
+                        if (input.isEmpty) return;
+
+                        await FirebaseFirestore.instance
+                            .collection('staffInvitations')
+                            .add({
+                              'ownerId': selectedProperty.ownerId,
+                              'ownerName': profile.name,
+                              'propertyId': selectedProperty.id,
+                              'propertyName': selectedProperty.name,
+                              'propertyCode': selectedProperty.propertyCode,
+                              'staffRole': selectedRole,
+                              'identifier': input,
+                              'phone': input.startsWith('GRI-') ? '' : input,
+                              'targetGrihoId':
+                                  input.toUpperCase().startsWith('GRI-')
+                                  ? input.toUpperCase()
+                                  : '',
+                              'status': 'pending',
+                              'accessStatus': 'active',
+                              'createdAt': FieldValue.serverTimestamp(),
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
+
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${selectedRole.toUpperCase()} invitation sent for ${selectedProperty.name}!',
+                            ),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: const Text('Send Staff Invitation'),
+                    ),
+                    const Divider(height: 32),
+                    const Text(
+                      '2. Dispatch Maintenance / Repair Work Order',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: ticketCategory,
+                      decoration: const InputDecoration(
+                        labelText: 'Work Category',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'electrical',
+                          child: Text('Electrical Repair (For Electrician)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'plumbing',
+                          child: Text('Plumbing / Water (For Caretaker)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'general',
+                          child: Text('General Maintenance (For Caretaker)'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setSheetState(() => ticketCategory = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: ticketTitleCtrl,
+                      decoration: const InputDecoration(
+                        labelText:
+                            'Issue Title (e.g. Circuit Breaker Tripping)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: ticketUnitCtrl,
+                      decoration: const InputDecoration(
+                        labelText:
+                            'Unit / Location (e.g. Unit 4A or Main Pump)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton.tonalIcon(
+                      onPressed: () async {
+                        if (ticketTitleCtrl.text.trim().isEmpty) return;
+
+                        await FirebaseFirestore.instance
+                            .collection('maintenanceRequests')
+                            .add({
+                              'ownerId': selectedProperty.ownerId,
+                              'propertyId': selectedProperty.id,
+                              'propertyName': selectedProperty.name,
+                              'title': ticketTitleCtrl.text.trim(),
+                              'description': 'Dispatched by ${profile.name}',
+                              'unitName': ticketUnitCtrl.text.trim().isEmpty
+                                  ? 'Common Area'
+                                  : ticketUnitCtrl.text.trim(),
+                              'category': ticketCategory,
+                              'status': 'open',
+                              'createdAt': FieldValue.serverTimestamp(),
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
+
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Work order dispatched to staff!'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.build_circle_outlined),
+                      label: const Text('Create Work Order'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -1298,10 +1482,6 @@ class _HubActionTile extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// SECTION TITLE
-// ============================================================================
-
 class _SectionTitle extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -1335,10 +1515,6 @@ class _SectionTitle extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// ERROR VIEW
-// ============================================================================
 
 class _ErrorView extends StatelessWidget {
   final String message;

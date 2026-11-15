@@ -10,7 +10,7 @@ import '../../../tenants/domain/entities/tenant_invitation.dart';
 import '../../../tenants/presentation/providers/recipient_invitations_provider.dart';
 import '../providers/auth_provider.dart';
 
-enum _SelectableRole { owner, tenant, manager }
+enum _SelectableRole { owner, tenant, manager, caretaker, electrician }
 
 class RoleSelectionScreen extends ConsumerStatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -135,6 +135,22 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
             isError: false,
           );
           context.go(RouteNames.managerHome);
+          break;
+
+        case _SelectableRole.caretaker:
+          _showMessage(
+            'Caretaker role saved. Property access requires an owner invitation.',
+            isError: false,
+          );
+          context.go(RouteNames.caretakerHome);
+          break;
+
+        case _SelectableRole.electrician:
+          _showMessage(
+            'Electrician role saved. Property access requires an owner invitation.',
+            isError: false,
+          );
+          context.go(RouteNames.electricianHome);
           break;
       }
     } catch (error, stackTrace) {
@@ -348,10 +364,28 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                           'Manage property operations with owner authorization.',
                       icon: Icons.manage_accounts_outlined,
                     ),
+                    const SizedBox(height: 12),
+                    _buildRoleCard(
+                      context: context,
+                      role: _SelectableRole.caretaker,
+                      title: 'Caretaker',
+                      subtitle:
+                          'Handle building maintenance, visitor log & notices.',
+                      icon: Icons.handyman_outlined,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildRoleCard(
+                      context: context,
+                      role: _SelectableRole.electrician,
+                      title: 'Electrician',
+                      subtitle:
+                          'Log meter readings and resolve electrical tickets.',
+                      icon: Icons.electrical_services_outlined,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'Selecting a role does not grant access automatically. '
-                      'Manager and Tenant access require an owner invitation.',
+                      'Staff and Tenant access require an owner invitation.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,

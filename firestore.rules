@@ -83,7 +83,9 @@ service cloud.firestore {
                         && request.resource.data.availableRoles[0] in [
                           'owner',
                           'tenant',
-                          'manager'
+                          'manager',
+                          'caretaker',
+                          'electrician'
                         ]
                         && request.resource.data.defaultDashboard
                            == request.resource.data.availableRoles[0]
@@ -129,6 +131,18 @@ service cloud.firestore {
                             !('manager' in resource.data.availableRoles)
                             && 'manager' in request.resource.data.availableRoles
                             && request.resource.data.defaultDashboard == 'manager'
+                          )
+                          ||
+                          (
+                            !('caretaker' in resource.data.availableRoles)
+                            && 'caretaker' in request.resource.data.availableRoles
+                            && request.resource.data.defaultDashboard == 'caretaker'
+                          )
+                          ||
+                          (
+                            !('electrician' in resource.data.availableRoles)
+                            && 'electrician' in request.resource.data.availableRoles
+                            && request.resource.data.defaultDashboard == 'electrician'
                           )
                         )
                       )
@@ -410,7 +424,7 @@ service cloud.firestore {
                         && request.resource.data.propertyId == resource.data.propertyId
                         && request.resource.data.unitId == resource.data.unitId
                         && request.resource.data.status == resource.data.status
-                        && isPropertyOwner(request.resource.data.propertyId)
+                        && isPropertyOwner(resource.data.propertyId)
                       )
                       ||
                       (
@@ -847,9 +861,149 @@ service cloud.firestore {
                     && request.resource.data.actorUid == request.auth.uid
                     && (
                       request.resource.data.ownerId == request.auth.uid
-                      || isPropertyManager(request.resource.data.propertyId)
+                      || isPropertyManager(resource.data.propertyId)
                     );
 
+      allow update, delete: if false;
+    }
+    // ============================================================
+    // STAFF INVITATIONS & ACCESS (CARETAKER & ELECTRICIAN)
+    // ============================================================
+
+    match /staffInvitations/{invitationId} {
+      allow create: if isAuthenticated()
+                    && (
+                      isPropertyOwner(request.resource.data.propertyId)
+                      || isPropertyManager(request.resource.data.propertyId)
+                    )
+                    && request.resource.data.staffRole in ['caretaker', 'electrician']
+                    && request.resource.data.status == 'pending';
+
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                         || isManagerInvitationRecipient(resource.data)
+                       );
+
+      allow update: if isAuthenticated()
+                    && (
+                      isPropertyOwner(resource.data.propertyId)
+                      || isPropertyManager(resource.data.propertyId)
+                      || isManagerInvitationRecipient(resource.data)
+                    );
+
+      allow delete: if isAuthenticated()
+                    && (
+                      isPropertyOwner(resource.data.propertyId)
+                      || isPropertyManager(resource.data.propertyId)
+                    );
+    }
+
+    match /staffAccess/{accessId} {
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || resource.data.userId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                       );
+
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.staffRole in ['caretaker', 'electrician']
+                    && request.resource.data.status == 'active';
+
+      allow update, delete: if isAuthenticated()
+                            && (
+                              isPropertyOwner(resource.data.propertyId)
+                              || isPropertyManager(resource.data.propertyId)
+                            );
+    }
+
+    // ============================================================
+    // MAINTENANCE, VISITOR LOGS, NOTICES & METER READINGS
+    // ============================================================
+
+    match /maintenanceRequests/{ticketId} {
+      allow get, list: if isAuthenticated()
+                       && (
+                         resource.data.ownerId == request.auth.uid
+                         || isPropertyManager(resource.data.propertyId)
+                         || isPropertyStaff(resource.data.propertyId)
+                         || resource.data.get('tenantUserId', null) == request.auth.uid
+                       );
+
+      allow create: if isAuthenticated()
+                    && (
+                      isPropertyOwner(request.resource.data.propertyId)
+                      || isPropertyManager(request.resource.data.propertyId)
+                      || isPropertyStaff(request.resource.data.propertyId)
+                      || request.resource.data.get('tenantUserId', null) == request.auth.uid
+                    );
+
+      allow update: if isAuthenticated()
+                    && (
+                      isPropertyOwner(resource.data.propertyId)
+                      || isPropertyManager(resource.data.propertyId)
+                      || isPropertyStaff(resource.data.propertyId)
+                    );
+
+      allow delete: if false;
+    }
+
+    match /visitorLogs/{logId} {
+      allow get, list, create, update: if isAuthenticated()
+                                       && (
+                                         isPropertyOwner(
+                                           request.method == 'create'
+                                             ? request.resource.data.propertyId
+                                             : resource.data.propertyId
+                                         )
+                                         || isPropertyManager(
+                                           request.method == 'create'
+                                             ? request.resource.data.propertyId
+                                             : resource.data.propertyId
+                                         )
+                                         || isPropertyStaff(
+                                           request.method == 'create'
+                                             ? request.resource.data.propertyId
+                                             : resource.data.propertyId
+                                         )
+                                       );
+      allow delete: if false;
+    }
+
+    match /buildingNotices/{noticeId} {
+      allow get, list: if isAuthenticated();
+      allow create, update: if isAuthenticated()
+                            && (
+                              isPropertyOwner(request.resource.data.propertyId)
+                              || isPropertyManager(request.resource.data.propertyId)
+                              || isPropertyStaff(request.resource.data.propertyId)
+                            );
+      allow delete: if isAuthenticated()
+                    && isPropertyOwner(resource.data.propertyId);
+    }
+
+    match /meterReadings/{readingId} {
+      allow get, list, create: if isAuthenticated()
+                               && (
+                                 isPropertyOwner(
+                                   request.method == 'create'
+                                     ? request.resource.data.propertyId
+                                     : resource.data.propertyId
+                                 )
+                                 || isPropertyManager(
+                                   request.method == 'create'
+                                     ? request.resource.data.propertyId
+                                     : resource.data.propertyId
+                                 )
+                                 || isPropertyStaff(
+                                   request.method == 'create'
+                                     ? request.resource.data.propertyId
+                                     : resource.data.propertyId
+                                 )
+                               );
       allow update, delete: if false;
     }
 
@@ -1230,12 +1384,28 @@ service cloud.firestore {
     }
 
     function hasPendingManagerInviteForProperty(propertyId) {
-      return false;
+      return propertyId is string && false;
     }
 
     function hasPendingTenantInviteForProperty(propertyId) {
-      return false;
+      return propertyId is string && false;
     }
+
+    function isPropertyStaff(propertyId) {
+      return isAuthenticated()
+             && (
+               (
+                 exists(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_caretaker'))
+                 && get(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_caretaker')).data.status == 'active'
+               )
+               ||
+               (
+                 exists(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_electrician'))
+                 && get(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_electrician')).data.status == 'active'
+               )
+             );
+    }
+
 
     function isInvitationRecipient(invitation) {
       return isAuthenticated()
