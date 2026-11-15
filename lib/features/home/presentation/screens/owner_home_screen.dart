@@ -136,7 +136,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                 const _SectionTitle(
                   title: 'Enterprise Management',
                   subtitle:
-                      'In-depth directory records and automated billing rules',
+                      'In-depth directory records, staff control & automated billing rules',
                 ),
                 const SizedBox(height: 12),
                 const _EnterpriseHub(),
@@ -1127,11 +1127,12 @@ class _EnterpriseHub extends StatelessWidget {
           ),
           const Divider(height: 1, indent: 64),
           _HubActionTile(
-            icon: Icons.supervisor_account_outlined,
-            title: 'Property Managers & Staff',
-            subtitle: 'Assign operational managers and review permissions',
-            tag: 'Team',
-            onTap: () => context.push(RouteNames.ownerManagers),
+            icon: Icons.engineering_outlined,
+            title: 'Property Managers & Operational Staff',
+            subtitle:
+                'Manage Managers, Caretakers, Electricians & active work orders',
+            tag: 'Team & Ops',
+            onTap: () => _showUnifiedStaffManagementModal(context),
           ),
           const Divider(height: 1, indent: 64),
           _HubActionTile(
@@ -1159,21 +1160,12 @@ class _EnterpriseHub extends StatelessWidget {
             tag: 'Audit',
             onTap: () => context.push(RouteNames.activityLogs),
           ),
-          const Divider(height: 1, indent: 64),
-          _HubActionTile(
-            icon: Icons.engineering_outlined,
-            title: 'Caretaker, Electrician & Maintenance',
-            subtitle:
-                'Invite building caretaker/electrician & dispatch repair work orders',
-            tag: 'Staff',
-            onTap: () => _showStaffAndMaintenanceSheet(context),
-          ),
         ],
       ),
     );
   }
 
-  void _showStaffAndMaintenanceSheet(BuildContext context) {
+  void _showUnifiedStaffManagementModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1191,222 +1183,468 @@ class _EnterpriseHub extends StatelessWidget {
             return const Padding(
               padding: EdgeInsets.all(32),
               child: Center(
-                child: Text(
-                  'Add a building first to assign Caretaker or Electrician.',
-                ),
+                child: Text('Please add a property first to manage staff.'),
               ),
             );
           }
 
           Property selectedProperty = properties.first;
-          String selectedRole = 'caretaker';
-          final idCtrl = TextEditingController();
-          final ticketTitleCtrl = TextEditingController();
-          final ticketUnitCtrl = TextEditingController();
-          String ticketCategory = 'electrical';
+          String staffRole = 'manager';
+          final identifierCtrl = TextEditingController();
 
           return StatefulBuilder(
-            builder: (context, setSheetState) {
-              return SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  MediaQuery.of(context).viewInsets.bottom + 28,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Staff & Maintenance Operations',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    DropdownButtonFormField<Property>(
-                      initialValue: selectedProperty,
-                      decoration: const InputDecoration(
-                        labelText: 'Select Building',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: properties
-                          .map(
-                            (p) =>
-                                DropdownMenuItem(value: p, child: Text(p.name)),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          setSheetState(() => selectedProperty = v);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      '1. Invite Caretaker or Electrician',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(
-                          value: 'caretaker',
-                          label: Text('Caretaker'),
-                          icon: Icon(Icons.handyman_outlined),
+            builder: (context, setModalState) {
+              return DefaultTabController(
+                length: 2,
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.75,
+                  child: Column(
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 10),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        ButtonSegment(
-                          value: 'electrician',
-                          label: Text('Electrician'),
-                          icon: Icon(Icons.electrical_services_outlined),
-                        ),
-                      ],
-                      selected: {selectedRole},
-                      onSelectionChanged: (s) =>
-                          setSheetState(() => selectedRole = s.first),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: idCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Staff Phone or Griho ID (e.g. GRI-...)',
-                        border: OutlineInputBorder(),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    FilledButton.icon(
-                      onPressed: () async {
-                        final input = idCtrl.text.trim();
-                        if (input.isEmpty) return;
-
-                        await FirebaseFirestore.instance
-                            .collection('staffInvitations')
-                            .add({
-                              'ownerId': selectedProperty.ownerId,
-                              'ownerName': profile.name,
-                              'propertyId': selectedProperty.id,
-                              'propertyName': selectedProperty.name,
-                              'propertyCode': selectedProperty.propertyCode,
-                              'staffRole': selectedRole,
-                              'identifier': input,
-                              'phone': input.startsWith('GRI-') ? '' : input,
-                              'targetGrihoId':
-                                  input.toUpperCase().startsWith('GRI-')
-                                  ? input.toUpperCase()
-                                  : '',
-                              'status': 'pending',
-                              'accessStatus': 'active',
-                              'createdAt': FieldValue.serverTimestamp(),
-                              'updatedAt': FieldValue.serverTimestamp(),
-                            });
-
-                        if (!ctx.mounted) return;
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '${selectedRole.toUpperCase()} invitation sent for ${selectedProperty.name}!',
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Team & Operational Staff',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                              ),
                             ),
-                            backgroundColor: Colors.green,
-                            behavior: SnackBarBehavior.floating,
+                            IconButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const TabBar(
+                        tabs: [
+                          Tab(
+                            icon: Icon(Icons.person_add_rounded),
+                            text: 'Invite Staff',
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.send_rounded, size: 18),
-                      label: const Text('Send Staff Invitation'),
-                    ),
-                    const Divider(height: 32),
-                    const Text(
-                      '2. Dispatch Maintenance / Repair Work Order',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      initialValue: ticketCategory,
-                      decoration: const InputDecoration(
-                        labelText: 'Work Category',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'electrical',
-                          child: Text('Electrical Repair (For Electrician)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'plumbing',
-                          child: Text('Plumbing / Water (For Caretaker)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'general',
-                          child: Text('General Maintenance (For Caretaker)'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          setSheetState(() => ticketCategory = v);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: ticketTitleCtrl,
-                      decoration: const InputDecoration(
-                        labelText:
-                            'Issue Title (e.g. Circuit Breaker Tripping)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: ticketUnitCtrl,
-                      decoration: const InputDecoration(
-                        labelText:
-                            'Unit / Location (e.g. Unit 4A or Main Pump)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    FilledButton.tonalIcon(
-                      onPressed: () async {
-                        if (ticketTitleCtrl.text.trim().isEmpty) return;
-
-                        await FirebaseFirestore.instance
-                            .collection('maintenanceRequests')
-                            .add({
-                              'ownerId': selectedProperty.ownerId,
-                              'propertyId': selectedProperty.id,
-                              'propertyName': selectedProperty.name,
-                              'title': ticketTitleCtrl.text.trim(),
-                              'description': 'Dispatched by ${profile.name}',
-                              'unitName': ticketUnitCtrl.text.trim().isEmpty
-                                  ? 'Common Area'
-                                  : ticketUnitCtrl.text.trim(),
-                              'category': ticketCategory,
-                              'status': 'open',
-                              'createdAt': FieldValue.serverTimestamp(),
-                              'updatedAt': FieldValue.serverTimestamp(),
-                            });
-
-                        if (!ctx.mounted) return;
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Work order dispatched to staff!'),
-                            behavior: SnackBarBehavior.floating,
+                          Tab(
+                            icon: Icon(Icons.group_rounded),
+                            text: 'Active Team & Roster',
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.build_circle_outlined),
-                      label: const Text('Create Work Order'),
-                    ),
-                  ],
+                        ],
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: TabBarView(
+                          children: [
+                            SingleChildScrollView(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  DropdownButtonFormField<Property>(
+                                    initialValue: selectedProperty,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Select Building',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: properties
+                                        .map(
+                                          (p) => DropdownMenuItem(
+                                            value: p,
+                                            child: Text(p.name),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (v) {
+                                      if (v != null) {
+                                        setModalState(
+                                          () => selectedProperty = v,
+                                        );
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'Select Staff Role',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: staffRole,
+                                    decoration: const InputDecoration(
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: 'manager',
+                                        child: Text(
+                                          'Property Manager (Full Admin)',
+                                        ),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'caretaker',
+                                        child: Text(
+                                          'Building Caretaker (Visitor & Issues)',
+                                        ),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'electrician',
+                                        child: Text(
+                                          'Electrician (Meter & Electrical)',
+                                        ),
+                                      ),
+                                    ],
+                                    onChanged: (v) {
+                                      if (v != null) {
+                                        setModalState(() => staffRole = v);
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: identifierCtrl,
+                                    decoration: const InputDecoration(
+                                      labelText:
+                                          'Staff Phone or Griho ID (e.g. GRI-...)',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  FilledButton.icon(
+                                    onPressed: () async {
+                                      final input = identifierCtrl.text.trim();
+                                      if (input.isEmpty) return;
+
+                                      final firestore =
+                                          FirebaseFirestore.instance;
+
+                                      if (staffRole == 'manager') {
+                                        await firestore
+                                            .collection('managerInvitations')
+                                            .add({
+                                              'ownerId':
+                                                  selectedProperty.ownerId,
+                                              'ownerName': profile.name,
+                                              'propertyId': selectedProperty.id,
+                                              'propertyName':
+                                                  selectedProperty.name,
+                                              'propertyCode':
+                                                  selectedProperty.propertyCode,
+                                              'identifier': input,
+                                              'phone': input.startsWith('GRI-')
+                                                  ? ''
+                                                  : input,
+                                              'targetGrihoId':
+                                                  input
+                                                      .toUpperCase()
+                                                      .startsWith('GRI-')
+                                                  ? input.toUpperCase()
+                                                  : '',
+                                              'status': 'pending',
+                                              'accessStatus': 'active',
+                                              'createdAt':
+                                                  FieldValue.serverTimestamp(),
+                                              'updatedAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+                                      } else {
+                                        await firestore
+                                            .collection('staffInvitations')
+                                            .add({
+                                              'ownerId':
+                                                  selectedProperty.ownerId,
+                                              'ownerName': profile.name,
+                                              'propertyId': selectedProperty.id,
+                                              'propertyName':
+                                                  selectedProperty.name,
+                                              'propertyCode':
+                                                  selectedProperty.propertyCode,
+                                              'staffRole': staffRole,
+                                              'identifier': input,
+                                              'phone': input.startsWith('GRI-')
+                                                  ? ''
+                                                  : input,
+                                              'targetGrihoId':
+                                                  input
+                                                      .toUpperCase()
+                                                      .startsWith('GRI-')
+                                                  ? input.toUpperCase()
+                                                  : '',
+                                              'status': 'pending',
+                                              'accessStatus': 'active',
+                                              'createdAt':
+                                                  FieldValue.serverTimestamp(),
+                                              'updatedAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+                                      }
+
+                                      if (!ctx.mounted) return;
+                                      Navigator.pop(ctx);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            '${staffRole.toUpperCase()} invitation sent successfully!',
+                                          ),
+                                          backgroundColor: Colors.green,
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(
+                                      Icons.send_rounded,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Dispatch Invitation'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('staffAccess')
+                                  .where('ownerId', isEqualTo: profile.uid)
+                                  .snapshots(),
+                              builder: (context, staffSnap) {
+                                return StreamBuilder<QuerySnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('managerAccess')
+                                      .where('ownerId', isEqualTo: profile.uid)
+                                      .snapshots(),
+                                  builder: (context, managerSnap) {
+                                    final staffDocs =
+                                        staffSnap.data?.docs ?? [];
+                                    final managerDocs =
+                                        managerSnap.data?.docs ?? [];
+
+                                    if (staffDocs.isEmpty &&
+                                        managerDocs.isEmpty) {
+                                      return const Center(
+                                        child: Text(
+                                          'No active staff or managers assigned yet.',
+                                        ),
+                                      );
+                                    }
+
+                                    return ListView(
+                                      padding: const EdgeInsets.all(16),
+                                      children: [
+                                        for (final doc in managerDocs)
+                                          _TeamMemberTile(
+                                            name:
+                                                (doc.data()
+                                                    as Map<
+                                                      String,
+                                                      dynamic
+                                                    >)['managerName'] ??
+                                                'Property Manager',
+                                            role: 'Property Manager',
+                                            building:
+                                                (doc.data()
+                                                    as Map<
+                                                      String,
+                                                      dynamic
+                                                    >)['propertyName'] ??
+                                                'Building',
+                                            status:
+                                                (doc.data()
+                                                    as Map<
+                                                      String,
+                                                      dynamic
+                                                    >)['status'] ??
+                                                'active',
+                                            onToggleSuspend: () async {
+                                              final current =
+                                                  (doc.data()
+                                                      as Map<
+                                                        String,
+                                                        dynamic
+                                                      >)['status'] ??
+                                                  'active';
+                                              final next = current == 'active'
+                                                  ? 'suspended'
+                                                  : 'active';
+                                              await doc.reference.update({
+                                                'status': next,
+                                                'updatedAt':
+                                                    FieldValue.serverTimestamp(),
+                                              });
+                                            },
+                                            onRevoke: () async {
+                                              await doc.reference.update({
+                                                'status': 'revoked',
+                                                'updatedAt':
+                                                    FieldValue.serverTimestamp(),
+                                              });
+                                            },
+                                          ),
+                                        for (final doc in staffDocs)
+                                          _TeamMemberTile(
+                                            name:
+                                                (doc.data()
+                                                    as Map<
+                                                      String,
+                                                      dynamic
+                                                    >)['staffName'] ??
+                                                'Staff Member',
+                                            role:
+                                                ((doc.data()
+                                                            as Map<
+                                                              String,
+                                                              dynamic
+                                                            >)['staffRole'] ??
+                                                        'staff')
+                                                    .toString()
+                                                    .toUpperCase(),
+                                            building:
+                                                (doc.data()
+                                                    as Map<
+                                                      String,
+                                                      dynamic
+                                                    >)['propertyName'] ??
+                                                'Building',
+                                            status:
+                                                (doc.data()
+                                                    as Map<
+                                                      String,
+                                                      dynamic
+                                                    >)['status'] ??
+                                                'active',
+                                            onToggleSuspend: () async {
+                                              final current =
+                                                  (doc.data()
+                                                      as Map<
+                                                        String,
+                                                        dynamic
+                                                      >)['status'] ??
+                                                  'active';
+                                              final next = current == 'active'
+                                                  ? 'suspended'
+                                                  : 'active';
+                                              await doc.reference.update({
+                                                'status': next,
+                                                'updatedAt':
+                                                    FieldValue.serverTimestamp(),
+                                              });
+                                            },
+                                            onRevoke: () async {
+                                              await doc.reference.update({
+                                                'status': 'revoked',
+                                                'updatedAt':
+                                                    FieldValue.serverTimestamp(),
+                                              });
+                                            },
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _TeamMemberTile extends StatelessWidget {
+  final String name;
+  final String role;
+  final String building;
+  final String status;
+  final VoidCallback onToggleSuspend;
+  final VoidCallback onRevoke;
+
+  const _TeamMemberTile({
+    required this.name,
+    required this.role,
+    required this.building,
+    required this.status,
+    required this.onToggleSuspend,
+    required this.onRevoke,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isSuspended = status == 'suspended';
+    final isRevoked = status == 'revoked';
+
+    if (isRevoked) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSuspended ? Colors.orange : theme.colorScheme.outlineVariant,
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: isSuspended
+                ? Colors.orange.withValues(alpha: 0.15)
+                : theme.colorScheme.primaryContainer,
+            child: Icon(
+              Icons.person_outline_rounded,
+              color: isSuspended ? Colors.orange : theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text(
+                  '$role • $building',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: isSuspended ? 'Restore Access' : 'Suspend Access',
+            icon: Icon(
+              isSuspended
+                  ? Icons.play_circle_outline_rounded
+                  : Icons.pause_circle_outline_rounded,
+              color: isSuspended ? Colors.green : Colors.orange,
+            ),
+            onPressed: onToggleSuspend,
+          ),
+          IconButton(
+            tooltip: 'Revoke Access',
+            icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+            onPressed: onRevoke,
+          ),
+        ],
       ),
     );
   }
