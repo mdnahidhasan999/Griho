@@ -17,6 +17,7 @@ class AuditLoggerService {
     required String actionTitle,
     required String details,
     Map<String, dynamic>? metadata,
+    String? actorRole, // 'owner' | 'manager' | 'caretaker' | 'electrician'
   }) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
@@ -24,7 +25,7 @@ class AuditLoggerService {
 
       final actorUid = currentUser.uid;
       final isOwner = actorUid == ownerId;
-      final actorRole = isOwner ? 'owner' : 'manager';
+      final resolvedRole = actorRole ?? (isOwner ? 'owner' : 'manager');
 
       String actorName = isOwner ? 'Property Owner' : 'Manager';
       String actorGrihoId = '';
@@ -59,7 +60,7 @@ class AuditLoggerService {
         'actorUid': actorUid,
         'actorName': actorName,
         'actorGrihoId': actorGrihoId,
-        'actorRole': actorRole, // 'owner' অথবা 'manager'
+        'actorRole': resolvedRole,
         'category': category,
         'actionTitle': actionTitle,
         'details': details,

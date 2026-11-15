@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/audit_logger_service.dart';
@@ -39,8 +40,8 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
   }
 
   Future<List<QueryDocumentSnapshot>> _fetchElectricianInvites(
-    dynamic profile,
-  ) async {
+      dynamic profile,
+      ) async {
     final firestore = FirebaseFirestore.instance;
     final col = firestore.collection('staffInvitations');
     final Map<String, QueryDocumentSnapshot> results = {};
@@ -77,10 +78,10 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
   }
 
   Future<void> _respondToInvite(
-    QueryDocumentSnapshot doc,
-    dynamic profile,
-    bool accept,
-  ) async {
+      QueryDocumentSnapshot doc,
+      dynamic profile,
+      bool accept,
+      ) async {
     if (_busy) return;
     setState(() => _busy = true);
 
@@ -134,6 +135,7 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
       }
 
       await batch.commit();
+      AuthRouteGuard.clearAccessCache();
       ref.invalidate(currentUserProfileProvider);
 
       if (!mounted) return;
@@ -285,9 +287,10 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
         propertyName: (activeAssignment['propertyName'] ?? 'Building')
             .toString(),
         category: 'billing',
+        actorRole: 'electrician',
         actionTitle: 'Electricity Meter Reading Logged',
         details:
-            '${unitCtrl.text.trim()}: ${consumed.toStringAsFixed(1)} kWh consumed (৳${totalBill.toStringAsFixed(0)}) logged by Electrician ${profile.name}.',
+        '${unitCtrl.text.trim()}: ${consumed.toStringAsFixed(1)} kWh consumed (৳${totalBill.toStringAsFixed(0)}) logged by Electrician ${profile.name}.',
       );
 
       if (!mounted) return;
@@ -450,11 +453,11 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
                   }
 
                   final currentAssignment = activeAccessList.firstWhere(
-                    (a) => a['propertyId'] == _selectedPropertyId,
+                        (a) => a['propertyId'] == _selectedPropertyId,
                     orElse: () => activeAccessList.first,
                   );
                   final activePropertyId =
-                      (currentAssignment['propertyId'] ?? '').toString();
+                  (currentAssignment['propertyId'] ?? '').toString();
 
                   return Column(
                     children: [
@@ -491,13 +494,13 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
                                 items: activeAccessList
                                     .map(
                                       (a) => DropdownMenuItem<String>(
-                                        value: a['propertyId'].toString(),
-                                        child: Text(
-                                          (a['propertyName'] ?? 'Building')
-                                              .toString(),
-                                        ),
-                                      ),
-                                    )
+                                    value: a['propertyId'].toString(),
+                                    child: Text(
+                                      (a['propertyName'] ?? 'Building')
+                                          .toString(),
+                                    ),
+                                  ),
+                                )
                                     .toList(),
                                 onChanged: (v) {
                                   if (v != null) {

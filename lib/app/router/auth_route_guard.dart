@@ -15,18 +15,50 @@ class AuthRouteGuard {
 
   const AuthRouteGuard(this.ref);
 
-  Future<bool> _hasActiveManagerAccess(String uid) async {
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('managerAccess')
-          .where('userId', isEqualTo: uid)
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get();
-      return snap.docs.isNotEmpty;
-    } catch (_) {
-      return false;
+  // uid -> (fetchedAt, active access roles). Avoids a Firestore round-trip
+  // on every navigation; the real protection is always Firestore rules.
+  static final Map<String, ({DateTime at, Set<String> roles})> _accessCache = {};
+  static const Duration _accessTtl = Duration(seconds: 20);
+
+  static void clearAccessCache() => _accessCache.clear();
+
+  /// Roles for which the user currently has ACTIVE property access:
+  /// 'manager' (managerAccess), 'caretaker' / 'electrician' (staffAccess).
+  Future<Set<String>> _activeAccessRoles(String uid) async {
+    final cached = _accessCache[uid];
+    if (cached != null && DateTime.now().difference(cached.at) < _accessTtl) {
+      return cached.roles;
     }
+
+    final db = FirebaseFirestore.instance;
+    final roles = <String>{};
+
+    try {
+      final results = await Future.wait([
+        db
+            .collection('managerAccess')
+            .where('userId', isEqualTo: uid)
+            .where('status', isEqualTo: 'active')
+            .limit(1)
+            .get(),
+        db
+            .collection('staffAccess')
+            .where('userId', isEqualTo: uid)
+            .where('status', isEqualTo: 'active')
+            .get(),
+      ]);
+
+      if (results[0].docs.isNotEmpty) roles.add('manager');
+      for (final doc in results[1].docs) {
+        final role = (doc.data()['staffRole'] ?? '').toString();
+        if (role == 'caretaker' || role == 'electrician') roles.add(role);
+      }
+    } catch (_) {
+      // On error treat as "no active access" (fail closed).
+    }
+
+    _accessCache[uid] = (at: DateTime.now(), roles: roles);
+    return roles;
   }
 
   Future<String?> redirect(String location) async {
@@ -58,18 +90,19 @@ class AuthRouteGuard {
     final isElectricianSection =
         path == RouteNames.electricianHome || path.startsWith('/electrician/');
 
-    // শুধুমাত্র মালিকের একক রুট (ম্যানেজার এখানে ঢুকতে পারবে না)
+    // Owner-only routes (a manager must NOT open these, even with active access)
     final isOwnerExclusiveRoute =
         path == RouteNames.addProperty ||
-        path == RouteNames.addManager ||
-        path == RouteNames.editProperty;
+            path == RouteNames.addManager ||
+            path == RouteNames.ownerTeam ||
+            RegExp(r'^/owner/properties/[^/]+/edit$').hasMatch(path);
 
     final isProtectedSection =
         isOwnerSection ||
-        isManagerSection ||
-        isTenantSection ||
-        isCaretakerSection ||
-        isElectricianSection;
+            isManagerSection ||
+            isTenantSection ||
+            isCaretakerSection ||
+            isElectricianSection;
 
     if (isSplashRoute) {
       return null;
@@ -190,24 +223,20 @@ class AuthRouteGuard {
           .map((role) => role.trim().toLowerCase())
           .toSet();
 
-      final hasActiveManager =
-          roles.contains('manager') ||
-          await _hasActiveManagerAccess(firebaseUser.uid);
-
-      if (hasActiveManager) {
-        roles.add('manager');
-      }
+      // Roles with an ACTIVE assignment right now (suspended / revoked excluded).
+      final activeAccess = await _activeAccessRoles(firebaseUser.uid);
+      final hasActiveManager = activeAccess.contains('manager');
 
       final destination = AuthRoleResolver.resolve(profile);
       final defaultFallbackRoute = AuthDestinationMapper.routeFor(destination);
 
-      // ১. শুধুমাত্র মালিকের একক রুট (Add Property, Add Manager, Edit Property)
+      // 1) Owner-only routes
       if (isOwnerExclusiveRoute) {
         if (roles.contains('owner')) return null;
         return hasActiveManager ? RouteNames.managerHome : defaultFallbackRoute;
       }
 
-      // ২. /owner এবং /owner/* সাব-রুট (Owner এবং Active Manager উভয়ের জন্য অনুমোদিত)
+      // 2) /owner and /owner/*  -> owner, or a manager with ACTIVE access
       if (isOwnerSection) {
         if (path == RouteNames.ownerHome) {
           if (roles.contains('owner')) return null;
@@ -215,29 +244,24 @@ class AuthRouteGuard {
               ? RouteNames.managerHome
               : defaultFallbackRoute;
         }
-        if (roles.contains('owner') || hasActiveManager) {
-          return null;
-        }
+        if (roles.contains('owner') || hasActiveManager) return null;
         return defaultFallbackRoute;
       }
 
-      // ৩. /manager এবং /manager/* সাব-রুট
+      // 3) /manager  -> manager role (needed to accept invitations / see suspended state)
       if (isManagerSection) {
-        if (roles.contains('manager') || hasActiveManager) {
-          return null;
-        }
-        return defaultFallbackRoute;
+        return (roles.contains('manager') || hasActiveManager)
+            ? null
+            : defaultFallbackRoute;
       }
 
-      // ৪. /tenant এবং /tenant/* সাব-রুট
+      // 4) /tenant
       if (isTenantSection) {
-        if (roles.contains('tenant')) {
-          return null;
-        }
-        return defaultFallbackRoute;
+        return roles.contains('tenant') ? null : defaultFallbackRoute;
       }
 
-      // ৫. Caretaker / Electrician সেকশন
+      // 5) Staff dashboards (role needed to accept invitations; data is
+      //    protected by Firestore rules, which require ACTIVE staffAccess)
       if (isCaretakerSection) {
         return roles.contains('caretaker') ? null : defaultFallbackRoute;
       }

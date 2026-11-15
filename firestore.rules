@@ -206,8 +206,6 @@ service cloud.firestore {
                      resource.data.tenantUserIds is list
                      && request.auth.uid in resource.data.tenantUserIds
                    )
-                   || hasPendingManagerInviteForProperty(propertyId)
-                   || hasPendingTenantInviteForProperty(propertyId)
                  );
 
       allow list: if isAuthenticated()
@@ -308,7 +306,10 @@ service cloud.firestore {
       allow update: if isAuthenticated()
                     && (
                       isPropertyOwner(resource.data.propertyId)
-                      || isPropertyManager(resource.data.propertyId)
+                      || (
+                        isPropertyManager(resource.data.propertyId)
+                        && request.resource.data.propertyId == resource.data.propertyId
+                      )
                       || (
                         (
                           !resource.data.keys().hasAny(['tenantUserId'])
@@ -416,7 +417,12 @@ service cloud.firestore {
 
       allow update: if isAuthenticated()
                     && (
-                      isPropertyManager(resource.data.propertyId)
+                      (
+                        isPropertyManager(resource.data.propertyId)
+                        && request.resource.data.ownerId == resource.data.ownerId
+                        && request.resource.data.propertyId == resource.data.propertyId
+                        && request.resource.data.get('userId', null) == resource.data.get('userId', null)
+                      )
                       ||
                       (
                         resource.data.ownerId == request.auth.uid
@@ -783,6 +789,12 @@ service cloud.firestore {
                         && request.resource.data.ownerId == resource.data.ownerId
                         && request.resource.data.propertyId == resource.data.propertyId
                         && request.resource.data.managerUserId == request.auth.uid
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly([
+                               'status', 'accessStatus', 'managerUserId',
+                               'managerName', 'managerGrihoId', 'managerPhone',
+                               'respondedAt', 'updatedAt'
+                             ])
                       )
                     );
 
@@ -834,12 +846,28 @@ service cloud.firestore {
                        ).data.managerUserId == request.auth.uid;
 
       allow update: if isAuthenticated()
-                    && resource.data.ownerId == request.auth.uid
-                    && isPropertyOwner(resource.data.propertyId)
-                    && request.resource.data.userId == resource.data.userId
-                    && request.resource.data.ownerId == resource.data.ownerId
-                    && request.resource.data.propertyId == resource.data.propertyId
-                    && request.resource.data.status in ['active', 'suspended', 'revoked'];
+                    && (
+                      (
+                        resource.data.ownerId == request.auth.uid
+                        && isPropertyOwner(resource.data.propertyId)
+                        && request.resource.data.userId == resource.data.userId
+                        && request.resource.data.ownerId == resource.data.ownerId
+                        && request.resource.data.propertyId == resource.data.propertyId
+                        && request.resource.data.status in ['active', 'suspended', 'revoked']
+                      )
+                      ||
+                      // Re-assignment of a previously revoked manager via a NEW accepted invitation
+                      (
+                        resource.data.userId == request.auth.uid
+                        && resource.data.status == 'revoked'
+                        && request.resource.data.status == 'active'
+                        && request.resource.data.userId == resource.data.userId
+                        && request.resource.data.ownerId == resource.data.ownerId
+                        && request.resource.data.propertyId == resource.data.propertyId
+                        && request.resource.data.invitationId != resource.data.invitationId
+                        && isValidManagerAccessGrant()
+                      )
+                    );
 
       allow delete: if isAuthenticated()
                     && resource.data.ownerId == request.auth.uid
@@ -847,7 +875,7 @@ service cloud.firestore {
     }
 
     // ============================================================
-    // ACTIVITY & AUDIT LOGS (IMMUTABLE & SCOPED)
+    // ACTIVITY & AUDIT LOGS (IMMUTABLE, SCOPED, NON-FORGEABLE)
     // ============================================================
 
     match /activityLogs/{logId} {
@@ -859,46 +887,112 @@ service cloud.firestore {
 
       allow create: if isAuthenticated()
                     && request.resource.data.actorUid == request.auth.uid
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.ownerId is string
                     && (
-                      request.resource.data.ownerId == request.auth.uid
-                      || isPropertyManager(resource.data.propertyId)
+                      (
+                        request.resource.data.actorRole == 'owner'
+                        && request.resource.data.ownerId == request.auth.uid
+                        && isPropertyOwner(request.resource.data.propertyId)
+                      )
+                      ||
+                      (
+                        request.resource.data.actorRole == 'manager'
+                        && isPropertyManager(request.resource.data.propertyId)
+                        && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
+                      )
+                      ||
+                      (
+                        request.resource.data.actorRole == 'caretaker'
+                        && isPropertyStaffRole(request.resource.data.propertyId, 'caretaker')
+                        && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
+                      )
+                      ||
+                      (
+                        request.resource.data.actorRole == 'electrician'
+                        && isPropertyStaffRole(request.resource.data.propertyId, 'electrician')
+                        && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
+                      )
                     );
 
       allow update, delete: if false;
     }
+
     // ============================================================
-    // STAFF INVITATIONS & ACCESS (CARETAKER & ELECTRICIAN)
+    // STAFF INVITATIONS (CARETAKER & ELECTRICIAN)
     // ============================================================
 
     match /staffInvitations/{invitationId} {
       allow create: if isAuthenticated()
-                    && (
-                      isPropertyOwner(request.resource.data.propertyId)
-                      || isPropertyManager(request.resource.data.propertyId)
-                    )
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.ownerId is string
                     && request.resource.data.staffRole in ['caretaker', 'electrician']
-                    && request.resource.data.status == 'pending';
+                    && request.resource.data.status == 'pending'
+                    && (
+                      (
+                        request.resource.data.ownerId == request.auth.uid
+                        && isPropertyOwner(request.resource.data.propertyId)
+                      )
+                      ||
+                      (
+                        isPropertyManager(request.resource.data.propertyId)
+                        && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
+                      )
+                    );
 
       allow get, list: if isAuthenticated()
                        && (
                          resource.data.ownerId == request.auth.uid
                          || isPropertyManager(resource.data.propertyId)
-                         || isManagerInvitationRecipient(resource.data)
+                         || isStaffInvitationRecipient(resource.data)
                        );
 
       allow update: if isAuthenticated()
                     && (
-                      isPropertyOwner(resource.data.propertyId)
-                      || isPropertyManager(resource.data.propertyId)
-                      || isManagerInvitationRecipient(resource.data)
+                      // OWNER / MANAGER — change access state or cancel; cannot fake an acceptance
+                      (
+                        (
+                          (resource.data.ownerId == request.auth.uid && isPropertyOwner(resource.data.propertyId))
+                          || isPropertyManager(resource.data.propertyId)
+                        )
+                        && request.resource.data.ownerId == resource.data.ownerId
+                        && request.resource.data.propertyId == resource.data.propertyId
+                        && request.resource.data.staffRole == resource.data.staffRole
+                        && request.resource.data.get('staffUserId', null) == resource.data.get('staffUserId', null)
+                        && (
+                          request.resource.data.status == resource.data.status
+                          || request.resource.data.status == 'revoked'
+                        )
+                      )
+                      ||
+                      // RECIPIENT — accept / reject, response fields only
+                      (
+                        isStaffInvitationRecipient(resource.data)
+                        && resource.data.status == 'pending'
+                        && request.resource.data.status in ['accepted', 'rejected']
+                        && request.resource.data.ownerId == resource.data.ownerId
+                        && request.resource.data.propertyId == resource.data.propertyId
+                        && request.resource.data.staffRole == resource.data.staffRole
+                        && request.resource.data.staffUserId == request.auth.uid
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly([
+                               'status', 'accessStatus', 'staffUserId',
+                               'staffName', 'staffGrihoId', 'staffPhone',
+                               'respondedAt', 'updatedAt'
+                             ])
+                      )
                     );
 
       allow delete: if isAuthenticated()
                     && (
-                      isPropertyOwner(resource.data.propertyId)
+                      (resource.data.ownerId == request.auth.uid && isPropertyOwner(resource.data.propertyId))
                       || isPropertyManager(resource.data.propertyId)
                     );
     }
+
+    // ============================================================
+    // STAFF ACCESS (CRITICAL SECURITY LOCKDOWN)
+    // ============================================================
 
     match /staffAccess/{accessId} {
       allow get, list: if isAuthenticated()
@@ -911,17 +1005,48 @@ service cloud.firestore {
       allow create: if isAuthenticated()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.staffRole in ['caretaker', 'electrician']
-                    && request.resource.data.status == 'active';
+                    && request.resource.data.status == 'active'
+                    && request.resource.data.propertyId is string
+                    && accessId == (
+                      request.auth.uid + '_'
+                      + request.resource.data.propertyId + '_'
+                      + request.resource.data.staffRole
+                    )
+                    && isValidStaffAccessGrant();
 
-      allow update, delete: if isAuthenticated()
-                            && (
-                              isPropertyOwner(resource.data.propertyId)
-                              || isPropertyManager(resource.data.propertyId)
-                            );
+      allow update: if isAuthenticated()
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.propertyId == resource.data.propertyId
+                    && request.resource.data.staffRole == resource.data.staffRole
+                    && (
+                      // OWNER / MANAGER — suspend, restore, revoke
+                      (
+                        (
+                          (resource.data.ownerId == request.auth.uid && isPropertyOwner(resource.data.propertyId))
+                          || isPropertyManager(resource.data.propertyId)
+                        )
+                        && request.resource.data.status in ['active', 'suspended', 'revoked']
+                      )
+                      ||
+                      // STAFF — re-assignment after revoke via a NEW accepted invitation
+                      (
+                        resource.data.userId == request.auth.uid
+                        && resource.data.status == 'revoked'
+                        && request.resource.data.status == 'active'
+                        && request.resource.data.invitationId != resource.data.invitationId
+                        && isValidStaffAccessGrant()
+                      )
+                    );
+
+      allow delete: if false;
     }
 
     // ============================================================
-    // MAINTENANCE, VISITOR LOGS, NOTICES & METER READINGS
+    // MAINTENANCE / WORK ORDERS (ROLE-SCOPED)
+    //   Electrician  -> category 'electrical' only
+    //   Caretaker    -> every other category
+    //   Owner/Manager-> full control of the property's tickets
     // ============================================================
 
     match /maintenanceRequests/{ticketId} {
@@ -934,76 +1059,153 @@ service cloud.firestore {
                        );
 
       allow create: if isAuthenticated()
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.status == 'open'
+                    && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
                     && (
                       isPropertyOwner(request.resource.data.propertyId)
                       || isPropertyManager(request.resource.data.propertyId)
                       || isPropertyStaff(request.resource.data.propertyId)
-                      || request.resource.data.get('tenantUserId', null) == request.auth.uid
+                      || (
+                        request.resource.data.get('tenantUserId', null) == request.auth.uid
+                        && request.auth.uid in get(
+                             /databases/$(database)/documents/properties/$(request.resource.data.propertyId)
+                           ).data.get('tenantUserIds', [])
+                      )
                     );
 
       allow update: if isAuthenticated()
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.propertyId == resource.data.propertyId
+                    && request.resource.data.get('tenantUserId', null) == resource.data.get('tenantUserId', null)
+                    && request.resource.data.status in ['open', 'assigned', 'in_progress', 'resolved', 'cancelled']
                     && (
                       isPropertyOwner(resource.data.propertyId)
                       || isPropertyManager(resource.data.propertyId)
-                      || isPropertyStaff(resource.data.propertyId)
+                      || (
+                        request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly([
+                            'status', 'handledByName', 'handledByRole',
+                            'resolutionNote', 'updatedAt'
+                          ])
+                        && request.resource.data.status in ['in_progress', 'resolved']
+                        && (
+                          (
+                            isPropertyStaffRole(resource.data.propertyId, 'electrician')
+                            && resource.data.get('category', 'electrical') == 'electrical'
+                            && request.resource.data.handledByRole == 'electrician'
+                          )
+                          ||
+                          (
+                            isPropertyStaffRole(resource.data.propertyId, 'caretaker')
+                            && resource.data.get('category', 'general') != 'electrical'
+                            && request.resource.data.handledByRole == 'caretaker'
+                          )
+                        )
+                      )
                     );
 
       allow delete: if false;
     }
 
+    // ============================================================
+    // VISITOR LOGS (Owner / Manager / Caretaker)
+    // ============================================================
+
     match /visitorLogs/{logId} {
-      allow get, list, create, update: if isAuthenticated()
-                                       && (
-                                         isPropertyOwner(
-                                           request.method == 'create'
-                                             ? request.resource.data.propertyId
-                                             : resource.data.propertyId
-                                         )
-                                         || isPropertyManager(
-                                           request.method == 'create'
-                                             ? request.resource.data.propertyId
-                                             : resource.data.propertyId
-                                         )
-                                         || isPropertyStaff(
-                                           request.method == 'create'
-                                             ? request.resource.data.propertyId
-                                             : resource.data.propertyId
-                                         )
-                                       );
+      allow get, list: if isAuthenticated()
+                       && (
+                         isPropertyOwner(resource.data.propertyId)
+                         || isPropertyManager(resource.data.propertyId)
+                         || isPropertyStaffRole(resource.data.propertyId, 'caretaker')
+                       );
+
+      allow create: if isAuthenticated()
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.loggedByUid == request.auth.uid
+                    && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
+                    && (
+                      isPropertyOwner(request.resource.data.propertyId)
+                      || isPropertyManager(request.resource.data.propertyId)
+                      || isPropertyStaffRole(request.resource.data.propertyId, 'caretaker')
+                    );
+
+      allow update: if isAuthenticated()
+                    && request.resource.data.propertyId == resource.data.propertyId
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'checkOutAt'])
+                    && (
+                      isPropertyOwner(resource.data.propertyId)
+                      || isPropertyManager(resource.data.propertyId)
+                      || isPropertyStaffRole(resource.data.propertyId, 'caretaker')
+                    );
+
       allow delete: if false;
     }
 
+    // ============================================================
+    // BUILDING NOTICES (post: Owner / Manager / Caretaker; read: + residents)
+    // ============================================================
+
     match /buildingNotices/{noticeId} {
-      allow get, list: if isAuthenticated();
-      allow create, update: if isAuthenticated()
-                            && (
-                              isPropertyOwner(request.resource.data.propertyId)
-                              || isPropertyManager(request.resource.data.propertyId)
-                              || isPropertyStaff(request.resource.data.propertyId)
-                            );
+      allow get, list: if isAuthenticated()
+                       && (
+                         isPropertyOwner(resource.data.propertyId)
+                         || isPropertyManager(resource.data.propertyId)
+                         || isPropertyStaff(resource.data.propertyId)
+                         || request.auth.uid in get(
+                              /databases/$(database)/documents/properties/$(resource.data.propertyId)
+                            ).data.get('tenantUserIds', [])
+                       );
+
+      allow create: if isAuthenticated()
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.postedByUid == request.auth.uid
+                    && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
+                    && (
+                      isPropertyOwner(request.resource.data.propertyId)
+                      || isPropertyManager(request.resource.data.propertyId)
+                      || isPropertyStaffRole(request.resource.data.propertyId, 'caretaker')
+                    );
+
+      allow update: if isAuthenticated()
+                    && request.resource.data.propertyId == resource.data.propertyId
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && (
+                      isPropertyOwner(resource.data.propertyId)
+                      || isPropertyManager(resource.data.propertyId)
+                    );
+
       allow delete: if isAuthenticated()
-                    && isPropertyOwner(resource.data.propertyId);
+                    && (
+                      isPropertyOwner(resource.data.propertyId)
+                      || isPropertyManager(resource.data.propertyId)
+                    );
     }
 
+    // ============================================================
+    // METER READINGS (Owner / Manager / Electrician)
+    // ============================================================
+
     match /meterReadings/{readingId} {
-      allow get, list, create: if isAuthenticated()
-                               && (
-                                 isPropertyOwner(
-                                   request.method == 'create'
-                                     ? request.resource.data.propertyId
-                                     : resource.data.propertyId
-                                 )
-                                 || isPropertyManager(
-                                   request.method == 'create'
-                                     ? request.resource.data.propertyId
-                                     : resource.data.propertyId
-                                 )
-                                 || isPropertyStaff(
-                                   request.method == 'create'
-                                     ? request.resource.data.propertyId
-                                     : resource.data.propertyId
-                                 )
-                               );
+      allow get, list: if isAuthenticated()
+                       && (
+                         isPropertyOwner(resource.data.propertyId)
+                         || isPropertyManager(resource.data.propertyId)
+                         || isPropertyStaffRole(resource.data.propertyId, 'electrician')
+                       );
+
+      allow create: if isAuthenticated()
+                    && request.resource.data.propertyId is string
+                    && request.resource.data.recordedByUid == request.auth.uid
+                    && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
+                    && (
+                      isPropertyOwner(request.resource.data.propertyId)
+                      || isPropertyManager(request.resource.data.propertyId)
+                      || isPropertyStaffRole(request.resource.data.propertyId, 'electrician')
+                    );
+
       allow update, delete: if false;
     }
 
@@ -1383,29 +1585,57 @@ service cloud.firestore {
              && get(/databases/$(database)/documents/units/$(unitId)).data.get('tenantUserId', null) == request.auth.uid;
     }
 
-    function hasPendingManagerInviteForProperty(propertyId) {
-      return propertyId is string && false;
+    function propertyOwnerId(propertyId) {
+      return get(/databases/$(database)/documents/properties/$(propertyId)).data.ownerId;
     }
 
-    function hasPendingTenantInviteForProperty(propertyId) {
-      return propertyId is string && false;
+    // Active staff access for ONE specific role on a property.
+    // staffAccess document id format: {uid}_{propertyId}_{role}
+    function isPropertyStaffRole(propertyId, role) {
+      return isAuthenticated()
+             && exists(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_' + role))
+             && get(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_' + role)).data.status == 'active';
     }
 
     function isPropertyStaff(propertyId) {
+      return isPropertyStaffRole(propertyId, 'caretaker')
+             || isPropertyStaffRole(propertyId, 'electrician');
+    }
+
+    function isStaffInvitationRecipient(invitation) {
       return isAuthenticated()
              && (
-               (
-                 exists(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_caretaker'))
-                 && get(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_caretaker')).data.status == 'active'
-               )
-               ||
-               (
-                 exists(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_electrician'))
-                 && get(/databases/$(database)/documents/staffAccess/$(request.auth.uid + '_' + propertyId + '_electrician')).data.status == 'active'
-               )
+               invitation.get('staffUserId', null) == request.auth.uid
+               || isManagerInvitationRecipient(invitation)
              );
     }
 
+    // Used when a (previously revoked) manager is assigned again.
+    function isValidManagerAccessGrant() {
+      let invPath = /databases/$(database)/documents/managerInvitations/$(request.resource.data.invitationId);
+      return request.resource.data.invitationId is string
+             && get(invPath).data.status == 'pending'
+             && get(invPath).data.propertyId == request.resource.data.propertyId
+             && get(invPath).data.ownerId == request.resource.data.ownerId
+             && isManagerInvitationRecipient(get(invPath).data)
+             && getAfter(invPath).data.status == 'accepted'
+             && getAfter(invPath).data.managerUserId == request.auth.uid;
+    }
+
+    // staffAccess create / re-grant must be bound to a pending invitation
+    // addressed to this user that is accepted in the SAME batch.
+    function isValidStaffAccessGrant() {
+      let invPath = /databases/$(database)/documents/staffInvitations/$(request.resource.data.invitationId);
+      return request.resource.data.invitationId is string
+             && request.resource.data.ownerId == propertyOwnerId(request.resource.data.propertyId)
+             && get(invPath).data.status == 'pending'
+             && get(invPath).data.propertyId == request.resource.data.propertyId
+             && get(invPath).data.ownerId == request.resource.data.ownerId
+             && get(invPath).data.staffRole == request.resource.data.staffRole
+             && isStaffInvitationRecipient(get(invPath).data)
+             && getAfter(invPath).data.status == 'accepted'
+             && getAfter(invPath).data.staffUserId == request.auth.uid;
+    }
 
     function isInvitationRecipient(invitation) {
       return isAuthenticated()

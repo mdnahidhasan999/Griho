@@ -25,7 +25,6 @@ import '../../features/home/presentation/screens/owner_home_screen.dart';
 import '../../features/home/presentation/screens/owner_welcome_screen.dart';
 import '../../features/more/presentation/screens/more_screen.dart';
 import '../../features/properties/domain/entities/property.dart';
-import '../../features/properties/presentation/screens/add_manager_screen.dart';
 import '../../features/properties/presentation/screens/add_property_screen.dart';
 import '../../features/properties/presentation/screens/edit_property_screen.dart';
 import '../../features/properties/presentation/screens/manager_invitations_screen.dart';
@@ -58,6 +57,8 @@ import '../../features/units/presentation/screens/unit_list_screen.dart';
 import '../../features/billing/presentation/screens/owner_payment_management_screen.dart';
 import '../../features/billing/presentation/screens/tenant_payment_screen.dart';
 
+import '../../features/team/presentation/screens/invite_team_member_screen.dart';
+import '../../features/team/presentation/screens/owner_team_screen.dart';
 import 'auth_route_guard.dart';
 import 'auth_state_refresh_notifier.dart';
 import 'route_arguments.dart';
@@ -99,8 +100,8 @@ abstract final class AppRouter {
 
             final isEmailVerification =
                 verificationMode == 'verifyEmail' &&
-                verificationCode != null &&
-                verificationCode.isNotEmpty;
+                    verificationCode != null &&
+                    verificationCode.isNotEmpty;
 
             if (isEmailVerification) {
               return const LinkWaitingScreen(email: '');
@@ -503,12 +504,18 @@ abstract final class AppRouter {
         ),
 
         GoRoute(
+          path: RouteNames.ownerTeam,
+          builder: (context, state) => const OwnerTeamScreen(),
+        ),
+        GoRoute(
           path: RouteNames.ownerManagers,
           builder: (context, state) => const ManagerInvitationsScreen(),
         ),
         GoRoute(
           path: RouteNames.addManager,
-          builder: (context, state) => const AddManagerScreen(),
+          builder: (context, state) => InviteTeamMemberScreen(
+            initialRole: state.uri.queryParameters['role'] ?? 'manager',
+          ),
         ),
 
         // ========================================================

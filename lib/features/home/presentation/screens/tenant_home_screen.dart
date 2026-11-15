@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,7 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
-
 import '../../../billing/presentation/widgets/tenant_current_bills_card.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
 import '../../../tenants/domain/entities/tenancy_history.dart';
@@ -27,14 +28,13 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     await ref.read(tenantDashboardProvider.future);
   }
 
-
   void _openInvitation(TenantInvitation invitation) {
     context.push(RouteNames.tenantInvitationPath(invitation.id));
   }
 
-  void _openInvitations() {
-    context.push(RouteNames.tenantInvitations);
-  }
+  void _openInvitations() => context.push(RouteNames.tenantInvitations);
+
+  void _openPayments() => context.push(RouteNames.tenantPayments);
 
   void _openTenancyHistory() {
     Navigator.of(context).push(
@@ -42,6 +42,46 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     );
   }
 
+  void _reportIssue(TenantDashboardData d) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _ReportIssueSheet(dashboard: d),
+    );
+  }
+
+  void _openMyRequests() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => const _MyRequestsSheet(),
+    );
+  }
+
+  void _openNotices(TenantDashboardData d) {
+    final propertyId = d.tenant?.propertyId.trim() ?? '';
+    if (propertyId.isEmpty) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _NoticesSheet(propertyId: propertyId),
+    );
+  }
+
+  void _copyId(String publicId) {
+    if (publicId.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: publicId));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Griho ID copied.'),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,33 +94,20 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
+        centerTitle: false,
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.tertiary,
-                  ],
+                  colors: [theme.colorScheme.primary, theme.colorScheme.tertiary],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.28),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
-              child: const Icon(
-                Icons.apartment_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.apartment_rounded, size: 20, color: Colors.white),
             ),
             const SizedBox(width: 12),
             Column(
@@ -105,206 +132,184 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
             ),
           ],
         ),
-        centerTitle: false,
       ),
       body: dashboardAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) =>
             _DashboardErrorView(error: error, onRetry: _refresh),
         data: (dashboard) {
+          final publicId = dashboard.appUser?.publicId ?? '';
+          final active = dashboard.hasActiveTenancy;
+
           return RefreshIndicator(
             onRefresh: _refresh,
-            child: _TenantDashboardContent(
-              dashboard: dashboard,
-              onOpenInvitation: _openInvitation,
-              onOpenInvitations: _openInvitations,
-              onOpenTenancyHistory: _openTenancyHistory,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+              children: [
+                _Header(dashboard: dashboard, onCopy: () => _copyId(publicId)),
+                const SizedBox(height: 16),
+
+                if (dashboard.hasPendingInvitation) ...[
+                  _PendingInvitationCard(
+                    invitation: dashboard.pendingInvitation!,
+                    onReview: () => _openInvitation(dashboard.pendingInvitation!),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                if (active)
+                  _DigitalResidencyPass(dashboard: dashboard)
+                else
+                  _NoActiveTenancyPassport(
+                    userPublicId: publicId,
+                    hasPendingInvitation: dashboard.hasPendingInvitation,
+                    onOpenInvitations: _openInvitations,
+                  ),
+
+                if (active) ...[
+                  const SizedBox(height: 22),
+                  _SectionHeader(
+                    title: 'Bills & dues',
+                    trailing: TextButton(
+                      onPressed: _openPayments,
+                      child: const Text('Payments'),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const TenantCurrentBillsCard(),
+                ],
+
+                const SizedBox(height: 22),
+                const _SectionHeader(title: 'Quick actions'),
+                const SizedBox(height: 10),
+                _ActionGrid(
+                  items: [
+                    if (active)
+                      _ActionItem(
+                        Icons.payments_outlined,
+                        'Payments',
+                        'Pay & receipts',
+                        Colors.green,
+                        _openPayments,
+                      ),
+                    if (active)
+                      _ActionItem(
+                        Icons.report_problem_outlined,
+                        'Report issue',
+                        'Plumbing, electric…',
+                        Colors.deepOrange,
+                            () => _reportIssue(dashboard),
+                      ),
+                    if (active)
+                      _ActionItem(
+                        Icons.build_circle_outlined,
+                        'My requests',
+                        'Track repairs',
+                        Colors.indigo,
+                        _openMyRequests,
+                      ),
+                    if (active)
+                      _ActionItem(
+                        Icons.campaign_outlined,
+                        'Notices',
+                        'From your building',
+                        Colors.amber.shade800,
+                            () => _openNotices(dashboard),
+                      ),
+                    _ActionItem(
+                      Icons.mark_email_read_outlined,
+                      'Invitations',
+                      'Lease offers',
+                      Colors.blueAccent,
+                      _openInvitations,
+                    ),
+                    _ActionItem(
+                      Icons.history_rounded,
+                      'History',
+                      'Past stays',
+                      Colors.teal,
+                      _openTenancyHistory,
+                    ),
+                    _ActionItem(
+                      Icons.share_rounded,
+                      'Share ID',
+                      'Copy your Griho ID',
+                      Colors.deepPurpleAccent,
+                          () => _copyId(publicId),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 22),
+                const _SectionHeader(title: 'Recent activity'),
+                const SizedBox(height: 10),
+                _RecentActivityCard(dashboard: dashboard),
+
+                if (dashboard.hasTenancyHistory) ...[
+                  const SizedBox(height: 22),
+                  _SectionHeader(
+                    title: 'Past residences',
+                    trailing: TextButton(
+                      onPressed: _openTenancyHistory,
+                      child: const Text('View all'),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _TenancyHistoryPreview(
+                    history: dashboard.tenancyHistory,
+                    onViewItem: _openTenancyHistory,
+                  ),
+                ],
+              ],
             ),
           );
         },
       ),
       bottomNavigationBar: AppBottomNavigation(
         selectedDestination: GrihoNavigationDestination.home,
-        onHomeTap: () {
-          context.go(RouteNames.tenantHome);
-        },
-        onMoreTap: () {
-          context.push(RouteNames.more);
-        },
+        onHomeTap: () => context.go(RouteNames.tenantHome),
+        onMoreTap: () => context.push(RouteNames.more),
       ),
     );
   }
 }
 
 // ============================================================================
-// DASHBOARD CONTENT
+// HEADER
 // ============================================================================
 
-class _TenantDashboardContent extends StatelessWidget {
+class _Header extends StatelessWidget {
+  const _Header({required this.dashboard, required this.onCopy});
+
   final TenantDashboardData dashboard;
-  final ValueChanged<TenantInvitation> onOpenInvitation;
-  final VoidCallback onOpenInvitations;
-  final VoidCallback onOpenTenancyHistory;
+  final VoidCallback onCopy;
 
-  const _TenantDashboardContent({
-    required this.dashboard,
-    required this.onOpenInvitation,
-    required this.onOpenInvitations,
-    required this.onOpenTenancyHistory,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-      children: [
-        // 1. Personalized Header & Quick Copy ID
-        _HeaderSection(dashboard: dashboard),
-
-        const SizedBox(height: 18),
-
-        // 2. Urgent Action: Pending Invitation Banner
-        if (dashboard.hasPendingInvitation) ...[
-          _PendingInvitationCard(
-            invitation: dashboard.pendingInvitation!,
-            onReview: () => onOpenInvitation(dashboard.pendingInvitation!),
-          ),
-          const SizedBox(height: 18),
-        ],
-
-        // 3. Digital Residency Pass or Unassigned Passport
-        if (dashboard.hasActiveTenancy) ...[
-          _DigitalResidencyPass(dashboard: dashboard),
-        ] else
-          ...[
-            _NoActiveTenancyPassport(
-              userPublicId: dashboard.appUser?.publicId ?? '',
-              hasPendingInvitation: dashboard.hasPendingInvitation,
-              onOpenInvitations: onOpenInvitations,
-            ),
-          ],
-
-        const SizedBox(height: 24),
-
-        // 4. Resident Quick Command Actions
-        const _SectionHeader(
-          title: 'Resident Shortcuts',
-          subtitle: 'Direct management and tenancy utilities',
-        ),
-        const SizedBox(height: 12),
-        _TenantCommandGrid(
-          userPublicId: dashboard.appUser?.publicId ?? '',
-          onOpenInvitations: onOpenInvitations,
-          onOpenTenancyHistory: onOpenTenancyHistory,
-        ),
-
-        const SizedBox(height: 24),
-
-        // 5. Billing & Invoices Section
-        if (dashboard.hasActiveTenancy) ...[
-          const _SectionHeader(
-            title: 'Invoices & Current Dues',
-            subtitle: 'Real-time rent statements and utility tariff rates',
-          ),
-          const SizedBox(height: 12),
-          const TenantCurrentBillsCard(),
-          const SizedBox(height: 24),
-        ],
-
-        // 6. Recent Operational Activity
-        const _SectionHeader(
-          title: 'Recent Activity',
-          subtitle: 'Milestones, invitations, and occupancy updates',
-        ),
-        const SizedBox(height: 12),
-        _RecentActivityCard(dashboard: dashboard),
-
-        // 7. Previous Stays Section
-        if (dashboard.hasTenancyHistory) ...[
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const _SectionHeader(
-                title: 'Past Residences',
-                subtitle: 'Completed lease agreements and stay records',
-              ),
-              TextButton(
-                onPressed: onOpenTenancyHistory,
-                child: const Text('View All'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _TenancyHistoryPreview(
-            history: dashboard.tenancyHistory,
-            onViewItem: onOpenTenancyHistory,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// 1. EXECUTIVE HEADER
-// ============================================================================
-
-class _HeaderSection extends StatelessWidget {
-  final TenantDashboardData dashboard;
-
-  const _HeaderSection({required this.dashboard});
-
-  String _greetingText() {
-    final hour = DateTime
-        .now()
-        .hour;
-    if (hour < 12) {
-      return 'Good Morning';
-    }
-    if (hour < 17) {
-      return 'Good Afternoon';
-    }
-    return 'Good Evening';
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final user = dashboard.appUser;
-    final publicId = user?.publicId ?? '';
+    final publicId = dashboard.appUser?.publicId ?? '';
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    _greetingText(),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: dashboard.hasActiveTenancy
-                          ? Colors.green
-                          : Colors.amber.shade800,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
+              Text(
+                _greeting(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              const SizedBox(height: 2),
               Text(
                 dashboard.displayName,
                 maxLines: 1,
@@ -318,46 +323,482 @@ class _HeaderSection extends StatelessWidget {
           ),
         ),
         if (publicId.isNotEmpty)
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: publicId));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Griho Tenant ID copied to clipboard.'),
-                  duration: Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: theme.colorScheme.outlineVariant),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.badge_outlined,
-                    size: 15,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    publicId,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
+          ActionChip(
+            avatar: const Icon(Icons.badge_outlined, size: 16),
+            label: Text(
+              publicId,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+            ),
+            onPressed: onCopy,
+          ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// ACTION GRID
+// ============================================================================
+
+class _ActionItem {
+  const _ActionItem(this.icon, this.title, this.subtitle, this.color, this.onTap);
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+}
+
+class _ActionGrid extends StatelessWidget {
+  const _ActionGrid({required this.items});
+  final List<_ActionItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      childAspectRatio: 2.3,
+      children: [
+        for (final i in items)
+          Material(
+            color: theme.colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: i.onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: i.color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(i.icon, size: 20, color: i.color),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            i.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            i.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
       ],
+    );
+  }
+}
+
+// ============================================================================
+// REPORT ISSUE  ->  maintenanceRequests (owner assigns, caretaker/electrician resolve)
+// ============================================================================
+
+class _ReportIssueSheet extends StatefulWidget {
+  const _ReportIssueSheet({required this.dashboard});
+  final TenantDashboardData dashboard;
+
+  @override
+  State<_ReportIssueSheet> createState() => _ReportIssueSheetState();
+}
+
+class _ReportIssueSheetState extends State<_ReportIssueSheet> {
+  final _titleCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  String _category = 'plumbing';
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final d = widget.dashboard;
+    final tenant = d.tenant;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final title = _titleCtrl.text.trim();
+
+    if (tenant == null || uid == null) return;
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please describe the problem.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await FirebaseFirestore.instance.collection('maintenanceRequests').add({
+        'ownerId': tenant.ownerId,
+        'propertyId': tenant.propertyId,
+        'propertyName': d.currentPropertyName ?? '',
+        'unitName': d.currentUnitDisplayName ?? 'Unit',
+        'tenantUserId': uid,
+        'tenantName': d.displayName,
+        'title': title,
+        'description': _descCtrl.text.trim(),
+        'category': _category,
+        'status': 'open',
+        'assignedToUid': '',
+        'assignedToName': '',
+        'assignedRole': '',
+        'createdBy': uid,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Request sent to your building team.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not send request: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        4,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Report an issue',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${widget.dashboard.currentPropertyName ?? ''} • ${widget.dashboard.currentUnitDisplayName ?? ''}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: 'plumbing',
+                  label: Text('Plumbing'),
+                  icon: Icon(Icons.water_drop_outlined, size: 18),
+                ),
+                ButtonSegment(
+                  value: 'electrical',
+                  label: Text('Electric'),
+                  icon: Icon(Icons.bolt_rounded, size: 18),
+                ),
+                ButtonSegment(
+                  value: 'general',
+                  label: Text('Other'),
+                  icon: Icon(Icons.build_outlined, size: 18),
+                ),
+              ],
+              selected: {_category},
+              onSelectionChanged: (v) => setState(() => _category = v.first),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _titleCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'What is the problem? *',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _descCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Details (optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _saving ? null : _submit,
+              icon: _saving
+                  ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+                  : const Icon(Icons.send_rounded, size: 18),
+              label: const Text('Send request'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// MY REQUESTS
+// ============================================================================
+
+class _MyRequestsSheet extends StatelessWidget {
+  const _MyRequestsSheet();
+
+  Color _color(String s) {
+    switch (s) {
+      case 'resolved':
+        return Colors.green;
+      case 'in_progress':
+        return Colors.blue;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+  String _label(String s) => s == 'in_progress'
+      ? 'In progress'
+      : (s.isEmpty ? 'Open' : s[0].toUpperCase() + s.substring(1));
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final theme = Theme.of(context);
+
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: uid == null
+            ? const Center(child: Text('Please sign in again.'))
+            : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('maintenanceRequests')
+              .where('tenantUserId', isEqualTo: uid)
+              .snapshots(),
+          builder: (context, snap) {
+            if (snap.hasError) {
+              return Center(child: Text('Unable to load: ${snap.error}'));
+            }
+            if (!snap.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final docs = [...snap.data!.docs];
+            docs.sort((a, b) {
+              final at = a.data()['createdAt'];
+              final bt = b.data()['createdAt'];
+              final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
+              final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
+              return bm.compareTo(am);
+            });
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              children: [
+                const Text(
+                  'My requests',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+                const SizedBox(height: 10),
+                if (docs.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Center(
+                      child: Text(
+                        'No requests yet.',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                for (final doc in docs)
+                  Builder(
+                    builder: (context) {
+                      final d = doc.data();
+                      final status = (d['status'] ?? 'open').toString();
+                      final note = (d['resolutionNote'] ?? '').toString();
+                      final color = _color(status);
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: ListTile(
+                          title: Text(
+                            (d['title'] ?? '').toString(),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text(
+                            note.isEmpty
+                                ? (d['category'] ?? '').toString()
+                                : note,
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              _label(status),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// BUILDING NOTICES
+// ============================================================================
+
+class _NoticesSheet extends StatelessWidget {
+  const _NoticesSheet({required this.propertyId});
+  final String propertyId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('buildingNotices')
+              .where('propertyId', isEqualTo: propertyId)
+              .snapshots(),
+          builder: (context, snap) {
+            if (snap.hasError) {
+              return Center(child: Text('Unable to load: ${snap.error}'));
+            }
+            if (!snap.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final docs = [...snap.data!.docs];
+            docs.sort((a, b) {
+              final at = a.data()['createdAt'];
+              final bt = b.data()['createdAt'];
+              final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
+              final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
+              return bm.compareTo(am);
+            });
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              children: [
+                const Text(
+                  'Building notices',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+                const SizedBox(height: 10),
+                if (docs.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Center(
+                      child: Text(
+                        'No notices right now.',
+                        style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ),
+                for (final doc in docs)
+                  Builder(
+                    builder: (context) {
+                      final d = doc.data();
+                      final urgent = (d['priority'] ?? '').toString() == 'high' ||
+                          (d['priority'] ?? '').toString() == 'urgent';
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: ListTile(
+                          leading: Icon(
+                            urgent
+                                ? Icons.priority_high_rounded
+                                : Icons.campaign_outlined,
+                            color: urgent ? Colors.red : theme.colorScheme.primary,
+                          ),
+                          title: Text(
+                            (d['title'] ?? '').toString(),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text((d['message'] ?? '').toString()),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -855,135 +1296,6 @@ class _NoActiveTenancyPassport extends StatelessWidget {
 }
 
 // ============================================================================
-// 5. RESIDENT COMMAND GRID (SHORTCUTS)
-// ============================================================================
-
-class _TenantCommandGrid extends StatelessWidget {
-  final String userPublicId;
-  final VoidCallback onOpenInvitations;
-  final VoidCallback onOpenTenancyHistory;
-
-  const _TenantCommandGrid({
-    required this.userPublicId,
-    required this.onOpenInvitations,
-    required this.onOpenTenancyHistory,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _CommandTile(
-            icon: Icons.mark_email_read_outlined,
-            title: 'Invitations',
-            subtitle: 'Lease Offers',
-            color: Colors.blueAccent,
-            onTap: onOpenInvitations,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _CommandTile(
-            icon: Icons.history_rounded,
-            title: 'History',
-            subtitle: 'Past Stays',
-            color: Colors.teal,
-            onTap: onOpenTenancyHistory,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _CommandTile(
-            icon: Icons.share_rounded,
-            title: 'Share ID',
-            subtitle: 'Fast Link',
-            color: Colors.deepPurpleAccent,
-            onTap: () {
-              if (userPublicId.isNotEmpty) {
-                Clipboard.setData(ClipboardData(text: userPublicId));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Griho ID copied to clipboard.'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CommandTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _CommandTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, size: 20, color: color),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
 // 6. RECENT ACTIVITY TIMELINE
 // ============================================================================
 
@@ -1243,33 +1555,22 @@ class _TenancyHistoryPreview extends StatelessWidget {
 
 class _SectionHeader extends StatelessWidget {
   final String title;
-  final String? subtitle;
+  final Widget? trailing;
 
-  const _SectionHeader({required this.title, this.subtitle});
+  const _SectionHeader({required this.title, this.trailing});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w900,
           ),
         ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 2),
-          Text(
-            subtitle!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontSize: 11,
-            ),
-          ),
-        ],
+        ?trailing,
       ],
     );
   }

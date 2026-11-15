@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -22,8 +23,8 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
   bool _busy = false;
 
   Future<List<QueryDocumentSnapshot>> _fetchScopedManagerInvitations(
-    dynamic profile,
-  ) async {
+      dynamic profile,
+      ) async {
     final firestore = FirebaseFirestore.instance;
     final col = firestore.collection('managerInvitations');
     final Map<String, QueryDocumentSnapshot> results = {};
@@ -58,10 +59,10 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
   }
 
   Future<void> _handleInvitation(
-    QueryDocumentSnapshot doc,
-    dynamic profile,
-    bool accept,
-  ) async {
+      QueryDocumentSnapshot doc,
+      dynamic profile,
+      bool accept,
+      ) async {
     if (_busy) return;
     setState(() => _busy = true);
 
@@ -114,6 +115,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
       }
 
       await batch.commit();
+      AuthRouteGuard.clearAccessCache();
       ref.invalidate(currentUserProfileProvider);
 
       if (!mounted) return;
@@ -263,23 +265,23 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                   final unitsStream = propIdList.isEmpty
                       ? const Stream<QuerySnapshot>.empty()
                       : firestore
-                            .collection('units')
-                            .where('propertyId', whereIn: propIdList)
-                            .snapshots();
+                      .collection('units')
+                      .where('propertyId', whereIn: propIdList)
+                      .snapshots();
 
                   final tenantsStream = propIdList.isEmpty
                       ? const Stream<QuerySnapshot>.empty()
                       : firestore
-                            .collection('tenants')
-                            .where('propertyId', whereIn: propIdList)
-                            .snapshots();
+                      .collection('tenants')
+                      .where('propertyId', whereIn: propIdList)
+                      .snapshots();
 
                   final billsStream = propIdList.isEmpty
                       ? const Stream<QuerySnapshot>.empty()
                       : firestore
-                            .collection('monthlyBills')
-                            .where('propertyId', whereIn: propIdList)
-                            .snapshots();
+                      .collection('monthlyBills')
+                      .where('propertyId', whereIn: propIdList)
+                      .snapshots();
 
                   return StreamBuilder<QuerySnapshot>(
                     stream: unitsStream,
@@ -336,7 +338,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                 },
                                 child: ListView(
                                   physics:
-                                      const AlwaysScrollableScrollPhysics(),
+                                  const AlwaysScrollableScrollPhysics(),
                                   padding: const EdgeInsets.fromLTRB(
                                     16,
                                     8,
@@ -354,15 +356,15 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                     if (pendingInvites.isNotEmpty)
                                       ...pendingInvites.map((inviteDoc) {
                                         final d =
-                                            inviteDoc.data()
-                                                as Map<String, dynamic>;
+                                        inviteDoc.data()
+                                        as Map<String, dynamic>;
                                         final propName =
-                                            (d['propertyName'] ??
-                                                    'Owner Property')
-                                                .toString();
+                                        (d['propertyName'] ??
+                                            'Owner Property')
+                                            .toString();
                                         final ownerName =
-                                            (d['ownerName'] ?? 'Property Owner')
-                                                .toString();
+                                        (d['ownerName'] ?? 'Property Owner')
+                                            .toString();
 
                                         return Container(
                                           margin: const EdgeInsets.only(
@@ -382,7 +384,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                           ),
                                           child: Column(
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                            CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 'New Manager Assignment: $propName',
@@ -390,9 +392,9 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                                     .textTheme
                                                     .titleMedium
                                                     ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w900,
-                                                    ),
+                                                  fontWeight:
+                                                  FontWeight.w900,
+                                                ),
                                               ),
                                               const SizedBox(height: 4),
                                               Text('Invited by $ownerName'),
@@ -404,11 +406,11 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                                       onPressed: _busy
                                                           ? null
                                                           : () =>
-                                                                _handleInvitation(
-                                                                  inviteDoc,
-                                                                  profile,
-                                                                  false,
-                                                                ),
+                                                          _handleInvitation(
+                                                            inviteDoc,
+                                                            profile,
+                                                            false,
+                                                          ),
                                                       child: const Text(
                                                         'Decline',
                                                       ),
@@ -420,11 +422,11 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                                       onPressed: _busy
                                                           ? null
                                                           : () =>
-                                                                _handleInvitation(
-                                                                  inviteDoc,
-                                                                  profile,
-                                                                  true,
-                                                                ),
+                                                          _handleInvitation(
+                                                            inviteDoc,
+                                                            profile,
+                                                            true,
+                                                          ),
                                                       child: const Text(
                                                         'Accept Role',
                                                       ),
@@ -467,12 +469,12 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                                 'Access to ${suspendedAccessDocs.length} building(s) is temporarily suspended by the owner.',
                                                 style: theme.textTheme.bodySmall
                                                     ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: Colors
-                                                          .orange
-                                                          .shade900,
-                                                    ),
+                                                  fontWeight:
+                                                  FontWeight.w700,
+                                                  color: Colors
+                                                      .orange
+                                                      .shade900,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -542,18 +544,18 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                       'Command Center',
                                       style: theme.textTheme.titleMedium
                                           ?.copyWith(
-                                            fontWeight: FontWeight.w800,
-                                          ),
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       'Direct property administration, rent & utility billing actions',
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(
-                                            color: theme
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                          ),
+                                        color: theme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
                                     ),
                                     const SizedBox(height: 12),
 
@@ -583,9 +585,9 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color:
-                                                      theme.colorScheme.primary,
+                                                  theme.colorScheme.primary,
                                                   borderRadius:
-                                                      BorderRadius.circular(14),
+                                                  BorderRadius.circular(14),
                                                 ),
                                                 child: const Icon(
                                                   Icons
@@ -598,7 +600,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                               Expanded(
                                                 child: Column(
                                                   crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
+                                                  CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
                                                       'Register New Resident',
@@ -606,9 +608,9 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                                           .textTheme
                                                           .titleMedium
                                                           ?.copyWith(
-                                                            fontWeight:
-                                                                FontWeight.w800,
-                                                          ),
+                                                        fontWeight:
+                                                        FontWeight.w800,
+                                                      ),
                                                     ),
                                                     const SizedBox(height: 2),
                                                     Text(
@@ -617,10 +619,10 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                                           .textTheme
                                                           .bodySmall
                                                           ?.copyWith(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .onSurfaceVariant,
-                                                          ),
+                                                        color: theme
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
@@ -628,7 +630,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                               Icon(
                                                 Icons.arrow_forward_rounded,
                                                 color:
-                                                    theme.colorScheme.primary,
+                                                theme.colorScheme.primary,
                                               ),
                                             ],
                                           ),
@@ -692,12 +694,12 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                     // Management Hub
                                     Material(
                                       color:
-                                          theme.colorScheme.surfaceContainerLow,
+                                      theme.colorScheme.surfaceContainerLow,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(20),
                                         side: BorderSide(
                                           color:
-                                              theme.colorScheme.outlineVariant,
+                                          theme.colorScheme.outlineVariant,
                                         ),
                                       ),
                                       clipBehavior: Clip.antiAlias,

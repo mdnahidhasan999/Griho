@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/audit_logger_service.dart';
@@ -134,6 +135,7 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen>
       }
 
       await batch.commit();
+      AuthRouteGuard.clearAccessCache();
       ref.invalidate(currentUserProfileProvider);
 
       if (!mounted) return;
@@ -217,6 +219,7 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen>
         propertyId: (data['propertyId'] ?? '').toString(),
         propertyName: (data['propertyName'] ?? 'Building').toString(),
         category: 'maintenance',
+        actorRole: 'caretaker',
         actionTitle: 'Maintenance Ticket ${nextStatus.toUpperCase()}',
         details:
             'Ticket "${data['title'] ?? 'Issue'}" (${data['unitName'] ?? 'Building'}) marked $nextStatus by Caretaker$actorName.',
@@ -853,7 +856,10 @@ class _CaretakerMaintenanceTab extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final docs = (snapshot.data?.docs ?? []).where((doc) {
+          final d = doc.data() as Map<String, dynamic>? ?? {};
+          return (d['category'] ?? 'general') != 'electrical';
+        }).toList();
         if (docs.isEmpty) {
           return const Center(
             child: Padding(

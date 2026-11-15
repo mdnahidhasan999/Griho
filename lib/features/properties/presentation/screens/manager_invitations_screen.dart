@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
@@ -22,8 +23,8 @@ class _ManagerInvitationsScreenState
   bool _processing = false;
 
   Future<List<QueryDocumentSnapshot>> _fetchManagerInvites(
-    dynamic profile,
-  ) async {
+      dynamic profile,
+      ) async {
     final firestore = FirebaseFirestore.instance;
     final col = firestore.collection('managerInvitations');
     final Map<String, QueryDocumentSnapshot> results = {};
@@ -59,21 +60,21 @@ class _ManagerInvitationsScreenState
       final aT =
           ((a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)
               ?.millisecondsSinceEpoch ??
-          0;
+              0;
       final bT =
           ((b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)
               ?.millisecondsSinceEpoch ??
-          0;
+              0;
       return bT.compareTo(aT);
     });
     return list;
   }
 
   Future<void> _respondToInvitation(
-    QueryDocumentSnapshot doc,
-    dynamic profile,
-    bool accept,
-  ) async {
+      QueryDocumentSnapshot doc,
+      dynamic profile,
+      bool accept,
+      ) async {
     if (_processing) return;
     setState(() => _processing = true);
 
@@ -126,6 +127,7 @@ class _ManagerInvitationsScreenState
       }
 
       await batch.commit();
+      AuthRouteGuard.clearAccessCache();
       ref.invalidate(currentUserProfileProvider);
 
       if (!mounted) return;
@@ -186,8 +188,8 @@ class _ManagerInvitationsScreenState
           FilledButton(
             style: currentlyActive
                 ? FilledButton.styleFrom(
-                    backgroundColor: Colors.orange.shade800,
-                  )
+              backgroundColor: Colors.orange.shade800,
+            )
                 : null,
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(actionLabel),
@@ -260,7 +262,7 @@ class _ManagerInvitationsScreenState
         title: const Text('Revoke Manager Access?'),
         content: Text(
           'Permanently remove $managerName from managing this building? '
-          'You will need to send a new invitation to assign them again.',
+              'You will need to send a new invitation to assign them again.',
         ),
         actions: [
           TextButton(
@@ -330,12 +332,12 @@ class _ManagerInvitationsScreenState
   }
 
   Widget _buildInviteList(
-    BuildContext context,
-    ThemeData theme,
-    dynamic profile,
-    bool isOwnerView,
-    List<QueryDocumentSnapshot> docs,
-  ) {
+      BuildContext context,
+      ThemeData theme,
+      dynamic profile,
+      bool isOwnerView,
+      List<QueryDocumentSnapshot> docs,
+      ) {
     final visibleDocs = docs.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       return (data['status'] ?? '').toString() != 'revoked';
@@ -529,12 +531,12 @@ class _ManagerInvitationsScreenState
                         onPressed: _processing
                             ? null
                             : () => _toggleManagerStatus(
-                                invitationId: doc.id,
-                                managerUserId: managerUserId,
-                                propertyId: propertyId,
-                                managerName: name,
-                                currentlyActive: !isSuspended,
-                              ),
+                          invitationId: doc.id,
+                          managerUserId: managerUserId,
+                          propertyId: propertyId,
+                          managerName: name,
+                          currentlyActive: !isSuspended,
+                        ),
                         icon: Icon(
                           isSuspended
                               ? Icons.play_arrow_rounded
@@ -556,11 +558,11 @@ class _ManagerInvitationsScreenState
                         onPressed: _processing
                             ? null
                             : () => _revokeManagerAccess(
-                                invitationId: doc.id,
-                                managerUserId: managerUserId,
-                                propertyId: propertyId,
-                                managerName: name,
-                              ),
+                          invitationId: doc.id,
+                          managerUserId: managerUserId,
+                          propertyId: propertyId,
+                          managerName: name,
+                        ),
                         icon: const Icon(
                           Icons.person_remove_outlined,
                           size: 18,
@@ -579,8 +581,8 @@ class _ManagerInvitationsScreenState
                     onPressed: _processing
                         ? null
                         : () async {
-                            await doc.reference.delete();
-                          },
+                      await doc.reference.delete();
+                    },
                     icon: const Icon(
                       Icons.delete_outline,
                       size: 16,
@@ -608,7 +610,7 @@ class _ManagerInvitationsScreenState
 
     return profileAsync.when(
       loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (err, _) => Scaffold(body: Center(child: Text('Error: $err'))),
       data: (profile) {
         if (profile == null) {
@@ -627,58 +629,58 @@ class _ManagerInvitationsScreenState
           ),
           body: isOwnerView
               ? StreamBuilder<QuerySnapshot>(
-                  stream: firestore
-                      .collection('managerInvitations')
-                      .where('ownerId', isEqualTo: profile.uid)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Text(
-                          'Error loading invitations: ${snapshot.error}',
-                        ),
-                      );
-                    }
-                    return _buildInviteList(
-                      context,
-                      theme,
-                      profile,
-                      true,
-                      snapshot.data?.docs ?? [],
-                    );
-                  },
-                )
+            stream: firestore
+                .collection('managerInvitations')
+                .where('ownerId', isEqualTo: profile.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Error loading invitations: ${snapshot.error}',
+                  ),
+                );
+              }
+              return _buildInviteList(
+                context,
+                theme,
+                profile,
+                true,
+                snapshot.data?.docs ?? [],
+              );
+            },
+          )
               : FutureBuilder<List<QueryDocumentSnapshot>>(
-                  future: _fetchManagerInvites(profile),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Text(
-                          'Error loading invitations: ${snapshot.error}',
-                        ),
-                      );
-                    }
-                    return _buildInviteList(
-                      context,
-                      theme,
-                      profile,
-                      false,
-                      snapshot.data ?? [],
-                    );
-                  },
-                ),
+            future: _fetchManagerInvites(profile),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Error loading invitations: ${snapshot.error}',
+                  ),
+                );
+              }
+              return _buildInviteList(
+                context,
+                theme,
+                profile,
+                false,
+                snapshot.data ?? [],
+              );
+            },
+          ),
           floatingActionButton: isOwnerView
               ? FloatingActionButton.extended(
-                  onPressed: () => context.push(RouteNames.addManager),
-                  icon: const Icon(Icons.person_add_rounded),
-                  label: const Text('Invite Manager'),
-                )
+            onPressed: () => context.push(RouteNames.addManager),
+            icon: const Icon(Icons.person_add_rounded),
+            label: const Text('Invite Manager'),
+          )
               : null,
         );
       },

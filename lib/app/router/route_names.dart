@@ -31,7 +31,11 @@ abstract final class RouteNames {
   static const propertyDetails = '/owner/properties/:propertyId';
   static const editProperty = '/owner/properties/:propertyId/edit';
   static const String ownerManagers = '/owner/managers';
+  static const String ownerTeam = '/owner/team';
   static const String addManager = '/owner/add-manager';
+
+  /// Unified invite screen (manager / caretaker / electrician).
+  static String inviteMember(String role) => '$addManager?role=$role';
   static const String activityLogs = '/owner/activity-logs';
 
   // ============================================================

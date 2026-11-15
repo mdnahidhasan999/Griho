@@ -12,6 +12,7 @@ import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+import '../../../team/presentation/providers/team_providers.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/owner_tenants_provider.dart';
 
@@ -29,6 +30,7 @@ class OwnerHomeScreen extends ConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
+        centerTitle: false,
         title: Row(
           children: [
             Container(
@@ -43,13 +45,6 @@ class OwnerHomeScreen extends ConsumerWidget {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
               child: const Icon(
                 Icons.apartment_rounded,
@@ -80,7 +75,13 @@ class OwnerHomeScreen extends ConsumerWidget {
             ),
           ],
         ),
-        centerTitle: false,
+        actions: [
+          IconButton(
+            tooltip: 'Activity & audit trail',
+            icon: const Icon(Icons.history_rounded),
+            onPressed: () => context.push(RouteNames.activityLogs),
+          ),
+        ],
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -105,41 +106,31 @@ class OwnerHomeScreen extends ConsumerWidget {
             },
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
               children: [
-                _ExecutiveHeader(
-                  name: profile.name,
-                  publicId: profile.publicId,
-                ),
-                const SizedBox(height: 18),
-                const _PortfolioVaultCard(),
+                _Header(name: profile.name, publicId: profile.publicId),
                 const SizedBox(height: 16),
-                const _OperationalPulseRow(),
-                const SizedBox(height: 24),
-                const _SectionTitle(
-                  title: 'Command Center',
-                  subtitle: 'Quick operational actions and workflows',
+                const _SummaryCard(),
+                const SizedBox(height: 14),
+                const _PrimaryActions(),
+                const SizedBox(height: 22),
+                const _SectionTitle('Your team'),
+                const SizedBox(height: 10),
+                const _TeamCard(),
+                const SizedBox(height: 22),
+                const _SectionTitle('Manage'),
+                const SizedBox(height: 10),
+                const _ManageGrid(),
+                const SizedBox(height: 22),
+                _SectionTitle(
+                  'Buildings',
+                  trailing: TextButton(
+                    onPressed: () => context.push(RouteNames.propertyList),
+                    child: const Text('View all'),
+                  ),
                 ),
-                const SizedBox(height: 12),
-                const _CommandGrid(),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    context.push(RouteNames.ownerPayments);
-                  },
-                  icon: const Icon(Icons.payments_outlined),
-                  label: const Text('Payment Management'),
-                ),
-                const SizedBox(height: 24),
-                const _PropertySnapshotSection(),
-                const SizedBox(height: 24),
-                const _SectionTitle(
-                  title: 'Enterprise Management',
-                  subtitle:
-                      'In-depth directory records, staff control & automated billing rules',
-                ),
-                const SizedBox(height: 12),
-                const _EnterpriseHub(),
+                const SizedBox(height: 6),
+                const _BuildingsStrip(),
               ],
             ),
           );
@@ -147,504 +138,263 @@ class OwnerHomeScreen extends ConsumerWidget {
       ),
       bottomNavigationBar: AppBottomNavigation(
         selectedDestination: GrihoNavigationDestination.home,
-        onHomeTap: () {
-          context.go(RouteNames.ownerHome);
-        },
-        onMoreTap: () {
-          context.push(RouteNames.more);
+        onHomeTap: () => context.go(RouteNames.ownerHome),
+        onMoreTap: () => context.push(RouteNames.more),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// HEADER
+// ============================================================================
+
+class _Header extends StatelessWidget {
+  const _Header({required this.name, required this.publicId});
+
+  final String name;
+  final String publicId;
+
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _greeting(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (publicId.isNotEmpty)
+          ActionChip(
+            avatar: const Icon(Icons.fingerprint_rounded, size: 16),
+            label: Text(
+              publicId,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+            ),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: publicId));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Owner ID copied.'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// SUMMARY (rent + 3 numbers)
+// ============================================================================
+
+class _SummaryCard extends ConsumerWidget {
+  const _SummaryCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final uid = ref.watch(currentUserProfileProvider).value?.uid;
+    final db = FirebaseFirestore.instance;
+
+    final rates = uid == null
+        ? const Stream<QuerySnapshot>.empty()
+        : db
+              .collection('rentRates')
+              .where('ownerId', isEqualTo: uid)
+              .snapshots();
+    final bills = uid == null
+        ? const Stream<QuerySnapshot>.empty()
+        : db
+              .collection('monthlyBills')
+              .where('ownerId', isEqualTo: uid)
+              .snapshots();
+
+    final properties =
+        ref.watch(currentOwnerPropertiesProvider).value ?? const <Property>[];
+    final owned = properties.where((p) => p.ownerId == uid).length;
+    final tenants = ref.watch(ownerTenantsProvider).value ?? const <Tenant>[];
+    final activeTenants = tenants
+        .where((t) => t.status == TenantStatus.active)
+        .length;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: rates,
+      builder: (context, ratesSnap) => StreamBuilder<QuerySnapshot>(
+        stream: bills,
+        builder: (context, billsSnap) {
+          var rent = 0.0;
+          for (final d
+              in ratesSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
+            final m = d.data() as Map<String, dynamic>? ?? {};
+            if (m['effectiveTo'] == null && m['amount'] is num) {
+              rent += (m['amount'] as num).toDouble();
+            }
+          }
+          var unsettled = 0;
+          for (final d
+              in billsSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
+            final m = d.data() as Map<String, dynamic>? ?? {};
+            final s = (m['status'] ?? 'unpaid').toString();
+            if (s != 'paid' && s != 'cancelled') unsettled++;
+          }
+          final rentText = rent == rent.roundToDouble()
+              ? rent.toStringAsFixed(0)
+              : rent.toStringAsFixed(2);
+
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E222D), Color(0xFF141720)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Expected rent this month',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '৳ $rentText',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _Stat(label: 'Buildings', value: '$owned'),
+                    _Stat(label: 'Residents', value: '$activeTenants'),
+                    _Stat(
+                      label: 'Unpaid bills',
+                      value: '$unsettled',
+                      highlight: unsettled > 0,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
         },
       ),
     );
   }
 }
 
-class _ExecutiveHeader extends StatelessWidget {
-  final String name;
-  final String publicId;
+class _Stat extends StatelessWidget {
+  const _Stat({
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
 
-  const _ExecutiveHeader({required this.name, required this.publicId});
-
-  String _greetingText() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
-  }
+  final String label;
+  final String value;
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      _greetingText(),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ],
+          Text(
+            value,
+            style: TextStyle(
+              color: highlight ? Colors.amberAccent : Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          if (publicId.isNotEmpty)
-            InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: publicId));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Owner ID copied to clipboard.'),
-                    duration: Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: theme.colorScheme.outlineVariant),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.fingerprint_rounded,
-                      size: 15,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      publicId,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _PortfolioVaultCard extends ConsumerWidget {
-  const _PortfolioVaultCard();
+// ============================================================================
+// PRIMARY ACTIONS (দুটি সবচেয়ে বেশি ব্যবহৃত কাজ)
+// ============================================================================
+
+class _PrimaryActions extends ConsumerWidget {
+  const _PrimaryActions();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final tenantsAsync = ref.watch(ownerTenantsProvider);
-    final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
-    final currentUid = ref.watch(currentUserProfileProvider).value?.uid;
-    final firestore = FirebaseFirestore.instance;
-
-    final rentRatesStream = currentUid == null
-        ? const Stream<QuerySnapshot>.empty()
-        : firestore
-              .collection('rentRates')
-              .where('ownerId', isEqualTo: currentUid)
-              .snapshots();
-
-    final billsStream = currentUid == null
-        ? const Stream<QuerySnapshot>.empty()
-        : firestore
-              .collection('monthlyBills')
-              .where('ownerId', isEqualTo: currentUid)
-              .snapshots();
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: rentRatesStream,
-      builder: (context, ratesSnap) {
-        return StreamBuilder<QuerySnapshot>(
-          stream: billsStream,
-          builder: (context, billsSnap) {
-            var projectedMonthlyRent = 0.0;
-            final rateDocs = ratesSnap.data?.docs ?? [];
-            for (final doc in rateDocs) {
-              final data = doc.data() as Map<String, dynamic>? ?? {};
-              if (data['effectiveTo'] == null) {
-                final amount = (data['amount'] is num)
-                    ? (data['amount'] as num).toDouble()
-                    : 0.0;
-                projectedMonthlyRent += amount;
-              }
-            }
-
-            var unsettledInvoices = 0;
-            final billDocs = billsSnap.data?.docs ?? [];
-            for (final doc in billDocs) {
-              final data = doc.data() as Map<String, dynamic>? ?? {};
-              final status = (data['status'] ?? 'unpaid').toString();
-              if (status != 'paid' && status != 'cancelled') {
-                unsettledInvoices++;
-              }
-            }
-
-            final formattedRent =
-                projectedMonthlyRent == projectedMonthlyRent.roundToDouble()
-                ? projectedMonthlyRent.toStringAsFixed(0)
-                : projectedMonthlyRent.toStringAsFixed(2);
-
-            return Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E222D), Color(0xFF141720)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: -20,
-                    top: -20,
-                    child: Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: theme.colorScheme.primary.withValues(
-                          alpha: 0.22,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(22),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(7),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(
-                                    Icons.shield_outlined,
-                                    size: 16,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'PORTFOLIO REVENUE VAULT',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.75),
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 1.0,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.teal.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.teal.withValues(alpha: 0.5),
-                                ),
-                              ),
-                              child: const Text(
-                                'Live Run-Rate',
-                                style: TextStyle(
-                                  color: Colors.tealAccent,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Text(
-                          'Projected Monthly Rent',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            const Text(
-                              '৳ ',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              formattedRent,
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '/ month',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.5),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Divider(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          height: 1,
-                        ),
-                        const SizedBox(height: 14),
-                        propertiesAsync.when(
-                          loading: () => const SizedBox(
-                            height: 18,
-                            child: LinearProgressIndicator(),
-                          ),
-                          error: (_, _) => const SizedBox.shrink(),
-                          data: (properties) {
-                            final ownedProperties = currentUid == null
-                                ? properties
-                                : properties
-                                      .where((p) => p.ownerId == currentUid)
-                                      .toList();
-                            final totalProperties = ownedProperties.length;
-
-                            return tenantsAsync.maybeWhen(
-                              data: (tenants) {
-                                final activeTenants = tenants
-                                    .where(
-                                      (t) => t.status == TenantStatus.active,
-                                    )
-                                    .length;
-
-                                return Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    _VaultSubMetric(
-                                      label: 'Active Leases',
-                                      value: '$activeTenants Tenancies',
-                                      icon: Icons.verified_user_outlined,
-                                    ),
-                                    Container(
-                                      width: 1,
-                                      height: 28,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.12,
-                                      ),
-                                    ),
-                                    _VaultSubMetric(
-                                      label: 'Real Estate Assets',
-                                      value:
-                                          '$totalProperties ${totalProperties == 1 ? 'Building' : 'Buildings'}',
-                                      icon: Icons.domain_rounded,
-                                    ),
-                                    Container(
-                                      width: 1,
-                                      height: 28,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.12,
-                                      ),
-                                    ),
-                                    _VaultSubMetric(
-                                      label: 'Pending Invoices',
-                                      value: '$unsettledInvoices Unsettled',
-                                      icon: Icons.receipt_long_outlined,
-                                    ),
-                                  ],
-                                );
-                              },
-                              orElse: () => const SizedBox.shrink(),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _VaultSubMetric extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-
-  const _VaultSubMetric({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.white60),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _OperationalPulseRow extends ConsumerWidget {
-  const _OperationalPulseRow();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
-    final tenantsAsync = ref.watch(ownerTenantsProvider);
-    final currentUid = ref.watch(currentUserProfileProvider).value?.uid;
-
     return Row(
       children: [
         Expanded(
-          child: _PulseTile(
-            title: 'Buildings',
-            value: propertiesAsync.when(
-              loading: () => '...',
-              error: (_, _) => '0',
-              data: (properties) {
-                final ownedProperties = currentUid == null
-                    ? properties
-                    : properties.where((p) => p.ownerId == currentUid).toList();
-                return '${ownedProperties.length}';
-              },
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            icon: Icons.domain_rounded,
-            color: Colors.indigo,
-            onTap: () => context.push(RouteNames.propertyList),
+            onPressed: () => context.push(RouteNames.addTenant),
+            icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
+            label: const Text('Add resident'),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _PulseTile(
-            title: 'Residents',
-            value: tenantsAsync.when(
-              loading: () => '...',
-              error: (_, _) => '0',
-              data: (tenants) {
-                final active = tenants
-                    .where((t) => t.status == TenantStatus.active)
-                    .length;
-                return '$active';
-              },
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            icon: Icons.group_rounded,
-            color: Colors.teal,
-            onTap: () => context.push(RouteNames.ownerTenants),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _PulseTile(
-            title: 'Past Leases',
-            value: tenantsAsync.when(
-              loading: () => '...',
-              error: (_, _) => '0',
-              data: (tenants) {
-                final inactive = tenants
-                    .where((t) => t.status == TenantStatus.inactive)
-                    .length;
-                return '$inactive';
-              },
-            ),
-            icon: Icons.history_rounded,
-            color: Colors.amber.shade900,
-            onTap: () => context.push(RouteNames.ownerTenants),
+            onPressed: () async {
+              await context.push(RouteNames.addProperty);
+              if (!context.mounted) return;
+              ref.invalidate(currentOwnerPropertiesProvider);
+            },
+            icon: const Icon(Icons.add_home_work_rounded, size: 20),
+            label: const Text('Add building'),
           ),
         ),
       ],
@@ -652,73 +402,100 @@ class _OperationalPulseRow extends ConsumerWidget {
   }
 }
 
-class _PulseTile extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
+// ============================================================================
+// TEAM CARD — ম্যানেজার, কেয়ারটেকার, ইলেক্ট্রিশিয়ান এক জায়গায়
+// ============================================================================
 
-  const _PulseTile({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
+class _TeamCard extends ConsumerWidget {
+  const _TeamCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final managers =
+        ref.watch(ownerManagersProvider).value ?? const <TeamMember>[];
+    final staff = ref.watch(ownerStaffProvider).value ?? const <TeamMember>[];
+    final pending =
+        (ref.watch(ownerPendingManagerInvitesProvider).value ??
+                const <TeamMember>[])
+            .length +
+        (ref.watch(ownerPendingStaffInvitesProvider).value ??
+                const <TeamMember>[])
+            .length;
+    final orders =
+        ref.watch(ownerWorkOrdersProvider).value ?? const <WorkOrder>[];
+
+    int active(Iterable<TeamMember> l, [String? role]) => l
+        .where((m) => m.status == 'active' && (role == null || m.role == role))
+        .length;
+    final suspended = [
+      ...managers,
+      ...staff,
+    ].where((m) => m.status == 'suspended').length;
+    final openTasks = orders.where((w) => w.isOpenish).length;
+
+    final notes = <String>[
+      if (pending > 0) '$pending pending invite${pending == 1 ? '' : 's'}',
+      if (suspended > 0) '$suspended suspended',
+      if (openTasks > 0) '$openTasks open task${openTasks == 1 ? '' : 's'}',
+    ];
 
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        onTap: () => context.push(RouteNames.ownerTeam),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, size: 16, color: color),
+                  _TeamCount(
+                    icon: Icons.admin_panel_settings_rounded,
+                    label: 'Managers',
+                    count: active(managers),
+                    color: Colors.indigo,
                   ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 16,
-                    color: Colors.grey,
+                  _TeamCount(
+                    icon: Icons.handyman_rounded,
+                    label: 'Caretakers',
+                    count: active(staff, 'caretaker'),
+                    color: Colors.teal,
+                  ),
+                  _TeamCount(
+                    icon: Icons.electrical_services_rounded,
+                    label: 'Electricians',
+                    count: active(staff, 'electrician'),
+                    color: Colors.amber.shade800,
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                value,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                title,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      notes.isEmpty
+                          ? 'Invite people, manage access and assign work.'
+                          : notes.join(' • '),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: notes.isEmpty
+                            ? theme.colorScheme.onSurfaceVariant
+                            : theme.colorScheme.primary,
+                        fontWeight: notes.isEmpty
+                            ? FontWeight.w500
+                            : FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded),
+                ],
               ),
             ],
           ),
@@ -728,147 +505,143 @@ class _PulseTile extends StatelessWidget {
   }
 }
 
-class _CommandGrid extends ConsumerWidget {
-  const _CommandGrid();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
-    return Column(
-      children: [
-        Material(
-          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: BorderSide(
-              color: theme.colorScheme.primary.withValues(alpha: 0.4),
-              width: 1.5,
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () => context.push(RouteNames.addTenant),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.person_add_alt_1_rounded,
-                      size: 24,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Register New Resident',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Assign vacant units and dispatch tenancy invites',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 16,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _SubActionTile(
-                icon: Icons.add_home_work_rounded,
-                title: 'Add Building',
-                color: Colors.teal,
-                onTap: () async {
-                  await context.push(RouteNames.addProperty);
-                  if (!context.mounted) return;
-                  ref.invalidate(currentOwnerPropertiesProvider);
-                },
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _SubActionTile(
-                icon: Icons.admin_panel_settings_outlined,
-                title: 'Managers',
-                color: Colors.indigo,
-                onTap: () => context.push(RouteNames.ownerManagers),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _SubActionTile(
-                icon: Icons.price_change_outlined,
-                title: 'Rent Control',
-                color: Colors.deepPurpleAccent,
-                onTap: () => context.push(RouteNames.centralRentControl),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _SubActionTile(
-                icon: Icons.receipt_long_rounded,
-                title: 'Billing Rules',
-                color: Colors.amber.shade900,
-                onTap: () => context.push(RouteNames.ownerBillingRules),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _SubActionTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _SubActionTile({
+class _TeamCount extends StatelessWidget {
+  const _TeamCount({
     required this.icon,
-    required this.title,
+    required this.label,
+    required this.count,
     required this.color,
-    required this.onTap,
   });
+
+  final IconData icon;
+  final String label;
+  final int count;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    return Expanded(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$count',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 17,
+                ),
+              ),
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
+// ============================================================================
+// MANAGE GRID — ৬টি পরিষ্কার শর্টকাট (আগের লম্বা তালিকার বদলে)
+// ============================================================================
+
+class _ManageGrid extends StatelessWidget {
+  const _ManageGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <_GridItem>[
+      _GridItem(
+        Icons.groups_rounded,
+        'Residents',
+        'Tenants & leases',
+        Colors.teal,
+        RouteNames.ownerTenants,
+      ),
+      _GridItem(
+        Icons.domain_rounded,
+        'Buildings',
+        'Units & floors',
+        Colors.indigo,
+        RouteNames.propertyList,
+      ),
+      _GridItem(
+        Icons.payments_outlined,
+        'Payments',
+        'Review & confirm',
+        Colors.green,
+        RouteNames.ownerPayments,
+      ),
+      _GridItem(
+        Icons.price_change_outlined,
+        'Rent control',
+        'Change rates',
+        Colors.deepPurpleAccent,
+        RouteNames.centralRentControl,
+      ),
+      _GridItem(
+        Icons.receipt_long_rounded,
+        'Billing rules',
+        'Utilities & charges',
+        Colors.amber.shade900,
+        RouteNames.ownerBillingRules,
+      ),
+      _GridItem(
+        Icons.history_edu_rounded,
+        'Audit trail',
+        'Who did what',
+        Colors.blueGrey,
+        RouteNames.activityLogs,
+      ),
+    ];
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      childAspectRatio: 2.3,
+      children: [for (final i in items) _GridTile(item: i)],
+    );
+  }
+}
+
+class _GridItem {
+  const _GridItem(this.icon, this.title, this.subtitle, this.color, this.route);
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final String route;
+}
+
+class _GridTile extends StatelessWidget {
+  const _GridTile({required this.item});
+
+  final _GridItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
@@ -877,25 +650,44 @@ class _SubActionTile extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        onTap: () => context.push(item.route),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-          child: Column(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  color: item.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(icon, size: 20, color: color),
+                child: Icon(item.icon, size: 20, color: item.color),
               ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      item.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -906,41 +698,28 @@ class _SubActionTile extends StatelessWidget {
   }
 }
 
-class _PropertySnapshotSection extends ConsumerWidget {
-  const _PropertySnapshotSection();
+// ============================================================================
+// BUILDINGS STRIP
+// ============================================================================
+
+class _BuildingsStrip extends ConsumerWidget {
+  const _BuildingsStrip();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
-    final currentUid = ref.watch(currentUserProfileProvider).value?.uid;
     final theme = Theme.of(context);
+    final uid = ref.watch(currentUserProfileProvider).value?.uid;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const _SectionTitle(
-              title: 'Portfolio Buildings',
-              subtitle: 'Active real estate assets and flat distribution',
-            ),
-            TextButton(
-              onPressed: () => context.push(RouteNames.propertyList),
-              child: const Text('View All'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        propertiesAsync.when(
+    return ref
+        .watch(currentOwnerPropertiesProvider)
+        .when(
           loading: () => const LinearProgressIndicator(),
-          error: (err, stack) => Text('Unable to load properties: $err'),
-          data: (properties) {
-            final ownedProperties = currentUid == null
-                ? properties
-                : properties.where((p) => p.ownerId == currentUid).toList();
-
-            if (ownedProperties.isEmpty) {
+          error: (e, _) => Text('Unable to load buildings: $e'),
+          data: (all) {
+            final owned = uid == null
+                ? all
+                : all.where((p) => p.ownerId == uid).toList();
+            if (owned.isEmpty) {
               return Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -953,62 +732,49 @@ class _PropertySnapshotSection extends ConsumerWidget {
                   children: [
                     Icon(
                       Icons.domain_disabled_rounded,
-                      size: 40,
+                      size: 38,
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     const Text(
-                      'No properties onboarded yet.',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      'No buildings yet',
+                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Register your first building to start managing units and tenants.',
+                      'Add your first building to start managing units and tenants.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    OutlinedButton.icon(
-                      onPressed: () => context.push(RouteNames.addProperty),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Add First Building'),
-                    ),
                   ],
                 ),
               );
             }
-
             return SizedBox(
-              height: 140,
+              height: 112,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: ownedProperties.length,
+                itemCount: owned.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final property = ownedProperties[index];
-                  return _PropertyMiniCard(property: property);
-                },
+                itemBuilder: (context, i) => _BuildingCard(property: owned[i]),
               ),
             );
           },
-        ),
-      ],
-    );
+        );
   }
 }
 
-class _PropertyMiniCard extends StatelessWidget {
-  final Property property;
+class _BuildingCard extends StatelessWidget {
+  const _BuildingCard({required this.property});
 
-  const _PropertyMiniCard({required this.property});
+  final Property property;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isActive = property.status == PropertyStatus.active;
-
+    final active = property.status == PropertyStatus.active;
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
@@ -1017,13 +783,11 @@ class _PropertyMiniCard extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          context.push(
-            RouteNames.propertyDetails.replaceFirst(':propertyId', property.id),
-          );
-        },
+        onTap: () => context.push(
+          RouteNames.propertyDetails.replaceFirst(':propertyId', property.id),
+        ),
         child: Container(
-          width: 220,
+          width: 200,
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1031,17 +795,9 @@ class _PropertyMiniCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.apartment_rounded,
-                      size: 18,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
+                  Icon(
+                    Icons.apartment_rounded,
+                    color: theme.colorScheme.primary,
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1049,17 +805,17 @@ class _PropertyMiniCard extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: isActive
-                          ? Colors.green.withValues(alpha: 0.12)
-                          : Colors.orange.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
+                      color: (active ? Colors.green : Colors.orange).withValues(
+                        alpha: 0.12,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      isActive ? 'Active' : 'Inactive',
+                      active ? 'Active' : 'Inactive',
                       style: TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: isActive
+                        fontWeight: FontWeight.w800,
+                        color: active
                             ? Colors.green.shade800
                             : Colors.orange.shade800,
                       ),
@@ -1077,9 +833,8 @@ class _PropertyMiniCard extends StatelessWidget {
                   fontSize: 14,
                 ),
               ),
-              const SizedBox(height: 2),
               Text(
-                '${property.numberOfFloors} Floors • Code: ${property.propertyCode}',
+                '${property.numberOfFloors} floors • ${property.propertyCode}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontSize: 11,
@@ -1093,672 +848,38 @@ class _PropertyMiniCard extends StatelessWidget {
   }
 }
 
-class _EnterpriseHub extends StatelessWidget {
-  const _EnterpriseHub();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          _HubActionTile(
-            icon: Icons.holiday_village_outlined,
-            title: 'Property & Spaces Directory',
-            subtitle: 'Buildings, residential units, and floor configurations',
-            tag: 'View All',
-            onTap: () => context.push(RouteNames.propertyList),
-          ),
-          const Divider(height: 1, indent: 64),
-          _HubActionTile(
-            icon: Icons.badge_outlined,
-            title: 'Tenants & Residency Directory',
-            subtitle:
-                'Manage verified member accounts, agreements, and vacated records',
-            tag: 'Residents',
-            onTap: () => context.push(RouteNames.ownerTenants),
-          ),
-          const Divider(height: 1, indent: 64),
-          _HubActionTile(
-            icon: Icons.engineering_outlined,
-            title: 'Property Managers & Operational Staff',
-            subtitle:
-                'Manage Managers, Caretakers, Electricians & active work orders',
-            tag: 'Team & Ops',
-            onTap: () => _showUnifiedStaffManagementModal(context),
-          ),
-          const Divider(height: 1, indent: 64),
-          _HubActionTile(
-            icon: Icons.price_change_outlined,
-            title: 'Rent & Tariff Control',
-            subtitle:
-                'Adjust rent across entire property, floor, or individual units',
-            tag: 'Rent',
-            onTap: () => context.push(RouteNames.centralRentControl),
-          ),
-          const Divider(height: 1, indent: 64),
-          _HubActionTile(
-            icon: Icons.tune_rounded,
-            title: 'Automated Billing & Invoicing Engine',
-            subtitle:
-                'Utility tariff rates, recurring rent cycles, and manual bill generation',
-            tag: 'Billing',
-            onTap: () => context.push(RouteNames.ownerBillingRules),
-          ),
-          const Divider(height: 1, indent: 64),
-          _HubActionTile(
-            icon: Icons.history_edu_rounded,
-            title: 'Activity & Audit Trail',
-            subtitle: 'Track manager actions, rent changes, and billing logs',
-            tag: 'Audit',
-            onTap: () => context.push(RouteNames.activityLogs),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showUnifiedStaffManagementModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => Consumer(
-        builder: (context, ref, _) {
-          final properties =
-              ref.watch(currentOwnerPropertiesProvider).value ?? [];
-          final profile = ref.watch(currentUserProfileProvider).value;
-
-          if (properties.isEmpty || profile == null) {
-            return const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(
-                child: Text('Please add a property first to manage staff.'),
-              ),
-            );
-          }
-
-          Property selectedProperty = properties.first;
-          String staffRole = 'manager';
-          final identifierCtrl = TextEditingController();
-
-          return StatefulBuilder(
-            builder: (context, setModalState) {
-              return DefaultTabController(
-                length: 2,
-                child: SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.75,
-                  child: Column(
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.symmetric(vertical: 10),
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Team & Operational Staff',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const TabBar(
-                        tabs: [
-                          Tab(
-                            icon: Icon(Icons.person_add_rounded),
-                            text: 'Invite Staff',
-                          ),
-                          Tab(
-                            icon: Icon(Icons.group_rounded),
-                            text: 'Active Team & Roster',
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: TabBarView(
-                          children: [
-                            SingleChildScrollView(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  DropdownButtonFormField<Property>(
-                                    initialValue: selectedProperty,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Select Building',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    items: properties
-                                        .map(
-                                          (p) => DropdownMenuItem(
-                                            value: p,
-                                            child: Text(p.name),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: (v) {
-                                      if (v != null) {
-                                        setModalState(
-                                          () => selectedProperty = v,
-                                        );
-                                      }
-                                    },
-                                  ),
-                                  const SizedBox(height: 16),
-                                  const Text(
-                                    'Select Staff Role',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: staffRole,
-                                    decoration: const InputDecoration(
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: 'manager',
-                                        child: Text(
-                                          'Property Manager (Full Admin)',
-                                        ),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'caretaker',
-                                        child: Text(
-                                          'Building Caretaker (Visitor & Issues)',
-                                        ),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'electrician',
-                                        child: Text(
-                                          'Electrician (Meter & Electrical)',
-                                        ),
-                                      ),
-                                    ],
-                                    onChanged: (v) {
-                                      if (v != null) {
-                                        setModalState(() => staffRole = v);
-                                      }
-                                    },
-                                  ),
-                                  const SizedBox(height: 16),
-                                  TextField(
-                                    controller: identifierCtrl,
-                                    decoration: const InputDecoration(
-                                      labelText:
-                                          'Staff Phone or Griho ID (e.g. GRI-...)',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  FilledButton.icon(
-                                    onPressed: () async {
-                                      final input = identifierCtrl.text.trim();
-                                      if (input.isEmpty) return;
-
-                                      final firestore =
-                                          FirebaseFirestore.instance;
-
-                                      if (staffRole == 'manager') {
-                                        await firestore
-                                            .collection('managerInvitations')
-                                            .add({
-                                              'ownerId':
-                                                  selectedProperty.ownerId,
-                                              'ownerName': profile.name,
-                                              'propertyId': selectedProperty.id,
-                                              'propertyName':
-                                                  selectedProperty.name,
-                                              'propertyCode':
-                                                  selectedProperty.propertyCode,
-                                              'identifier': input,
-                                              'phone': input.startsWith('GRI-')
-                                                  ? ''
-                                                  : input,
-                                              'targetGrihoId':
-                                                  input
-                                                      .toUpperCase()
-                                                      .startsWith('GRI-')
-                                                  ? input.toUpperCase()
-                                                  : '',
-                                              'status': 'pending',
-                                              'accessStatus': 'active',
-                                              'createdAt':
-                                                  FieldValue.serverTimestamp(),
-                                              'updatedAt':
-                                                  FieldValue.serverTimestamp(),
-                                            });
-                                      } else {
-                                        await firestore
-                                            .collection('staffInvitations')
-                                            .add({
-                                              'ownerId':
-                                                  selectedProperty.ownerId,
-                                              'ownerName': profile.name,
-                                              'propertyId': selectedProperty.id,
-                                              'propertyName':
-                                                  selectedProperty.name,
-                                              'propertyCode':
-                                                  selectedProperty.propertyCode,
-                                              'staffRole': staffRole,
-                                              'identifier': input,
-                                              'phone': input.startsWith('GRI-')
-                                                  ? ''
-                                                  : input,
-                                              'targetGrihoId':
-                                                  input
-                                                      .toUpperCase()
-                                                      .startsWith('GRI-')
-                                                  ? input.toUpperCase()
-                                                  : '',
-                                              'status': 'pending',
-                                              'accessStatus': 'active',
-                                              'createdAt':
-                                                  FieldValue.serverTimestamp(),
-                                              'updatedAt':
-                                                  FieldValue.serverTimestamp(),
-                                            });
-                                      }
-
-                                      if (!ctx.mounted) return;
-                                      Navigator.pop(ctx);
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            '${staffRole.toUpperCase()} invitation sent successfully!',
-                                          ),
-                                          backgroundColor: Colors.green,
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      Icons.send_rounded,
-                                      size: 18,
-                                    ),
-                                    label: const Text('Dispatch Invitation'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('staffAccess')
-                                  .where('ownerId', isEqualTo: profile.uid)
-                                  .snapshots(),
-                              builder: (context, staffSnap) {
-                                return StreamBuilder<QuerySnapshot>(
-                                  stream: FirebaseFirestore.instance
-                                      .collection('managerAccess')
-                                      .where('ownerId', isEqualTo: profile.uid)
-                                      .snapshots(),
-                                  builder: (context, managerSnap) {
-                                    final staffDocs =
-                                        staffSnap.data?.docs ?? [];
-                                    final managerDocs =
-                                        managerSnap.data?.docs ?? [];
-
-                                    if (staffDocs.isEmpty &&
-                                        managerDocs.isEmpty) {
-                                      return const Center(
-                                        child: Text(
-                                          'No active staff or managers assigned yet.',
-                                        ),
-                                      );
-                                    }
-
-                                    return ListView(
-                                      padding: const EdgeInsets.all(16),
-                                      children: [
-                                        for (final doc in managerDocs)
-                                          _TeamMemberTile(
-                                            name:
-                                                (doc.data()
-                                                    as Map<
-                                                      String,
-                                                      dynamic
-                                                    >)['managerName'] ??
-                                                'Property Manager',
-                                            role: 'Property Manager',
-                                            building:
-                                                (doc.data()
-                                                    as Map<
-                                                      String,
-                                                      dynamic
-                                                    >)['propertyName'] ??
-                                                'Building',
-                                            status:
-                                                (doc.data()
-                                                    as Map<
-                                                      String,
-                                                      dynamic
-                                                    >)['status'] ??
-                                                'active',
-                                            onToggleSuspend: () async {
-                                              final current =
-                                                  (doc.data()
-                                                      as Map<
-                                                        String,
-                                                        dynamic
-                                                      >)['status'] ??
-                                                  'active';
-                                              final next = current == 'active'
-                                                  ? 'suspended'
-                                                  : 'active';
-                                              await doc.reference.update({
-                                                'status': next,
-                                                'updatedAt':
-                                                    FieldValue.serverTimestamp(),
-                                              });
-                                            },
-                                            onRevoke: () async {
-                                              await doc.reference.update({
-                                                'status': 'revoked',
-                                                'updatedAt':
-                                                    FieldValue.serverTimestamp(),
-                                              });
-                                            },
-                                          ),
-                                        for (final doc in staffDocs)
-                                          _TeamMemberTile(
-                                            name:
-                                                (doc.data()
-                                                    as Map<
-                                                      String,
-                                                      dynamic
-                                                    >)['staffName'] ??
-                                                'Staff Member',
-                                            role:
-                                                ((doc.data()
-                                                            as Map<
-                                                              String,
-                                                              dynamic
-                                                            >)['staffRole'] ??
-                                                        'staff')
-                                                    .toString()
-                                                    .toUpperCase(),
-                                            building:
-                                                (doc.data()
-                                                    as Map<
-                                                      String,
-                                                      dynamic
-                                                    >)['propertyName'] ??
-                                                'Building',
-                                            status:
-                                                (doc.data()
-                                                    as Map<
-                                                      String,
-                                                      dynamic
-                                                    >)['status'] ??
-                                                'active',
-                                            onToggleSuspend: () async {
-                                              final current =
-                                                  (doc.data()
-                                                      as Map<
-                                                        String,
-                                                        dynamic
-                                                      >)['status'] ??
-                                                  'active';
-                                              final next = current == 'active'
-                                                  ? 'suspended'
-                                                  : 'active';
-                                              await doc.reference.update({
-                                                'status': next,
-                                                'updatedAt':
-                                                    FieldValue.serverTimestamp(),
-                                              });
-                                            },
-                                            onRevoke: () async {
-                                              await doc.reference.update({
-                                                'status': 'revoked',
-                                                'updatedAt':
-                                                    FieldValue.serverTimestamp(),
-                                              });
-                                            },
-                                          ),
-                                      ],
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _TeamMemberTile extends StatelessWidget {
-  final String name;
-  final String role;
-  final String building;
-  final String status;
-  final VoidCallback onToggleSuspend;
-  final VoidCallback onRevoke;
-
-  const _TeamMemberTile({
-    required this.name,
-    required this.role,
-    required this.building,
-    required this.status,
-    required this.onToggleSuspend,
-    required this.onRevoke,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isSuspended = status == 'suspended';
-    final isRevoked = status == 'revoked';
-
-    if (isRevoked) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSuspended ? Colors.orange : theme.colorScheme.outlineVariant,
-        ),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: isSuspended
-                ? Colors.orange.withValues(alpha: 0.15)
-                : theme.colorScheme.primaryContainer,
-            child: Icon(
-              Icons.person_outline_rounded,
-              color: isSuspended ? Colors.orange : theme.colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                Text(
-                  '$role • $building',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: isSuspended ? 'Restore Access' : 'Suspend Access',
-            icon: Icon(
-              isSuspended
-                  ? Icons.play_circle_outline_rounded
-                  : Icons.pause_circle_outline_rounded,
-              color: isSuspended ? Colors.green : Colors.orange,
-            ),
-            onPressed: onToggleSuspend,
-          ),
-          IconButton(
-            tooltip: 'Revoke Access',
-            icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-            onPressed: onRevoke,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HubActionTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String tag;
-  final VoidCallback onTap;
-
-  const _HubActionTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.tag,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(icon, size: 22, color: theme.colorScheme.primary),
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              tag,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 3),
-        child: Text(
-          subtitle,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            height: 1.3,
-          ),
-        ),
-      ),
-      trailing: const Icon(Icons.chevron_right_rounded, size: 20),
-      onTap: onTap,
-    );
-  }
-}
+// ============================================================================
+// SHARED
+// ============================================================================
 
 class _SectionTitle extends StatelessWidget {
-  final String title;
-  final String? subtitle;
+  const _SectionTitle(this.title, {this.trailing});
 
-  const _SectionTitle({required this.title, this.subtitle});
+  final String title;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 2),
-          Text(
-            subtitle!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontSize: 12,
-            ),
-          ),
-        ],
+        ?trailing,
       ],
     );
   }
 }
 
 class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.onRetry});
+
   final String message;
   final VoidCallback onRetry;
-
-  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
