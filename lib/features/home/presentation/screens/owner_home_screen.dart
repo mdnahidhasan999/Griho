@@ -16,6 +16,24 @@ import '../../../team/presentation/providers/team_providers.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/owner_tenants_provider.dart';
 
+Map<String, dynamic> _asMap(Object? raw) {
+  if (raw is Map<String, dynamic>) return raw;
+  if (raw is Map) return Map<String, dynamic>.from(raw);
+  return <String, dynamic>{};
+}
+
+class _NoticePropertyOption {
+  const _NoticePropertyOption({
+    required this.id,
+    required this.name,
+    required this.ownerId,
+  });
+
+  final String id;
+  final String name;
+  final String ownerId;
+}
+
 class OwnerHomeScreen extends ConsumerWidget {
   const OwnerHomeScreen({super.key});
 
@@ -31,9 +49,37 @@ class OwnerHomeScreen extends ConsumerWidget {
     );
   }
 
+  void _openNoticesSheet(
+    BuildContext context,
+    String uid,
+    String userName,
+    List<Property> properties,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _OwnerNoticesSheet(
+        actorUid: uid,
+        actorName: userName,
+        properties: properties
+            .map(
+              (p) => _NoticePropertyOption(
+                id: p.id,
+                name: p.name,
+                ownerId: p.ownerId,
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentUserProfileProvider);
+    final properties =
+        ref.watch(currentOwnerPropertiesProvider).value ?? const <Property>[];
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -109,6 +155,10 @@ class OwnerHomeScreen extends ConsumerWidget {
             );
           }
 
+          final ownedProps = properties
+              .where((p) => p.ownerId == profile.uid)
+              .toList();
+
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(currentUserProfileProvider);
@@ -123,7 +173,6 @@ class OwnerHomeScreen extends ConsumerWidget {
                 _Header(name: profile.name, publicId: profile.publicId),
                 const SizedBox(height: 16),
 
-                // ভাড়াটিয়ার রিপোর্ট করা সমস্যার লাইভ অ্যালার্ট ব্যানার
                 _OpenIssuesBanner(
                   filterField: 'ownerId',
                   filterValues: [profile.uid],
@@ -143,6 +192,12 @@ class OwnerHomeScreen extends ConsumerWidget {
                 _ManageGrid(
                   onOpenIssues: () =>
                       _openMaintenanceSheet(context, profile.uid),
+                  onOpenNotices: () => _openNoticesSheet(
+                    context,
+                    profile.uid,
+                    profile.name,
+                    ownedProps,
+                  ),
                 ),
                 const SizedBox(height: 22),
                 _SectionTitle(
@@ -258,14 +313,13 @@ class _OpenIssuesBanner extends StatelessWidget {
               .collection('maintenanceRequests')
               .where('propertyId', whereIn: filterValues.take(10).toList());
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
       builder: (context, snap) {
-        final docs =
-            snap.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+        final docs = snap.data?.docs ?? const <QueryDocumentSnapshot>[];
 
         final openCount = docs.where((d) {
-          final s = (d.data()['status'] ?? 'open').toString();
+          final s = (_asMap(d.data())['status'] ?? 'open').toString();
           return s == 'open' || s == 'in_progress';
         }).length;
 
@@ -332,7 +386,7 @@ class _OwnerMaintenanceSheet extends StatelessWidget {
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.7,
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        child: StreamBuilder<QuerySnapshot>(
           stream: query.snapshots(),
           builder: (context, snap) {
             if (!snap.hasData) {
@@ -342,11 +396,10 @@ class _OwnerMaintenanceSheet extends StatelessWidget {
             final docs = [...snap.data!.docs];
 
             docs.sort((a, b) {
-              final at = a.data()['createdAt'];
-              final bt = b.data()['createdAt'];
+              final at = _asMap(a.data())['createdAt'];
+              final bt = _asMap(b.data())['createdAt'];
 
               final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
-
               final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
 
               return bm.compareTo(am);
@@ -368,7 +421,7 @@ class _OwnerMaintenanceSheet extends StatelessWidget {
                 for (final doc in docs)
                   Builder(
                     builder: (context) {
-                      final d = doc.data();
+                      final d = _asMap(doc.data());
 
                       final title = (d['title'] ?? 'Issue').toString();
                       final desc = (d['description'] ?? '').toString();
@@ -476,6 +529,332 @@ class _OwnerMaintenanceSheet extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// OWNER BUILDING NOTICES SHEET
+// ============================================================================
+
+class _OwnerNoticesSheet extends StatefulWidget {
+  const _OwnerNoticesSheet({
+    required this.actorUid,
+    required this.actorName,
+    required this.properties,
+  });
+
+  final String actorUid;
+  final String actorName;
+  final List<_NoticePropertyOption> properties;
+
+  @override
+  State<_OwnerNoticesSheet> createState() => _OwnerNoticesSheetState();
+}
+
+class _OwnerNoticesSheetState extends State<_OwnerNoticesSheet> {
+  final _titleCtrl = TextEditingController();
+  final _messageCtrl = TextEditingController();
+  late String _selectedPropertyId;
+  String _priority = 'normal';
+  bool _posting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedPropertyId = widget.properties.isNotEmpty
+        ? widget.properties.first.id
+        : '';
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _publishNotice() async {
+    final title = _titleCtrl.text.trim();
+    final message = _messageCtrl.text.trim();
+    if (_selectedPropertyId.isEmpty || title.isEmpty || message.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a building and enter title & message.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final prop = widget.properties.firstWhere(
+      (p) => p.id == _selectedPropertyId,
+      orElse: () => widget.properties.first,
+    );
+
+    setState(() => _posting = true);
+    try {
+      await FirebaseFirestore.instance.collection('buildingNotices').add({
+        'ownerId': widget.actorUid,
+        'propertyId': prop.id,
+        'propertyName': prop.name,
+        'title': title,
+        'message': message,
+        'priority': _priority,
+        'postedByUid': widget.actorUid,
+        'postedByName': widget.actorName,
+        'postedByRole': 'owner',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      _titleCtrl.clear();
+      _messageCtrl.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notice published to residents!'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not publish notice: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (widget.properties.isEmpty) {
+      return const SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: Text('Add a building first to post notices.')),
+        ),
+      );
+    }
+
+    final activePropId =
+        widget.properties.any((p) => p.id == _selectedPropertyId)
+        ? _selectedPropertyId
+        : widget.properties.first.id;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.78,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              const Text(
+                'Building Notices',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Post announcements directly to residents of your building.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              if (widget.properties.length > 1) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: activePropId,
+                  decoration: const InputDecoration(
+                    labelText: 'Target Building',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: widget.properties
+                      .map(
+                        (p) => DropdownMenuItem<String>(
+                          value: p.id,
+                          child: Text(p.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _selectedPropertyId = v);
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                controller: _titleCtrl,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Notice Title *',
+                  hintText: 'e.g. Water Tank Cleaning Tomorrow',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _messageCtrl,
+                maxLines: 2,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Details / Schedule *',
+                  hintText: 'Water supply will be paused from 10 AM to 1 PM.',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _priority,
+                      decoration: const InputDecoration(
+                        labelText: 'Urgency Level',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'normal',
+                          child: Text('Normal'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'important',
+                          child: Text('Important'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'urgent',
+                          child: Text('Urgent'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _priority = v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 14,
+                      ),
+                    ),
+                    onPressed: _posting ? null : _publishNotice,
+                    icon: _posting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.campaign_rounded, size: 18),
+                    label: const Text('Publish'),
+                  ),
+                ],
+              ),
+              const Divider(height: 28),
+              const Text(
+                'Published Notices',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              ),
+              const SizedBox(height: 8),
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('buildingNotices')
+                    .where('propertyId', isEqualTo: activePropId)
+                    .snapshots(),
+                builder: (context, snap) {
+                  if (!snap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = [...snap.data!.docs];
+                  docs.sort((a, b) {
+                    final at = _asMap(a.data())['createdAt'];
+                    final bt = _asMap(b.data())['createdAt'];
+                    final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
+                    final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
+                    return bm.compareTo(am);
+                  });
+
+                  if (docs.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: Text(
+                          'No notices posted for this building yet.',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      for (final doc in docs)
+                        Builder(
+                          builder: (context) {
+                            final d = _asMap(doc.data());
+                            final isUrgent =
+                                (d['priority'] ?? 'normal') == 'urgent';
+                            final postedBy = (d['postedByName'] ?? 'Admin')
+                                .toString();
+                            final roleLabel = (d['postedByRole'] ?? 'owner')
+                                .toString()
+                                .toUpperCase();
+
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: Icon(
+                                  isUrgent
+                                      ? Icons.priority_high_rounded
+                                      : Icons.campaign_outlined,
+                                  color: isUrgent
+                                      ? Colors.red
+                                      : theme.colorScheme.primary,
+                                ),
+                                title: Text(
+                                  (d['title'] ?? '').toString(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${d['message'] ?? ''}\nBy $postedBy ($roleLabel)',
+                                ),
+                                isThreeLine: true,
+                                trailing: IconButton(
+                                  tooltip: 'Delete notice',
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: Colors.redAccent,
+                                  ),
+                                  onPressed: () => doc.reference.delete(),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SummaryCard extends ConsumerWidget {
   const _SummaryCard();
 
@@ -486,14 +865,14 @@ class _SummaryCard extends ConsumerWidget {
     final db = FirebaseFirestore.instance;
 
     final rates = uid == null
-        ? const Stream<QuerySnapshot<Map<String, dynamic>>>.empty()
+        ? const Stream<QuerySnapshot>.empty()
         : db
               .collection('rentRates')
               .where('ownerId', isEqualTo: uid)
               .snapshots();
 
     final bills = uid == null
-        ? const Stream<QuerySnapshot<Map<String, dynamic>>>.empty()
+        ? const Stream<QuerySnapshot>.empty()
         : db
               .collection('monthlyBills')
               .where('ownerId', isEqualTo: uid)
@@ -510,18 +889,17 @@ class _SummaryCard extends ConsumerWidget {
         .where((t) => t.status == TenantStatus.active)
         .length;
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<QuerySnapshot>(
       stream: rates,
       builder: (context, ratesSnap) {
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        return StreamBuilder<QuerySnapshot>(
           stream: bills,
           builder: (context, billsSnap) {
             var rent = 0.0;
 
             for (final d
-                in ratesSnap.data?.docs ??
-                    const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
-              final m = d.data();
+                in ratesSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
+              final m = _asMap(d.data());
 
               if (m['effectiveTo'] == null && m['amount'] is num) {
                 rent += (m['amount'] as num).toDouble();
@@ -531,9 +909,8 @@ class _SummaryCard extends ConsumerWidget {
             var unsettled = 0;
 
             for (final d
-                in billsSnap.data?.docs ??
-                    const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
-              final m = d.data();
+                in billsSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
+              final m = _asMap(d.data());
               final s = (m['status'] ?? 'unpaid').toString();
 
               if (s != 'paid' && s != 'cancelled') {
@@ -833,9 +1210,10 @@ class _TeamCount extends StatelessWidget {
 }
 
 class _ManageGrid extends StatelessWidget {
-  const _ManageGrid({required this.onOpenIssues});
+  const _ManageGrid({required this.onOpenIssues, required this.onOpenNotices});
 
   final VoidCallback onOpenIssues;
+  final VoidCallback onOpenNotices;
 
   @override
   Widget build(BuildContext context) {
@@ -869,6 +1247,13 @@ class _ManageGrid extends StatelessWidget {
         onOpenIssues,
       ),
       _GridItem(
+        Icons.campaign_outlined,
+        'Notices',
+        'Post & manage',
+        Colors.amber.shade800,
+        onOpenNotices,
+      ),
+      _GridItem(
         Icons.price_change_outlined,
         'Rent control',
         'Change rates',
@@ -879,8 +1264,15 @@ class _ManageGrid extends StatelessWidget {
         Icons.receipt_long_rounded,
         'Billing rules',
         'Utilities & charges',
-        Colors.amber.shade900,
+        Colors.brown,
         () => context.push(RouteNames.ownerBillingRules),
+      ),
+      _GridItem(
+        Icons.history_edu_rounded,
+        'Audit trail',
+        'Activity logs',
+        Colors.blueGrey,
+        () => context.push(RouteNames.activityLogs),
       ),
     ];
 

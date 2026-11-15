@@ -13,6 +13,24 @@ import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../widgets/manager_portal_sheets.dart';
 
+Map<String, dynamic> _asMap(Object? raw) {
+  if (raw is Map<String, dynamic>) return raw;
+  if (raw is Map) return Map<String, dynamic>.from(raw);
+  return <String, dynamic>{};
+}
+
+class _ManagerNoticePropertyOption {
+  const _ManagerNoticePropertyOption({
+    required this.id,
+    required this.name,
+    required this.ownerId,
+  });
+
+  final String id;
+  final String name;
+  final String ownerId;
+}
+
 class ManagerHomeScreen extends ConsumerStatefulWidget {
   const ManagerHomeScreen({super.key});
 
@@ -69,7 +87,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
 
     try {
       final firestore = FirebaseFirestore.instance;
-      final data = doc.data() as Map<String, dynamic>;
+      final data = _asMap(doc.data());
       final propertyId = (data['propertyId'] ?? '').toString().trim();
       final ownerId = (data['ownerId'] ?? '').toString().trim();
 
@@ -182,7 +200,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
               for (final doc in issueDocs)
                 Builder(
                   builder: (context) {
-                    final d = doc.data() as Map<String, dynamic>? ?? {};
+                    final d = _asMap(doc.data());
                     final title = (d['title'] ?? 'Issue').toString();
                     final desc = (d['description'] ?? '').toString();
                     final prop = (d['propertyName'] ?? '').toString();
@@ -283,6 +301,36 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
     );
   }
 
+  void _openManagerNoticesSheet(
+    BuildContext context,
+    String uid,
+    String userName,
+    List<QueryDocumentSnapshot> activeAccessDocs,
+  ) {
+    final props = activeAccessDocs
+        .map((doc) {
+          final d = _asMap(doc.data());
+          return _ManagerNoticePropertyOption(
+            id: (d['propertyId'] ?? '').toString(),
+            name: (d['propertyName'] ?? 'Building').toString(),
+            ownerId: (d['ownerId'] ?? '').toString(),
+          );
+        })
+        .where((p) => p.id.isNotEmpty)
+        .toList();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _ManagerNoticesSheet(
+        actorUid: uid,
+        actorName: userName,
+        properties: props,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -370,17 +418,17 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                   final accessDocs = accessSnap.data?.docs ?? [];
 
                   final pendingInvites = myInvites.where((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
+                    final data = _asMap(doc.data());
                     return (data['status'] ?? 'pending') == 'pending';
                   }).toList();
 
                   final activeAccessDocs = accessDocs.where((doc) {
-                    final d = doc.data() as Map<String, dynamic>;
+                    final d = _asMap(doc.data());
                     return (d['status'] ?? 'active') == 'active';
                   }).toList();
 
                   final suspendedAccessDocs = accessDocs.where((doc) {
-                    final d = doc.data() as Map<String, dynamic>;
+                    final d = _asMap(doc.data());
                     return (d['status'] ?? '') == 'suspended';
                   }).toList();
 
@@ -388,7 +436,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                   final propertyNames = <String, String>{};
 
                   for (final doc in activeAccessDocs) {
-                    final d = doc.data() as Map<String, dynamic>;
+                    final d = _asMap(doc.data());
                     final pId = (d['propertyId'] ?? '').toString().trim();
                     final pName = (d['propertyName'] ?? '').toString().trim();
                     if (pId.isNotEmpty) {
@@ -446,16 +494,14 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                   final myIssues = issuesSnap.data?.docs ?? [];
 
                                   final openIssuesCount = myIssues.where((d) {
-                                    final m =
-                                        d.data() as Map<String, dynamic>? ?? {};
+                                    final m = _asMap(d.data());
                                     final s = (m['status'] ?? 'open')
                                         .toString();
                                     return s == 'open' || s == 'in_progress';
                                   }).length;
 
                                   final vacantUnitsCount = myUnits.where((doc) {
-                                    final d =
-                                        doc.data() as Map<String, dynamic>;
+                                    final d = _asMap(doc.data());
                                     return (d['status'] ?? 'available') ==
                                         'available';
                                   }).length;
@@ -464,8 +510,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                       myUnits.length - vacantUnitsCount;
 
                                   final activeTenants = myTenants.where((doc) {
-                                    final d =
-                                        doc.data() as Map<String, dynamic>;
+                                    final d = _asMap(doc.data());
                                     return d['status'] == 'active';
                                   }).toList();
 
@@ -473,8 +518,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                   var unpaidInvoicesCount = 0;
 
                                   for (final doc in myBills) {
-                                    final d =
-                                        doc.data() as Map<String, dynamic>;
+                                    final d = _asMap(doc.data());
                                     final status = (d['status'] ?? 'unpaid')
                                         .toString();
                                     if (status != 'paid' &&
@@ -514,6 +558,18 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                       ),
                                     ),
                                     _MgrAction(
+                                      Icons.campaign_outlined,
+                                      'Notices',
+                                      'Post & manage',
+                                      Colors.amber.shade800,
+                                      () => _openManagerNoticesSheet(
+                                        context,
+                                        profile.uid,
+                                        profile.name,
+                                        activeAccessDocs,
+                                      ),
+                                    ),
+                                    _MgrAction(
                                       Icons.meeting_room_outlined,
                                       'Units',
                                       '$vacantUnitsCount vacant • $occupiedUnitsCount occupied',
@@ -548,10 +604,18 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                       Icons.receipt_long_rounded,
                                       'Billing rules',
                                       'Utilities & charges',
-                                      Colors.amber.shade900,
+                                      Colors.brown,
                                       () => context.push(
                                         RouteNames.ownerBillingRules,
                                       ),
+                                    ),
+                                    _MgrAction(
+                                      Icons.history_edu_rounded,
+                                      'Audit trail',
+                                      'Activity logs',
+                                      Colors.blueGrey,
+                                      () =>
+                                          context.push(RouteNames.activityLogs),
                                     ),
                                   ];
 
@@ -569,7 +633,6 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         40,
                                       ),
                                       children: [
-                                        // Unified Top Greeting Header
                                         Row(
                                           children: [
                                             Expanded(
@@ -646,7 +709,6 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         ),
                                         const SizedBox(height: 16),
 
-                                        // Open Issues Banner
                                         if (openIssuesCount > 0)
                                           Padding(
                                             padding: const EdgeInsets.only(
@@ -700,12 +762,9 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                             ),
                                           ),
 
-                                        // Pending Invitations Banner
                                         if (pendingInvites.isNotEmpty)
                                           ...pendingInvites.map((inviteDoc) {
-                                            final d =
-                                                inviteDoc.data()
-                                                    as Map<String, dynamic>;
+                                            final d = _asMap(inviteDoc.data());
                                             final propName =
                                                 (d['propertyName'] ??
                                                         'Owner Property')
@@ -841,7 +900,6 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         ),
                                         const SizedBox(height: 14),
 
-                                        // Primary CTA
                                         Row(
                                           children: [
                                             Expanded(
@@ -899,7 +957,6 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         ),
                                         const SizedBox(height: 10),
 
-                                        // Tenant-Style 2-Column Action Grid
                                         GridView.count(
                                           crossAxisCount: 2,
                                           shrinkWrap: true,
@@ -1046,4 +1103,339 @@ class _MgrAction {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
+}
+
+class _ManagerNoticesSheet extends StatefulWidget {
+  const _ManagerNoticesSheet({
+    required this.actorUid,
+    required this.actorName,
+    required this.properties,
+  });
+
+  final String actorUid;
+  final String actorName;
+  final List<_ManagerNoticePropertyOption> properties;
+
+  @override
+  State<_ManagerNoticesSheet> createState() => _ManagerNoticesSheetState();
+}
+
+class _ManagerNoticesSheetState extends State<_ManagerNoticesSheet> {
+  final _titleCtrl = TextEditingController();
+  final _messageCtrl = TextEditingController();
+  late String _selectedPropertyId;
+  String _priority = 'normal';
+  bool _posting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedPropertyId = widget.properties.isNotEmpty
+        ? widget.properties.first.id
+        : '';
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _publishNotice() async {
+    final title = _titleCtrl.text.trim();
+    final message = _messageCtrl.text.trim();
+    if (_selectedPropertyId.isEmpty || title.isEmpty || message.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a building and enter title & message.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final prop = widget.properties.firstWhere(
+      (p) => p.id == _selectedPropertyId,
+      orElse: () => widget.properties.first,
+    );
+
+    setState(() => _posting = true);
+    try {
+      var ownerId = prop.ownerId.trim();
+      final propertyId = prop.id.trim();
+
+      if (ownerId.isEmpty && propertyId.isNotEmpty) {
+        final propSnap = await FirebaseFirestore.instance
+            .collection('properties')
+            .doc(propertyId)
+            .get();
+        ownerId = (_asMap(propSnap.data())['ownerId'] ?? '').toString().trim();
+      }
+
+      await FirebaseFirestore.instance.collection('buildingNotices').add({
+        'ownerId': ownerId,
+        'propertyId': propertyId,
+        'propertyName': prop.name,
+        'title': title,
+        'message': message,
+        'priority': _priority,
+        'postedByUid': widget.actorUid,
+        'postedByName': widget.actorName,
+        'postedByRole': 'manager',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      _titleCtrl.clear();
+      _messageCtrl.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notice published to residents!'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not publish notice: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (widget.properties.isEmpty) {
+      return const SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(
+            child: Text('Accept a building assignment first to post notices.'),
+          ),
+        ),
+      );
+    }
+
+    final activePropId =
+        widget.properties.any((p) => p.id == _selectedPropertyId)
+        ? _selectedPropertyId
+        : widget.properties.first.id;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.78,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              const Text(
+                'Building Notices',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Post announcements directly to residents of your assigned building.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              if (widget.properties.length > 1) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: activePropId,
+                  decoration: const InputDecoration(
+                    labelText: 'Target Building',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: widget.properties
+                      .map(
+                        (p) => DropdownMenuItem<String>(
+                          value: p.id,
+                          child: Text(p.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _selectedPropertyId = v);
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                controller: _titleCtrl,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Notice Title *',
+                  hintText: 'e.g. Lift Maintenance Schedule',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _messageCtrl,
+                maxLines: 2,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Details / Schedule *',
+                  hintText: 'Lift service will be paused from 2 PM to 4 PM.',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _priority,
+                      decoration: const InputDecoration(
+                        labelText: 'Urgency Level',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'normal',
+                          child: Text('Normal'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'important',
+                          child: Text('Important'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'urgent',
+                          child: Text('Urgent'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _priority = v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 14,
+                      ),
+                    ),
+                    onPressed: _posting ? null : _publishNotice,
+                    icon: _posting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.campaign_rounded, size: 18),
+                    label: const Text('Publish'),
+                  ),
+                ],
+              ),
+              const Divider(height: 28),
+              const Text(
+                'Published Notices',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              ),
+              const SizedBox(height: 8),
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('buildingNotices')
+                    .where('propertyId', isEqualTo: activePropId)
+                    .snapshots(),
+                builder: (context, snap) {
+                  if (!snap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = [...snap.data!.docs];
+                  docs.sort((a, b) {
+                    final at = _asMap(a.data())['createdAt'];
+                    final bt = _asMap(b.data())['createdAt'];
+                    final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
+                    final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
+                    return bm.compareTo(am);
+                  });
+
+                  if (docs.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: Text(
+                          'No notices posted for this building yet.',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      for (final doc in docs)
+                        Builder(
+                          builder: (context) {
+                            final d = _asMap(doc.data());
+                            final isUrgent =
+                                (d['priority'] ?? 'normal') == 'urgent';
+                            final postedBy = (d['postedByName'] ?? 'Admin')
+                                .toString();
+                            final roleLabel = (d['postedByRole'] ?? 'manager')
+                                .toString()
+                                .toUpperCase();
+
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: Icon(
+                                  isUrgent
+                                      ? Icons.priority_high_rounded
+                                      : Icons.campaign_outlined,
+                                  color: isUrgent
+                                      ? Colors.red
+                                      : theme.colorScheme.primary,
+                                ),
+                                title: Text(
+                                  (d['title'] ?? '').toString(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${d['message'] ?? ''}\nBy $postedBy ($roleLabel)',
+                                ),
+                                isThreeLine: true,
+                                trailing: IconButton(
+                                  tooltip: 'Delete notice',
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: Colors.redAccent,
+                                  ),
+                                  onPressed: () => doc.reference.delete(),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
