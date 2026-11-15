@@ -12,18 +12,17 @@ final unitDataSourceProvider = Provider<UnitDataSource>((ref) {
 final unitRepositoryProvider = Provider<UnitRepository>((ref) {
   final dataSource = ref.read(unitDataSourceProvider);
 
-  return UnitRepositoryImpl(
-    dataSource: dataSource,
-  );
+  return UnitRepositoryImpl(dataSource: dataSource);
 });
-
 
 // ============================================================
 // UNIT BY ID
 // ============================================================
 
-final unitByIdProvider =
-FutureProvider.family<Unit?, String>((ref, unitId) async {
+final unitByIdProvider = FutureProvider.family<Unit?, String>((
+  ref,
+  unitId,
+) async {
   final normalizedId = unitId.trim();
 
   if (normalizedId.isEmpty) {

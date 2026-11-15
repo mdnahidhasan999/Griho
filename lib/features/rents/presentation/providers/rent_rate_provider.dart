@@ -25,8 +25,7 @@ import '../controllers/rent_rate_controller.dart';
 // DATA SOURCE
 // ============================================================================
 
-final rentRateDataSourceProvider =
-Provider<RentRateDataSource>((ref) {
+final rentRateDataSourceProvider = Provider<RentRateDataSource>((ref) {
   return RentRateDataSource();
 });
 
@@ -34,15 +33,10 @@ Provider<RentRateDataSource>((ref) {
 // REPOSITORY
 // ============================================================================
 
-final rentRateRepositoryProvider =
-Provider<RentRateRepository>((ref) {
+final rentRateRepositoryProvider = Provider<RentRateRepository>((ref) {
   return RentRateRepositoryImpl(
-    dataSource: ref.read(
-      rentRateDataSourceProvider,
-    ),
-    unitRepository: ref.read(
-      unitRepositoryProvider,
-    ),
+    dataSource: ref.read(rentRateDataSourceProvider),
+    unitRepository: ref.read(unitRepositoryProvider),
   );
 });
 
@@ -50,75 +44,47 @@ Provider<RentRateRepository>((ref) {
 // USE CASES
 // ============================================================================
 
-final createInitialRentRateProvider =
-Provider<CreateInitialRentRate>((ref) {
+final createInitialRentRateProvider = Provider<CreateInitialRentRate>((ref) {
   return CreateInitialRentRate(
-    repository: ref.read(
-      rentRateRepositoryProvider,
-    ),
+    repository: ref.read(rentRateRepositoryProvider),
   );
 });
 
-final changeUnitRentProvider =
-Provider<ChangeUnitRent>((ref) {
-  return ChangeUnitRent(
-    repository: ref.read(
-      rentRateRepositoryProvider,
-    ),
-  );
+final changeUnitRentProvider = Provider<ChangeUnitRent>((ref) {
+  return ChangeUnitRent(repository: ref.read(rentRateRepositoryProvider));
 });
 
-final changeFloorRentProvider =
-Provider<ChangeFloorRent>((ref) {
-  return ChangeFloorRent(
-    repository: ref.read(
-      rentRateRepositoryProvider,
-    ),
-  );
+final changeFloorRentProvider = Provider<ChangeFloorRent>((ref) {
+  return ChangeFloorRent(repository: ref.read(rentRateRepositoryProvider));
 });
 
-final changePropertyRentProvider =
-Provider<ChangePropertyRent>((ref) {
-  return ChangePropertyRent(
-    repository: ref.read(
-      rentRateRepositoryProvider,
-    ),
-  );
+final changePropertyRentProvider = Provider<ChangePropertyRent>((ref) {
+  return ChangePropertyRent(repository: ref.read(rentRateRepositoryProvider));
 });
 
-final getRentRateApplicableAtProvider =
-Provider<GetRentRateApplicableAt>((ref) {
+final getRentRateApplicableAtProvider = Provider<GetRentRateApplicableAt>((
+  ref,
+) {
   return GetRentRateApplicableAt(
-    repository: ref.read(
-      rentRateRepositoryProvider,
-    ),
+    repository: ref.read(rentRateRepositoryProvider),
   );
 });
 
-final getCurrentRentRateProvider =
-Provider<GetCurrentRentRate>((ref) {
-  return GetCurrentRentRate(
-    repository: ref.read(
-      rentRateRepositoryProvider,
-    ),
-  );
+final getCurrentRentRateProvider = Provider<GetCurrentRentRate>((ref) {
+  return GetCurrentRentRate(repository: ref.read(rentRateRepositoryProvider));
 });
 
-final getUnitRentRateHistoryProvider =
-Provider<GetUnitRentRateHistory>((ref) {
+final getUnitRentRateHistoryProvider = Provider<GetUnitRentRateHistory>((ref) {
   return GetUnitRentRateHistory(
-    repository: ref.read(
-      rentRateRepositoryProvider,
-    ),
+    repository: ref.read(rentRateRepositoryProvider),
   );
 });
 
-final getTenantRentRateHistoryProvider =
-Provider<GetTenantRentRateHistory>((ref) {
+final getTenantRentRateHistoryProvider = Provider<GetTenantRentRateHistory>((
+  ref,
+) {
   return GetTenantRentRateHistory(
-    repository: ref.read(
-      rentRateRepositoryProvider,
-    ),
+    repository: ref.read(rentRateRepositoryProvider),
   );
 });
 
@@ -127,20 +93,14 @@ Provider<GetTenantRentRateHistory>((ref) {
 // ============================================================================
 
 final currentRentRateProvider =
-FutureProvider.family<
-    RentRate?,
-    ({String unitId, String ownerId})>(
-      (ref, args) async {
-    final getCurrentRentRate = ref.read(
-      getCurrentRentRateProvider,
-    );
+    FutureProvider.family<RentRate?, ({String unitId, String ownerId})>((
+      ref,
+      args,
+    ) async {
+      final getCurrentRentRate = ref.read(getCurrentRentRateProvider);
 
-    return getCurrentRentRate(
-      unitId: args.unitId,
-      ownerId: args.ownerId,
-    );
-  },
-);
+      return getCurrentRentRate(unitId: args.unitId, ownerId: args.ownerId);
+    });
 
 // ============================================================================
 // CURRENT RENT RATE — TENANT
@@ -160,61 +120,46 @@ FutureProvider.family<
 // RentRate itself does NOT contain tenantId/tenantUserId.
 //
 
-final currentTenantRentRateProvider =
-FutureProvider.family<RentRate?, String>(
-      (ref, unitId) async {
-    final normalizedUnitId = unitId.trim();
+final currentTenantRentRateProvider = FutureProvider.family<RentRate?, String>((
+  ref,
+  unitId,
+) async {
+  final normalizedUnitId = unitId.trim();
 
-    if (normalizedUnitId.isEmpty) {
-      return null;
-    }
+  if (normalizedUnitId.isEmpty) {
+    return null;
+  }
 
-    final unit = await ref.read(
-      unitByIdProvider(normalizedUnitId).future,
-    );
+  final unit = await ref.read(unitByIdProvider(normalizedUnitId).future);
 
-    if (unit == null) {
-      return null;
-    }
+  if (unit == null) {
+    return null;
+  }
 
-    final property = await ref.read(
-      propertyByIdProvider(unit.propertyId).future,
-    );
+  final property = await ref.read(propertyByIdProvider(unit.propertyId).future);
 
-    if (property == null) {
-      return null;
-    }
+  if (property == null) {
+    return null;
+  }
 
-    final getCurrentRentRate = ref.read(
-      getCurrentRentRateProvider,
-    );
+  final getCurrentRentRate = ref.read(getCurrentRentRateProvider);
 
-    return getCurrentRentRate(
-      unitId: unit.id,
-      ownerId: property.ownerId,
-    );
-  },
-);
+  return getCurrentRentRate(unitId: unit.id, ownerId: property.ownerId);
+});
 
 // ============================================================================
 // RENT RATE HISTORY — UNIT
 // ============================================================================
 
 final unitRentRateHistoryProvider =
-FutureProvider.family<
-    List<RentRate>,
-    ({String unitId, String ownerId})>(
-      (ref, args) async {
-    final getHistory = ref.read(
-      getUnitRentRateHistoryProvider,
-    );
+    FutureProvider.family<List<RentRate>, ({String unitId, String ownerId})>((
+      ref,
+      args,
+    ) async {
+      final getHistory = ref.read(getUnitRentRateHistoryProvider);
 
-    return getHistory(
-      unitId: args.unitId,
-      ownerId: args.ownerId,
-    );
-  },
-);
+      return getHistory(unitId: args.unitId, ownerId: args.ownerId);
+    });
 
 // ============================================================================
 // RENT RATE HISTORY — TENANT
@@ -229,73 +174,47 @@ FutureProvider.family<
 //
 
 final tenantRentRateHistoryProvider =
-FutureProvider.family<
-    List<RentRate>,
-    ({
-    String unitId,
-    String ownerId,
-    String tenantId,
-    })>(
-      (ref, args) async {
-    final getHistory = ref.read(
-      getTenantRentRateHistoryProvider,
-    );
+    FutureProvider.family<
+      List<RentRate>,
+      ({String unitId, String ownerId, String tenantId})
+    >((ref, args) async {
+      final getHistory = ref.read(getTenantRentRateHistoryProvider);
 
-    return getHistory(
-      unitId: args.unitId,
-      ownerId: args.ownerId,
-      tenantId: args.tenantId,
-    );
-  },
-);
+      return getHistory(
+        unitId: args.unitId,
+        ownerId: args.ownerId,
+        tenantId: args.tenantId,
+      );
+    });
 
 // ============================================================================
 // RENT RATE — CONTROLLER
 // ============================================================================
 
 final rentRateControllerProvider =
-StateNotifierProvider<
-    RentRateController,
-    AsyncValue<void>>(
-      (ref) {
-    return RentRateController(
-      createInitialRentRate: ref.read(
-        createInitialRentRateProvider,
-      ),
-      changeUnitRent: ref.read(
-        changeUnitRentProvider,
-      ),
-      changeFloorRent: ref.read(
-        changeFloorRentProvider,
-      ),
-      changePropertyRent: ref.read(
-        changePropertyRentProvider,
-      ),
-    );
-  },
-);
+    StateNotifierProvider<RentRateController, AsyncValue<void>>((ref) {
+      return RentRateController(
+        createInitialRentRate: ref.read(createInitialRentRateProvider),
+        changeUnitRent: ref.read(changeUnitRentProvider),
+        changeFloorRent: ref.read(changeFloorRentProvider),
+        changePropertyRent: ref.read(changePropertyRentProvider),
+      );
+    });
 
 // ============================================================================
 // RENT RATE APPLICABLE AT
 // ============================================================================
 
 final rentRateApplicableAtProvider =
-FutureProvider.family<
-    RentRate?,
-    ({
-    String unitId,
-    String ownerId,
-    DateTime effectiveAt,
-    })>(
-      (ref, args) async {
-    final getRentRate = ref.read(
-      getRentRateApplicableAtProvider,
-    );
+    FutureProvider.family<
+      RentRate?,
+      ({String unitId, String ownerId, DateTime effectiveAt})
+    >((ref, args) async {
+      final getRentRate = ref.read(getRentRateApplicableAtProvider);
 
-    return getRentRate(
-      unitId: args.unitId,
-      ownerId: args.ownerId,
-      effectiveAt: args.effectiveAt,
-    );
-  },
-);
+      return getRentRate(
+        unitId: args.unitId,
+        ownerId: args.ownerId,
+        effectiveAt: args.effectiveAt,
+      );
+    });

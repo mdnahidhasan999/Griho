@@ -1,7 +1,1 @@
-enum InvitationStatus {
-  pending,
-  accepted,
-  declined,
-  cancelled,
-  expired,
-}
+enum InvitationStatus { pending, accepted, declined, cancelled, expired }

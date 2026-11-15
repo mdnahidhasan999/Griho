@@ -20,9 +20,7 @@ class TenantInvitationsScreen extends ConsumerWidget {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-      body: const SafeArea(
-        child: _InvitationList(),
-      ),
+      body: const SafeArea(child: _InvitationList()),
     );
   }
 }
@@ -39,17 +37,13 @@ class _InvitationList extends ConsumerWidget {
     final invitationsAsync = ref.watch(recipientInvitationsProvider);
 
     return invitationsAsync.when(
-      loading: () =>
-      const Center(
-        child: CircularProgressIndicator(),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stackTrace) => _ErrorView(
+        message: 'Unable to load your invitations.',
+        onRetry: () {
+          ref.invalidate(recipientInvitationsProvider);
+        },
       ),
-      error: (error, stackTrace) =>
-          _ErrorView(
-            message: 'Unable to load your invitations.',
-            onRetry: () {
-              ref.invalidate(recipientInvitationsProvider);
-            },
-          ),
       data: (invitations) {
         if (invitations.isEmpty) {
           return RefreshIndicator(
@@ -66,7 +60,7 @@ class _InvitationList extends ConsumerWidget {
                     icon: Icons.mail_outline_rounded,
                     title: 'No Invitations Yet',
                     message:
-                    'You do not have any tenancy invitations. '
+                        'You do not have any tenancy invitations. '
                         'When a property manager invites you, '
                         'it will appear here.',
                   ),
@@ -116,9 +110,7 @@ class _InvitationList extends ConsumerWidget {
                 for (final invitation in pendingInvitations)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _PendingInvitationCard(
-                      invitation: invitation,
-                    ),
+                    child: _PendingInvitationCard(invitation: invitation),
                   ),
                 const SizedBox(height: 12),
               ],
@@ -133,9 +125,7 @@ class _InvitationList extends ConsumerWidget {
                 for (final invitation in historicalInvitations)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _HistoricalInvitationCard(
-                      invitation: invitation,
-                    ),
+                    child: _HistoricalInvitationCard(invitation: invitation),
                   ),
               ],
             ],
@@ -170,9 +160,7 @@ class _InvitationsOverviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,14 +258,9 @@ class _MetricBadge extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 10,
-        horizontal: 8,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.5,
-        ),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -332,11 +315,7 @@ class _SectionTitle extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 18,
-          color: color ?? theme.colorScheme.primary,
-        ),
+        Icon(icon, size: 18, color: color ?? theme.colorScheme.primary),
         const SizedBox(width: 8),
         Text(
           title,
@@ -346,10 +325,7 @@ class _SectionTitle extends StatelessWidget {
         ),
         const Spacer(),
         Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 2,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
@@ -374,18 +350,13 @@ class _SectionTitle extends StatelessWidget {
 class _PendingInvitationCard extends ConsumerWidget {
   final TenantInvitation invitation;
 
-  const _PendingInvitationCard({
-    required this.invitation,
-  });
+  const _PendingInvitationCard({required this.invitation});
 
-  Future<void> _openReceiveScreen(BuildContext context,
-      WidgetRef ref,) async {
+  Future<void> _openReceiveScreen(BuildContext context, WidgetRef ref) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) =>
-            TenantInvitationReceiveScreen(
-              invitationToken: invitation.token,
-            ),
+            TenantInvitationReceiveScreen(invitationToken: invitation.token),
       ),
     );
 
@@ -512,10 +483,7 @@ class _PendingInvitationCard extends ConsumerWidget {
                 height: 46,
                 child: FilledButton.icon(
                   onPressed: () => _openReceiveScreen(context, ref),
-                  icon: const Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 18,
-                  ),
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
                   label: const Text(
                     'Review & Respond',
                     style: TextStyle(fontWeight: FontWeight.bold),
@@ -537,9 +505,7 @@ class _PendingInvitationCard extends ConsumerWidget {
 class _HistoricalInvitationCard extends ConsumerWidget {
   final TenantInvitation invitation;
 
-  const _HistoricalInvitationCard({
-    required this.invitation,
-  });
+  const _HistoricalInvitationCard({required this.invitation});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -549,19 +515,16 @@ class _HistoricalInvitationCard extends ConsumerWidget {
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () async {
           await Navigator.of(context).push<void>(
             MaterialPageRoute<void>(
-              builder: (_) =>
-                  TenantInvitationReceiveScreen(
-                    invitationToken: invitation.token,
-                  ),
+              builder: (_) => TenantInvitationReceiveScreen(
+                invitationToken: invitation.token,
+              ),
             ),
           );
 
@@ -639,56 +602,45 @@ class _StatusChip extends StatelessWidget {
   final TenantInvitationStatus status;
   final bool isExpired;
 
-  const _StatusChip({
-    required this.status,
-    required this.isExpired,
-  });
+  const _StatusChip({required this.status, required this.isExpired});
 
   @override
   Widget build(BuildContext context) {
     final effectiveStatus =
-    isExpired && status == TenantInvitationStatus.pending
+        isExpired && status == TenantInvitationStatus.pending
         ? TenantInvitationStatus.expired
         : status;
 
     final (label, icon, color) = switch (effectiveStatus) {
-      TenantInvitationStatus.pending =>
-      (
-      'Pending',
-      Icons.schedule_rounded,
-      Colors.amber.shade900,
+      TenantInvitationStatus.pending => (
+        'Pending',
+        Icons.schedule_rounded,
+        Colors.amber.shade900,
       ),
-      TenantInvitationStatus.accepted =>
-      (
-      'Accepted',
-      Icons.check_circle_rounded,
-      Colors.green.shade800,
+      TenantInvitationStatus.accepted => (
+        'Accepted',
+        Icons.check_circle_rounded,
+        Colors.green.shade800,
       ),
-      TenantInvitationStatus.cancelled =>
-      (
-      'Cancelled',
-      Icons.cancel_outlined,
-      Colors.grey.shade700,
+      TenantInvitationStatus.cancelled => (
+        'Cancelled',
+        Icons.cancel_outlined,
+        Colors.grey.shade700,
       ),
-      TenantInvitationStatus.rejected =>
-      (
-      'Declined',
-      Icons.block_rounded,
-      Colors.red.shade800,
+      TenantInvitationStatus.rejected => (
+        'Declined',
+        Icons.block_rounded,
+        Colors.red.shade800,
       ),
-      TenantInvitationStatus.expired =>
-      (
-      'Expired',
-      Icons.timer_off_outlined,
-      Colors.grey.shade700,
+      TenantInvitationStatus.expired => (
+        'Expired',
+        Icons.timer_off_outlined,
+        Colors.grey.shade700,
       ),
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 3,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
@@ -696,11 +648,7 @@ class _StatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 13,
-            color: color,
-          ),
+          Icon(icon, size: 13, color: color),
           const SizedBox(width: 4),
           Text(
             label,
@@ -787,10 +735,7 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
 
-  const _ErrorView({
-    required this.message,
-    this.onRetry,
-  });
+  const _ErrorView({required this.message, this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -809,16 +754,11 @@ class _ErrorView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
-              FilledButton(
-                onPressed: onRetry,
-                child: const Text('Retry'),
-              ),
+              FilledButton(onPressed: onRetry, child: const Text('Retry')),
             ],
           ],
         ),

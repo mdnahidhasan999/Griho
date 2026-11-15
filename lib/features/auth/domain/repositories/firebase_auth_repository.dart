@@ -8,12 +8,12 @@ class FirebaseAuthRepository implements AuthRepository {
   final FirebaseAuthDataSource _dataSource;
 
   FirebaseAuthRepository({FirebaseAuthDataSource? dataSource})
-      : _dataSource = dataSource ?? FirebaseAuthDataSource();
+    : _dataSource = dataSource ?? FirebaseAuthDataSource();
 
   @override
   Stream<AppUser?> get authStateChanges {
     return _dataSource.authStateChanges.map(
-          (user) => user == null ? null : _mapFirebaseUser(user),
+      (user) => user == null ? null : _mapFirebaseUser(user),
     );
   }
 

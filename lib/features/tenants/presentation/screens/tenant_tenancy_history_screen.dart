@@ -21,9 +21,7 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-      body: SafeArea(
-        child: _buildBody(context, ref, user),
-      ),
+      body: SafeArea(child: _buildBody(context, ref, user)),
     );
   }
 
@@ -32,7 +30,8 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
       return const _EmptyView(
         icon: Icons.lock_outline_rounded,
         title: 'Authentication Required',
-        message: 'Please sign in to view your past tenancy history and lease records.',
+        message:
+            'Please sign in to view your past tenancy history and lease records.',
       );
     }
 
@@ -41,7 +40,8 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
       return const _EmptyView(
         icon: Icons.account_circle_outlined,
         title: 'Account Unavailable',
-        message: 'Your account information is currently unavailable. Please re-login.',
+        message:
+            'Your account information is currently unavailable. Please re-login.',
       );
     }
 
@@ -49,19 +49,18 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
 
     return historyAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) =>
-          _ErrorView(
-            onRetry: () {
-              ref.invalidate(myTenancyHistoryProvider(tenantUserId));
-            },
-          ),
+      error: (error, stackTrace) => _ErrorView(
+        onRetry: () {
+          ref.invalidate(myTenancyHistoryProvider(tenantUserId));
+        },
+      ),
       data: (histories) {
         if (histories.isEmpty) {
           return const _EmptyView(
             icon: Icons.history_toggle_off_rounded,
             title: 'No Tenancy History',
             message:
-            'You do not have any past completed tenancies recorded with Griho.',
+                'You do not have any past completed tenancies recorded with Griho.',
           );
         }
 
@@ -84,13 +83,9 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
 
               Text(
                 'Archived Leases (${sorted.length})',
-                style: Theme
-                    .of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
 
               const SizedBox(height: 12),
@@ -198,9 +193,7 @@ class _HistoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final unitDisplay = history.unitName
-        ?.trim()
-        .isNotEmpty == true
+    final unitDisplay = history.unitName?.trim().isNotEmpty == true
         ? '${history.unitName!} (Unit ${history.unitNumber})'
         : 'Unit ${history.unitNumber}';
 
@@ -256,7 +249,9 @@ class _HistoryCard extends StatelessWidget {
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(10),
@@ -278,10 +273,13 @@ class _HistoryCard extends StatelessWidget {
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest.withValues(
-                      alpha: 0.5),
+                    alpha: 0.5,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -317,9 +315,7 @@ class _HistoryCard extends StatelessWidget {
               value: '$unitDisplay • Floor ${history.floorNumber}',
             ),
 
-            if (history.propertyAddress
-                ?.trim()
-                .isNotEmpty == true) ...[
+            if (history.propertyAddress?.trim().isNotEmpty == true) ...[
               const SizedBox(height: 8),
               _HistoryInfoRow(
                 icon: Icons.location_on_outlined,
@@ -335,7 +331,8 @@ class _HistoryCard extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.35),
+                  alpha: 0.35,
+                ),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: theme.colorScheme.outlineVariant),
               ),
@@ -402,9 +399,7 @@ class _HistoryCard extends StatelessWidget {
   }
 
   String _formatDuration(DateTime startedAt, DateTime endedAt) {
-    final days = endedAt
-        .difference(startedAt)
-        .inDays;
+    final days = endedAt.difference(startedAt).inDays;
     if (days <= 0) {
       return 'Less than 1 day';
     }
@@ -420,9 +415,7 @@ class _HistoryCard extends StatelessWidget {
       if (remainingDays == 0) {
         return '$months ${months == 1 ? 'month' : 'months'}';
       }
-      return '$months ${months == 1
-          ? 'mo'
-          : 'mos'}, $remainingDays ${remainingDays == 1 ? 'day' : 'days'}';
+      return '$months ${months == 1 ? 'mo' : 'mos'}, $remainingDays ${remainingDays == 1 ? 'day' : 'days'}';
     }
 
     final years = months ~/ 12;
@@ -431,9 +424,7 @@ class _HistoryCard extends StatelessWidget {
     if (remMonths == 0) {
       return '$years ${years == 1 ? 'year' : 'years'}';
     }
-    return '$years ${years == 1 ? 'yr' : 'yrs'}, $remMonths ${remMonths == 1
-        ? 'mo'
-        : 'mos'}';
+    return '$years ${years == 1 ? 'yr' : 'yrs'}, $remMonths ${remMonths == 1 ? 'mo' : 'mos'}';
   }
 
   String _formatRent(num value) {
@@ -460,8 +451,9 @@ class _TimelineDateColumn extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Column(
-      crossAxisAlignment:
-      isEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: isEnd
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         Text(
           label,
@@ -556,7 +548,8 @@ class _EmptyView extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.5),
+                  alpha: 0.5,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(

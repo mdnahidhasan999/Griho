@@ -17,7 +17,8 @@ class AuthRouteGuard {
 
   // uid -> (fetchedAt, active access roles). Avoids a Firestore round-trip
   // on every navigation; the real protection is always Firestore rules.
-  static final Map<String, ({DateTime at, Set<String> roles})> _accessCache = {};
+  static final Map<String, ({DateTime at, Set<String> roles})> _accessCache =
+      {};
   static const Duration _accessTtl = Duration(seconds: 20);
 
   static void clearAccessCache() => _accessCache.clear();
@@ -93,16 +94,16 @@ class AuthRouteGuard {
     // Owner-only routes (a manager must NOT open these, even with active access)
     final isOwnerExclusiveRoute =
         path == RouteNames.addProperty ||
-            path == RouteNames.addManager ||
-            path == RouteNames.ownerTeam ||
-            RegExp(r'^/owner/properties/[^/]+/edit$').hasMatch(path);
+        path == RouteNames.addManager ||
+        path == RouteNames.ownerTeam ||
+        RegExp(r'^/owner/properties/[^/]+/edit$').hasMatch(path);
 
     final isProtectedSection =
         isOwnerSection ||
-            isManagerSection ||
-            isTenantSection ||
-            isCaretakerSection ||
-            isElectricianSection;
+        isManagerSection ||
+        isTenantSection ||
+        isCaretakerSection ||
+        isElectricianSection;
 
     if (isSplashRoute) {
       return null;

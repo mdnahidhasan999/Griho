@@ -8,19 +8,14 @@ import '../providers/auth_controller.dart';
 class LinkWaitingScreen extends ConsumerStatefulWidget {
   final String email;
 
-  const LinkWaitingScreen({
-    super.key,
-    required this.email,
-  });
+  const LinkWaitingScreen({super.key, required this.email});
 
   @override
-  ConsumerState<LinkWaitingScreen> createState() =>
-      _LinkWaitingScreenState();
+  ConsumerState<LinkWaitingScreen> createState() => _LinkWaitingScreenState();
 }
 
 class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
-  final TextEditingController _linkController =
-  TextEditingController();
+  final TextEditingController _linkController = TextEditingController();
 
   bool _autoVerificationStarted = false;
   bool _verificationSucceeded = false;
@@ -49,14 +44,9 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
 
     final Uri incomingUri = Uri.base;
     final String? mode = incomingUri.queryParameters['mode'];
-    final String? oobCode =
-    incomingUri.queryParameters['oobCode'];
+    final String? oobCode = incomingUri.queryParameters['oobCode'];
 
-    if (mode != 'verifyEmail' ||
-        oobCode == null ||
-        oobCode
-            .trim()
-            .isEmpty) {
+    if (mode != 'verifyEmail' || oobCode == null || oobCode.trim().isEmpty) {
       return;
     }
 
@@ -82,22 +72,19 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
       return null;
     }
 
-    final String? directCode =
-    uri.queryParameters['oobCode'];
+    final String? directCode = uri.queryParameters['oobCode'];
 
     if (directCode != null && directCode.isNotEmpty) {
       return directCode;
     }
 
     // Some Firebase email action URLs contain a nested link.
-    final String? nestedLink =
-    uri.queryParameters['link'];
+    final String? nestedLink = uri.queryParameters['link'];
 
     if (nestedLink != null && nestedLink.isNotEmpty) {
       final Uri? nestedUri = Uri.tryParse(nestedLink);
 
-      final String? nestedCode =
-      nestedUri?.queryParameters['oobCode'];
+      final String? nestedCode = nestedUri?.queryParameters['oobCode'];
 
       if (nestedCode != null && nestedCode.isNotEmpty) {
         return nestedCode;
@@ -111,10 +98,7 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
     final String input = _linkController.text.trim();
 
     if (input.isEmpty) {
-      _showMessage(
-        'Please paste the email verification link.',
-        isError: true,
-      );
+      _showMessage('Please paste the email verification link.', isError: true);
       return;
     }
 
@@ -143,10 +127,8 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
 
     if (!success) {
       final String errorMessage =
-          ref
-              .read(authControllerProvider)
-              .errorMessage ??
-              'Email verification failed. The link may have expired. Please request a new verification email.';
+          ref.read(authControllerProvider).errorMessage ??
+          'Email verification failed. The link may have expired. Please request a new verification email.';
 
       _showMessage(errorMessage, isError: true);
       return;
@@ -169,9 +151,7 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
     context.go(RouteNames.login);
   }
 
-  void _showMessage(String message, {
-    required bool isError,
-  }) {
+  void _showMessage(String message, {required bool isError}) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context)
@@ -180,10 +160,7 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
         SnackBar(
           content: Text(message),
           backgroundColor: isError
-              ? Theme
-              .of(context)
-              .colorScheme
-              .error
+              ? Theme.of(context).colorScheme.error
               : Colors.green,
           duration: const Duration(seconds: 3),
         ),
@@ -196,17 +173,13 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
     final authState = ref.watch(authControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Email Verification'),
-      ),
+      appBar: AppBar(title: const Text('Email Verification')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 480,
-              ),
+              constraints: const BoxConstraints(maxWidth: 480),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -249,9 +222,7 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  if (widget.email
-                      .trim()
-                      .isNotEmpty) ...[
+                  if (widget.email.trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text(
                       widget.email.trim(),
@@ -265,9 +236,7 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: theme
-                            .colorScheme
-                            .surfaceContainerHighest
+                        color: theme.colorScheme.surfaceContainerHighest
                             .withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -291,13 +260,10 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
                       maxLines: 5,
                       keyboardType: TextInputType.url,
                       decoration: const InputDecoration(
-                        hintText:
-                        'Paste the complete email verification link',
+                        hintText: 'Paste the complete email verification link',
                         prefixIcon: Icon(Icons.link_rounded),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(
-                            Radius.circular(14),
-                          ),
+                          borderRadius: BorderRadius.all(Radius.circular(14)),
                         ),
                       ),
                     ),
@@ -310,34 +276,31 @@ class _LinkWaitingScreenState extends ConsumerState<LinkWaitingScreen> {
                             : _verifyPastedLink,
                         child: authState.isLoading
                             ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Text(
-                          'Verify Email',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                                'Verify Email',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                       ),
                     ),
-                  ] else
-                    ...[
-                      const SizedBox(height: 20),
-                      const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Returning to sign in...',
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+                  ] else ...[
+                    const SizedBox(height: 20),
+                    const Center(child: CircularProgressIndicator()),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Returning to sign in...',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   if (!_verificationSucceeded)
                     TextButton(

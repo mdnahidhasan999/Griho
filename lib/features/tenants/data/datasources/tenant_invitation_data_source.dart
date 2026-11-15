@@ -18,12 +18,9 @@ class TenantInvitationDataSource {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
-  TenantInvitationDataSource({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? auth,
-  })
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  TenantInvitationDataSource({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   // ================================================================
   // COLLECTIONS
@@ -105,10 +102,9 @@ class TenantInvitationDataSource {
       normalizedGrihoId,
     ];
 
-    final suppliedIdentifierCount =
-        identifiers
-            .where((value) => value != null)
-            .length;
+    final suppliedIdentifierCount = identifiers
+        .where((value) => value != null)
+        .length;
 
     if (suppliedIdentifierCount != 1) {
       throw ArgumentError(
@@ -145,8 +141,7 @@ class TenantInvitationDataSource {
       throw StateError('Property data is missing.');
     }
 
-    if (_normalize(propertyData['ownerId'] as String?) !=
-        normalizedOwnerId) {
+    if (_normalize(propertyData['ownerId'] as String?) != normalizedOwnerId) {
       throw StateError(
         'Selected property does not belong to the current owner.',
       );
@@ -155,9 +150,7 @@ class TenantInvitationDataSource {
     final propertyStatus = propertyData['status'];
 
     if (propertyStatus is String &&
-        propertyStatus
-            .trim()
-            .isNotEmpty &&
+        propertyStatus.trim().isNotEmpty &&
         propertyStatus.toLowerCase() != 'active') {
       throw StateError('Selected property is not active.');
     }
@@ -179,8 +172,7 @@ class TenantInvitationDataSource {
       throw StateError('Unit data is missing.');
     }
 
-    if (_normalize(unitData['propertyId'] as String?) !=
-        normalizedPropertyId) {
+    if (_normalize(unitData['propertyId'] as String?) != normalizedPropertyId) {
       throw StateError(
         'Selected unit does not belong to the selected property.',
       );
@@ -189,9 +181,7 @@ class TenantInvitationDataSource {
     final unitStatus = unitData['status'];
 
     if (unitStatus is String &&
-        unitStatus
-            .trim()
-            .isNotEmpty &&
+        unitStatus.trim().isNotEmpty &&
         unitStatus.toLowerCase() != 'available') {
       throw StateError('Selected unit is not available.');
     }
@@ -199,9 +189,7 @@ class TenantInvitationDataSource {
     final existingUnitTenantUserId = unitData['tenantUserId'];
 
     if (existingUnitTenantUserId is String &&
-        existingUnitTenantUserId
-            .trim()
-            .isNotEmpty) {
+        existingUnitTenantUserId.trim().isNotEmpty) {
       throw StateError('Selected unit is already assigned to a tenant.');
     }
 
@@ -210,13 +198,12 @@ class TenantInvitationDataSource {
     // --------------------------------------------------------------
 
     if (normalizedTenantId != null) {
-      final tenantSnapshot =
-      await _tenants.doc(normalizedTenantId).get();
+      final tenantSnapshot = await _tenants.doc(normalizedTenantId).get();
 
       if (!tenantSnapshot.exists) {
         throw StateError(
           'The supplied tenant record does not exist. '
-              'Leave tenantId empty for a new tenant invitation.',
+          'Leave tenantId empty for a new tenant invitation.',
         );
       }
 
@@ -242,8 +229,9 @@ class TenantInvitationDataSource {
       }
 
       if (normalizedPhone != null) {
-        final existingPhone =
-        PhoneNumberUtils.normalizeAndValidate(tenant.phone);
+        final existingPhone = PhoneNumberUtils.normalizeAndValidate(
+          tenant.phone,
+        );
 
         if (existingPhone != normalizedPhone) {
           throw StateError(
@@ -281,7 +269,7 @@ class TenantInvitationDataSource {
       if (!existing.isExpired) {
         throw StateError(
           'A pending invitation already exists for this unit. '
-              'Cancel it or wait until it expires before creating another.',
+          'Cancel it or wait until it expires before creating another.',
         );
       }
     }
@@ -318,9 +306,7 @@ class TenantInvitationDataSource {
     await invitationReference.set(invitation.toMap());
 
     if (kDebugMode) {
-      debugPrint(
-        '[TENANT INVITATION] Created invitation ${invitation.id}',
-      );
+      debugPrint('[TENANT INVITATION] Created invitation ${invitation.id}');
     }
 
     return invitation;
@@ -331,7 +317,8 @@ class TenantInvitationDataSource {
   // ================================================================
 
   Stream<List<TenantInvitationModel>> watchInvitationsByTenantId(
-      String tenantId,) {
+    String tenantId,
+  ) {
     final normalizedTenantId = tenantId.trim();
 
     if (normalizedTenantId.isEmpty) {
@@ -342,40 +329,35 @@ class TenantInvitationDataSource {
         .where('tenantId', isEqualTo: normalizedTenantId)
         .snapshots()
         .map((snapshot) {
-      final invitations = snapshot.docs
-          .map(TenantInvitationModel.fromFirestore)
-          .toList();
+          final invitations = snapshot.docs
+              .map(TenantInvitationModel.fromFirestore)
+              .toList();
 
-      invitations.sort(
-            (a, b) => b.createdAt.compareTo(a.createdAt),
-      );
+          invitations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      return invitations;
-    });
+          return invitations;
+        });
   }
 
   // ================================================================
   // REALTIME: INVITATIONS BY PHONE
   // ================================================================
 
-  Stream<List<TenantInvitationModel>> watchInvitationsByPhone(String phone,) {
-    final normalizedPhone =
-    PhoneNumberUtils.normalizeAndValidate(phone);
+  Stream<List<TenantInvitationModel>> watchInvitationsByPhone(String phone) {
+    final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(phone);
 
     return _invitations
         .where('phone', isEqualTo: normalizedPhone)
         .snapshots()
         .map((snapshot) {
-      final invitations = snapshot.docs
-          .map(TenantInvitationModel.fromFirestore)
-          .toList();
+          final invitations = snapshot.docs
+              .map(TenantInvitationModel.fromFirestore)
+              .toList();
 
-      invitations.sort(
-            (a, b) => b.createdAt.compareTo(a.createdAt),
-      );
+          invitations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      return invitations;
-    });
+          return invitations;
+        });
   }
 
   // ================================================================
@@ -383,7 +365,8 @@ class TenantInvitationDataSource {
   // ================================================================
 
   Stream<TenantInvitationModel?> watchPendingInvitationByTenantId(
-      String tenantId,) {
+    String tenantId,
+  ) {
     return watchInvitationsByTenantId(tenantId).map((invitations) {
       for (final invitation in invitations) {
         if (invitation.isPending) {
@@ -399,7 +382,7 @@ class TenantInvitationDataSource {
   // GET INVITATION BY ID
   // ================================================================
 
-  Future<TenantInvitationModel?> getInvitationById(String invitationId,) async {
+  Future<TenantInvitationModel?> getInvitationById(String invitationId) async {
     final normalizedId = invitationId.trim();
 
     if (normalizedId.isEmpty) {
@@ -426,7 +409,7 @@ class TenantInvitationDataSource {
   // GET INVITATION BY TOKEN
   // ================================================================
 
-  Future<TenantInvitationModel?> getInvitationByToken(String token,) async {
+  Future<TenantInvitationModel?> getInvitationByToken(String token) async {
     final normalizedToken = token.trim();
 
     if (normalizedToken.isEmpty) {
@@ -454,8 +437,12 @@ class TenantInvitationDataSource {
 
     final p = _normalize(phone);
     if (p != null) {
-      queries.add(_invitations.where('phone',
-          isEqualTo: PhoneNumberUtils.normalizeAndValidate(p)));
+      queries.add(
+        _invitations.where(
+          'phone',
+          isEqualTo: PhoneNumberUtils.normalizeAndValidate(p),
+        ),
+      );
     }
     final e = _normalizeEmail(email);
     if (e != null) {
@@ -471,7 +458,9 @@ class TenantInvitationDataSource {
 
     late final StreamController<List<TenantInvitationModel>> controller;
     final latest = List<List<TenantInvitationModel>>.filled(
-        queries.length, const <TenantInvitationModel>[]);
+      queries.length,
+      const <TenantInvitationModel>[],
+    );
     final subs = <StreamSubscription>[];
 
     void emit() {
@@ -489,11 +478,14 @@ class TenantInvitationDataSource {
     controller = StreamController<List<TenantInvitationModel>>(
       onListen: () {
         for (var i = 0; i < queries.length; i++) {
-          subs.add(queries[i].snapshots().listen((snap) {
-            latest[i] =
-                snap.docs.map(TenantInvitationModel.fromFirestore).toList();
-            emit();
-          }, onError: controller.addError));
+          subs.add(
+            queries[i].snapshots().listen((snap) {
+              latest[i] = snap.docs
+                  .map(TenantInvitationModel.fromFirestore)
+                  .toList();
+              emit();
+            }, onError: controller.addError),
+          );
         }
       },
       onCancel: () async {
@@ -510,7 +502,8 @@ class TenantInvitationDataSource {
   // ================================================================
 
   Future<TenantInvitationModel?> getPendingInvitationByTenantId(
-      String tenantId,) async {
+    String tenantId,
+  ) async {
     final normalizedTenantId = tenantId.trim();
 
     if (normalizedTenantId.isEmpty) {
@@ -524,8 +517,7 @@ class TenantInvitationDataSource {
         .get();
 
     for (final document in snapshot.docs) {
-      final invitation =
-      TenantInvitationModel.fromFirestore(document);
+      final invitation = TenantInvitationModel.fromFirestore(document);
 
       if (invitation.isPending) {
         return invitation;
@@ -540,9 +532,9 @@ class TenantInvitationDataSource {
   // ================================================================
 
   Future<TenantInvitationModel?> getPendingInvitationByPhone(
-      String phone,) async {
-    final normalizedPhone =
-    PhoneNumberUtils.normalizeAndValidate(phone);
+    String phone,
+  ) async {
+    final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(phone);
 
     final snapshot = await _invitations
         .where('phone', isEqualTo: normalizedPhone)
@@ -551,8 +543,7 @@ class TenantInvitationDataSource {
         .get();
 
     for (final document in snapshot.docs) {
-      final invitation =
-      TenantInvitationModel.fromFirestore(document);
+      final invitation = TenantInvitationModel.fromFirestore(document);
 
       if (invitation.isPending) {
         return invitation;
@@ -570,7 +561,8 @@ class TenantInvitationDataSource {
   // ================================================================
 
   Future<TenantInvitationModel?> getPendingInvitationByEmail(
-      String email,) async {
+    String email,
+  ) async {
     final normalizedEmail = _normalizeEmail(email);
 
     if (normalizedEmail == null) {
@@ -584,8 +576,7 @@ class TenantInvitationDataSource {
         .get();
 
     for (final document in snapshot.docs) {
-      final invitation =
-      TenantInvitationModel.fromFirestore(document);
+      final invitation = TenantInvitationModel.fromFirestore(document);
 
       if (invitation.isPending) {
         return invitation;
@@ -603,7 +594,8 @@ class TenantInvitationDataSource {
   // ================================================================
 
   Future<TenantInvitationModel?> getPendingInvitationByGrihoId(
-      String grihoId,) async {
+    String grihoId,
+  ) async {
     final normalizedGrihoId = _normalizeGrihoId(grihoId);
 
     if (normalizedGrihoId == null) {
@@ -617,8 +609,7 @@ class TenantInvitationDataSource {
         .get();
 
     for (final document in snapshot.docs) {
-      final invitation =
-      TenantInvitationModel.fromFirestore(document);
+      final invitation = TenantInvitationModel.fromFirestore(document);
 
       if (invitation.isPending) {
         return invitation;
@@ -649,9 +640,7 @@ class TenantInvitationDataSource {
     final firebaseUser = _auth.currentUser;
 
     if (firebaseUser == null) {
-      throw StateError(
-        'You must be signed in to accept an invitation.',
-      );
+      throw StateError('You must be signed in to accept an invitation.');
     }
 
     // Reload authentication claims/profile state before checking
@@ -664,19 +653,18 @@ class TenantInvitationDataSource {
       throw StateError('Your authentication session has expired.');
     }
 
-    final invitationReference =
-    _invitations.doc(normalizedInvitationId);
+    final invitationReference = _invitations.doc(normalizedInvitationId);
 
     await _firestore.runTransaction((transaction) async {
-      final invitationSnapshot =
-      await transaction.get(invitationReference);
+      final invitationSnapshot = await transaction.get(invitationReference);
 
       if (!invitationSnapshot.exists) {
         throw StateError('Invitation does not exist.');
       }
 
-      final invitation =
-      TenantInvitationModel.fromFirestore(invitationSnapshot);
+      final invitation = TenantInvitationModel.fromFirestore(
+        invitationSnapshot,
+      );
 
       if (invitation.status != TenantInvitationStatus.pending) {
         throw StateError('This invitation is no longer pending.');
@@ -704,32 +692,27 @@ class TenantInvitationDataSource {
       if (tenantId == null) {
         throw StateError(
           'This invitation requires new-tenant onboarding. '
-              'Collect and verify the recipient details before creating '
-              'the tenant record.',
+          'Collect and verify the recipient details before creating '
+          'the tenant record.',
         );
       }
 
       final tenantReference = _tenants.doc(tenantId);
-      final tenantAccessReference =
-      _tenantAccess.doc(currentUser.uid);
-      final propertyReference =
-      _properties.doc(invitation.propertyId);
+      final tenantAccessReference = _tenantAccess.doc(currentUser.uid);
+      final propertyReference = _properties.doc(invitation.propertyId);
       final unitReference = _units.doc(invitation.unitId);
 
       // ------------------------------------------------------------
       // READ ALL DOCUMENTS BEFORE WRITES
       // ------------------------------------------------------------
 
-      final tenantSnapshot =
-      await transaction.get(tenantReference);
-      final tenantAccessSnapshot =
-      await transaction.get(tenantAccessReference);
-      final propertySnapshot =
-      await transaction.get(propertyReference);
-      final unitSnapshot =
-      await transaction.get(unitReference);
-      final accountSnapshot =
-      await transaction.get(_users.doc(currentUser.uid));
+      final tenantSnapshot = await transaction.get(tenantReference);
+      final tenantAccessSnapshot = await transaction.get(tenantAccessReference);
+      final propertySnapshot = await transaction.get(propertyReference);
+      final unitSnapshot = await transaction.get(unitReference);
+      final accountSnapshot = await transaction.get(
+        _users.doc(currentUser.uid),
+      );
 
       if (!tenantSnapshot.exists) {
         throw StateError('Tenant does not exist.');
@@ -738,9 +721,7 @@ class TenantInvitationDataSource {
       final tenant = TenantModel.fromFirestore(tenantSnapshot);
 
       if (tenant.ownerId != invitation.ownerId) {
-        throw StateError(
-          'Invitation owner does not match tenant owner.',
-        );
+        throw StateError('Invitation owner does not match tenant owner.');
       }
 
       if (tenant.propertyId != invitation.propertyId ||
@@ -756,11 +737,8 @@ class TenantInvitationDataSource {
 
       final linkedUserId = _normalize(tenant.userId);
 
-      if (linkedUserId != null &&
-          linkedUserId != currentUser.uid) {
-        throw StateError(
-          'This tenant record is linked to another account.',
-        );
+      if (linkedUserId != null && linkedUserId != currentUser.uid) {
+        throw StateError('This tenant record is linked to another account.');
       }
 
       // ------------------------------------------------------------
@@ -779,17 +757,13 @@ class TenantInvitationDataSource {
 
       if (_normalize(propertyData['ownerId'] as String?) !=
           invitation.ownerId) {
-        throw StateError(
-          'Invitation property does not belong to its owner.',
-        );
+        throw StateError('Invitation property does not belong to its owner.');
       }
 
       final propertyStatus = propertyData['status'];
 
       if (propertyStatus is String &&
-          propertyStatus
-              .trim()
-              .isNotEmpty &&
+          propertyStatus.trim().isNotEmpty &&
           propertyStatus.toLowerCase() != 'active') {
         throw StateError('Invitation property is no longer active.');
       }
@@ -810,29 +784,21 @@ class TenantInvitationDataSource {
 
       if (_normalize(unitData['propertyId'] as String?) !=
           invitation.propertyId) {
-        throw StateError(
-          'Invitation unit does not belong to its property.',
-        );
+        throw StateError('Invitation unit does not belong to its property.');
       }
 
       final unitStatus = unitData['status'];
 
       if (unitStatus is String &&
-          unitStatus
-              .trim()
-              .isNotEmpty &&
+          unitStatus.trim().isNotEmpty &&
           unitStatus.toLowerCase() != 'available') {
         throw StateError('This unit is no longer available.');
       }
 
-      final unitTenantUserId =
-      _normalize(unitData['tenantUserId'] as String?);
+      final unitTenantUserId = _normalize(unitData['tenantUserId'] as String?);
 
-      if (unitTenantUserId != null &&
-          unitTenantUserId != currentUser.uid) {
-        throw StateError(
-          'This unit is already assigned to another account.',
-        );
+      if (unitTenantUserId != null && unitTenantUserId != currentUser.uid) {
+        throw StateError('This unit is already assigned to another account.');
       }
 
       // ------------------------------------------------------------
@@ -846,19 +812,14 @@ class TenantInvitationDataSource {
           throw StateError('Tenant access data is invalid.');
         }
 
-        final accessTenantId =
-        _normalize(accessData['tenantId'] as String?);
-        final accessOwnerId =
-        _normalize(accessData['ownerId'] as String?);
+        final accessTenantId = _normalize(accessData['tenantId'] as String?);
+        final accessOwnerId = _normalize(accessData['ownerId'] as String?);
 
         if (accessTenantId != null && accessTenantId != tenantId) {
-          throw StateError(
-            'This account is already linked to another tenant.',
-          );
+          throw StateError('This account is already linked to another tenant.');
         }
 
-        if (accessOwnerId != null &&
-            accessOwnerId != invitation.ownerId) {
+        if (accessOwnerId != null && accessOwnerId != invitation.ownerId) {
           throw StateError(
             'This account already has tenant access for another owner.',
           );
@@ -872,10 +833,7 @@ class TenantInvitationDataSource {
       final rentRateSnapshot = await _rentRates
           .where('unitId', isEqualTo: invitation.unitId)
           .where('ownerId', isEqualTo: invitation.ownerId)
-          .where(
-        'effectiveFrom',
-        isLessThanOrEqualTo: Timestamp.fromDate(now),
-      )
+          .where('effectiveFrom', isLessThanOrEqualTo: Timestamp.fromDate(now))
           .orderBy('effectiveFrom', descending: true)
           .limit(1)
           .get();
@@ -894,7 +852,8 @@ class TenantInvitationDataSource {
 
       final newRentRateReference = _rentRates.doc();
 
-      final shouldCreateRentRate = currentRentRate == null ||
+      final shouldCreateRentRate =
+          currentRentRate == null ||
           currentRentRate.amount != invitation.rentAmount;
 
       // ------------------------------------------------------------
@@ -965,8 +924,7 @@ class TenantInvitationDataSource {
 
       if (shouldCreateRentRate) {
         if (currentRentRate != null) {
-          final oldRentRateReference =
-          _rentRates.doc(currentRentRate.id);
+          final oldRentRateReference = _rentRates.doc(currentRentRate.id);
 
           transaction.update(oldRentRateReference, {
             'effectiveTo': Timestamp.fromDate(now),
@@ -994,10 +952,7 @@ class TenantInvitationDataSource {
           updatedAt: now,
         );
 
-        transaction.set(
-          newRentRateReference,
-          newRentRate.toFirestore(),
-        );
+        transaction.set(newRentRateReference, newRentRate.toFirestore());
       }
 
       // ------------------------------------------------------------
@@ -1011,9 +966,7 @@ class TenantInvitationDataSource {
       });
 
       if (kDebugMode) {
-        debugPrint(
-          '[TENANT INVITATION] Accepted: ${invitation.id}',
-        );
+        debugPrint('[TENANT INVITATION] Accepted: ${invitation.id}');
       }
     });
   }
@@ -1046,8 +999,7 @@ class TenantInvitationDataSource {
         throw StateError('Invitation does not exist.');
       }
 
-      final invitation =
-      TenantInvitationModel.fromFirestore(snapshot);
+      final invitation = TenantInvitationModel.fromFirestore(snapshot);
 
       if (invitation.status != TenantInvitationStatus.pending) {
         throw StateError('Only pending invitations can be changed.');
@@ -1064,10 +1016,7 @@ class TenantInvitationDataSource {
         return;
       }
 
-      await _verifyInvitationRecipient(
-        invitation: invitation,
-        user: user,
-      );
+      await _verifyInvitationRecipient(invitation: invitation, user: user);
 
       transaction.update(reference, {
         'status': TenantInvitationStatus.rejected.name,
@@ -1103,8 +1052,7 @@ class TenantInvitationDataSource {
         throw StateError('Invitation does not exist.');
       }
 
-      final invitation =
-      TenantInvitationModel.fromFirestore(snapshot);
+      final invitation = TenantInvitationModel.fromFirestore(snapshot);
 
       if (invitation.ownerId != user.uid) {
         throw StateError('Only the owner can expire an invitation.');
@@ -1115,9 +1063,7 @@ class TenantInvitationDataSource {
       }
 
       if (DateTime.now().isBefore(invitation.expiresAt)) {
-        throw StateError(
-          'This invitation has not expired yet.',
-        );
+        throw StateError('This invitation has not expired yet.');
       }
 
       transaction.update(reference, {
@@ -1150,7 +1096,8 @@ class TenantInvitationDataSource {
     if (invitationEmail != null) {
       if (!user.emailVerified) {
         throw StateError(
-            'Verify your email address before accepting this invitation.');
+          'Verify your email address before accepting this invitation.',
+        );
       }
       if (_normalizeEmail(user.email) != invitationEmail) {
         throw StateError('Your account email does not match this invitation.');
@@ -1195,12 +1142,11 @@ class TenantInvitationDataSource {
 
     return List.generate(
       32,
-          (_) => characters[random.nextInt(characters.length)],
+      (_) => characters[random.nextInt(characters.length)],
     ).join();
   }
 
-  String? _readOptionalString(Map<String, dynamic> data,
-      String field,) {
+  String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! String) {

@@ -1,13 +1,6 @@
-enum PropertyType {
-  residential,
-  commercial,
-  mixedUse,
-}
+enum PropertyType { residential, commercial, mixedUse }
 
-enum PropertyStatus {
-  active,
-  inactive,
-}
+enum PropertyStatus { active, inactive }
 
 class Property {
   /// Internal Firestore document ID.

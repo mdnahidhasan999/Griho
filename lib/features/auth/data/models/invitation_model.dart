@@ -20,8 +20,8 @@ class InvitationModel extends Invitation {
   });
 
   factory InvitationModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> document,
-      ) {
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
     final data = document.data();
 
     if (data == null) {
@@ -39,9 +39,7 @@ class InvitationModel extends Invitation {
       status: _statusFromString(data['status'] as String),
       createdAt: _dateTimeFromTimestamp(data['createdAt']),
       expiresAt: _dateTimeFromTimestamp(data['expiresAt']),
-      respondedAt: _optionalDateTimeFromTimestamp(
-        data['respondedAt'],
-      ),
+      respondedAt: _optionalDateTimeFromTimestamp(data['respondedAt']),
     );
   }
 
@@ -80,19 +78,15 @@ class InvitationModel extends Invitation {
 
   static InvitationRole _roleFromString(String value) {
     return InvitationRole.values.firstWhere(
-          (role) => role.name == value,
-      orElse: () => throw StateError(
-        'Invalid invitation role: $value',
-      ),
+      (role) => role.name == value,
+      orElse: () => throw StateError('Invalid invitation role: $value'),
     );
   }
 
   static InvitationStatus _statusFromString(String value) {
     return InvitationStatus.values.firstWhere(
-          (status) => status.name == value,
-      orElse: () => throw StateError(
-        'Invalid invitation status: $value',
-      ),
+      (status) => status.name == value,
+      orElse: () => throw StateError('Invalid invitation status: $value'),
     );
   }
 

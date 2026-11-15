@@ -6,17 +6,13 @@ abstract interface class MonthlyRentRepository {
   // CREATE
   // ==========================================================================
 
-  Future<MonthlyRent> createMonthlyRent(
-      CreateMonthlyRentRequest request,
-      );
+  Future<MonthlyRent> createMonthlyRent(CreateMonthlyRentRequest request);
 
   // ==========================================================================
   // GET BY ID
   // ==========================================================================
 
-  Future<MonthlyRent?> getMonthlyRentById(
-      String rentId,
-      );
+  Future<MonthlyRent?> getMonthlyRentById(String rentId);
 
   // ==========================================================================
   // GET BY UNIT + BILLING PERIOD

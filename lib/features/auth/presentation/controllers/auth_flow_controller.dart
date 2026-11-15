@@ -21,9 +21,9 @@ class AuthFlowController {
       return const AuthFlowResult.unauthenticated();
     }
 
-    final profile = await ref.read(
-      userProfileRepositoryProvider,
-    ).getUserByUid(firebaseUser.uid);
+    final profile = await ref
+        .read(userProfileRepositoryProvider)
+        .getUserByUid(firebaseUser.uid);
 
     if (profile == null) {
       return const AuthFlowResult.newUser();
@@ -31,44 +31,30 @@ class AuthFlowController {
 
     final destination = AuthRoleResolver.resolve(profile);
 
-    return AuthFlowResult.existingUser(
-      profile,
-      destination,
-    );
+    return AuthFlowResult.existingUser(profile, destination);
   }
 }
 
-enum AuthFlowStatus {
-  unauthenticated,
-  newUser,
-  existingUser,
-}
+enum AuthFlowStatus { unauthenticated, newUser, existingUser }
 
 class AuthFlowResult {
   final AuthFlowStatus status;
   final AppUser? user;
   final AuthUserDestination? destination;
 
-  const AuthFlowResult._({
-    required this.status,
-    this.user,
-    this.destination,
-  });
+  const AuthFlowResult._({required this.status, this.user, this.destination});
 
   const AuthFlowResult.unauthenticated()
-      : this._(
-    status: AuthFlowStatus.unauthenticated,
-  );
+    : this._(status: AuthFlowStatus.unauthenticated);
 
-  const AuthFlowResult.newUser()
-      : this._(
-    status: AuthFlowStatus.newUser,
-  );
+  const AuthFlowResult.newUser() : this._(status: AuthFlowStatus.newUser);
 
-  const AuthFlowResult.existingUser(AppUser user,
-      AuthUserDestination destination,) : this._(
-    status: AuthFlowStatus.existingUser,
-    user: user,
-    destination: destination,
-  );
+  const AuthFlowResult.existingUser(
+    AppUser user,
+    AuthUserDestination destination,
+  ) : this._(
+        status: AuthFlowStatus.existingUser,
+        user: user,
+        destination: destination,
+      );
 }

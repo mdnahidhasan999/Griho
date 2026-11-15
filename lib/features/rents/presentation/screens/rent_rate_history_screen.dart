@@ -9,10 +9,7 @@ import '../providers/rent_rate_provider.dart';
 class RentRateHistoryScreen extends ConsumerWidget {
   final String unitId;
 
-  const RentRateHistoryScreen({
-    super.key,
-    required this.unitId,
-  });
+  const RentRateHistoryScreen({super.key, required this.unitId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,7 +37,9 @@ class RentRateHistoryScreen extends ConsumerWidget {
             return const Center(child: Text('Unit information not found.'));
           }
 
-          final propertyAsync = ref.watch(propertyByIdProvider(unit.propertyId));
+          final propertyAsync = ref.watch(
+            propertyByIdProvider(unit.propertyId),
+          );
 
           return propertyAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -52,15 +51,15 @@ class RentRateHistoryScreen extends ConsumerWidget {
             ),
             data: (property) {
               if (property == null) {
-                return const Center(child: Text('Property information not found.'));
+                return const Center(
+                  child: Text('Property information not found.'),
+                );
               }
 
-              final historyProvider = unitRentRateHistoryProvider(
-                (
+              final historyProvider = unitRentRateHistoryProvider((
                 unitId: unit.id,
                 ownerId: property.ownerId,
-                ),
-              );
+              ));
 
               final historyAsync = ref.watch(historyProvider);
 
@@ -136,9 +135,9 @@ class _HistoryBody extends StatelessWidget {
               const SizedBox(height: 18),
               Text(
                 'No Rent History Recorded',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
               Text(
@@ -172,18 +171,15 @@ class _HistoryBody extends StatelessWidget {
 
           Text(
             'Timeline & Rate Revisions',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
 
           // 2. Chronological History Cards
           for (var i = 0; i < history.length; i++) ...[
-            _RentRateCard(
-              rate: history[i],
-              isFirst: i == 0,
-            ),
+            _RentRateCard(rate: history[i], isFirst: i == 0),
             if (i != history.length - 1) const SizedBox(height: 12),
           ],
         ],
@@ -284,10 +280,7 @@ class _RentRateCard extends StatelessWidget {
   final RentRate rate;
   final bool isFirst;
 
-  const _RentRateCard({
-    required this.rate,
-    required this.isFirst,
-  });
+  const _RentRateCard({required this.rate, required this.isFirst});
 
   @override
   Widget build(BuildContext context) {
@@ -318,11 +311,16 @@ class _RentRateCard extends StatelessWidget {
                 '৳ ${_formatAmount(rate.amount)}',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
-                  color: isCurrent ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+                  color: isCurrent
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface,
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: isCurrent
                       ? Colors.green.withValues(alpha: 0.15)
@@ -334,7 +332,9 @@ class _RentRateCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: isCurrent ? Colors.green.shade800 : theme.colorScheme.onSurfaceVariant,
+                    color: isCurrent
+                        ? Colors.green.shade800
+                        : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -346,7 +346,8 @@ class _RentRateCard extends StatelessWidget {
           _DetailRow(
             icon: Icons.calendar_today_outlined,
             label: 'Effective Range',
-            value: '${_formatDate(rate.effectiveFrom)} → ${rate.effectiveTo == null ? 'Ongoing' : _formatDate(rate.effectiveTo!)}',
+            value:
+                '${_formatDate(rate.effectiveFrom)} → ${rate.effectiveTo == null ? 'Ongoing' : _formatDate(rate.effectiveTo!)}',
           ),
           const SizedBox(height: 6),
           _DetailRow(
@@ -405,10 +406,7 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -418,7 +416,11 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: Colors.redAccent,
+            ),
             const SizedBox(height: 16),
             Text(
               message,
@@ -426,10 +428,7 @@ class _ErrorView extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

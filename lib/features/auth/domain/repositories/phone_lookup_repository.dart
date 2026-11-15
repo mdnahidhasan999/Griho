@@ -1,7 +1,5 @@
 abstract class PhoneLookupRepository {
-  Future<Map<String, dynamic>?> getUserByPhone(
-      String phoneNumber,
-      );
+  Future<Map<String, dynamic>?> getUserByPhone(String phoneNumber);
 
   Future<void> savePhoneLookup({
     required String phoneNumber,
@@ -12,7 +10,5 @@ abstract class PhoneLookupRepository {
     String? nidNumber,
   });
 
-  Future<void> deletePhoneLookup(
-      String phoneNumber,
-      );
+  Future<void> deletePhoneLookup(String phoneNumber);
 }

@@ -31,12 +31,10 @@ class TenancyBillingPeriodResolver {
     // means Sep 1 through Sep 30.
     // ------------------------------------------------------------------------
 
-    if (!billingPeriodEnd.isAfter(
-      billingPeriodStart,
-    )) {
+    if (!billingPeriodEnd.isAfter(billingPeriodStart)) {
       throw ArgumentError(
         'Billing period end must be after '
-            'billing period start.',
+        'billing period start.',
       );
     }
 
@@ -47,37 +45,26 @@ class TenancyBillingPeriodResolver {
     // tenancyEnd   = INCLUSIVE
     // ------------------------------------------------------------------------
 
-    if (tenancyEnd != null &&
-        tenancyEnd.isBefore(
-          tenancyStart,
-        )) {
+    if (tenancyEnd != null && tenancyEnd.isBefore(tenancyStart)) {
       throw ArgumentError(
         'Tenancy end cannot be before '
-            'tenancy start.',
+        'tenancy start.',
       );
     }
 
-    final billingStart = _dateOnly(
-      billingPeriodStart,
-    );
+    final billingStart = _dateOnly(billingPeriodStart);
 
     // billingPeriodEnd is EXCLUSIVE, so the actual
     // last chargeable calendar day is one day before it.
     final billingEndInclusive = _dateOnly(
       billingPeriodEnd,
-    ).subtract(
-      const Duration(days: 1),
-    );
+    ).subtract(const Duration(days: 1));
 
-    final normalizedTenancyStart = _dateOnly(
-      tenancyStart,
-    );
+    final normalizedTenancyStart = _dateOnly(tenancyStart);
 
     final normalizedTenancyEnd = tenancyEnd == null
         ? null
-        : _dateOnly(
-      tenancyEnd,
-    );
+        : _dateOnly(tenancyEnd);
 
     // ------------------------------------------------------------------------
     // No overlap:
@@ -86,16 +73,12 @@ class TenancyBillingPeriodResolver {
     // 2. Tenancy ended before the billing period.
     // ------------------------------------------------------------------------
 
-    if (normalizedTenancyStart.isAfter(
-      billingEndInclusive,
-    )) {
+    if (normalizedTenancyStart.isAfter(billingEndInclusive)) {
       return null;
     }
 
     if (normalizedTenancyEnd != null &&
-        normalizedTenancyEnd.isBefore(
-          billingStart,
-        )) {
+        normalizedTenancyEnd.isBefore(billingStart)) {
       return null;
     }
 
@@ -103,10 +86,7 @@ class TenancyBillingPeriodResolver {
     // Resolve the actual charge period.
     // ------------------------------------------------------------------------
 
-    final chargeStart = _maxDate(
-      billingStart,
-      normalizedTenancyStart,
-    );
+    final chargeStart = _maxDate(billingStart, normalizedTenancyStart);
 
     final chargeEnd = _minDate(
       billingEndInclusive,
@@ -124,25 +104,15 @@ class TenancyBillingPeriodResolver {
     );
   }
 
-  DateTime _maxDate(
-      DateTime first,
-      DateTime second,
-      ) {
+  DateTime _maxDate(DateTime first, DateTime second) {
     return first.isAfter(second) ? first : second;
   }
 
-  DateTime _minDate(
-      DateTime first,
-      DateTime second,
-      ) {
+  DateTime _minDate(DateTime first, DateTime second) {
     return first.isBefore(second) ? first : second;
   }
 
   DateTime _dateOnly(DateTime value) {
-    return DateTime(
-      value.year,
-      value.month,
-      value.day,
-    );
+    return DateTime(value.year, value.month, value.day);
   }
 }

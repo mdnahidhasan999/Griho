@@ -10,14 +10,9 @@ class ResolvedBillingRule {
   /// actual monthly amount is entered.
   final double? amount;
 
-  const ResolvedBillingRule({
-    required this.rule,
-    required this.amount,
-  });
+  const ResolvedBillingRule({required this.rule, required this.amount});
 
-  bool get isFixed =>
-      rule.valueType == BillingValueType.fixed;
+  bool get isFixed => rule.valueType == BillingValueType.fixed;
 
-  bool get isVariable =>
-      rule.valueType == BillingValueType.variable;
+  bool get isVariable => rule.valueType == BillingValueType.variable;
 }

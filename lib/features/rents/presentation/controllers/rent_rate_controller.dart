@@ -35,18 +35,13 @@ class RentRateController extends StateNotifier<AsyncValue<void>> {
     state = const AsyncLoading();
 
     try {
-      final rentRate = await _createInitialRentRate(
-        request,
-      );
+      final rentRate = await _createInitialRentRate(request);
 
       state = const AsyncData(null);
 
       return rentRate;
     } catch (error, stackTrace) {
-      state = AsyncError(
-        error,
-        stackTrace,
-      );
+      state = AsyncError(error, stackTrace);
 
       return null;
     }
@@ -76,10 +71,7 @@ class RentRateController extends StateNotifier<AsyncValue<void>> {
 
       return rentRate;
     } catch (error, stackTrace) {
-      state = AsyncError(
-        error,
-        stackTrace,
-      );
+      state = AsyncError(error, stackTrace);
 
       return null;
     }
@@ -123,10 +115,7 @@ class RentRateController extends StateNotifier<AsyncValue<void>> {
 
       return rentRates;
     } catch (error, stackTrace) {
-      state = AsyncError(
-        error,
-        stackTrace,
-      );
+      state = AsyncError(error, stackTrace);
 
       return null;
     }
@@ -168,10 +157,7 @@ class RentRateController extends StateNotifier<AsyncValue<void>> {
 
       return rentRates;
     } catch (error, stackTrace) {
-      state = AsyncError(
-        error,
-        stackTrace,
-      );
+      state = AsyncError(error, stackTrace);
 
       return null;
     }

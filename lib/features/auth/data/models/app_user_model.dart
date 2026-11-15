@@ -59,7 +59,8 @@ class AppUserModel extends AppUser {
   }
 
   factory AppUserModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc,) {
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data()!;
 
     return AppUserModel.fromJson({...data, 'uid': doc.id});

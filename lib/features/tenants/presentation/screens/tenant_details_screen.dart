@@ -16,10 +16,7 @@ import 'start_new_tenancy_screen.dart';
 class TenantDetailsScreen extends ConsumerStatefulWidget {
   final String tenantId;
 
-  const TenantDetailsScreen({
-    super.key,
-    required this.tenantId,
-  });
+  const TenantDetailsScreen({super.key, required this.tenantId});
 
   @override
   ConsumerState<TenantDetailsScreen> createState() =>
@@ -79,9 +76,8 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
         return AlertDialog(
           title: const Text('End Current Tenancy?'),
           content: Text(
-            'Are you sure you want to end the active tenancy of "${tenant
-                .name}"?\n\n'
-                'The resident will be marked as inactive and the assigned unit will immediately become vacant and available.',
+            'Are you sure you want to end the active tenancy of "${tenant.name}"?\n\n'
+            'The resident will be marked as inactive and the assigned unit will immediately become vacant and available.',
           ),
           actions: [
             TextButton(
@@ -92,10 +88,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme
-                    .of(context)
-                    .colorScheme
-                    .error,
+                backgroundColor: Theme.of(context).colorScheme.error,
               ),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
@@ -126,10 +119,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
           content: Text(
             state.error?.toString() ?? 'Unable to end tenancy agreement.',
           ),
-          backgroundColor: Theme
-              .of(context)
-              .colorScheme
-              .error,
+          backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -144,10 +134,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
     ref.invalidate(propertyByIdProvider(tenant.propertyId));
     ref.invalidate(unitByIdProvider(tenant.unitId));
     ref.invalidate(
-      tenantHistoryProvider((
-      tenantId: tenant.id,
-      ownerId: tenant.ownerId,
-      )),
+      tenantHistoryProvider((tenantId: tenant.id, ownerId: tenant.ownerId)),
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -177,9 +164,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
     }
 
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => StartNewTenancyScreen(tenant: tenant),
-      ),
+      MaterialPageRoute(builder: (_) => StartNewTenancyScreen(tenant: tenant)),
     );
 
     if (!mounted || result != true) {
@@ -206,7 +191,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
           title: const Text('Delete Resident Record?'),
           content: Text(
             'Are you sure you want to permanently delete "${tenant.name}"?\n\n'
-                'This action cannot be undone and will detach all associated history.',
+            'This action cannot be undone and will detach all associated history.',
           ),
           actions: [
             TextButton(
@@ -217,10 +202,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme
-                    .of(context)
-                    .colorScheme
-                    .error,
+                backgroundColor: Theme.of(context).colorScheme.error,
               ),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
@@ -251,10 +233,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
           content: Text(
             state.error?.toString() ?? 'Unable to delete resident record.',
           ),
-          backgroundColor: Theme
-              .of(context)
-              .colorScheme
-              .error,
+          backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -278,10 +257,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
     if (_errorMessage != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Resident Details')),
-        body: _ErrorView(
-          message: _errorMessage!,
-          onRetry: _loadTenant,
-        ),
+        body: _ErrorView(message: _errorMessage!, onRetry: _loadTenant),
       );
     }
 
@@ -297,14 +273,12 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
     final propertyAsync = ref.watch(propertyByIdProvider(tenant.propertyId));
     final unitAsync = ref.watch(unitByIdProvider(tenant.unitId));
     final historyAsync = ref.watch(
-      tenantHistoryProvider((
-      tenantId: tenant.id,
-      ownerId: tenant.ownerId,
-      )),
+      tenantHistoryProvider((tenantId: tenant.id, ownerId: tenant.ownerId)),
     );
 
     final isActive = tenant.status == TenantStatus.active;
-    final canStartNewTenancy = tenant.status == TenantStatus.inactive &&
+    final canStartNewTenancy =
+        tenant.status == TenantStatus.inactive &&
         tenant.accountStatus == TenantAccountStatus.registered;
 
     return Scaffold(
@@ -320,32 +294,32 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             onPressed: tenantState.isLoading
                 ? null
                 : () async {
-              final result = await context.push<Tenant>(
-                RouteNames.editTenant.replaceFirst(
-                  ':tenantId',
-                  tenant.id,
-                ),
-                extra: tenant,
-              );
+                    final result = await context.push<Tenant>(
+                      RouteNames.editTenant.replaceFirst(
+                        ':tenantId',
+                        tenant.id,
+                      ),
+                      extra: tenant,
+                    );
 
-              if (!context.mounted || result == null) {
-                return;
-              }
+                    if (!context.mounted || result == null) {
+                      return;
+                    }
 
-              setState(() {
-                _tenant = result;
-              });
+                    setState(() {
+                      _tenant = result;
+                    });
 
-              ref.invalidate(propertyTenantsProvider(result.propertyId));
-              ref.invalidate(propertyByIdProvider(result.propertyId));
-              ref.invalidate(unitByIdProvider(result.unitId));
-              ref.invalidate(
-                tenantHistoryProvider((
-                tenantId: result.id,
-                ownerId: result.ownerId,
-                )),
-              );
-            },
+                    ref.invalidate(propertyTenantsProvider(result.propertyId));
+                    ref.invalidate(propertyByIdProvider(result.propertyId));
+                    ref.invalidate(unitByIdProvider(result.unitId));
+                    ref.invalidate(
+                      tenantHistoryProvider((
+                        tenantId: result.id,
+                        ownerId: result.ownerId,
+                      )),
+                    );
+                  },
             icon: const Icon(Icons.edit_outlined),
           ),
           IconButton(
@@ -363,8 +337,8 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             if (currentTenant != null) {
               ref.invalidate(
                 tenantHistoryProvider((
-                tenantId: currentTenant.id,
-                ownerId: currentTenant.ownerId,
+                  tenantId: currentTenant.id,
+                  ownerId: currentTenant.ownerId,
                 )),
               );
             }
@@ -386,14 +360,13 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                 onEndTenancy: _endTenancy,
               ),
               const SizedBox(height: 18),
-            ] else
-              if (canStartNewTenancy) ...[
-                _NewTenancyActionCard(
-                  isLoading: tenantState.isLoading,
-                  onStartNewTenancy: _startNewTenancy,
-                ),
-                const SizedBox(height: 18),
-              ],
+            ] else if (canStartNewTenancy) ...[
+              _NewTenancyActionCard(
+                isLoading: tenantState.isLoading,
+                onStartNewTenancy: _startNewTenancy,
+              ),
+              const SizedBox(height: 18),
+            ],
 
             // 3. Property & Space Allocation
             _buildSectionCard(
@@ -403,32 +376,28 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
               children: [
                 propertyAsync.when(
                   loading: () => const _LoadingDetailRow(label: 'Property'),
-                  error: (_, _) =>
-                  const _DetailRow(
+                  error: (_, _) => const _DetailRow(
                     label: 'Property',
                     value: 'Property information unavailable',
                   ),
-                  data: (property) =>
-                      _DetailRow(
-                        label: 'Property',
-                        value: property != null
-                            ? '${property.name} (${property.propertyCode})'
-                            : 'Property record not found',
-                      ),
+                  data: (property) => _DetailRow(
+                    label: 'Property',
+                    value: property != null
+                        ? '${property.name} (${property.propertyCode})'
+                        : 'Property record not found',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 unitAsync.when(
                   loading: () => const _LoadingDetailRow(label: 'Unit / Floor'),
-                  error: (_, _) =>
-                  const _DetailRow(
+                  error: (_, _) => const _DetailRow(
                     label: 'Unit / Floor',
                     value: 'Unit information unavailable',
                   ),
-                  data: (unit) =>
-                      _DetailRow(
-                        label: 'Unit / Floor',
-                        value: _unitDisplayName(unit),
-                      ),
+                  data: (unit) => _DetailRow(
+                    label: 'Unit / Floor',
+                    value: _unitDisplayName(unit),
+                  ),
                 ),
               ],
             ),
@@ -449,9 +418,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                 const SizedBox(height: 10),
                 _DetailRow(
                   label: 'Email Address',
-                  value: tenant.email
-                      ?.trim()
-                      .isNotEmpty == true
+                  value: tenant.email?.trim().isNotEmpty == true
                       ? tenant.email!.trim()
                       : 'Email not linked to this resident record',
                   isSelectable: true,
@@ -459,9 +426,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
                 const SizedBox(height: 10),
                 _DetailRow(
                   label: 'National ID (NID)',
-                  value: tenant.nidNumber
-                      ?.trim()
-                      .isNotEmpty == true
+                  value: tenant.nidNumber?.trim().isNotEmpty == true
                       ? tenant.nidNumber!
                       : 'Not provided',
                   isSelectable: true,
@@ -473,24 +438,20 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
 
             // 5. Tenancy History Stream
             historyAsync.when(
-              loading: () =>
-                  _buildSectionCard(
-                    title: 'Tenancy History',
-                    subtitle: 'Past agreements and occupancy snapshots',
-                    icon: Icons.history_rounded,
-                    children: const [
-                      LinearProgressIndicator(),
-                    ],
-                  ),
-              error: (_, _) =>
-                  _buildSectionCard(
-                    title: 'Tenancy History',
-                    subtitle: 'Past agreements and occupancy snapshots',
-                    icon: Icons.history_rounded,
-                    children: const [
-                      Text('Unable to load tenancy history records.'),
-                    ],
-                  ),
+              loading: () => _buildSectionCard(
+                title: 'Tenancy History',
+                subtitle: 'Past agreements and occupancy snapshots',
+                icon: Icons.history_rounded,
+                children: const [LinearProgressIndicator()],
+              ),
+              error: (_, _) => _buildSectionCard(
+                title: 'Tenancy History',
+                subtitle: 'Past agreements and occupancy snapshots',
+                icon: Icons.history_rounded,
+                children: const [
+                  Text('Unable to load tenancy history records.'),
+                ],
+              ),
               data: (histories) {
                 if (histories.isEmpty) {
                   return _buildSectionCard(
@@ -644,8 +605,7 @@ class _TenantHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isActive = tenant.status == TenantStatus.active;
-    final isRegistered =
-        tenant.accountStatus == TenantAccountStatus.registered;
+    final isRegistered = tenant.accountStatus == TenantAccountStatus.registered;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -701,7 +661,9 @@ class _TenantHeroCard extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: isActive
                       ? Colors.green.withValues(alpha: 0.12)
@@ -712,11 +674,13 @@ class _TenantHeroCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      isActive ? Icons.check_circle_rounded : Icons
-                          .pause_circle_rounded,
+                      isActive
+                          ? Icons.check_circle_rounded
+                          : Icons.pause_circle_rounded,
                       size: 14,
-                      color: isActive ? Colors.green.shade800 : Colors.orange
-                          .shade800,
+                      color: isActive
+                          ? Colors.green.shade800
+                          : Colors.orange.shade800,
                     ),
                     const SizedBox(width: 5),
                     Text(
@@ -724,8 +688,9 @@ class _TenantHeroCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: isActive ? Colors.green.shade800 : Colors.orange
-                            .shade800,
+                        color: isActive
+                            ? Colors.green.shade800
+                            : Colors.orange.shade800,
                       ),
                     ),
                   ],
@@ -734,7 +699,9 @@ class _TenantHeroCard extends StatelessWidget {
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: isRegistered
                       ? Colors.teal.withValues(alpha: 0.12)
@@ -745,11 +712,13 @@ class _TenantHeroCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      isRegistered ? Icons.verified_user_rounded : Icons
-                          .person_outline,
+                      isRegistered
+                          ? Icons.verified_user_rounded
+                          : Icons.person_outline,
                       size: 14,
-                      color: isRegistered ? Colors.teal.shade800 : theme
-                          .colorScheme.onSurfaceVariant,
+                      color: isRegistered
+                          ? Colors.teal.shade800
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 5),
                     Text(
@@ -757,8 +726,9 @@ class _TenantHeroCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: isRegistered ? Colors.teal.shade800 : theme
-                            .colorScheme.onSurfaceVariant,
+                        color: isRegistered
+                            ? Colors.teal.shade800
+                            : theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -776,8 +746,10 @@ class _TenantHeroCard extends StatelessWidget {
     if (value.isEmpty) {
       return 'T';
     }
-    final parts =
-    value.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = value
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.length == 1) {
       return parts.first
           .substring(0, parts.first.length >= 2 ? 2 : 1)
@@ -964,8 +936,11 @@ class _TenancyHistorySection extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.history_rounded, size: 20,
-                    color: theme.colorScheme.primary),
+                Icon(
+                  Icons.history_rounded,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Tenancy History (${histories.length})',
@@ -1001,17 +976,12 @@ class _TenancyHistoryItem extends StatelessWidget {
   final TenancyHistory history;
   final String Function(DateTime) formatDate;
 
-  const _TenancyHistoryItem({
-    required this.history,
-    required this.formatDate,
-  });
+  const _TenancyHistoryItem({required this.history, required this.formatDate});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final unitDisplay = history.unitName
-        ?.trim()
-        .isNotEmpty == true
+    final unitDisplay = history.unitName?.trim().isNotEmpty == true
         ? '${history.unitName!} (Unit ${history.unitNumber})'
         : 'Unit ${history.unitNumber}';
 
@@ -1047,8 +1017,10 @@ class _TenancyHistoryItem extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        _HistoryDataRow(label: 'Unit / Floor',
-            value: '$unitDisplay • Floor ${history.floorNumber}'),
+        _HistoryDataRow(
+          label: 'Unit / Floor',
+          value: '$unitDisplay • Floor ${history.floorNumber}',
+        ),
         _HistoryDataRow(
           label: 'Monthly Rent',
           value: history.monthlyRent != null
@@ -1056,7 +1028,9 @@ class _TenancyHistoryItem extends StatelessWidget {
               : 'Not recorded',
         ),
         _HistoryDataRow(
-            label: 'Commenced', value: formatDate(history.startedAt)),
+          label: 'Commenced',
+          value: formatDate(history.startedAt),
+        ),
         _HistoryDataRow(label: 'Vacated', value: formatDate(history.endedAt)),
       ],
     );
@@ -1138,17 +1112,17 @@ class _DetailRow extends StatelessWidget {
         Expanded(
           child: isSelectable
               ? SelectableText(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          )
+                  value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                )
               : Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+                  value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
         ),
       ],
     );
@@ -1193,10 +1167,7 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1218,10 +1189,7 @@ class _ErrorView extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

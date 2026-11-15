@@ -5,9 +5,7 @@ import '../repositories/invitation_repository.dart';
 class CreateInvitation {
   final InvitationRepository _repository;
 
-  CreateInvitation({
-    required this._repository,
-  });
+  CreateInvitation({required this._repository});
 
   Future<void> call(Invitation invitation) {
     if (invitation.role == InvitationRole.manager ||
@@ -15,8 +13,6 @@ class CreateInvitation {
       return _repository.createInvitation(invitation);
     }
 
-    throw ArgumentError(
-      'Only manager or caretaker invitations are allowed.',
-    );
+    throw ArgumentError('Only manager or caretaker invitations are allowed.');
   }
 }

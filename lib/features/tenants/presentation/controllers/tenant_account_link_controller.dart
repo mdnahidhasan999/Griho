@@ -26,8 +26,7 @@ class TenantAccountLinkState {
   }) {
     return TenantAccountLinkState(
       isLoading: isLoading ?? this.isLoading,
-      errorMessage:
-      clearError ? null : errorMessage ?? this.errorMessage,
+      errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       completed: completed ?? this.completed,
     );
   }
@@ -41,31 +40,22 @@ class TenantAccountLinkController
     extends StateNotifier<TenantAccountLinkState> {
   final LinkAndAcceptTenantInvitation _linkAndAcceptTenantInvitation;
 
-  TenantAccountLinkController({
-    required this._linkAndAcceptTenantInvitation,
-  }) : super(const TenantAccountLinkState());
+  TenantAccountLinkController({required this._linkAndAcceptTenantInvitation})
+    : super(const TenantAccountLinkState());
 
   // ==============================================================
   // LINK + ACCEPT
   // ==============================================================
 
-  Future<bool> linkAndAccept({
-    required String invitationId,
-  }) async {
+  Future<bool> linkAndAccept({required String invitationId}) async {
     if (state.isLoading) {
       return false;
     }
 
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-      completed: false,
-    );
+    state = state.copyWith(isLoading: true, clearError: true, completed: false);
 
     try {
-      await _linkAndAcceptTenantInvitation(
-        invitationId: invitationId,
-      );
+      await _linkAndAcceptTenantInvitation(invitationId: invitationId);
 
       state = state.copyWith(
         isLoading: false,
@@ -113,15 +103,12 @@ class TenantAccountLinkController
 // ================================================================
 
 final tenantAccountLinkControllerProvider =
-StateNotifierProvider<
-    TenantAccountLinkController,
-    TenantAccountLinkState
->(
-      (ref) {
-    return TenantAccountLinkController(
-      linkAndAcceptTenantInvitation: ref.read(
-        linkAndAcceptTenantInvitationProvider,
-      ),
-    );
-  },
-);
+    StateNotifierProvider<TenantAccountLinkController, TenantAccountLinkState>((
+      ref,
+    ) {
+      return TenantAccountLinkController(
+        linkAndAcceptTenantInvitation: ref.read(
+          linkAndAcceptTenantInvitationProvider,
+        ),
+      );
+    });

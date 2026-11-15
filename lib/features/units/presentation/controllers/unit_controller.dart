@@ -12,9 +12,7 @@ import '../../domain/usecases/update_unit.dart';
 import '../providers/unit_usecase_provider.dart';
 
 final unitControllerProvider =
-NotifierProvider<UnitController, UnitControllerState>(
-  UnitController.new,
-);
+    NotifierProvider<UnitController, UnitControllerState>(UnitController.new);
 
 class UnitControllerState {
   final bool isLoading;
@@ -43,9 +41,7 @@ class UnitControllerState {
       selectedUnit: clearSelectedUnit
           ? null
           : selectedUnit ?? this.selectedUnit,
-      errorMessage: clearError
-          ? null
-          : errorMessage ?? this.errorMessage,
+      errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
   }
 }
@@ -63,8 +59,7 @@ class UnitController extends Notifier<UnitControllerState> {
   UnitControllerState build() {
     _createUnit = ref.read(createUnitProvider);
     _getUnit = ref.read(getUnitProvider);
-    _getUnitsByPropertyId =
-        ref.read(getUnitsByPropertyIdProvider);
+    _getUnitsByPropertyId = ref.read(getUnitsByPropertyIdProvider);
     _updateUnit = ref.read(updateUnitProvider);
     _deleteUnit = ref.read(deleteUnitProvider);
     _assignTenantUser = ref.read(assignTenantUserProvider);
@@ -73,100 +68,57 @@ class UnitController extends Notifier<UnitControllerState> {
     return const UnitControllerState();
   }
 
-  Future<void> loadUnits({
-    required String propertyId,
-  }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+  Future<void> loadUnits({required String propertyId}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      final units = await _getUnitsByPropertyId(
-        propertyId,
-      );
+      final units = await _getUnitsByPropertyId(propertyId);
 
-      state = state.copyWith(
-        isLoading: false,
-        units: units,
-      );
+      state = state.copyWith(isLoading: false, units: units);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
     }
   }
 
-  Future<void> loadUnit({
-    required String unitId,
-  }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+  Future<void> loadUnit({required String unitId}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final unit = await _getUnit(unitId);
 
       if (unit == null) {
-        state = state.copyWith(
-          isLoading: false,
-          clearSelectedUnit: true,
-        );
+        state = state.copyWith(isLoading: false, clearSelectedUnit: true);
         return;
       }
 
-      state = state.copyWith(
-        isLoading: false,
-        selectedUnit: unit,
-      );
+      state = state.copyWith(isLoading: false, selectedUnit: unit);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
     }
   }
 
-  Future<Unit?> createUnit({
-    required CreateUnitRequest request,
-  }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+  Future<Unit?> createUnit({required CreateUnitRequest request}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final createdUnit = await _createUnit(request);
 
       state = state.copyWith(
         isLoading: false,
-        units: [
-          createdUnit,
-          ...state.units,
-        ],
+        units: [createdUnit, ...state.units],
         selectedUnit: createdUnit,
       );
 
       return createdUnit;
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
 
       return null;
     }
   }
 
-  Future<Unit?> updateUnit({
-    required Unit unit,
-  }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+  Future<Unit?> updateUnit({required Unit unit}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final updatedUnit = await _updateUnit(unit);
@@ -187,30 +139,20 @@ class UnitController extends Notifier<UnitControllerState> {
 
       return updatedUnit;
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
 
       return null;
     }
   }
 
-  Future<bool> deleteUnit({
-    required String unitId,
-  }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+  Future<bool> deleteUnit({required String unitId}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       await _deleteUnit(unitId);
 
       final remainingUnits = state.units
-          .where(
-            (unit) => unit.id != unitId,
-      )
+          .where((unit) => unit.id != unitId)
           .toList();
 
       final selectedUnit = state.selectedUnit;
@@ -218,16 +160,12 @@ class UnitController extends Notifier<UnitControllerState> {
       state = state.copyWith(
         isLoading: false,
         units: remainingUnits,
-        clearSelectedUnit:
-        selectedUnit?.id == unitId,
+        clearSelectedUnit: selectedUnit?.id == unitId,
       );
 
       return true;
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
 
       return false;
     }
@@ -237,77 +175,46 @@ class UnitController extends Notifier<UnitControllerState> {
     required String unitId,
     required String tenantUserId,
   }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      await _assignTenantUser(
-        unitId: unitId,
-        tenantUserId: tenantUserId,
-      );
+      await _assignTenantUser(unitId: unitId, tenantUserId: tenantUserId);
 
-      state = state.copyWith(
-        isLoading: false,
-      );
+      state = state.copyWith(isLoading: false);
 
-      await loadUnit(
-        unitId: unitId,
-      );
+      await loadUnit(unitId: unitId);
 
       return true;
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
 
       return false;
     }
   }
 
-  Future<bool> removeTenantUser({
-    required String unitId,
-  }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
-    );
+  Future<bool> removeTenantUser({required String unitId}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      await _removeTenantUser(
-        unitId: unitId,
-      );
+      await _removeTenantUser(unitId: unitId);
 
-      state = state.copyWith(
-        isLoading: false,
-      );
+      state = state.copyWith(isLoading: false);
 
-      await loadUnit(
-        unitId: unitId,
-      );
+      await loadUnit(unitId: unitId);
 
       return true;
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
 
       return false;
     }
   }
 
   void clearError() {
-    state = state.copyWith(
-      clearError: true,
-    );
+    state = state.copyWith(clearError: true);
   }
 
   void clearSelectedUnit() {
-    state = state.copyWith(
-      clearSelectedUnit: true,
-    );
+    state = state.copyWith(clearSelectedUnit: true);
   }
 }

@@ -59,8 +59,10 @@ class DefaultFirebaseOptions {
     messagingSenderId: '730568159232',
     projectId: 'griho-crafttech',
     storageBucket: 'griho-crafttech.firebasestorage.app',
-    androidClientId: '730568159232-84tn54locfvlth2egaifqd0161imnp6m.apps.googleusercontent.com',
-    iosClientId: '730568159232-m2otquc99qemdn247spu0og859bo5ilh.apps.googleusercontent.com',
+    androidClientId:
+        '730568159232-84tn54locfvlth2egaifqd0161imnp6m.apps.googleusercontent.com',
+    iosClientId:
+        '730568159232-m2otquc99qemdn247spu0og859bo5ilh.apps.googleusercontent.com',
     iosBundleId: 'com.crafttech.griho',
   );
   static const FirebaseOptions web = FirebaseOptions(

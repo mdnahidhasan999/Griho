@@ -4,9 +4,7 @@ import '../repositories/monthly_rent_repository.dart';
 class GetTenantMonthlyRentHistory {
   final MonthlyRentRepository _repository;
 
-  const GetTenantMonthlyRentHistory({
-    required this._repository,
-  });
+  const GetTenantMonthlyRentHistory({required this._repository});
 
   Future<List<MonthlyRent>> call({
     required String tenantId,
@@ -16,15 +14,11 @@ class GetTenantMonthlyRentHistory {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedTenantId.isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
-      );
+      throw ArgumentError('Tenant ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     return _repository.getMonthlyRentHistoryByTenantId(

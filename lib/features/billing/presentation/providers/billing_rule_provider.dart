@@ -9,83 +9,55 @@ import '../../domain/services/billing_rule_resolver.dart';
 import '../../domain/usecases/create_billing_rule.dart';
 import '../../domain/usecases/resolve_billing_rule.dart';
 
-final billingRuleDataSourceProvider =
-Provider<BillingRuleDataSource>((ref) {
+final billingRuleDataSourceProvider = Provider<BillingRuleDataSource>((ref) {
   return BillingRuleDataSource();
 });
 
-final billingRuleRepositoryProvider =
-Provider<BillingRuleRepository>((ref) {
+final billingRuleRepositoryProvider = Provider<BillingRuleRepository>((ref) {
   return BillingRuleRepositoryImpl(
-    dataSource: ref.read(
-      billingRuleDataSourceProvider,
-    ),
+    dataSource: ref.read(billingRuleDataSourceProvider),
   );
 });
 
-final billingRuleResolverProvider =
-Provider<BillingRuleResolver>((ref) {
+final billingRuleResolverProvider = Provider<BillingRuleResolver>((ref) {
   return const BillingRuleResolver();
 });
 
-final createBillingRuleProvider =
-Provider<CreateBillingRule>((ref) {
-  return CreateBillingRule(
-    repository: ref.read(
-      billingRuleRepositoryProvider,
-    ),
-  );
+final createBillingRuleProvider = Provider<CreateBillingRule>((ref) {
+  return CreateBillingRule(repository: ref.read(billingRuleRepositoryProvider));
 });
 
-final resolveBillingRuleProvider =
-Provider<ResolveBillingRule>((ref) {
-  return ResolveBillingRule(
-    resolver: ref.read(
-      billingRuleResolverProvider,
-    ),
-  );
+final resolveBillingRuleProvider = Provider<ResolveBillingRule>((ref) {
+  return ResolveBillingRule(resolver: ref.read(billingRuleResolverProvider));
 });
 
 final propertyBillingRulesProvider =
-FutureProvider.family<
-    List<BillingRule>,
-    ({
-    String ownerId,
-    String propertyId,
-    })>((ref, params) async {
-  final repository = ref.read(
-    billingRuleRepositoryProvider,
-  );
+    FutureProvider.family<
+      List<BillingRule>,
+      ({String ownerId, String propertyId})
+    >((ref, params) async {
+      final repository = ref.read(billingRuleRepositoryProvider);
 
-  return repository.getPropertyBillingRules(
-    ownerId: params.ownerId,
-    propertyId: params.propertyId,
-  );
-});
-
+      return repository.getPropertyBillingRules(
+        ownerId: params.ownerId,
+        propertyId: params.propertyId,
+      );
+    });
 
 final updateBillingRuleProvider =
-Provider<Future<BillingRule> Function(
-    UpdateBillingRuleRequest request,
-    )>((ref) {
-  final repository =
-  ref.watch(billingRuleRepositoryProvider);
+    Provider<Future<BillingRule> Function(UpdateBillingRuleRequest request)>((
+      ref,
+    ) {
+      final repository = ref.watch(billingRuleRepositoryProvider);
 
-  return repository.updateBillingRule;
-});
-
-
+      return repository.updateBillingRule;
+    });
 
 final deactivateBillingRuleProvider =
-Provider<Future<void> Function({
-required String ruleId,
-required String ownerId,
-})>((ref) {
-  final repository =
-  ref.watch(billingRuleRepositoryProvider);
+    Provider<
+      Future<void> Function({required String ruleId, required String ownerId})
+    >((ref) {
+      final repository = ref.watch(billingRuleRepositoryProvider);
 
-  return repository.deactivateBillingRule;
-});
-
-
-
+      return repository.deactivateBillingRule;
+    });

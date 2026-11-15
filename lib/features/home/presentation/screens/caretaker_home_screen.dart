@@ -713,59 +713,58 @@ class _CaretakerHeader extends StatelessWidget {
 
   const _CaretakerHeader({required this.name, required this.publicId});
 
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'On-Duty Supervisor',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: Colors.teal.shade700,
-                  fontWeight: FontWeight.w800,
+                _greeting(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               Text(
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleLarge?.copyWith(
+                style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
                 ),
               ),
             ],
           ),
         ),
         if (publicId.isNotEmpty)
-          InkWell(
-            onTap: () {
+          ActionChip(
+            avatar: const Icon(Icons.badge_outlined, size: 16),
+            label: Text(
+              publicId,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+            ),
+            onPressed: () {
               Clipboard.setData(ClipboardData(text: publicId));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Griho ID copied.'),
+                  duration: Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,
                 ),
               );
             },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: theme.colorScheme.outlineVariant),
-              ),
-              child: Text(
-                publicId,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
           ),
       ],
     );

@@ -3,8 +3,7 @@ import '../../domain/entities/repositories/tenant_invitation_repository.dart';
 import '../../domain/entities/tenant_invitation.dart';
 import '../datasources/tenant_invitation_data_source.dart';
 
-class TenantInvitationRepositoryImpl
-    implements TenantInvitationRepository {
+class TenantInvitationRepositoryImpl implements TenantInvitationRepository {
   final TenantInvitationDataSource _dataSource;
   final CurrentUserService _currentUserService;
 
@@ -46,7 +45,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?> getInvitationById(String invitationId,) {
+  Future<TenantInvitation?> getInvitationById(String invitationId) {
     return _dataSource.getInvitationById(invitationId);
   }
 
@@ -55,7 +54,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?> getInvitationByToken(String token,) {
+  Future<TenantInvitation?> getInvitationByToken(String token) {
     return _dataSource.getInvitationByToken(token);
   }
 
@@ -64,7 +63,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId,) {
+  Future<TenantInvitation?> getPendingInvitationByTenantId(String tenantId) {
     return _dataSource.getPendingInvitationByTenantId(tenantId);
   }
 
@@ -73,7 +72,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByPhone(String phone,) {
+  Future<TenantInvitation?> getPendingInvitationByPhone(String phone) {
     return _dataSource.getPendingInvitationByPhone(phone);
   }
 
@@ -82,7 +81,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByEmail(String email,) {
+  Future<TenantInvitation?> getPendingInvitationByEmail(String email) {
     return _dataSource.getPendingInvitationByEmail(email);
   }
 
@@ -91,7 +90,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<TenantInvitation?> getPendingInvitationByGrihoId(String grihoId,) {
+  Future<TenantInvitation?> getPendingInvitationByGrihoId(String grihoId) {
     return _dataSource.getPendingInvitationByGrihoId(grihoId);
   }
 
@@ -100,7 +99,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Stream<List<TenantInvitation>> watchInvitationsByTenantId(String tenantId,) {
+  Stream<List<TenantInvitation>> watchInvitationsByTenantId(String tenantId) {
     return _dataSource.watchInvitationsByTenantId(tenantId);
   }
 
@@ -109,7 +108,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Stream<TenantInvitation?> watchPendingInvitationByTenantId(String tenantId,) {
+  Stream<TenantInvitation?> watchPendingInvitationByTenantId(String tenantId) {
     return _dataSource.watchPendingInvitationByTenantId(tenantId);
   }
 
@@ -118,7 +117,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Stream<List<TenantInvitation>> watchInvitationsByPhone(String phone,) {
+  Stream<List<TenantInvitation>> watchInvitationsByPhone(String phone) {
     return _dataSource.watchInvitationsByPhone(phone);
   }
 
@@ -127,7 +126,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<void> acceptInvitation(String invitationId,) {
+  Future<void> acceptInvitation(String invitationId) {
     return _dataSource.acceptInvitation(invitationId);
   }
 
@@ -136,7 +135,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<void> cancelInvitation(String invitationId,) {
+  Future<void> cancelInvitation(String invitationId) {
     return _dataSource.cancelInvitation(invitationId);
   }
 
@@ -145,7 +144,7 @@ class TenantInvitationRepositoryImpl
   // ================================================================
 
   @override
-  Future<void> expireInvitation(String invitationId,) {
+  Future<void> expireInvitation(String invitationId) {
     return _dataSource.expireInvitation(invitationId);
   }
 }

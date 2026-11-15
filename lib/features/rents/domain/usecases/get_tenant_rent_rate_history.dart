@@ -4,9 +4,7 @@ import '../repositories/rent_rate_repository.dart';
 class GetTenantRentRateHistory {
   final RentRateRepository _repository;
 
-  const GetTenantRentRateHistory({
-    required this._repository,
-  });
+  const GetTenantRentRateHistory({required this._repository});
 
   Future<List<RentRate>> call({
     required String ownerId,
@@ -18,21 +16,15 @@ class GetTenantRentRateHistory {
     final normalizedUnitId = unitId.trim();
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     if (normalizedTenantId.isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
-      );
+      throw ArgumentError('Tenant ID cannot be empty.');
     }
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
     // Rent rates belong to a unit, not to a tenant.

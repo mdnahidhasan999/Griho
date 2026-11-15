@@ -1,4 +1,1 @@
-enum InvitationRole {
-  manager,
-  caretaker,
-}
+enum InvitationRole { manager, caretaker }

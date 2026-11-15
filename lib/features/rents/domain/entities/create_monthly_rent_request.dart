@@ -57,6 +57,5 @@ class CreateMonthlyRentRequest {
     this.status = MonthlyRentStatus.unpaid,
   });
 
-  double get prorationFactor =>
-      chargeableDays / daysInBillingPeriod;
+  double get prorationFactor => chargeableDays / daysInBillingPeriod;
 }

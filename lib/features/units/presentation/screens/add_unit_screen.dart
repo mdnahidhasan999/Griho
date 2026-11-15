@@ -80,9 +80,9 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
       name: name.isEmpty ? null : name,
     );
 
-    final unit = await ref.read(unitControllerProvider.notifier).createUnit(
-      request: request,
-    );
+    final unit = await ref
+        .read(unitControllerProvider.notifier)
+        .createUnit(request: request);
 
     if (!mounted) {
       return;
@@ -92,13 +92,8 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
       final state = ref.read(unitControllerProvider);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            state.errorMessage ?? 'Unable to create unit.',
-          ),
-          backgroundColor: Theme
-              .of(context)
-              .colorScheme
-              .error,
+          content: Text(state.errorMessage ?? 'Unable to create unit.'),
+          backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -172,8 +167,7 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Create a residential apartment or commercial unit in this building ($maxFloors ${maxFloors ==
-                                  1 ? 'floor' : 'floors'} available).',
+                              'Create a residential apartment or commercial unit in this building ($maxFloors ${maxFloors == 1 ? 'floor' : 'floors'} available).',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                                 height: 1.35,
@@ -213,10 +207,10 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
                       onChanged: state.isLoading
                           ? null
                           : (val) {
-                        setState(() {
-                          _selectedFloor = val;
-                        });
-                      },
+                              setState(() {
+                                _selectedFloor = val;
+                              });
+                            },
                       validator: (val) {
                         if (val == null) {
                           return 'Please select a floor level.';
@@ -276,13 +270,13 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
                     onPressed: state.isLoading ? null : _createUnit,
                     icon: state.isLoading
                         ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Icon(Icons.add_home_work_rounded),
                     label: Text(
                       state.isLoading ? 'Creating Unit...' : 'Create Unit',

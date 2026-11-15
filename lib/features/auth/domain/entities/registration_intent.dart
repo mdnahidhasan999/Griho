@@ -1,4 +1,1 @@
-enum RegistrationIntent {
-  owner,
-  tenant,
-}
+enum RegistrationIntent { owner, tenant }

@@ -19,6 +19,18 @@ import '../../../tenants/presentation/providers/owner_tenants_provider.dart';
 class OwnerHomeScreen extends ConsumerWidget {
   const OwnerHomeScreen({super.key});
 
+  void _openMaintenanceSheet(BuildContext context, String ownerId) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _OwnerMaintenanceSheet(
+        filterField: 'ownerId',
+        filterValues: [ownerId],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentUserProfileProvider);
@@ -110,6 +122,14 @@ class OwnerHomeScreen extends ConsumerWidget {
               children: [
                 _Header(name: profile.name, publicId: profile.publicId),
                 const SizedBox(height: 16),
+
+                // ভাড়াটিয়ার রিপোর্ট করা সমস্যার লাইভ অ্যালার্ট ব্যানার
+                _OpenIssuesBanner(
+                  filterField: 'ownerId',
+                  filterValues: [profile.uid],
+                  onTap: () => _openMaintenanceSheet(context, profile.uid),
+                ),
+
                 const _SummaryCard(),
                 const SizedBox(height: 14),
                 const _PrimaryActions(),
@@ -118,9 +138,12 @@ class OwnerHomeScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
                 const _TeamCard(),
                 const SizedBox(height: 22),
-                const _SectionTitle('Manage'),
+                const _SectionTitle('Quick actions'),
                 const SizedBox(height: 10),
-                const _ManageGrid(),
+                _ManageGrid(
+                  onOpenIssues: () =>
+                      _openMaintenanceSheet(context, profile.uid),
+                ),
                 const SizedBox(height: 22),
                 _SectionTitle(
                   'Buildings',
@@ -145,10 +168,6 @@ class OwnerHomeScreen extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// HEADER
-// ============================================================================
-
 class _Header extends StatelessWidget {
   const _Header({required this.name, required this.publicId});
 
@@ -165,6 +184,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Row(
       children: [
         Expanded(
@@ -192,7 +212,7 @@ class _Header extends StatelessWidget {
         ),
         if (publicId.isNotEmpty)
           ActionChip(
-            avatar: const Icon(Icons.fingerprint_rounded, size: 16),
+            avatar: const Icon(Icons.badge_outlined, size: 16),
             label: Text(
               publicId,
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
@@ -213,9 +233,248 @@ class _Header extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// SUMMARY (rent + 3 numbers)
-// ============================================================================
+class _OpenIssuesBanner extends StatelessWidget {
+  const _OpenIssuesBanner({
+    required this.filterField,
+    required this.filterValues,
+    required this.onTap,
+  });
+
+  final String filterField;
+  final List<String> filterValues;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (filterValues.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    final query = filterField == 'ownerId'
+        ? FirebaseFirestore.instance
+              .collection('maintenanceRequests')
+              .where('ownerId', isEqualTo: filterValues.first)
+        : FirebaseFirestore.instance
+              .collection('maintenanceRequests')
+              .where('propertyId', whereIn: filterValues.take(10).toList());
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: query.snapshots(),
+      builder: (context, snap) {
+        final docs =
+            snap.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+        final openCount = docs.where((d) {
+          final s = (d.data()['status'] ?? 'open').toString();
+          return s == 'open' || s == 'in_progress';
+        }).length;
+
+        if (openCount == 0) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Material(
+            color: theme.colorScheme.errorContainer,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              leading: Icon(
+                Icons.report_problem_rounded,
+                color: theme.colorScheme.onErrorContainer,
+              ),
+              title: Text(
+                openCount == 1
+                    ? '1 tenant maintenance issue open'
+                    : '$openCount tenant maintenance issues open',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
+              subtitle: Text(
+                'Tap to review, assign or mark resolved',
+                style: TextStyle(color: theme.colorScheme.onErrorContainer),
+              ),
+              trailing: Icon(
+                Icons.chevron_right_rounded,
+                color: theme.colorScheme.onErrorContainer,
+              ),
+              onTap: onTap,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _OwnerMaintenanceSheet extends StatelessWidget {
+  const _OwnerMaintenanceSheet({
+    required this.filterField,
+    required this.filterValues,
+  });
+
+  final String filterField;
+  final List<String> filterValues;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final query = filterField == 'ownerId'
+        ? FirebaseFirestore.instance
+              .collection('maintenanceRequests')
+              .where('ownerId', isEqualTo: filterValues.first)
+        : FirebaseFirestore.instance
+              .collection('maintenanceRequests')
+              .where('propertyId', whereIn: filterValues.take(10).toList());
+
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: query.snapshots(),
+          builder: (context, snap) {
+            if (!snap.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final docs = [...snap.data!.docs];
+
+            docs.sort((a, b) {
+              final at = a.data()['createdAt'];
+              final bt = b.data()['createdAt'];
+
+              final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
+
+              final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
+
+              return bm.compareTo(am);
+            });
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                const Text(
+                  'Maintenance & Tenant Issues',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+                const SizedBox(height: 12),
+                if (docs.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(child: Text('No issues reported yet.')),
+                  ),
+                for (final doc in docs)
+                  Builder(
+                    builder: (context) {
+                      final d = doc.data();
+
+                      final title = (d['title'] ?? 'Issue').toString();
+                      final desc = (d['description'] ?? '').toString();
+                      final prop = (d['propertyName'] ?? '').toString();
+                      final unit = (d['unitName'] ?? '').toString();
+                      final cat = (d['category'] ?? 'general').toString();
+                      final status = (d['status'] ?? 'open').toString();
+                      final tenantName = (d['tenantName'] ?? '').toString();
+
+                      final isDone = status == 'resolved';
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                  ),
+                                  Chip(
+                                    label: Text(
+                                      status.toUpperCase(),
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                '$prop • $unit (${cat.toUpperCase()})',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              if (tenantName.isNotEmpty)
+                                Text(
+                                  'Reported by: $tenantName',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              if (desc.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(desc, style: theme.textTheme.bodySmall),
+                              ],
+                              if (!isDone) ...[
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    if (status == 'open')
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: () {
+                                            doc.reference.update({
+                                              'status': 'in_progress',
+                                              'updatedAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+                                          },
+                                          child: const Text('In Progress'),
+                                        ),
+                                      ),
+                                    if (status == 'open')
+                                      const SizedBox(width: 8),
+                                    Expanded(
+                                      child: FilledButton.tonal(
+                                        onPressed: () {
+                                          doc.reference.update({
+                                            'status': 'resolved',
+                                            'updatedAt':
+                                                FieldValue.serverTimestamp(),
+                                          });
+                                        },
+                                        child: const Text('Mark Resolved'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
 
 class _SummaryCard extends ConsumerWidget {
   const _SummaryCard();
@@ -227,13 +486,14 @@ class _SummaryCard extends ConsumerWidget {
     final db = FirebaseFirestore.instance;
 
     final rates = uid == null
-        ? const Stream<QuerySnapshot>.empty()
+        ? const Stream<QuerySnapshot<Map<String, dynamic>>>.empty()
         : db
               .collection('rentRates')
               .where('ownerId', isEqualTo: uid)
               .snapshots();
+
     final bills = uid == null
-        ? const Stream<QuerySnapshot>.empty()
+        ? const Stream<QuerySnapshot<Map<String, dynamic>>>.empty()
         : db
               .collection('monthlyBills')
               .where('ownerId', isEqualTo: uid)
@@ -241,83 +501,98 @@ class _SummaryCard extends ConsumerWidget {
 
     final properties =
         ref.watch(currentOwnerPropertiesProvider).value ?? const <Property>[];
+
     final owned = properties.where((p) => p.ownerId == uid).length;
+
     final tenants = ref.watch(ownerTenantsProvider).value ?? const <Tenant>[];
+
     final activeTenants = tenants
         .where((t) => t.status == TenantStatus.active)
         .length;
 
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: rates,
-      builder: (context, ratesSnap) => StreamBuilder<QuerySnapshot>(
-        stream: bills,
-        builder: (context, billsSnap) {
-          var rent = 0.0;
-          for (final d
-              in ratesSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
-            final m = d.data() as Map<String, dynamic>? ?? {};
-            if (m['effectiveTo'] == null && m['amount'] is num) {
-              rent += (m['amount'] as num).toDouble();
-            }
-          }
-          var unsettled = 0;
-          for (final d
-              in billsSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
-            final m = d.data() as Map<String, dynamic>? ?? {};
-            final s = (m['status'] ?? 'unpaid').toString();
-            if (s != 'paid' && s != 'cancelled') unsettled++;
-          }
-          final rentText = rent == rent.roundToDouble()
-              ? rent.toStringAsFixed(0)
-              : rent.toStringAsFixed(2);
+      builder: (context, ratesSnap) {
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: bills,
+          builder: (context, billsSnap) {
+            var rent = 0.0;
 
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E222D), Color(0xFF141720)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+            for (final d
+                in ratesSnap.data?.docs ??
+                    const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
+              final m = d.data();
+
+              if (m['effectiveTo'] == null && m['amount'] is num) {
+                rent += (m['amount'] as num).toDouble();
+              }
+            }
+
+            var unsettled = 0;
+
+            for (final d
+                in billsSnap.data?.docs ??
+                    const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
+              final m = d.data();
+              final s = (m['status'] ?? 'unpaid').toString();
+
+              if (s != 'paid' && s != 'cancelled') {
+                unsettled++;
+              }
+            }
+
+            final rentText = rent == rent.roundToDouble()
+                ? rent.toStringAsFixed(0)
+                : rent.toStringAsFixed(2);
+
+            return Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E222D), Color(0xFF141720)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Expected rent this month',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.65),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '৳ $rentText',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    _Stat(label: 'Buildings', value: '$owned'),
-                    _Stat(label: 'Residents', value: '$activeTenants'),
-                    _Stat(
-                      label: 'Unpaid bills',
-                      value: '$unsettled',
-                      highlight: unsettled > 0,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Expected rent this month',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.65),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '৳ $rentText',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _Stat(label: 'Buildings', value: '$owned'),
+                      _Stat(label: 'Residents', value: '$activeTenants'),
+                      _Stat(
+                        label: 'Unpaid bills',
+                        value: '$unsettled',
+                        highlight: unsettled > 0,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -361,10 +636,6 @@ class _Stat extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// PRIMARY ACTIONS (দুটি সবচেয়ে বেশি ব্যবহৃত কাজ)
-// ============================================================================
-
 class _PrimaryActions extends ConsumerWidget {
   const _PrimaryActions();
 
@@ -402,19 +673,18 @@ class _PrimaryActions extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// TEAM CARD — ম্যানেজার, কেয়ারটেকার, ইলেক্ট্রিশিয়ান এক জায়গায়
-// ============================================================================
-
 class _TeamCard extends ConsumerWidget {
   const _TeamCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+
     final managers =
         ref.watch(ownerManagersProvider).value ?? const <TeamMember>[];
+
     final staff = ref.watch(ownerStaffProvider).value ?? const <TeamMember>[];
+
     final pending =
         (ref.watch(ownerPendingManagerInvitesProvider).value ??
                 const <TeamMember>[])
@@ -422,16 +692,19 @@ class _TeamCard extends ConsumerWidget {
         (ref.watch(ownerPendingStaffInvitesProvider).value ??
                 const <TeamMember>[])
             .length;
+
     final orders =
         ref.watch(ownerWorkOrdersProvider).value ?? const <WorkOrder>[];
 
     int active(Iterable<TeamMember> l, [String? role]) => l
         .where((m) => m.status == 'active' && (role == null || m.role == role))
         .length;
+
     final suspended = [
       ...managers,
       ...staff,
     ].where((m) => m.status == 'suspended').length;
+
     final openTasks = orders.where((w) => w.isOpenish).length;
 
     final notes = <String>[
@@ -521,6 +794,7 @@ class _TeamCount extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Expanded(
       child: Row(
         children: [
@@ -558,57 +832,55 @@ class _TeamCount extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// MANAGE GRID — ৬টি পরিষ্কার শর্টকাট (আগের লম্বা তালিকার বদলে)
-// ============================================================================
-
 class _ManageGrid extends StatelessWidget {
-  const _ManageGrid();
+  const _ManageGrid({required this.onOpenIssues});
+
+  final VoidCallback onOpenIssues;
 
   @override
   Widget build(BuildContext context) {
     final items = <_GridItem>[
-      const _GridItem(
+      _GridItem(
         Icons.groups_rounded,
         'Residents',
         'Tenants & leases',
         Colors.teal,
-        RouteNames.ownerTenants,
+        () => context.push(RouteNames.ownerTenants),
       ),
-      const _GridItem(
+      _GridItem(
         Icons.domain_rounded,
         'Buildings',
         'Units & floors',
         Colors.indigo,
-        RouteNames.propertyList,
+        () => context.push(RouteNames.propertyList),
       ),
-      const _GridItem(
+      _GridItem(
         Icons.payments_outlined,
         'Payments',
         'Review & confirm',
         Colors.green,
-        RouteNames.ownerPayments,
+        () => context.push(RouteNames.ownerPayments),
       ),
-      const _GridItem(
+      _GridItem(
+        Icons.build_circle_outlined,
+        'Issues',
+        'Tenant complaints',
+        Colors.deepOrange,
+        onOpenIssues,
+      ),
+      _GridItem(
         Icons.price_change_outlined,
         'Rent control',
         'Change rates',
         Colors.deepPurpleAccent,
-        RouteNames.centralRentControl,
+        () => context.push(RouteNames.centralRentControl),
       ),
       _GridItem(
         Icons.receipt_long_rounded,
         'Billing rules',
         'Utilities & charges',
         Colors.amber.shade900,
-        RouteNames.ownerBillingRules,
-      ),
-      const _GridItem(
-        Icons.history_edu_rounded,
-        'Audit trail',
-        'Who did what',
-        Colors.blueGrey,
-        RouteNames.activityLogs,
+        () => context.push(RouteNames.ownerBillingRules),
       ),
     ];
 
@@ -625,13 +897,13 @@ class _ManageGrid extends StatelessWidget {
 }
 
 class _GridItem {
-  const _GridItem(this.icon, this.title, this.subtitle, this.color, this.route);
+  const _GridItem(this.icon, this.title, this.subtitle, this.color, this.onTap);
 
   final IconData icon;
   final String title;
   final String subtitle;
   final Color color;
-  final String route;
+  final VoidCallback onTap;
 }
 
 class _GridTile extends StatelessWidget {
@@ -642,6 +914,7 @@ class _GridTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
@@ -650,7 +923,7 @@ class _GridTile extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.push(item.route),
+        onTap: item.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
@@ -698,10 +971,6 @@ class _GridTile extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// BUILDINGS STRIP
-// ============================================================================
-
 class _BuildingsStrip extends ConsumerWidget {
   const _BuildingsStrip();
 
@@ -719,6 +988,7 @@ class _BuildingsStrip extends ConsumerWidget {
             final owned = uid == null
                 ? all
                 : all.where((p) => p.ownerId == uid).toList();
+
             if (owned.isEmpty) {
               return Container(
                 width: double.infinity,
@@ -752,6 +1022,7 @@ class _BuildingsStrip extends ConsumerWidget {
                 ),
               );
             }
+
             return SizedBox(
               height: 112,
               child: ListView.separated(
@@ -775,6 +1046,7 @@ class _BuildingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final active = property.status == PropertyStatus.active;
+
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
@@ -847,10 +1119,6 @@ class _BuildingCard extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// SHARED
-// ============================================================================
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.title, {this.trailing});

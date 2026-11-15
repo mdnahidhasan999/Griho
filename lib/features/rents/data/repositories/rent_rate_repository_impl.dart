@@ -22,7 +22,7 @@ class RentRateRepositoryImpl implements RentRateRepository {
   // ============================================================
 
   @override
-  Future<RentRate> createInitialRentRate(CreateRentRateRequest request,) {
+  Future<RentRate> createInitialRentRate(CreateRentRateRequest request) {
     final now = DateTime.now();
 
     final rentRate = RentRateModel(
@@ -40,9 +40,7 @@ class RentRateRepositoryImpl implements RentRateRepository {
       updatedAt: now,
     );
 
-    return _dataSource.createInitialRentRate(
-      rentRate: rentRate,
-    );
+    return _dataSource.createInitialRentRate(rentRate: rentRate);
   }
 
   // ============================================================
@@ -54,10 +52,7 @@ class RentRateRepositoryImpl implements RentRateRepository {
     required String unitId,
     required String ownerId,
   }) {
-    return _dataSource.getCurrentRentRate(
-      unitId: unitId,
-      ownerId: ownerId,
-    );
+    return _dataSource.getCurrentRentRate(unitId: unitId, ownerId: ownerId);
   }
 
   // ============================================================
@@ -106,21 +101,15 @@ class RentRateRepositoryImpl implements RentRateRepository {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedPropertyId.isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     if (floorNumber < 1) {
-      throw ArgumentError(
-        'Floor number must be at least 1.',
-      );
+      throw ArgumentError('Floor number must be at least 1.');
     }
 
     final units = await _unitRepository.getUnitsByFloor(
@@ -165,15 +154,11 @@ class RentRateRepositoryImpl implements RentRateRepository {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedPropertyId.isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     final units = await _unitRepository.getUnitsByPropertyId(
@@ -240,27 +225,19 @@ class RentRateRepositoryImpl implements RentRateRepository {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedPropertyId.isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     if (floorNumber < 1) {
-      throw ArgumentError(
-        'Floor number must be at least 1.',
-      );
+      throw ArgumentError('Floor number must be at least 1.');
     }
 
     if (amount <= 0) {
-      throw ArgumentError(
-        'Rent adjustment amount must be greater than zero.',
-      );
+      throw ArgumentError('Rent adjustment amount must be greater than zero.');
     }
 
     final currentRates = await getCurrentRentRatesByFloor(
@@ -274,11 +251,7 @@ class RentRateRepositoryImpl implements RentRateRepository {
     }
 
     return _dataSource.changeFloorRent(
-      currentRates: currentRates
-          .map(
-            (rate) => rate as RentRateModel,
-      )
-          .toList(),
+      currentRates: currentRates.map((rate) => rate as RentRateModel).toList(),
       amount: amount,
       adjustmentType: adjustmentType,
       effectiveFrom: effectiveFrom,
@@ -301,21 +274,15 @@ class RentRateRepositoryImpl implements RentRateRepository {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedPropertyId.isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     if (amount <= 0) {
-      throw ArgumentError(
-        'Rent adjustment amount must be greater than zero.',
-      );
+      throw ArgumentError('Rent adjustment amount must be greater than zero.');
     }
 
     final currentRates = await getCurrentRentRatesByProperty(
@@ -328,11 +295,7 @@ class RentRateRepositoryImpl implements RentRateRepository {
     }
 
     return _dataSource.changePropertyRent(
-      currentRates: currentRates
-          .map(
-            (rate) => rate as RentRateModel,
-      )
-          .toList(),
+      currentRates: currentRates.map((rate) => rate as RentRateModel).toList(),
       amount: amount,
       adjustmentType: adjustmentType,
       effectiveFrom: effectiveFrom,

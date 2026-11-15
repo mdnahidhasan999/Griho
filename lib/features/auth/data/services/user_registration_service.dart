@@ -11,10 +11,7 @@ class UserRegistrationResult {
   final AppUser user;
   final String? invitationId;
 
-  const UserRegistrationResult({
-    required this.user,
-    this.invitationId,
-  });
+  const UserRegistrationResult({required this.user, this.invitationId});
 
   bool get hasPendingInvitation {
     return invitationId != null && invitationId!.trim().isNotEmpty;
@@ -32,13 +29,12 @@ class UserRegistrationService {
     GrihoIdGenerator? grihoIdGenerator,
     UserProfileDataSource? userProfileDataSource,
     TenantInvitationDataSource? tenantInvitationDataSource,
-  })
-      : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-        _grihoIdGenerator = grihoIdGenerator ?? GrihoIdGenerator(),
-        _userProfileDataSource =
-            userProfileDataSource ?? UserProfileDataSource(),
-        _tenantInvitationDataSource =
-            tenantInvitationDataSource ?? TenantInvitationDataSource();
+  }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+       _grihoIdGenerator = grihoIdGenerator ?? GrihoIdGenerator(),
+       _userProfileDataSource =
+           userProfileDataSource ?? UserProfileDataSource(),
+       _tenantInvitationDataSource =
+           tenantInvitationDataSource ?? TenantInvitationDataSource();
 
   // Retrieves an existing Griho profile using the Firebase UID.
   Future<AppUserModel?> getUserProfileByFirebaseUid(String uid) async {
@@ -66,17 +62,16 @@ class UserRegistrationService {
     if (normalizedName.isEmpty) {
       throw ArgumentError('Name cannot be empty.');
     }
-    final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(
-      phoneNumber,
-    );
+    final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(phoneNumber);
     final existingUser = await _userProfileDataSource.getUserByUid(
       firebaseUser.uid,
     );
     if (existingUser != null) {
       final existingPhone = existingUser.phoneNumber?.trim() ?? '';
       if (existingPhone.isNotEmpty) {
-        final normalizedExistingPhone =
-        PhoneNumberUtils.normalizeAndValidate(existingPhone);
+        final normalizedExistingPhone = PhoneNumberUtils.normalizeAndValidate(
+          existingPhone,
+        );
         if (normalizedExistingPhone != normalizedPhone) {
           throw StateError(
             'The phone number is already set and cannot be changed.',
@@ -167,17 +162,16 @@ class UserRegistrationService {
     if (normalizedName.isEmpty) {
       throw ArgumentError('Name cannot be empty.');
     }
-    final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(
-      phoneNumber,
-    );
+    final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(phoneNumber);
     final existingUser = await _userProfileDataSource.getUserByUid(
       firebaseUser.uid,
     );
     if (existingUser != null) {
       final existingPhone = existingUser.phoneNumber?.trim() ?? '';
       if (existingPhone.isNotEmpty) {
-        final normalizedExistingPhone =
-        PhoneNumberUtils.normalizeAndValidate(existingPhone);
+        final normalizedExistingPhone = PhoneNumberUtils.normalizeAndValidate(
+          existingPhone,
+        );
         if (normalizedExistingPhone != normalizedPhone) {
           throw StateError(
             'The phone number is already set and cannot be changed.',
@@ -274,10 +268,7 @@ class UserRegistrationService {
     if (invitation == null) {
       return UserRegistrationResult(user: user);
     }
-    return UserRegistrationResult(
-      user: user,
-      invitationId: invitation.id,
-    );
+    return UserRegistrationResult(user: user, invitationId: invitation.id);
   }
 
   // Creates a tenant profile without granting tenant dashboard access.

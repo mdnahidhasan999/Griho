@@ -4,15 +4,9 @@ import '../entities/tenant_invitation.dart';
 class GetPendingTenantInvitation {
   final TenantInvitationRepository _repository;
 
-  const GetPendingTenantInvitation({
-    required this._repository,
-  });
+  const GetPendingTenantInvitation({required this._repository});
 
-  Future<TenantInvitation?> call(
-      String tenantId,
-      ) {
-    return _repository.getPendingInvitationByTenantId(
-      tenantId,
-    );
+  Future<TenantInvitation?> call(String tenantId) {
+    return _repository.getPendingInvitationByTenantId(tenantId);
   }
 }

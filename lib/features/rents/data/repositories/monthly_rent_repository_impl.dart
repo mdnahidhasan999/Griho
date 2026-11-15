@@ -3,25 +3,18 @@ import '../../domain/entities/monthly_rent.dart';
 import '../../domain/repositories/monthly_rent_repository.dart';
 import '../datasources/monthly_rent_datasource.dart';
 
-class MonthlyRentRepositoryImpl
-    implements MonthlyRentRepository {
+class MonthlyRentRepositoryImpl implements MonthlyRentRepository {
   final MonthlyRentDataSource _dataSource;
 
-  MonthlyRentRepositoryImpl({
-    required this._dataSource,
-  });
+  MonthlyRentRepositoryImpl({required this._dataSource});
 
   // ==========================================================================
   // CREATE
   // ==========================================================================
 
   @override
-  Future<MonthlyRent> createMonthlyRent(
-      CreateMonthlyRentRequest request,
-      ) {
-    return _dataSource.createMonthlyRent(
-      request: request,
-    );
+  Future<MonthlyRent> createMonthlyRent(CreateMonthlyRentRequest request) {
+    return _dataSource.createMonthlyRent(request: request);
   }
 
   // ==========================================================================
@@ -29,12 +22,8 @@ class MonthlyRentRepositoryImpl
   // ==========================================================================
 
   @override
-  Future<MonthlyRent?> getMonthlyRentById(
-      String rentId,
-      ) {
-    return _dataSource.getMonthlyRentById(
-      rentId,
-    );
+  Future<MonthlyRent?> getMonthlyRentById(String rentId) {
+    return _dataSource.getMonthlyRentById(rentId);
   }
 
   // ==========================================================================
@@ -59,8 +48,7 @@ class MonthlyRentRepositoryImpl
   // ==========================================================================
 
   @override
-  Future<List<MonthlyRent>>
-  getMonthlyRentHistoryByUnitId({
+  Future<List<MonthlyRent>> getMonthlyRentHistoryByUnitId({
     required String unitId,
     required String ownerId,
   }) {
@@ -75,8 +63,7 @@ class MonthlyRentRepositoryImpl
   // ==========================================================================
 
   @override
-  Future<List<MonthlyRent>>
-  getMonthlyRentHistoryByTenantId({
+  Future<List<MonthlyRent>> getMonthlyRentHistoryByTenantId({
     required String tenantId,
     required String ownerId,
   }) {

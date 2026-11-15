@@ -5,17 +5,11 @@ class DeleteUnit {
 
   const DeleteUnit(this._repository);
 
-  Future<void> call(
-      String unitId,
-      ) async {
+  Future<void> call(String unitId) async {
     if (unitId.trim().isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
-    await _repository.deleteUnit(
-      unitId,
-    );
+    await _repository.deleteUnit(unitId);
   }
 }

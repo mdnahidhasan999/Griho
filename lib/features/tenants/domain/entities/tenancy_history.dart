@@ -1,6 +1,4 @@
-enum TenancyHistoryStatus {
-  ended,
-}
+enum TenancyHistoryStatus { ended }
 
 class TenancyHistory {
   final String id;

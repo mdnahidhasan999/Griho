@@ -118,13 +118,12 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
       body: SafeArea(
         child: tenantsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) =>
-              _TenantErrorView(
-                error: error,
-                onRetry: () {
-                  ref.invalidate(propertyTenantsProvider(widget.propertyId));
-                },
-              ),
+          error: (error, stackTrace) => _TenantErrorView(
+            error: error,
+            onRetry: () {
+              ref.invalidate(propertyTenantsProvider(widget.propertyId));
+            },
+          ),
           data: (tenants) {
             final activeTenants = tenants
                 .where((tenant) => tenant.status == TenantStatus.active)
@@ -136,7 +135,8 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
               onRefresh: () async {
                 ref.invalidate(propertyTenantsProvider(widget.propertyId));
                 await ref.read(
-                    propertyTenantsProvider(widget.propertyId).future);
+                  propertyTenantsProvider(widget.propertyId).future,
+                );
               },
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -155,27 +155,30 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
                     controller: _searchController,
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
-                      hintText: 'Search active residents by name, phone, NID...',
+                      hintText:
+                          'Search active residents by name, phone, NID...',
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: _searchQuery.isEmpty
                           ? null
                           : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                        },
-                        icon: const Icon(Icons.clear_rounded, size: 20),
-                      ),
+                              onPressed: () {
+                                _searchController.clear();
+                              },
+                              icon: const Icon(Icons.clear_rounded, size: 20),
+                            ),
                       filled: true,
                       fillColor: theme.colorScheme.surfaceContainerLow,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide:
-                        BorderSide(color: theme.colorScheme.outlineVariant),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide:
-                        BorderSide(color: theme.colorScheme.outlineVariant),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -217,21 +220,20 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
                   // 4. Content Streams
                   if (activeTenants.isEmpty)
                     _EmptyTenantsView(onAddTenant: _addTenant)
+                  else if (filteredTenants.isEmpty)
+                    _NoSearchResultView(query: _searchQuery)
                   else
-                    if (filteredTenants.isEmpty)
-                      _NoSearchResultView(query: _searchQuery)
-                    else
-                      for (final tenant in filteredTenants) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _TenantCard(
-                            tenant: tenant,
-                            onTap: () {
-                              _openTenantDetails(tenant);
-                            },
-                          ),
+                    for (final tenant in filteredTenants) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _TenantCard(
+                          tenant: tenant,
+                          onTap: () {
+                            _openTenantDetails(tenant);
+                          },
                         ),
-                      ],
+                      ),
+                    ],
                 ],
               ),
             );
@@ -310,8 +312,11 @@ class _PropertyHeaderCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.people_alt_rounded, size: 14,
-                    color: Colors.green.shade800),
+                Icon(
+                  Icons.people_alt_rounded,
+                  size: 14,
+                  color: Colors.green.shade800,
+                ),
                 const SizedBox(width: 5),
                 Text(
                   '$activeCount Active',
@@ -338,10 +343,7 @@ class _TenantCard extends ConsumerWidget {
   final Tenant tenant;
   final VoidCallback onTap;
 
-  const _TenantCard({
-    required this.tenant,
-    required this.onTap,
-  });
+  const _TenantCard({required this.tenant, required this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -459,7 +461,7 @@ class _TenantCard extends ConsumerWidget {
                     unitAsync.when(
                       loading: () => const _MiniBadgeLoading(),
                       error: (_, _) =>
-                      const _UnitBadge(text: 'Unit unavailable'),
+                          const _UnitBadge(text: 'Unit unavailable'),
                       data: (Unit? unit) =>
                           _UnitBadge(text: _unitDisplayName(unit)),
                     ),
@@ -501,8 +503,10 @@ class _TenantCard extends ConsumerWidget {
       return 'T';
     }
 
-    final parts =
-    value.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = value
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.length == 1) {
       return parts.first
           .substring(0, parts.first.length >= 2 ? 2 : 1)
@@ -614,7 +618,8 @@ class _EmptyTenantsView extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.5),
+                  alpha: 0.5,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -697,10 +702,7 @@ class _TenantErrorView extends StatelessWidget {
   final Object error;
   final VoidCallback onRetry;
 
-  const _TenantErrorView({
-    required this.error,
-    required this.onRetry,
-  });
+  const _TenantErrorView({required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -725,22 +727,12 @@ class _TenantErrorView extends StatelessWidget {
             Text(
               error.toString(),
               textAlign: TextAlign.center,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(
-                color: Theme
-                    .of(context)
-                    .colorScheme
-                    .onSurfaceVariant,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

@@ -6,17 +6,11 @@ class GetUnitsByPropertyId {
 
   const GetUnitsByPropertyId(this._repository);
 
-  Future<List<Unit>> call(
-      String propertyId,
-      ) async {
+  Future<List<Unit>> call(String propertyId) async {
     if (propertyId.trim().isEmpty) {
-      throw ArgumentError(
-        'Property ID cannot be empty.',
-      );
+      throw ArgumentError('Property ID cannot be empty.');
     }
 
-    return _repository.getUnitsByPropertyId(
-      propertyId,
-    );
+    return _repository.getUnitsByPropertyId(propertyId);
   }
 }

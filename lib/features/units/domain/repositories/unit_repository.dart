@@ -18,9 +18,7 @@ abstract interface class UnitRepository {
   // GET OCCUPIED UNITS BY PROPERTY
   // ============================================================
 
-  Future<List<Unit>> getOccupiedUnitsByProperty({
-    required String propertyId,
-  });
+  Future<List<Unit>> getOccupiedUnitsByProperty({required String propertyId});
 
   // ============================================================
   // GET OCCUPIED UNITS BY FLOOR
@@ -31,15 +29,15 @@ abstract interface class UnitRepository {
     required int floorNumber,
   });
 
-// ============================================================
-// GET ALL UNITS BY FLOOR
-// ============================================================
-//
-// Returns both occupied and vacant units.
-//
-// This is required for Unit-based rent management because
-// vacant units also have rent.
-//
+  // ============================================================
+  // GET ALL UNITS BY FLOOR
+  // ============================================================
+  //
+  // Returns both occupied and vacant units.
+  //
+  // This is required for Unit-based rent management because
+  // vacant units also have rent.
+  //
 
   Future<List<Unit>> getUnitsByFloor({
     required String propertyId,
@@ -77,7 +75,5 @@ abstract interface class UnitRepository {
   // REMOVE TENANT USER
   // ============================================================
 
-  Future<void> removeTenantUser({
-    required String unitId,
-  });
+  Future<void> removeTenantUser({required String unitId});
 }

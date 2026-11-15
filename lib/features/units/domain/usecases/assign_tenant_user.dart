@@ -13,15 +13,11 @@ class AssignTenantUser {
     final normalizedTenantUserId = tenantUserId.trim();
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
     if (normalizedTenantUserId.isEmpty) {
-      throw ArgumentError(
-        'Tenant user ID cannot be empty.',
-      );
+      throw ArgumentError('Tenant user ID cannot be empty.');
     }
 
     await _repository.assignTenantUser(

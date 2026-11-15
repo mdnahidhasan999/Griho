@@ -7,7 +7,7 @@ class PropertyDataSource {
   final FirebaseFirestore _firestore;
 
   PropertyDataSource({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'properties';
 
@@ -95,9 +95,7 @@ class PropertyDataSource {
       propertyCode: propertyCode,
       ownerId: normalizedOwnerId,
       name: normalizedName,
-      address: normalizedAddress?.isEmpty == true
-          ? null
-          : normalizedAddress,
+      address: normalizedAddress?.isEmpty == true ? null : normalizedAddress,
       description: normalizedDescription?.isEmpty == true
           ? null
           : normalizedDescription,
@@ -183,9 +181,7 @@ class PropertyDataSource {
     }
 
     await _properties.doc(normalizedPropertyId).update({
-      'tenantUserIds': FieldValue.arrayUnion([
-        normalizedTenantUserId,
-      ]),
+      'tenantUserIds': FieldValue.arrayUnion([normalizedTenantUserId]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -214,9 +210,7 @@ class PropertyDataSource {
     }
 
     await _properties.doc(normalizedPropertyId).update({
-      'tenantUserIds': FieldValue.arrayRemove([
-        normalizedTenantUserId,
-      ]),
+      'tenantUserIds': FieldValue.arrayRemove([normalizedTenantUserId]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -225,9 +219,7 @@ class PropertyDataSource {
   // GENERATE PROPERTY CODE
   // ============================================================
 
-  Future<String> _generatePropertyCode({
-    required String ownerId,
-  }) async {
+  Future<String> _generatePropertyCode({required String ownerId}) async {
     final normalizedOwnerId = ownerId.trim();
 
     final snapshot = await _properties
@@ -240,24 +232,15 @@ class PropertyDataSource {
       return 'PROP-0001';
     }
 
-    final latest = PropertyModel.fromFirestore(
-      snapshot.docs.first,
-    );
+    final latest = PropertyModel.fromFirestore(snapshot.docs.first);
 
-    final match = RegExp(
-      r'(\d+)$',
-    ).firstMatch(
-      latest.propertyCode,
-    );
+    final match = RegExp(r'(\d+)$').firstMatch(latest.propertyCode);
 
     if (match == null) {
       return 'PROP-0001';
     }
 
-    final latestNumber = int.tryParse(
-      match.group(1)!,
-    ) ??
-        0;
+    final latestNumber = int.tryParse(match.group(1)!) ?? 0;
 
     final nextNumber = latestNumber + 1;
 

@@ -13,8 +13,6 @@ class GetTenantAccess {
       return null;
     }
 
-    return _repository.getTenantAccessByUserId(
-      normalizedUserId,
-    );
+    return _repository.getTenantAccessByUserId(normalizedUserId);
   }
 }

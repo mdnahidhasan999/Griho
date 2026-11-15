@@ -21,8 +21,7 @@ import 'rent_rate_provider.dart';
 // DATA SOURCE
 // ============================================================================
 
-final monthlyRentDataSourceProvider =
-Provider<MonthlyRentDataSource>((ref) {
+final monthlyRentDataSourceProvider = Provider<MonthlyRentDataSource>((ref) {
   return MonthlyRentDataSource();
 });
 
@@ -30,12 +29,9 @@ Provider<MonthlyRentDataSource>((ref) {
 // REPOSITORY
 // ============================================================================
 
-final monthlyRentRepositoryProvider =
-Provider<MonthlyRentRepository>((ref) {
+final monthlyRentRepositoryProvider = Provider<MonthlyRentRepository>((ref) {
   return MonthlyRentRepositoryImpl(
-    dataSource: ref.read(
-      monthlyRentDataSourceProvider,
-    ),
+    dataSource: ref.read(monthlyRentDataSourceProvider),
   );
 });
 
@@ -43,13 +39,8 @@ Provider<MonthlyRentRepository>((ref) {
 // USE CASES
 // ============================================================================
 
-final createMonthlyRentProvider =
-Provider<CreateMonthlyRent>((ref) {
-  return CreateMonthlyRent(
-    repository: ref.read(
-      monthlyRentRepositoryProvider,
-    ),
-  );
+final createMonthlyRentProvider = Provider<CreateMonthlyRent>((ref) {
+  return CreateMonthlyRent(repository: ref.read(monthlyRentRepositoryProvider));
 });
 
 // ============================================================================
@@ -75,15 +66,10 @@ Provider<CreateMonthlyRent>((ref) {
 // - historical rent snapshots
 //
 
-final generateMonthlyRentProvider =
-Provider<GenerateMonthlyRent>((ref) {
+final generateMonthlyRentProvider = Provider<GenerateMonthlyRent>((ref) {
   return GenerateMonthlyRent(
-    monthlyRentRepository: ref.read(
-      monthlyRentRepositoryProvider,
-    ),
-    rentRateRepository: ref.read(
-      rentRateRepositoryProvider,
-    ),
+    monthlyRentRepository: ref.read(monthlyRentRepositoryProvider),
+    rentRateRepository: ref.read(rentRateRepositoryProvider),
   );
 });
 
@@ -91,59 +77,46 @@ Provider<GenerateMonthlyRent>((ref) {
 // QUERY USE CASES
 // ============================================================================
 
-final getMonthlyRentByIdProvider =
-Provider<GetMonthlyRentById>((ref) {
+final getMonthlyRentByIdProvider = Provider<GetMonthlyRentById>((ref) {
   return GetMonthlyRentById(
-    repository: ref.read(
-      monthlyRentRepositoryProvider,
-    ),
+    repository: ref.read(monthlyRentRepositoryProvider),
   );
 });
 
 final getMonthlyRentByUnitAndPeriodProvider =
-Provider<GetMonthlyRentByUnitAndPeriod>((ref) {
-  return GetMonthlyRentByUnitAndPeriod(
-    repository: ref.read(
-      monthlyRentRepositoryProvider,
-    ),
-  );
-});
+    Provider<GetMonthlyRentByUnitAndPeriod>((ref) {
+      return GetMonthlyRentByUnitAndPeriod(
+        repository: ref.read(monthlyRentRepositoryProvider),
+      );
+    });
 
-final getUnitMonthlyRentHistoryProvider =
-Provider<GetUnitMonthlyRentHistory>((ref) {
+final getUnitMonthlyRentHistoryProvider = Provider<GetUnitMonthlyRentHistory>((
+  ref,
+) {
   return GetUnitMonthlyRentHistory(
-    repository: ref.read(
-      monthlyRentRepositoryProvider,
-    ),
+    repository: ref.read(monthlyRentRepositoryProvider),
   );
 });
 
 final getTenantMonthlyRentHistoryProvider =
-Provider<GetTenantMonthlyRentHistory>((ref) {
-  return GetTenantMonthlyRentHistory(
-    repository: ref.read(
-      monthlyRentRepositoryProvider,
-    ),
-  );
-});
+    Provider<GetTenantMonthlyRentHistory>((ref) {
+      return GetTenantMonthlyRentHistory(
+        repository: ref.read(monthlyRentRepositoryProvider),
+      );
+    });
 
 // ============================================================================
 // MONTHLY RENT BY ID
 // ============================================================================
 
-final monthlyRentByIdProvider =
-FutureProvider.family<MonthlyRent?, String>(
-      (ref,
-      rentId,) async {
-    final getMonthlyRentById = ref.read(
-      getMonthlyRentByIdProvider,
-    );
+final monthlyRentByIdProvider = FutureProvider.family<MonthlyRent?, String>((
+  ref,
+  rentId,
+) async {
+  final getMonthlyRentById = ref.read(getMonthlyRentByIdProvider);
 
-    return getMonthlyRentById(
-      rentId,
-    );
-  },
-);
+  return getMonthlyRentById(rentId);
+});
 
 // ============================================================================
 // MONTHLY RENTS BY UNIT + PERIOD
@@ -165,74 +138,45 @@ FutureProvider.family<MonthlyRent?, String>(
 //
 
 final monthlyRentByUnitAndPeriodProvider =
-FutureProvider.family<
-    List<MonthlyRent>,
-    ({
-    String unitId,
-    String ownerId,
-    DateTime billingPeriodStart,
-    })>(
-      (ref,
-      args,) async {
-    final getMonthlyRent = ref.read(
-      getMonthlyRentByUnitAndPeriodProvider,
-    );
+    FutureProvider.family<
+      List<MonthlyRent>,
+      ({String unitId, String ownerId, DateTime billingPeriodStart})
+    >((ref, args) async {
+      final getMonthlyRent = ref.read(getMonthlyRentByUnitAndPeriodProvider);
 
-    return getMonthlyRent(
-      unitId: args.unitId,
-      ownerId: args.ownerId,
-      billingPeriodStart: args.billingPeriodStart,
-    );
-  },
-);
+      return getMonthlyRent(
+        unitId: args.unitId,
+        ownerId: args.ownerId,
+        billingPeriodStart: args.billingPeriodStart,
+      );
+    });
 
 // ============================================================================
 // UNIT HISTORY
 // ============================================================================
 
 final unitMonthlyRentHistoryProvider =
-FutureProvider.family<
-    List<MonthlyRent>,
-    ({
-    String unitId,
-    String ownerId,
-    })>(
-      (ref,
-      args,) async {
-    final getHistory = ref.read(
-      getUnitMonthlyRentHistoryProvider,
-    );
+    FutureProvider.family<List<MonthlyRent>, ({String unitId, String ownerId})>(
+      (ref, args) async {
+        final getHistory = ref.read(getUnitMonthlyRentHistoryProvider);
 
-    return getHistory(
-      unitId: args.unitId,
-      ownerId: args.ownerId,
+        return getHistory(unitId: args.unitId, ownerId: args.ownerId);
+      },
     );
-  },
-);
 
 // ============================================================================
 // TENANT HISTORY
 // ============================================================================
 
 final tenantMonthlyRentHistoryProvider =
-FutureProvider.family<
-    List<MonthlyRent>,
-    ({
-    String tenantId,
-    String ownerId,
-    })>(
-      (ref,
-      args,) async {
-    final getHistory = ref.read(
-      getTenantMonthlyRentHistoryProvider,
-    );
+    FutureProvider.family<
+      List<MonthlyRent>,
+      ({String tenantId, String ownerId})
+    >((ref, args) async {
+      final getHistory = ref.read(getTenantMonthlyRentHistoryProvider);
 
-    return getHistory(
-      tenantId: args.tenantId,
-      ownerId: args.ownerId,
-    );
-  },
-);
+      return getHistory(tenantId: args.tenantId, ownerId: args.ownerId);
+    });
 
 // ============================================================================
 // CONTROLLER
@@ -245,14 +189,8 @@ FutureProvider.family<
 //
 
 final monthlyRentControllerProvider =
-StateNotifierProvider<
-    MonthlyRentController,
-    AsyncValue<void>>(
-      (ref) {
-    return MonthlyRentController(
-      createMonthlyRent: ref.read(
-        createMonthlyRentProvider,
-      ),
-    );
-  },
-);
+    StateNotifierProvider<MonthlyRentController, AsyncValue<void>>((ref) {
+      return MonthlyRentController(
+        createMonthlyRent: ref.read(createMonthlyRentProvider),
+      );
+    });

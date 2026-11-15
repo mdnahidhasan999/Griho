@@ -6,9 +6,7 @@ abstract interface class PropertyRepository {
 
   Future<List<Property>> getPropertiesByOwnerId(String ownerId);
 
-  Future<Property> createProperty(
-      CreatePropertyRequest request,
-      );
+  Future<Property> createProperty(CreatePropertyRequest request);
 
   Future<Property> updateProperty(Property property);
 

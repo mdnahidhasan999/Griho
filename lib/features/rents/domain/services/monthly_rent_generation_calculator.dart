@@ -6,50 +6,39 @@ import 'tenancy_billing_period_resolver.dart';
 class MonthlyRentGenerationResult {
   final List<MonthlyRentCalculation> calculations;
 
-  const MonthlyRentGenerationResult({
-    required this.calculations,
-  });
+  const MonthlyRentGenerationResult({required this.calculations});
 
   double get totalAmount {
     return calculations.fold<double>(
       0,
-          (total, calculation) =>
-      total + calculation.amount,
+      (total, calculation) => total + calculation.amount,
     );
   }
 
   int get totalChargeableDays {
     return calculations.fold<int>(
       0,
-          (total, calculation) =>
-      total + calculation.chargeableDays,
+      (total, calculation) => total + calculation.chargeableDays,
     );
   }
 }
 
 class MonthlyRentGenerationCalculator {
-  final TenancyBillingPeriodResolver
-  _tenancyPeriodResolver;
+  final TenancyBillingPeriodResolver _tenancyPeriodResolver;
 
-  final MonthlyRentRateSegmentResolver
-  _rateSegmentResolver;
+  final MonthlyRentRateSegmentResolver _rateSegmentResolver;
 
-  final MonthlyRentCalculator
-  _rentCalculator;
+  final MonthlyRentCalculator _rentCalculator;
 
   const MonthlyRentGenerationCalculator({
     TenancyBillingPeriodResolver? tenancyPeriodResolver,
     MonthlyRentRateSegmentResolver? rateSegmentResolver,
     MonthlyRentCalculator? rentCalculator,
-  })  : _tenancyPeriodResolver =
-      tenancyPeriodResolver ??
-          const TenancyBillingPeriodResolver(),
-        _rateSegmentResolver =
-            rateSegmentResolver ??
-                const MonthlyRentRateSegmentResolver(),
-        _rentCalculator =
-            rentCalculator ??
-                const MonthlyRentCalculator();
+  }) : _tenancyPeriodResolver =
+           tenancyPeriodResolver ?? const TenancyBillingPeriodResolver(),
+       _rateSegmentResolver =
+           rateSegmentResolver ?? const MonthlyRentRateSegmentResolver(),
+       _rentCalculator = rentCalculator ?? const MonthlyRentCalculator();
 
   MonthlyRentGenerationResult calculate({
     required DateTime billingPeriodStart,
@@ -58,8 +47,7 @@ class MonthlyRentGenerationCalculator {
     DateTime? tenancyEnd,
     required List<RentRate> rentRates,
   }) {
-    final tenancyPeriod =
-    _tenancyPeriodResolver.resolve(
+    final tenancyPeriod = _tenancyPeriodResolver.resolve(
       billingPeriodStart: billingPeriodStart,
       billingPeriodEnd: billingPeriodEnd,
       tenancyStart: tenancyStart,
@@ -67,42 +55,29 @@ class MonthlyRentGenerationCalculator {
     );
 
     if (tenancyPeriod == null) {
-      return const MonthlyRentGenerationResult(
-        calculations: [],
-      );
+      return const MonthlyRentGenerationResult(calculations: []);
     }
 
-    final rateSegments =
-    _rateSegmentResolver.resolve(
+    final rateSegments = _rateSegmentResolver.resolve(
       rentRates: rentRates,
-      chargePeriodStart:
-      tenancyPeriod.chargePeriodStart,
-      chargePeriodEnd:
-      tenancyPeriod.chargePeriodEnd,
+      chargePeriodStart: tenancyPeriod.chargePeriodStart,
+      chargePeriodEnd: tenancyPeriod.chargePeriodEnd,
     );
 
-    final calculations =
-    <MonthlyRentCalculation>[];
+    final calculations = <MonthlyRentCalculation>[];
 
     for (final segment in rateSegments) {
-      final calculation =
-      _rentCalculator.calculate(
+      final calculation = _rentCalculator.calculate(
         monthlyRate: segment.rentRate.amount,
-        billingPeriodStart:
-        billingPeriodStart,
-        billingPeriodEnd:
-        billingPeriodEnd,
-        tenancyStart:
-        segment.start,
-        tenancyEnd:
-        segment.end,
+        billingPeriodStart: billingPeriodStart,
+        billingPeriodEnd: billingPeriodEnd,
+        tenancyStart: segment.start,
+        tenancyEnd: segment.end,
       );
 
       calculations.add(calculation);
     }
 
-    return MonthlyRentGenerationResult(
-      calculations: calculations,
-    );
+    return MonthlyRentGenerationResult(calculations: calculations);
   }
 }

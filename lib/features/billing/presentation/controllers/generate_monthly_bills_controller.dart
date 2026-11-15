@@ -7,23 +7,19 @@ import '../providers/monthly_bill_generation_provider.dart';
 import '../providers/monthly_bill_provider.dart';
 
 final generateMonthlyBillsControllerProvider =
-StateNotifierProvider<
-    GenerateMonthlyBillsController,
-    AsyncValue<List<MonthlyBill>>>(
-      (ref) {
-    return GenerateMonthlyBillsController(
-      ref: ref,
-    );
-  },
-);
+    StateNotifierProvider<
+      GenerateMonthlyBillsController,
+      AsyncValue<List<MonthlyBill>>
+    >((ref) {
+      return GenerateMonthlyBillsController(ref: ref);
+    });
 
 class GenerateMonthlyBillsController
     extends StateNotifier<AsyncValue<List<MonthlyBill>>> {
   final Ref _ref;
 
-  GenerateMonthlyBillsController({
-    required this._ref,
-  })  : super(const AsyncValue.data([]));
+  GenerateMonthlyBillsController({required this._ref})
+    : super(const AsyncValue.data([]));
 
   // ==========================================================================
   // GENERATE
@@ -40,8 +36,7 @@ class GenerateMonthlyBillsController
     state = const AsyncValue.loading();
 
     try {
-      final generateMonthlyBills =
-      _ref.read(generateMonthlyBillsProvider);
+      final generateMonthlyBills = _ref.read(generateMonthlyBillsProvider);
 
       final bills = await generateMonthlyBills(
         ownerId: ownerId,
@@ -56,31 +51,24 @@ class GenerateMonthlyBillsController
 
       // Refresh property bill data after generation.
       _ref.invalidate(
-        monthlyBillsByPropertyAndPeriodProvider(
-          (
+        monthlyBillsByPropertyAndPeriodProvider((
           ownerId: ownerId,
           propertyId: propertyId,
           billingPeriodStart: billingPeriodStart,
-          ),
-        ),
+        )),
       );
 
       // Refresh property bill history.
       _ref.invalidate(
-        propertyMonthlyBillHistoryProvider(
-          (
+        propertyMonthlyBillHistoryProvider((
           ownerId: ownerId,
           propertyId: propertyId,
-          ),
-        ),
+        )),
       );
 
       return bills;
     } catch (error, stackTrace) {
-      state = AsyncValue.error(
-        error,
-        stackTrace,
-      );
+      state = AsyncValue.error(error, stackTrace);
 
       rethrow;
     }

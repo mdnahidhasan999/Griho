@@ -4,9 +4,7 @@ import '../entities/tenant_invitation.dart';
 class CreateTenantInvitation {
   final TenantInvitationRepository repository;
 
-  const CreateTenantInvitation({
-    required this.repository,
-  });
+  const CreateTenantInvitation({required this.repository});
 
   Future<TenantInvitation> call({
     String? tenantId,
@@ -44,9 +42,7 @@ class CreateTenantInvitation {
     // --------------------------------------------------------------
 
     if (!rentAmount.isFinite || rentAmount <= 0) {
-      throw ArgumentError(
-        'Monthly rent must be a positive finite number.',
-      );
+      throw ArgumentError('Monthly rent must be a positive finite number.');
     }
 
     // --------------------------------------------------------------
@@ -63,15 +59,12 @@ class CreateTenantInvitation {
       normalizedGrihoId,
     ];
 
-    final recipientCount =
-        recipientIdentifiers
-            .whereType<String>()
-            .length;
+    final recipientCount = recipientIdentifiers.whereType<String>().length;
 
     if (recipientCount != 1) {
       throw ArgumentError(
         'Provide exactly one recipient identifier: '
-            'phone number, email address, or Griho ID.',
+        'phone number, email address, or Griho ID.',
       );
     }
 
@@ -79,33 +72,24 @@ class CreateTenantInvitation {
     // EMAIL VALIDATION
     // --------------------------------------------------------------
 
-    if (normalizedEmail != null &&
-        !_isValidEmail(normalizedEmail)) {
-      throw ArgumentError(
-        'Please provide a valid email address.',
-      );
+    if (normalizedEmail != null && !_isValidEmail(normalizedEmail)) {
+      throw ArgumentError('Please provide a valid email address.');
     }
 
     // --------------------------------------------------------------
     // PHONE VALIDATION
     // --------------------------------------------------------------
 
-    if (normalizedPhone != null &&
-        !_looksLikePhoneNumber(normalizedPhone)) {
-      throw ArgumentError(
-        'Please provide a valid phone number.',
-      );
+    if (normalizedPhone != null && !_looksLikePhoneNumber(normalizedPhone)) {
+      throw ArgumentError('Please provide a valid phone number.');
     }
 
     // --------------------------------------------------------------
     // GRIHO ID VALIDATION
     // --------------------------------------------------------------
 
-    if (normalizedGrihoId != null &&
-        !_isValidGrihoId(normalizedGrihoId)) {
-      throw ArgumentError(
-        'Please provide a valid Griho ID.',
-      );
+    if (normalizedGrihoId != null && !_isValidGrihoId(normalizedGrihoId)) {
+      throw ArgumentError('Please provide a valid Griho ID.');
     }
 
     // --------------------------------------------------------------
@@ -143,9 +127,7 @@ class CreateTenantInvitation {
   }
 
   bool _isValidEmail(String email) {
-    return RegExp(
-      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-    ).hasMatch(email);
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
   }
 
   bool _looksLikePhoneNumber(String phone) {
@@ -159,8 +141,6 @@ class CreateTenantInvitation {
   bool _isValidGrihoId(String grihoId) {
     // Accept a non-empty Griho ID with a reasonable length.
     // Actual ownership must be verified separately.
-    return RegExp(
-      r'^[A-Z0-9][A-Z0-9_-]{2,39}$',
-    ).hasMatch(grihoId);
+    return RegExp(r'^[A-Z0-9][A-Z0-9_-]{2,39}$').hasMatch(grihoId);
   }
 }

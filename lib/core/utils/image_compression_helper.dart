@@ -7,7 +7,8 @@ class ImageCompressionHelper {
   static Future<File?> compressImage(File file) async {
     try {
       final dir = await getTemporaryDirectory();
-      final targetPath = '${dir.absolute.path}/temp_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final targetPath =
+          '${dir.absolute.path}/temp_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
       var result = await FlutterImageCompress.compressAndGetFile(
         file.absolute.path,
@@ -25,7 +26,8 @@ class ImageCompressionHelper {
       final double sizeInKb = sizeInBytes / 1024;
 
       if (sizeInKb > 50) {
-        final ultimatePath = '${dir.absolute.path}/ultimate_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final ultimatePath =
+            '${dir.absolute.path}/ultimate_${DateTime.now().millisecondsSinceEpoch}.jpg';
         result = await FlutterImageCompress.compressAndGetFile(
           compressedFile.absolute.path,
           ultimatePath,

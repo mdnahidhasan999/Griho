@@ -39,10 +39,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     );
 
     _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutCubic,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
     );
 
     _animationController.forward();
@@ -112,13 +109,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     if (profile == null) {
       debugPrint(
-          'SPLASH: User profile not created yet. Redirecting to onboarding.');
+        'SPLASH: User profile not created yet. Redirecting to onboarding.',
+      );
       return RouteNames.onboarding;
     }
 
     // ফিক্স: profile.role এর জায়গায় defaultDashboard প্রিন্ট করা হয়েছে
-    debugPrint('SPLASH: Profile identified: ${profile
-        .publicId} (Default View: ${profile.defaultDashboard})');
+    debugPrint(
+      'SPLASH: Profile identified: ${profile.publicId} (Default View: ${profile.defaultDashboard})',
+    );
 
     // ফিক্স: profile.role এর বদলে সরাসরি profile পাস করা হয়েছে
     final destination = AuthRoleResolver.resolve(profile);

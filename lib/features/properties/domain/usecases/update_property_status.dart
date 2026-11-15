@@ -15,8 +15,6 @@ class UpdatePropertyStatus {
       updatedAt: DateTime.now(),
     );
 
-    return _repository.updateProperty(
-      updatedProperty,
-    );
+    return _repository.updateProperty(updatedProperty);
   }
 }

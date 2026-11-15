@@ -58,7 +58,8 @@ class TenantInvitationModel extends TenantInvitation {
 
   /// Creates a model from a Firestore document.
   factory TenantInvitationModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> snapshot,) {
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+  ) {
     final data = snapshot.data();
 
     if (data == null) {
@@ -67,17 +68,15 @@ class TenantInvitationModel extends TenantInvitation {
       );
     }
 
-    return TenantInvitationModel.fromMap(
-      data,
-      id: snapshot.id,
-    );
+    return TenantInvitationModel.fromMap(data, id: snapshot.id);
   }
 
   /// Creates a model from a map.
   ///
   /// The document ID is passed separately because Firestore document
   /// IDs are not necessarily stored inside the document data.
-  factory TenantInvitationModel.fromMap(Map<String, dynamic> map, {
+  factory TenantInvitationModel.fromMap(
+    Map<String, dynamic> map, {
     String? id,
   }) {
     final resolvedId = _readString(map, 'id', fallback: id);
@@ -185,47 +184,39 @@ class TenantInvitationModel extends TenantInvitation {
     return data;
   }
 
-  static String? _readString(Map<String, dynamic> map,
-      String key, {
-        String? fallback,
-      }) {
+  static String? _readString(
+    Map<String, dynamic> map,
+    String key, {
+    String? fallback,
+  }) {
     final value = map[key];
 
-    if (value is String && value
-        .trim()
-        .isNotEmpty) {
+    if (value is String && value.trim().isNotEmpty) {
       return value.trim();
     }
 
-    if (fallback != null &&
-        fallback
-            .trim()
-            .isNotEmpty &&
-        value == null) {
+    if (fallback != null && fallback.trim().isNotEmpty && value == null) {
       return fallback.trim();
     }
 
     return null;
   }
 
-  static String? _readOptionalString(Map<String, dynamic> map,
-      String key, {
-        String? fallbackKey,
-      }) {
+  static String? _readOptionalString(
+    Map<String, dynamic> map,
+    String key, {
+    String? fallbackKey,
+  }) {
     final value = map[key];
 
-    if (value is String && value
-        .trim()
-        .isNotEmpty) {
+    if (value is String && value.trim().isNotEmpty) {
       return value.trim();
     }
 
     if (fallbackKey != null) {
       final fallbackValue = map[fallbackKey];
 
-      if (fallbackValue is String && fallbackValue
-          .trim()
-          .isNotEmpty) {
+      if (fallbackValue is String && fallbackValue.trim().isNotEmpty) {
         return fallbackValue.trim();
       }
     }
@@ -233,21 +224,17 @@ class TenantInvitationModel extends TenantInvitation {
     return null;
   }
 
-  static double _readDouble(Map<String, dynamic> map,
-      String key,) {
+  static double _readDouble(Map<String, dynamic> map, String key) {
     final value = map[key];
 
     if (value is num && value.isFinite) {
       return value.toDouble();
     }
 
-    throw FormatException(
-      'Tenant invitation has an invalid "$key" value.',
-    );
+    throw FormatException('Tenant invitation has an invalid "$key" value.');
   }
 
-  static DateTime _readDateTime(Map<String, dynamic> map,
-      String key,) {
+  static DateTime _readDateTime(Map<String, dynamic> map, String key) {
     final value = map[key];
 
     if (value is Timestamp) {
@@ -263,13 +250,10 @@ class TenantInvitationModel extends TenantInvitation {
       if (parsed != null) return parsed;
     }
 
-    throw FormatException(
-      'Tenant invitation has an invalid "$key" timestamp.',
-    );
+    throw FormatException('Tenant invitation has an invalid "$key" timestamp.');
   }
 
-  static DateTime? _readOptionalDateTime(Map<String, dynamic> map,
-      String key,) {
+  static DateTime? _readOptionalDateTime(Map<String, dynamic> map, String key) {
     final value = map[key];
 
     if (value == null) return null;

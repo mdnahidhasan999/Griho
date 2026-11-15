@@ -3,15 +3,9 @@ import '../entities/repositories/tenant_invitation_repository.dart';
 class AcceptTenantInvitation {
   final TenantInvitationRepository _repository;
 
-  const AcceptTenantInvitation({
-    required this._repository,
-  });
+  const AcceptTenantInvitation({required this._repository});
 
-  Future<void> call(
-      String invitationId,
-      ) {
-    return _repository.acceptInvitation(
-      invitationId,
-    );
+  Future<void> call(String invitationId) {
+    return _repository.acceptInvitation(invitationId);
   }
 }

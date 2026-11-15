@@ -44,9 +44,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     return null;
   }
 
-  void _showMessage(String message, {
-    bool isError = false,
-  }) {
+  void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context)
@@ -54,12 +52,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: isError
-              ? Theme
-              .of(context)
-              .colorScheme
-              .error
-              : null,
+          backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
         ),
       );
   }
@@ -73,9 +66,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
     final success = await ref
         .read(authControllerProvider.notifier)
-        .sendPasswordResetEmail(
-      _emailController.text.trim(),
-    );
+        .sendPasswordResetEmail(_emailController.text.trim());
 
     if (!mounted) return;
 
@@ -84,10 +75,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         _emailSent = true;
       });
     } else {
-      final message =
-          ref
-              .read(authControllerProvider)
-              .errorMessage;
+      final message = ref.read(authControllerProvider).errorMessage;
 
       _showMessage(
         message?.isNotEmpty == true
@@ -104,9 +92,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     final authState = ref.watch(authControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Forgot Password'),
-      ),
+      appBar: AppBar(title: const Text('Forgot Password')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -185,27 +171,25 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               onPressed: isLoading ? null : _sendResetEmail,
               child: isLoading
                   ? const SizedBox(
-                height: 22,
-                width: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Text(
-                'Send Reset Link',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+                      'Send Reset Link',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 16),
           TextButton.icon(
-            onPressed: isLoading
-                ? null
-                : () => context.go(RouteNames.login),
+            onPressed: isLoading ? null : () => context.go(RouteNames.login),
             icon: const Icon(Icons.arrow_back_rounded),
             label: const Text('Back to Sign In'),
           ),
@@ -241,8 +225,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'If an account exists for ${_emailController.text
-              .trim()}, a password reset email will be sent. Check your inbox and spam folder.',
+          'If an account exists for ${_emailController.text.trim()}, a password reset email will be sent. Check your inbox and spam folder.',
           style: theme.textTheme.bodyMedium?.copyWith(
             height: 1.6,
             color: theme.colorScheme.onSurfaceVariant,
@@ -255,10 +238,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             onPressed: () => context.go(RouteNames.login),
             child: const Text(
               'Back to Sign In',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
         ),

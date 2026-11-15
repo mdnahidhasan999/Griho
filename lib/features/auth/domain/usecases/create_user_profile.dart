@@ -6,9 +6,8 @@ import '../repositories/user_profile_repository.dart';
 class CreateUserProfile {
   final UserProfileRepository _repository;
 
-  CreateUserProfile({
-    required UserProfileRepository repository,
-  }) : _repository = repository;
+  CreateUserProfile({required UserProfileRepository repository})
+    : _repository = repository;
 
   Future<void> call(AppUser user) {
     return _repository.createUser(user);

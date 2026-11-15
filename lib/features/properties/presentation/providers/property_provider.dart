@@ -21,13 +21,14 @@ final propertyRepositoryProvider = Provider<PropertyRepository>((ref) {
   );
 });
 
-
 // ============================================================
 // PROPERTY BY ID
 // ============================================================
 
-final propertyByIdProvider =
-FutureProvider.family<Property?, String>((ref, propertyId) async {
+final propertyByIdProvider = FutureProvider.family<Property?, String>((
+  ref,
+  propertyId,
+) async {
   final normalizedId = propertyId.trim();
 
   if (normalizedId.isEmpty) {

@@ -25,81 +25,33 @@ class TenancyHistoryModel extends TenancyHistory {
   });
 
   factory TenancyHistoryModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> snapshot,) {
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+  ) {
     final data = snapshot.data();
 
     if (data == null) {
-      throw StateError(
-        'Tenancy history document is empty: ${snapshot.id}',
-      );
+      throw StateError('Tenancy history document is empty: ${snapshot.id}');
     }
 
     return TenancyHistoryModel(
       id: snapshot.id,
       tenantId: _readRequiredString(data, 'tenantId'),
-      tenantUserId: _readOptionalString(
-        data,
-        'tenantUserId',
-      ),
-      ownerId: _readRequiredString(
-        data,
-        'ownerId',
-      ),
-      propertyId: _readRequiredString(
-        data,
-        'propertyId',
-      ),
-      tenantName: _readRequiredString(
-        data,
-        'tenantName',
-      ),
-      propertyName: _readRequiredString(
-        data,
-        'propertyName',
-      ),
-      propertyCode: _readRequiredString(
-        data,
-        'propertyCode',
-      ),
-      propertyAddress: _readOptionalString(
-        data,
-        'propertyAddress',
-      ),
-      unitId: _readRequiredString(
-        data,
-        'unitId',
-      ),
-      unitNumber: _readRequiredString(
-        data,
-        'unitNumber',
-      ),
-      unitName: _readOptionalString(
-        data,
-        'unitName',
-      ),
-      floorNumber: _readRequiredInt(
-        data,
-        'floorNumber',
-      ),
-      monthlyRent: _readOptionalDouble(
-        data,
-        'monthlyRent',
-      ),
-      startedAt: _readRequiredDateTime(
-        data,
-        'startedAt',
-      ),
-      endedAt: _readRequiredDateTime(
-        data,
-        'endedAt',
-      ),
-      status: _readStatus(
-        data['status'],
-      ),
-      createdAt: _readRequiredDateTime(
-        data,
-        'createdAt',
-      ),
+      tenantUserId: _readOptionalString(data, 'tenantUserId'),
+      ownerId: _readRequiredString(data, 'ownerId'),
+      propertyId: _readRequiredString(data, 'propertyId'),
+      tenantName: _readRequiredString(data, 'tenantName'),
+      propertyName: _readRequiredString(data, 'propertyName'),
+      propertyCode: _readRequiredString(data, 'propertyCode'),
+      propertyAddress: _readOptionalString(data, 'propertyAddress'),
+      unitId: _readRequiredString(data, 'unitId'),
+      unitNumber: _readRequiredString(data, 'unitNumber'),
+      unitName: _readOptionalString(data, 'unitName'),
+      floorNumber: _readRequiredInt(data, 'floorNumber'),
+      monthlyRent: _readOptionalDouble(data, 'monthlyRent'),
+      startedAt: _readRequiredDateTime(data, 'startedAt'),
+      endedAt: _readRequiredDateTime(data, 'endedAt'),
+      status: _readStatus(data['status']),
+      createdAt: _readRequiredDateTime(data, 'createdAt'),
     );
   }
 
@@ -125,23 +77,17 @@ class TenancyHistoryModel extends TenancyHistory {
     };
   }
 
-  static String _readRequiredString(Map<String, dynamic> data,
-      String field,) {
+  static String _readRequiredString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
-    if (value is! String || value
-        .trim()
-        .isEmpty) {
-      throw StateError(
-        'Invalid or missing "$field" in tenancy history.',
-      );
+    if (value is! String || value.trim().isEmpty) {
+      throw StateError('Invalid or missing "$field" in tenancy history.');
     }
 
     return value.trim();
   }
 
-  static String? _readOptionalString(Map<String, dynamic> data,
-      String field,) {
+  static String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -149,9 +95,7 @@ class TenancyHistoryModel extends TenancyHistory {
     }
 
     if (value is! String) {
-      throw StateError(
-        'Invalid "$field" in tenancy history.',
-      );
+      throw StateError('Invalid "$field" in tenancy history.');
     }
 
     final trimmed = value.trim();
@@ -159,8 +103,7 @@ class TenancyHistoryModel extends TenancyHistory {
     return trimmed.isEmpty ? null : trimmed;
   }
 
-  static int _readRequiredInt(Map<String, dynamic> data,
-      String field,) {
+  static int _readRequiredInt(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is int) {
@@ -171,13 +114,10 @@ class TenancyHistoryModel extends TenancyHistory {
       return value.toInt();
     }
 
-    throw StateError(
-      'Invalid or missing "$field" in tenancy history.',
-    );
+    throw StateError('Invalid or missing "$field" in tenancy history.');
   }
 
-  static double? _readOptionalDouble(Map<String, dynamic> data,
-      String field,) {
+  static double? _readOptionalDouble(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -188,13 +128,13 @@ class TenancyHistoryModel extends TenancyHistory {
       return value.toDouble();
     }
 
-    throw StateError(
-      'Invalid "$field" in tenancy history.',
-    );
+    throw StateError('Invalid "$field" in tenancy history.');
   }
 
-  static DateTime _readRequiredDateTime(Map<String, dynamic> data,
-      String field,) {
+  static DateTime _readRequiredDateTime(
+    Map<String, dynamic> data,
+    String field,
+  ) {
     final value = data[field];
 
     if (value is Timestamp) {
@@ -205,18 +145,14 @@ class TenancyHistoryModel extends TenancyHistory {
       return value;
     }
 
-    throw StateError(
-      'Invalid or missing "$field" in tenancy history.',
-    );
+    throw StateError('Invalid or missing "$field" in tenancy history.');
   }
 
-  static TenancyHistoryStatus _readStatus(dynamic value,) {
+  static TenancyHistoryStatus _readStatus(dynamic value) {
     if (value == 'ended') {
       return TenancyHistoryStatus.ended;
     }
 
-    throw StateError(
-      'Invalid tenancy history status.',
-    );
+    throw StateError('Invalid tenancy history status.');
   }
 }

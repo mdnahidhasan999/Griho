@@ -15,7 +15,8 @@ class MyInvitationsScreen extends ConsumerStatefulWidget {
   const MyInvitationsScreen({super.key});
 
   @override
-  ConsumerState<MyInvitationsScreen> createState() => _MyInvitationsScreenState();
+  ConsumerState<MyInvitationsScreen> createState() =>
+      _MyInvitationsScreenState();
 }
 
 class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
@@ -43,7 +44,11 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
     }
   }
 
-  Future<void> _respond(WorkInvitation inv, dynamic profile, bool accept) async {
+  Future<void> _respond(
+    WorkInvitation inv,
+    dynamic profile,
+    bool accept,
+  ) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -65,20 +70,23 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
         if (accept && propertyId.isNotEmpty) {
-          batch.set(db.collection('managerAccess').doc('${profile.uid}_$propertyId'), {
-            'userId': profile.uid,
-            'managerName': profile.name,
-            'managerGrihoId': profile.publicId,
-            'managerPhone': profile.phoneNumber,
-            'ownerId': ownerId,
-            'propertyId': propertyId,
-            'propertyName': data['propertyName'] ?? 'Property',
-            'propertyCode': data['propertyCode'] ?? '',
-            'invitationId': inv.doc.id,
-            'status': 'active',
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+          batch.set(
+            db.collection('managerAccess').doc('${profile.uid}_$propertyId'),
+            {
+              'userId': profile.uid,
+              'managerName': profile.name,
+              'managerGrihoId': profile.publicId,
+              'managerPhone': profile.phoneNumber,
+              'ownerId': ownerId,
+              'propertyId': propertyId,
+              'propertyName': data['propertyName'] ?? 'Property',
+              'propertyCode': data['propertyCode'] ?? '',
+              'invitationId': inv.doc.id,
+              'status': 'active',
+              'createdAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+          );
         }
       } else {
         batch.update(inv.doc.reference, {
@@ -93,7 +101,9 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
         });
         if (accept && propertyId.isNotEmpty) {
           batch.set(
-            db.collection('staffAccess').doc('${profile.uid}_${propertyId}_${inv.role}'),
+            db
+                .collection('staffAccess')
+                .doc('${profile.uid}_${propertyId}_${inv.role}'),
             {
               'userId': profile.uid,
               'staffName': profile.name,
@@ -142,10 +152,10 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
           ),
           action: accept
               ? SnackBarAction(
-            label: 'OPEN',
-            textColor: Colors.white,
-            onPressed: () => context.go(_route(inv.role)),
-          )
+                  label: 'OPEN',
+                  textColor: Colors.white,
+                  onPressed: () => context.go(_route(inv.role)),
+                )
               : null,
         ),
       );
@@ -178,16 +188,21 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
         },
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(24), child: Text('Unable to load: $e')),
-          ]),
+          error: (e, _) => ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('Unable to load: $e'),
+              ),
+            ],
+          ),
           data: (list) => ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
               Text(
                 'Invitations from property owners to work as manager, caretaker or electrician. '
-                    'They appear here no matter which account you are using.',
+                'They appear here no matter which account you are using.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -198,11 +213,16 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 60),
                   child: Column(
                     children: [
-                      Icon(Icons.mark_email_read_outlined,
-                          size: 48, color: theme.colorScheme.outline),
+                      Icon(
+                        Icons.mark_email_read_outlined,
+                        size: 48,
+                        color: theme.colorScheme.outline,
+                      ),
                       const SizedBox(height: 10),
-                      const Text('No pending invitations',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      const Text(
+                        'No pending invitations',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ],
                   ),
                 ),
@@ -217,9 +237,12 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                         Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: theme.colorScheme.primaryContainer,
-                              child: Icon(_icon(inv.role),
-                                  color: theme.colorScheme.primary),
+                              backgroundColor:
+                                  theme.colorScheme.primaryContainer,
+                              child: Icon(
+                                _icon(inv.role),
+                                color: theme.colorScheme.primary,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -229,10 +252,14 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                                   Text(
                                     WorkInvitation.roleLabel(inv.role),
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.w900, fontSize: 15),
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 15,
+                                    ),
                                   ),
-                                  Text('${inv.propertyName} • from ${inv.ownerName}',
-                                      style: theme.textTheme.bodySmall),
+                                  Text(
+                                    '${inv.propertyName} • from ${inv.ownerName}',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
                                 ],
                               ),
                             ),

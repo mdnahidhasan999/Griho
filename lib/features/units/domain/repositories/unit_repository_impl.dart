@@ -7,9 +7,7 @@ import '../../domain/repositories/unit_repository.dart';
 class UnitRepositoryImpl implements UnitRepository {
   final UnitDataSource _dataSource;
 
-  UnitRepositoryImpl({
-    required this._dataSource,
-  });
+  UnitRepositoryImpl({required this._dataSource});
 
   // ============================================================
   // GET UNIT BY ID
@@ -29,9 +27,9 @@ class UnitRepositoryImpl implements UnitRepository {
     return _dataSource.getUnitsByPropertyId(propertyId);
   }
 
-// ============================================================
-// GET ALL UNITS BY FLOOR
-// ============================================================
+  // ============================================================
+  // GET ALL UNITS BY FLOOR
+  // ============================================================
 
   @override
   Future<List<Unit>> getUnitsByFloor({
@@ -49,12 +47,8 @@ class UnitRepositoryImpl implements UnitRepository {
   // ============================================================
 
   @override
-  Future<List<Unit>> getOccupiedUnitsByProperty({
-    required String propertyId,
-  }) {
-    return _dataSource.getOccupiedUnitsByProperty(
-      propertyId: propertyId,
-    );
+  Future<List<Unit>> getOccupiedUnitsByProperty({required String propertyId}) {
+    return _dataSource.getOccupiedUnitsByProperty(propertyId: propertyId);
   }
 
   // ============================================================
@@ -77,10 +71,8 @@ class UnitRepositoryImpl implements UnitRepository {
   // ============================================================
 
   @override
-  Future<Unit> createUnit(CreateUnitRequest request,) {
-    return _dataSource.createUnit(
-      request: request,
-    );
+  Future<Unit> createUnit(CreateUnitRequest request) {
+    return _dataSource.createUnit(request: request);
   }
 
   // ============================================================
@@ -88,7 +80,7 @@ class UnitRepositoryImpl implements UnitRepository {
   // ============================================================
 
   @override
-  Future<Unit> updateUnit(Unit unit,) {
+  Future<Unit> updateUnit(Unit unit) {
     final model = UnitModel(
       id: unit.id,
       propertyId: unit.propertyId,
@@ -109,7 +101,7 @@ class UnitRepositoryImpl implements UnitRepository {
   // ============================================================
 
   @override
-  Future<void> deleteUnit(String unitId,) {
+  Future<void> deleteUnit(String unitId) {
     return _dataSource.deleteUnit(unitId);
   }
 
@@ -133,11 +125,7 @@ class UnitRepositoryImpl implements UnitRepository {
   // ============================================================
 
   @override
-  Future<void> removeTenantUser({
-    required String unitId,
-  }) {
-    return _dataSource.removeTenantUser(
-      unitId: unitId,
-    );
+  Future<void> removeTenantUser({required String unitId}) {
+    return _dataSource.removeTenantUser(unitId: unitId);
   }
 }

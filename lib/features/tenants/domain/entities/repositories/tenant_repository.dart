@@ -17,13 +17,9 @@ abstract class TenantRepository {
   // SEARCH REGISTERED TENANT
   // ============================================================
 
-  Future<TenantSearchResult?> searchRegisteredTenantByPublicId(
-      String publicId,
-      );
+  Future<TenantSearchResult?> searchRegisteredTenantByPublicId(String publicId);
 
-  Future<TenantSearchResult?> searchRegisteredTenantByPhone(
-      String phone,
-      );
+  Future<TenantSearchResult?> searchRegisteredTenantByPhone(String phone);
 
   // ============================================================
   // FIND TENANT BY PHONE

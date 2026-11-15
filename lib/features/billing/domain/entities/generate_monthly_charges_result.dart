@@ -10,9 +10,7 @@ class GenerateMonthlyChargesResult {
     required this.generatedBills,
   });
 
-  int get totalGenerated =>
-      generatedRents.length + generatedBills.length;
+  int get totalGenerated => generatedRents.length + generatedBills.length;
 
-  bool get isEmpty =>
-      generatedRents.isEmpty && generatedBills.isEmpty;
+  bool get isEmpty => generatedRents.isEmpty && generatedBills.isEmpty;
 }

@@ -11,28 +11,22 @@ import 'tenant_invitation_provider.dart';
 /// This provider is kept for compatibility with existing code that
 /// still references currentTenantPendingInvitationProvider.
 final currentTenantPendingInvitationProvider =
-StreamProvider.autoDispose<TenantInvitation?>((ref) async* {
-  final tenant = await ref.watch(
-    currentTenantProvider.future,
-  );
+    StreamProvider.autoDispose<TenantInvitation?>((ref) async* {
+      final tenant = await ref.watch(currentTenantProvider.future);
 
-  if (tenant == null) {
-    yield null;
-    return;
-  }
+      if (tenant == null) {
+        yield null;
+        return;
+      }
 
-  final tenantId = tenant.id.trim();
+      final tenantId = tenant.id.trim();
 
-  if (tenantId.isEmpty) {
-    yield null;
-    return;
-  }
+      if (tenantId.isEmpty) {
+        yield null;
+        return;
+      }
 
-  final repository = ref.read(
-    tenantInvitationRepositoryProvider,
-  );
+      final repository = ref.read(tenantInvitationRepositoryProvider);
 
-  yield* repository.watchPendingInvitationByTenantId(
-    tenantId,
-  );
-});
+      yield* repository.watchPendingInvitationByTenantId(tenantId);
+    });

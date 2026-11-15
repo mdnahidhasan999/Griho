@@ -1,9 +1,4 @@
-enum GrihoRole {
-  owner,
-  tenant,
-  manager,
-  caretaker,
-}
+enum GrihoRole { owner, tenant, manager, caretaker }
 
 extension GrihoRoleExtension on GrihoRole {
   String get key {
@@ -49,10 +44,7 @@ extension GrihoRoleExtension on GrihoRole {
 }
 
 class RoleNavigationConfig {
-  const RoleNavigationConfig({
-    required this.role,
-    required this.homeRoute,
-  });
+  const RoleNavigationConfig({required this.role, required this.homeRoute});
 
   final GrihoRole role;
   final String homeRoute;

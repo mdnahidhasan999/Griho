@@ -12,13 +12,11 @@ class GrihoIdGenerator {
     FirebaseFirestore? firestore,
     FirebaseAuth? firebaseAuth,
     Random? random,
-  })
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-        _random = random ?? Random.secure();
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+       _random = random ?? Random.secure();
 
-  static const String _characters =
-      'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  static const String _characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
   static const int _idLength = 8;
   static const int _maxAttempts = 10;
@@ -39,39 +37,34 @@ class GrihoIdGenerator {
     for (var attempt = 0; attempt < _maxAttempts; attempt++) {
       final publicId = _generateId();
 
-      final reservationRef = _firestore
-          .collection('public_ids')
-          .doc(publicId);
+      final reservationRef = _firestore.collection('public_ids').doc(publicId);
 
-      final reserved = await _firestore.runTransaction<bool>(
-            (transaction) async {
-          final snapshot = await transaction.get(reservationRef);
+      final reserved = await _firestore.runTransaction<bool>((
+        transaction,
+      ) async {
+        final snapshot = await transaction.get(reservationRef);
 
-          // ---------------------------------------------------------------
-          // ID ALREADY EXISTS
-          // ---------------------------------------------------------------
+        // ---------------------------------------------------------------
+        // ID ALREADY EXISTS
+        // ---------------------------------------------------------------
 
-          if (snapshot.exists) {
-            return false;
-          }
+        if (snapshot.exists) {
+          return false;
+        }
 
-          // ---------------------------------------------------------------
-          // RESERVE NEW ID
-          // ---------------------------------------------------------------
+        // ---------------------------------------------------------------
+        // RESERVE NEW ID
+        // ---------------------------------------------------------------
 
-          transaction.set(
-            reservationRef,
-            {
-              'publicId': publicId,
-              'uid': currentUser.uid,
-              'createdBy': currentUser.uid,
-              'createdAt': FieldValue.serverTimestamp(),
-            },
-          );
+        transaction.set(reservationRef, {
+          'publicId': publicId,
+          'uid': currentUser.uid,
+          'createdBy': currentUser.uid,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
 
-          return true;
-        },
-      );
+        return true;
+      });
 
       if (reserved) {
         return publicId;

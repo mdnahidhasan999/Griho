@@ -67,10 +67,7 @@ class _PropertyTenantsScreenState extends ConsumerState<PropertyTenantsScreen> {
   Future<void> _openTenantDetails(Tenant tenant) async {
     final shouldRefresh = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) =>
-            TenantDetailsScreen(
-              tenantId: tenant.id,
-            ),
+        builder: (_) => TenantDetailsScreen(tenantId: tenant.id),
       ),
     );
 
@@ -141,19 +138,17 @@ class _PropertyTenantsScreenState extends ConsumerState<PropertyTenantsScreen> {
       ),
       body: tenantsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) =>
-            _TenantErrorView(
-              error: error,
-              onRetry: () {
-                ref.invalidate(propertyTenantsProvider(widget.propertyId));
-              },
-            ),
+        error: (error, stackTrace) => _TenantErrorView(
+          error: error,
+          onRetry: () {
+            ref.invalidate(propertyTenantsProvider(widget.propertyId));
+          },
+        ),
         data: (tenants) {
           final totalCount = tenants.length;
-          final activeCount =
-              tenants
-                  .where((t) => t.status == TenantStatus.active)
-                  .length;
+          final activeCount = tenants
+              .where((t) => t.status == TenantStatus.active)
+              .length;
           final inactiveCount = totalCount - activeCount;
 
           final filteredTenants = _filterTenants(tenants);
@@ -195,22 +190,24 @@ class _PropertyTenantsScreenState extends ConsumerState<PropertyTenantsScreen> {
                     suffixIcon: _searchQuery.isEmpty
                         ? null
                         : IconButton(
-                      onPressed: () {
-                        _searchController.clear();
-                      },
-                      icon: const Icon(Icons.clear_rounded, size: 20),
-                    ),
+                            onPressed: () {
+                              _searchController.clear();
+                            },
+                            icon: const Icon(Icons.clear_rounded, size: 20),
+                          ),
                     filled: true,
                     fillColor: theme.colorScheme.surfaceContainerLow,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide:
-                      BorderSide(color: theme.colorScheme.outlineVariant),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide:
-                      BorderSide(color: theme.colorScheme.outlineVariant),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -252,55 +249,52 @@ class _PropertyTenantsScreenState extends ConsumerState<PropertyTenantsScreen> {
                 // 4. Content Streams
                 if (tenants.isEmpty)
                   _EmptyTenantView(onAddTenant: _addTenant)
-                else
-                  if (sortedTenants.isEmpty)
-                    _NoSearchResultView(query: _searchQuery)
-                  else
-                    ...[
-                      if (activeTenants.isNotEmpty) ...[
-                        _SectionHeader(
-                          title: 'Active Residents',
-                          count: activeTenants.length,
-                          icon: Icons.verified_user_outlined,
-                          color: Colors.green.shade700,
+                else if (sortedTenants.isEmpty)
+                  _NoSearchResultView(query: _searchQuery)
+                else ...[
+                  if (activeTenants.isNotEmpty) ...[
+                    _SectionHeader(
+                      title: 'Active Residents',
+                      count: activeTenants.length,
+                      icon: Icons.verified_user_outlined,
+                      color: Colors.green.shade700,
+                    ),
+                    const SizedBox(height: 10),
+                    for (final tenant in activeTenants) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _TenantCard(
+                          tenant: tenant,
+                          onTap: () {
+                            _openTenantDetails(tenant);
+                          },
                         ),
-                        const SizedBox(height: 10),
-                        for (final tenant in activeTenants) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _TenantCard(
-                              tenant: tenant,
-                              onTap: () {
-                                _openTenantDetails(tenant);
-                              },
-                            ),
-                          ),
-                        ],
-                      ],
-
-                      if (inactiveTenants.isNotEmpty) ...[
-                        if (activeTenants.isNotEmpty) const SizedBox(
-                            height: 12),
-                        _SectionHeader(
-                          title: 'Inactive / Vacated',
-                          count: inactiveTenants.length,
-                          icon: Icons.history_rounded,
-                          color: Colors.orange.shade800,
-                        ),
-                        const SizedBox(height: 10),
-                        for (final tenant in inactiveTenants) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _TenantCard(
-                              tenant: tenant,
-                              onTap: () {
-                                _openTenantDetails(tenant);
-                              },
-                            ),
-                          ),
-                        ],
-                      ],
+                      ),
                     ],
+                  ],
+
+                  if (inactiveTenants.isNotEmpty) ...[
+                    if (activeTenants.isNotEmpty) const SizedBox(height: 12),
+                    _SectionHeader(
+                      title: 'Inactive / Vacated',
+                      count: inactiveTenants.length,
+                      icon: Icons.history_rounded,
+                      color: Colors.orange.shade800,
+                    ),
+                    const SizedBox(height: 10),
+                    for (final tenant in inactiveTenants) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _TenantCard(
+                          tenant: tenant,
+                          onTap: () {
+                            _openTenantDetails(tenant);
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ],
               ],
             ),
           );
@@ -532,10 +526,7 @@ class _TenantCard extends ConsumerWidget {
   final Tenant tenant;
   final VoidCallback onTap;
 
-  const _TenantCard({
-    required this.tenant,
-    required this.onTap,
-  });
+  const _TenantCard({required this.tenant, required this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -646,13 +637,9 @@ class _TenantCard extends ConsumerWidget {
                     unitAsync.when(
                       loading: () => const _MiniBadgeLoading(),
                       error: (_, _) =>
-                      const _UnitBadge(
-                        text: 'Unit unavailable',
-                      ),
+                          const _UnitBadge(text: 'Unit unavailable'),
                       data: (Unit? unit) =>
-                          _UnitBadge(
-                            text: _unitDisplayName(unit),
-                          ),
+                          _UnitBadge(text: _unitDisplayName(unit)),
                     ),
                   ],
                 ),
@@ -694,8 +681,10 @@ class _TenantCard extends ConsumerWidget {
       return 'T';
     }
 
-    final parts =
-    value.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = value
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.length == 1) {
       return parts.first
           .substring(0, parts.first.length >= 2 ? 2 : 1)
@@ -839,8 +828,9 @@ class _EmptyTenantView extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color:
-                theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+                color: theme.colorScheme.primaryContainer.withValues(
+                  alpha: 0.5,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -927,10 +917,7 @@ class _TenantErrorView extends StatelessWidget {
   final Object error;
   final VoidCallback onRetry;
 
-  const _TenantErrorView({
-    required this.error,
-    required this.onRetry,
-  });
+  const _TenantErrorView({required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -955,22 +942,12 @@ class _TenantErrorView extends StatelessWidget {
             Text(
               error.toString(),
               textAlign: TextAlign.center,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(
-                color: Theme
-                    .of(context)
-                    .colorScheme
-                    .onSurfaceVariant,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

@@ -5,24 +5,19 @@ import '../models/tenancy_history_model.dart';
 class TenancyHistoryDataSource {
   final FirebaseFirestore _firestore;
 
-  TenancyHistoryDataSource({
-    FirebaseFirestore? firestore,
-  }) : _firestore =
-      firestore ?? FirebaseFirestore.instance;
+  TenancyHistoryDataSource({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  static const String _collectionName =
-      'tenancyHistories';
+  static const String _collectionName = 'tenancyHistories';
 
-  CollectionReference<Map<String, dynamic>>
-  get _collection =>
+  CollectionReference<Map<String, dynamic>> get _collection =>
       _firestore.collection(_collectionName);
 
   // ========================================================================
   // TENANT HISTORY — OWNER SIDE
   // ========================================================================
 
-  Future<List<TenancyHistoryModel>>
-  getHistoryByTenantId({
+  Future<List<TenancyHistoryModel>> getHistoryByTenantId({
     required String tenantId,
     required String ownerId,
   }) async {
@@ -30,45 +25,27 @@ class TenancyHistoryDataSource {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedTenantId.isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
-      );
+      throw ArgumentError('Tenant ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     final snapshot = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'tenantId',
-      isEqualTo: normalizedTenantId,
-    )
-        .orderBy(
-      'endedAt',
-      descending: true,
-    )
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('tenantId', isEqualTo: normalizedTenantId)
+        .orderBy('endedAt', descending: true)
         .get();
 
-    return snapshot.docs
-        .map(
-      TenancyHistoryModel.fromFirestore,
-    )
-        .toList();
+    return snapshot.docs.map(TenancyHistoryModel.fromFirestore).toList();
   }
 
   // ========================================================================
   // UNIT HISTORY — OWNER SIDE
   // ========================================================================
 
-  Future<List<TenancyHistoryModel>>
-  getHistoryByUnitId({
+  Future<List<TenancyHistoryModel>> getHistoryByUnitId({
     required String unitId,
     required String ownerId,
   }) async {
@@ -76,71 +53,40 @@ class TenancyHistoryDataSource {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     final snapshot = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'unitId',
-      isEqualTo: normalizedUnitId,
-    )
-        .orderBy(
-      'endedAt',
-      descending: true,
-    )
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('unitId', isEqualTo: normalizedUnitId)
+        .orderBy('endedAt', descending: true)
         .get();
 
-    return snapshot.docs
-        .map(
-      TenancyHistoryModel.fromFirestore,
-    )
-        .toList();
+    return snapshot.docs.map(TenancyHistoryModel.fromFirestore).toList();
   }
 
   // ========================================================================
   // TENANT HISTORY — TENANT SIDE
   // ========================================================================
 
-  Future<List<TenancyHistoryModel>>
-  getHistoryByTenantUserId({
+  Future<List<TenancyHistoryModel>> getHistoryByTenantUserId({
     required String tenantUserId,
   }) async {
-    final normalizedTenantUserId =
-    tenantUserId.trim();
+    final normalizedTenantUserId = tenantUserId.trim();
 
     if (normalizedTenantUserId.isEmpty) {
-      throw ArgumentError(
-        'Tenant user ID cannot be empty.',
-      );
+      throw ArgumentError('Tenant user ID cannot be empty.');
     }
 
     final snapshot = await _collection
-        .where(
-      'tenantUserId',
-      isEqualTo: normalizedTenantUserId,
-    )
-        .orderBy(
-      'endedAt',
-      descending: true,
-    )
+        .where('tenantUserId', isEqualTo: normalizedTenantUserId)
+        .orderBy('endedAt', descending: true)
         .get();
 
-    return snapshot.docs
-        .map(
-      TenancyHistoryModel.fromFirestore,
-    )
-        .toList();
+    return snapshot.docs.map(TenancyHistoryModel.fromFirestore).toList();
   }
 }

@@ -114,14 +114,10 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
       unitId: unit.id,
       name: _nameController.text.trim(),
       phone: phone,
-      email: _emailController.text
-          .trim()
-          .isEmpty
+      email: _emailController.text.trim().isEmpty
           ? null
           : _emailController.text.trim(),
-      nidNumber: _nidController.text
-          .trim()
-          .isEmpty
+      nidNumber: _nidController.text.trim().isEmpty
           ? null
           : _nidController.text.trim(),
       status: _status,
@@ -141,10 +137,7 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(state.error?.toString() ?? 'Unable to update tenant.'),
-          backgroundColor: Theme
-              .of(context)
-              .colorScheme
-              .error,
+          backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -182,23 +175,27 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
       body: SafeArea(
         child: propertiesAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) =>
-              _ErrorView(
-                message: 'Unable to load properties.',
-                onRetry: () {
-                  ref.invalidate(currentOwnerPropertiesProvider);
-                },
-              ),
+          error: (error, stackTrace) => _ErrorView(
+            message: 'Unable to load properties.',
+            onRetry: () {
+              ref.invalidate(currentOwnerPropertiesProvider);
+            },
+          ),
           data: (properties) {
             if (properties.isEmpty) {
               return const Center(child: Text('No properties available.'));
             }
 
             // Safe initial property match
-            final initialProperty = properties
-                .where((p) =>
-            p.id == (_selectedProperty?.id ?? widget.tenant.propertyId))
-                .firstOrNull ?? properties.first;
+            final initialProperty =
+                properties
+                    .where(
+                      (p) =>
+                          p.id ==
+                          (_selectedProperty?.id ?? widget.tenant.propertyId),
+                    )
+                    .firstOrNull ??
+                properties.first;
 
             _selectedProperty ??= initialProperty;
 
@@ -216,9 +213,7 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                   children: [
                     // Top Tenant Summary Card
                     _TenantHeaderCard(
-                      name: _nameController.text
-                          .trim()
-                          .isNotEmpty
+                      name: _nameController.text.trim().isNotEmpty
                           ? _nameController.text.trim()
                           : widget.tenant.name,
                       phone: _phoneNumber,
@@ -230,7 +225,8 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                     // Section 1: Property & Unit Allocation
                     _buildSectionCard(
                       title: '1. Allocation & Unit',
-                      subtitle: 'Target building and residential unit assignment',
+                      subtitle:
+                          'Target building and residential unit assignment',
                       icon: Icons.apartment_rounded,
                       children: [
                         DropdownButtonFormField<Property>(
@@ -252,11 +248,11 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                           onChanged: tenantState.isLoading
                               ? null
                               : (property) {
-                            setState(() {
-                              _selectedProperty = property;
-                              _selectedUnit = null;
-                            });
-                          },
+                                  setState(() {
+                                    _selectedProperty = property;
+                                    _selectedUnit = null;
+                                  });
+                                },
                           validator: (value) {
                             if (value == null) {
                               return 'Please select a property.';
@@ -267,19 +263,18 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                         const SizedBox(height: 16),
                         unitsAsync.when(
                           loading: () => const LinearProgressIndicator(),
-                          error: (error, stackTrace) =>
-                              Text(
-                                'Unable to load units: $error',
-                                style: TextStyle(
-                                    color: theme.colorScheme.error),
-                              ),
+                          error: (error, stackTrace) => Text(
+                            'Unable to load units: $error',
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
                           data: (units) {
                             if (_selectedProperty == null) {
                               return const InputDecorator(
                                 decoration: InputDecoration(
                                   labelText: 'Assigned Unit',
                                   prefixIcon: Icon(
-                                      Icons.door_front_door_outlined),
+                                    Icons.door_front_door_outlined,
+                                  ),
                                   border: OutlineInputBorder(),
                                 ),
                                 child: Text('Select a property first'),
@@ -291,17 +286,23 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                                 decoration: InputDecoration(
                                   labelText: 'Assigned Unit',
                                   prefixIcon: Icon(
-                                      Icons.door_front_door_outlined),
+                                    Icons.door_front_door_outlined,
+                                  ),
                                   border: OutlineInputBorder(),
                                 ),
                                 child: Text(
-                                    'No units available in this property'),
+                                  'No units available in this property',
+                                ),
                               );
                             }
 
                             final initialUnit = units
-                                .where((u) =>
-                            u.id == (_selectedUnit?.id ?? widget.tenant.unitId))
+                                .where(
+                                  (u) =>
+                                      u.id ==
+                                      (_selectedUnit?.id ??
+                                          widget.tenant.unitId),
+                                )
                                 .firstOrNull;
 
                             _selectedUnit ??= initialUnit;
@@ -313,15 +314,15 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Assigned Unit',
                                 prefixIcon: Icon(
-                                    Icons.door_front_door_outlined),
+                                  Icons.door_front_door_outlined,
+                                ),
                                 border: OutlineInputBorder(),
                               ),
                               items: units.map((unit) {
                                 return DropdownMenuItem<Unit>(
                                   value: unit,
                                   child: Text(
-                                    'Unit ${unit.unitNumber} • Floor ${unit
-                                        .floorNumber}',
+                                    'Unit ${unit.unitNumber} • Floor ${unit.floorNumber}',
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 );
@@ -329,10 +330,10 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                               onChanged: tenantState.isLoading
                                   ? null
                                   : (unit) {
-                                setState(() {
-                                  _selectedUnit = unit;
-                                });
-                              },
+                                      setState(() {
+                                        _selectedUnit = unit;
+                                      });
+                                    },
                               validator: (value) {
                                 if (value == null) {
                                   return 'Please select a unit.';
@@ -365,14 +366,10 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                             border: OutlineInputBorder(),
                           ),
                           validator: (value) {
-                            if (value == null || value
-                                .trim()
-                                .isEmpty) {
+                            if (value == null || value.trim().isEmpty) {
                               return 'Please enter tenant name.';
                             }
-                            if (value
-                                .trim()
-                                .length < 2) {
+                            if (value.trim().length < 2) {
                               return 'Name must be at least 2 characters.';
                             }
                             return null;
@@ -391,13 +388,13 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                             _phoneNumber = phone.completeNumber;
                           },
                           validator: (phone) {
-                            if (phone == null || phone.completeNumber
-                                .trim()
-                                .isEmpty) {
+                            if (phone == null ||
+                                phone.completeNumber.trim().isEmpty) {
                               return 'Please enter phone number.';
                             }
                             if (!PhoneNumberUtils.isValid(
-                                phone.completeNumber)) {
+                              phone.completeNumber,
+                            )) {
                               return 'Please enter a valid international phone number.';
                             }
                             return null;
@@ -452,8 +449,11 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                               value: TenantStatus.active,
                               child: Row(
                                 children: [
-                                  Icon(Icons.check_circle_outline,
-                                      color: Colors.green, size: 18),
+                                  Icon(
+                                    Icons.check_circle_outline,
+                                    color: Colors.green,
+                                    size: 18,
+                                  ),
                                   SizedBox(width: 8),
                                   Text('Active Resident'),
                                 ],
@@ -463,8 +463,11 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                               value: TenantStatus.inactive,
                               child: Row(
                                 children: [
-                                  Icon(Icons.pause_circle_outline,
-                                      color: Colors.orange, size: 18),
+                                  Icon(
+                                    Icons.pause_circle_outline,
+                                    color: Colors.orange,
+                                    size: 18,
+                                  ),
                                   SizedBox(width: 8),
                                   Text('Inactive / Vacated'),
                                 ],
@@ -474,13 +477,13 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                           onChanged: tenantState.isLoading
                               ? null
                               : (status) {
-                            if (status == null) {
-                              return;
-                            }
-                            setState(() {
-                              _status = status;
-                            });
-                          },
+                                  if (status == null) {
+                                    return;
+                                  }
+                                  setState(() {
+                                    _status = status;
+                                  });
+                                },
                         ),
                         const SizedBox(height: 10),
                         Container(
@@ -490,7 +493,8 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                                 .withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                                color: theme.colorScheme.outlineVariant),
+                              color: theme.colorScheme.outlineVariant,
+                            ),
                           ),
                           child: Text(
                             _status == TenantStatus.active
@@ -516,13 +520,13 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                         onPressed: tenantState.isLoading ? null : _updateTenant,
                         icon: tenantState.isLoading
                             ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Icon(Icons.check_circle_outline_rounded),
                         label: Text(
                           tenantState.isLoading
@@ -671,8 +675,9 @@ class _TenantHeaderCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: isActive ? Colors.green.shade800 : Colors.orange
-                    .shade800,
+                color: isActive
+                    ? Colors.green.shade800
+                    : Colors.orange.shade800,
               ),
             ),
           ),
@@ -719,7 +724,10 @@ class _ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-                Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
+              Icons.error_outline_rounded,
+              size: 48,
+              color: Colors.redAccent,
+            ),
             const SizedBox(height: 16),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),

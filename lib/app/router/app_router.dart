@@ -101,8 +101,8 @@ abstract final class AppRouter {
 
             final isEmailVerification =
                 verificationMode == 'verifyEmail' &&
-                    verificationCode != null &&
-                    verificationCode.isNotEmpty;
+                verificationCode != null &&
+                verificationCode.isNotEmpty;
 
             if (isEmailVerification) {
               return const LinkWaitingScreen(email: '');

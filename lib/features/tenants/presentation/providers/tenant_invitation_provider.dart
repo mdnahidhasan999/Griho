@@ -22,37 +22,34 @@ import '../../domain/usecases/link_and_accept_tenant_invitation.dart';
 // TENANT INVITATION DATA SOURCE
 // ================================================================
 
-final tenantInvitationDataSourceProvider =
-Provider<TenantInvitationDataSource>((ref) {
-  return TenantInvitationDataSource();
-});
+final tenantInvitationDataSourceProvider = Provider<TenantInvitationDataSource>(
+  (ref) {
+    return TenantInvitationDataSource();
+  },
+);
 
 // ================================================================
 // TENANT INVITATION REPOSITORY
 // ================================================================
 
-final tenantInvitationRepositoryProvider =
-Provider<TenantInvitationRepository>((ref) {
-  final dataSource = ref.watch(
-    tenantInvitationDataSourceProvider,
-  );
+final tenantInvitationRepositoryProvider = Provider<TenantInvitationRepository>(
+  (ref) {
+    final dataSource = ref.watch(tenantInvitationDataSourceProvider);
 
-  return TenantInvitationRepositoryImpl(
-    dataSource: dataSource,
-    currentUserService: CurrentUserService(),
-  );
-});
+    return TenantInvitationRepositoryImpl(
+      dataSource: dataSource,
+      currentUserService: CurrentUserService(),
+    );
+  },
+);
 
 // ================================================================
 // CREATE TENANT INVITATION
 // ================================================================
 
-final createTenantInvitationProvider =
-Provider<CreateTenantInvitation>((ref) {
+final createTenantInvitationProvider = Provider<CreateTenantInvitation>((ref) {
   return CreateTenantInvitation(
-    repository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.watch(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -60,12 +57,9 @@ Provider<CreateTenantInvitation>((ref) {
 // GET TENANT INVITATION BY ID
 // ================================================================
 
-final getTenantInvitationProvider =
-Provider<GetTenantInvitation>((ref) {
+final getTenantInvitationProvider = Provider<GetTenantInvitation>((ref) {
   return GetTenantInvitation(
-    repository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.watch(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -73,12 +67,9 @@ Provider<GetTenantInvitation>((ref) {
 // GET INVITATION BY TOKEN
 // ================================================================
 
-final getInvitationByTokenProvider =
-Provider<GetInvitationByToken>((ref) {
+final getInvitationByTokenProvider = Provider<GetInvitationByToken>((ref) {
   return GetInvitationByToken(
-    repository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.watch(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -86,38 +77,32 @@ Provider<GetInvitationByToken>((ref) {
 // GET PENDING TENANT INVITATION BY TENANT ID
 // ================================================================
 
-final getPendingTenantInvitationProvider =
-Provider<GetPendingTenantInvitation>((ref) {
-  return GetPendingTenantInvitation(
-    repository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
-  );
-});
+final getPendingTenantInvitationProvider = Provider<GetPendingTenantInvitation>(
+  (ref) {
+    return GetPendingTenantInvitation(
+      repository: ref.watch(tenantInvitationRepositoryProvider),
+    );
+  },
+);
 
 // ================================================================
 // GET PENDING INVITATION BY PHONE
 // ================================================================
 
 final getPendingInvitationByPhoneProvider =
-Provider<GetPendingInvitationByPhone>((ref) {
-  return GetPendingInvitationByPhone(
-    repository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
-  );
-});
+    Provider<GetPendingInvitationByPhone>((ref) {
+      return GetPendingInvitationByPhone(
+        repository: ref.watch(tenantInvitationRepositoryProvider),
+      );
+    });
 
 // ================================================================
 // ACCEPT TENANT INVITATION
 // ================================================================
 
-final acceptTenantInvitationProvider =
-Provider<AcceptTenantInvitation>((ref) {
+final acceptTenantInvitationProvider = Provider<AcceptTenantInvitation>((ref) {
   return AcceptTenantInvitation(
-    repository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.watch(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -125,12 +110,9 @@ Provider<AcceptTenantInvitation>((ref) {
 // CANCEL TENANT INVITATION
 // ================================================================
 
-final cancelTenantInvitationProvider =
-Provider<CancelTenantInvitation>((ref) {
+final cancelTenantInvitationProvider = Provider<CancelTenantInvitation>((ref) {
   return CancelTenantInvitation(
-    repository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.watch(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -138,12 +120,9 @@ Provider<CancelTenantInvitation>((ref) {
 // EXPIRE TENANT INVITATION
 // ================================================================
 
-final expireTenantInvitationProvider =
-Provider<ExpireTenantInvitation>((ref) {
+final expireTenantInvitationProvider = Provider<ExpireTenantInvitation>((ref) {
   return ExpireTenantInvitation(
-    repository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
+    repository: ref.watch(tenantInvitationRepositoryProvider),
   );
 });
 
@@ -152,84 +131,60 @@ Provider<ExpireTenantInvitation>((ref) {
 // ================================================================
 
 final linkAndAcceptTenantInvitationProvider =
-Provider<LinkAndAcceptTenantInvitation>((ref) {
-  return LinkAndAcceptTenantInvitation(
-    invitationRepository: ref.watch(
-      tenantInvitationRepositoryProvider,
-    ),
-  );
-});
+    Provider<LinkAndAcceptTenantInvitation>((ref) {
+      return LinkAndAcceptTenantInvitation(
+        invitationRepository: ref.watch(tenantInvitationRepositoryProvider),
+      );
+    });
 
 // ================================================================
 // REALTIME — ALL INVITATIONS BY TENANT ID
 // ================================================================
 
 final tenantInvitationsProvider =
-StreamProvider.family<List<TenantInvitation>, String>(
-      (ref, tenantId) {
-    final normalizedTenantId = tenantId.trim();
+    StreamProvider.family<List<TenantInvitation>, String>((ref, tenantId) {
+      final normalizedTenantId = tenantId.trim();
 
-    if (normalizedTenantId.isEmpty) {
-      return Stream.value(
-        const <TenantInvitation>[],
-      );
-    }
+      if (normalizedTenantId.isEmpty) {
+        return Stream.value(const <TenantInvitation>[]);
+      }
 
-    final repository = ref.watch(
-      tenantInvitationRepositoryProvider,
-    );
+      final repository = ref.watch(tenantInvitationRepositoryProvider);
 
-    return repository.watchInvitationsByTenantId(
-      normalizedTenantId,
-    );
-  },
-);
+      return repository.watchInvitationsByTenantId(normalizedTenantId);
+    });
 
 // ================================================================
 // REALTIME — PENDING INVITATION BY TENANT ID
 // ================================================================
 
 final pendingTenantInvitationStreamProvider =
-StreamProvider.family<TenantInvitation?, String>(
-      (ref, tenantId) {
-    final normalizedTenantId = tenantId.trim();
+    StreamProvider.family<TenantInvitation?, String>((ref, tenantId) {
+      final normalizedTenantId = tenantId.trim();
 
-    if (normalizedTenantId.isEmpty) {
-      return Stream.value(null);
-    }
+      if (normalizedTenantId.isEmpty) {
+        return Stream.value(null);
+      }
 
-    final repository = ref.watch(
-      tenantInvitationRepositoryProvider,
-    );
+      final repository = ref.watch(tenantInvitationRepositoryProvider);
 
-    return repository.watchPendingInvitationByTenantId(
-      normalizedTenantId,
-    );
-  },
-);
+      return repository.watchPendingInvitationByTenantId(normalizedTenantId);
+    });
 
 // ================================================================
 // REALTIME — INVITATIONS BY PHONE
 // ================================================================
 
 final tenantInvitationsByPhoneProvider =
-StreamProvider.family<List<TenantInvitation>, String>(
-      (ref, phone) {
-    if (phone
-        .trim()
-        .isEmpty) {
-      return Stream.value(
-        const <TenantInvitation>[],
-      );
-    }
+    StreamProvider.family<List<TenantInvitation>, String>((ref, phone) {
+      if (phone.trim().isEmpty) {
+        return Stream.value(const <TenantInvitation>[]);
+      }
 
-    final dataSource = ref.watch(
-      tenantInvitationDataSourceProvider,
-    );
+      final dataSource = ref.watch(tenantInvitationDataSourceProvider);
 
-    return dataSource.watchInvitationsByPhone(phone);
-  },
-);
+      return dataSource.watchInvitationsByPhone(phone);
+    });
 
 // ================================================================
 // GET PENDING INVITATION BY EMAIL
@@ -241,21 +196,15 @@ StreamProvider.family<List<TenantInvitation>, String>(
 // ================================================================
 
 final pendingTenantInvitationByEmailProvider =
-FutureProvider.family<TenantInvitation?, String>(
-      (ref, email) {
-    if (email
-        .trim()
-        .isEmpty) {
-      return Future.value(null);
-    }
+    FutureProvider.family<TenantInvitation?, String>((ref, email) {
+      if (email.trim().isEmpty) {
+        return Future.value(null);
+      }
 
-    final repository = ref.watch(
-      tenantInvitationRepositoryProvider,
-    );
+      final repository = ref.watch(tenantInvitationRepositoryProvider);
 
-    return repository.getPendingInvitationByEmail(email);
-  },
-);
+      return repository.getPendingInvitationByEmail(email);
+    });
 
 // ================================================================
 // GET PENDING INVITATION BY GRIHO ID
@@ -266,45 +215,35 @@ FutureProvider.family<TenantInvitation?, String>(
 // ================================================================
 
 final pendingTenantInvitationByGrihoIdProvider =
-FutureProvider.family<TenantInvitation?, String>(
-      (ref, grihoId) {
-    if (grihoId
-        .trim()
-        .isEmpty) {
-      return Future.value(null);
-    }
+    FutureProvider.family<TenantInvitation?, String>((ref, grihoId) {
+      if (grihoId.trim().isEmpty) {
+        return Future.value(null);
+      }
 
-    final repository = ref.watch(
-      tenantInvitationRepositoryProvider,
-    );
+      final repository = ref.watch(tenantInvitationRepositoryProvider);
 
-    return repository.getPendingInvitationByGrihoId(grihoId);
-  },
-);
+      return repository.getPendingInvitationByGrihoId(grihoId);
+    });
 
 // ================================================================
 // CURRENT PENDING INVITATION FROM REALTIME HISTORY
 // ================================================================
 
 final currentPendingTenantInvitationProvider =
-Provider.family<TenantInvitation?, String>(
-      (ref, tenantId) {
-    final invitations = ref.watch(
-      tenantInvitationsProvider(tenantId),
-    );
+    Provider.family<TenantInvitation?, String>((ref, tenantId) {
+      final invitations = ref.watch(tenantInvitationsProvider(tenantId));
 
-    return invitations.when(
-      data: (items) {
-        for (final invitation in items) {
-          if (invitation.isPending) {
-            return invitation;
+      return invitations.when(
+        data: (items) {
+          for (final invitation in items) {
+            if (invitation.isPending) {
+              return invitation;
+            }
           }
-        }
 
-        return null;
-      },
-      loading: () => null,
-      error: (_, _) => null,
-    );
-  },
-);
+          return null;
+        },
+        loading: () => null,
+        error: (_, _) => null,
+      );
+    });

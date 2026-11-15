@@ -18,7 +18,8 @@ class WorkInvitation {
   bool get isManager => role == 'manager';
   String get propertyName => (data['propertyName'] ?? 'Property').toString();
   String get ownerName => (data['ownerName'] ?? 'Owner').toString();
-  String get collection => isManager ? 'managerInvitations' : 'staffInvitations';
+  String get collection =>
+      isManager ? 'managerInvitations' : 'staffInvitations';
 
   static String roleLabel(String role) {
     switch (role) {
@@ -34,7 +35,9 @@ class WorkInvitation {
   }
 }
 
-Future<List<WorkInvitation>> fetchPendingWorkInvitations(dynamic profile) async {
+Future<List<WorkInvitation>> fetchPendingWorkInvitations(
+  dynamic profile,
+) async {
   final db = FirebaseFirestore.instance;
   final uid = profile.uid.toString().trim();
   final phone = (profile.phoneNumber ?? '').toString().trim();
@@ -46,7 +49,10 @@ Future<List<WorkInvitation>> fetchPendingWorkInvitations(dynamic profile) async 
   Future<void> run(String collection, String field, String value) async {
     if (value.isEmpty) return;
     try {
-      final snap = await db.collection(collection).where(field, isEqualTo: value).get();
+      final snap = await db
+          .collection(collection)
+          .where(field, isEqualTo: value)
+          .get();
       for (final d in snap.docs) {
         final data = d.data();
         if ((data['status'] ?? '') != 'pending') continue;
@@ -66,7 +72,9 @@ Future<List<WorkInvitation>> fetchPendingWorkInvitations(dynamic profile) async 
 
   final jobs = <Future<void>>[];
   for (final c in const ['managerInvitations', 'staffInvitations']) {
-    jobs.add(run(c, c == 'managerInvitations' ? 'managerUserId' : 'staffUserId', uid));
+    jobs.add(
+      run(c, c == 'managerInvitations' ? 'managerUserId' : 'staffUserId', uid),
+    );
     jobs.add(run(c, 'targetUserId', uid));
     jobs.add(run(c, 'phone', phone));
     jobs.add(run(c, 'identifier', phone));
@@ -78,18 +86,17 @@ Future<List<WorkInvitation>> fetchPendingWorkInvitations(dynamic profile) async 
 
   final list = found.values.toList()
     ..sort((a, b) {
-      int t(WorkInvitation i) =>
-          (i.data['createdAt'] is Timestamp)
-              ? (i.data['createdAt'] as Timestamp).millisecondsSinceEpoch
-              : 0;
+      int t(WorkInvitation i) => (i.data['createdAt'] is Timestamp)
+          ? (i.data['createdAt'] as Timestamp).millisecondsSinceEpoch
+          : 0;
       return t(b).compareTo(t(a));
     });
   return list;
 }
 
 final pendingWorkInvitationsProvider =
-FutureProvider.autoDispose<List<WorkInvitation>>((ref) async {
-  final profile = await ref.watch(currentUserProfileProvider.future);
-  if (profile == null) return const [];
-  return fetchPendingWorkInvitations(profile);
-});
+    FutureProvider.autoDispose<List<WorkInvitation>>((ref) async {
+      final profile = await ref.watch(currentUserProfileProvider.future);
+      if (profile == null) return const [];
+      return fetchPendingWorkInvitations(profile);
+    });

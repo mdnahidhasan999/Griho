@@ -4,9 +4,7 @@ import '../repositories/rent_rate_repository.dart';
 class GetRentRateApplicableAt {
   final RentRateRepository _repository;
 
-  const GetRentRateApplicableAt({
-    required this._repository,
-  });
+  const GetRentRateApplicableAt({required this._repository});
 
   Future<RentRate?> call({
     required String unitId,
@@ -17,15 +15,11 @@ class GetRentRateApplicableAt {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     return _repository.getRentRateApplicableAt(

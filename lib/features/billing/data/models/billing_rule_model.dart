@@ -21,13 +21,12 @@ class BillingRuleModel extends BillingRule {
   });
 
   factory BillingRuleModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc,) {
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data();
 
     if (data == null) {
-      throw StateError(
-        'Billing rule document ${doc.id} has no data.',
-      );
+      throw StateError('Billing rule document ${doc.id} has no data.');
     }
 
     return BillingRuleModel(
@@ -40,26 +39,11 @@ class BillingRuleModel extends BillingRule {
       valueType: _readValueType(data),
       amount: _readRequiredDouble(data, 'amount'),
       title: _readOptionalString(data, 'title'),
-      effectiveFrom: _readRequiredDateTime(
-        data,
-        'effectiveFrom',
-      ),
-      effectiveTo: _readOptionalDateTime(
-        data,
-        'effectiveTo',
-      ),
-      isActive: _readRequiredBool(
-        data,
-        'isActive',
-      ),
-      createdAt: _readRequiredDateTime(
-        data,
-        'createdAt',
-      ),
-      updatedAt: _readRequiredDateTime(
-        data,
-        'updatedAt',
-      ),
+      effectiveFrom: _readRequiredDateTime(data, 'effectiveFrom'),
+      effectiveTo: _readOptionalDateTime(data, 'effectiveTo'),
+      isActive: _readRequiredBool(data, 'isActive'),
+      createdAt: _readRequiredDateTime(data, 'createdAt'),
+      updatedAt: _readRequiredDateTime(data, 'updatedAt'),
     );
   }
 
@@ -73,41 +57,27 @@ class BillingRuleModel extends BillingRule {
       'valueType': valueType.name,
       'amount': amount,
       'title': title,
-      'effectiveFrom': Timestamp.fromDate(
-        effectiveFrom,
-      ),
+      'effectiveFrom': Timestamp.fromDate(effectiveFrom),
       'effectiveTo': effectiveTo == null
           ? null
-          : Timestamp.fromDate(
-        effectiveTo!,
-      ),
+          : Timestamp.fromDate(effectiveTo!),
       'isActive': isActive,
-      'createdAt': Timestamp.fromDate(
-        createdAt,
-      ),
-      'updatedAt': Timestamp.fromDate(
-        updatedAt,
-      ),
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
-  static String _readRequiredString(Map<String, dynamic> data,
-      String field,) {
+  static String _readRequiredString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
-    if (value is! String || value
-        .trim()
-        .isEmpty) {
-      throw StateError(
-        'Billing rule field "$field" is missing or invalid.',
-      );
+    if (value is! String || value.trim().isEmpty) {
+      throw StateError('Billing rule field "$field" is missing or invalid.');
     }
 
     return value.trim();
   }
 
-  static String? _readOptionalString(Map<String, dynamic> data,
-      String field,) {
+  static String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -115,9 +85,7 @@ class BillingRuleModel extends BillingRule {
     }
 
     if (value is! String) {
-      throw StateError(
-        'Billing rule field "$field" is invalid.',
-      );
+      throw StateError('Billing rule field "$field" is invalid.');
     }
 
     final normalized = value.trim();
@@ -125,61 +93,53 @@ class BillingRuleModel extends BillingRule {
     return normalized.isEmpty ? null : normalized;
   }
 
-  static double _readRequiredDouble(Map<String, dynamic> data,
-      String field,) {
+  static double _readRequiredDouble(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! num) {
-      throw StateError(
-        'Billing rule field "$field" is missing or invalid.',
-      );
+      throw StateError('Billing rule field "$field" is missing or invalid.');
     }
 
     final result = value.toDouble();
 
     if (result.isNaN || result.isInfinite) {
-      throw StateError(
-        'Billing rule field "$field" is invalid.',
-      );
+      throw StateError('Billing rule field "$field" is invalid.');
     }
 
     if (result < 0) {
-      throw StateError(
-        'Billing rule field "$field" cannot be negative.',
-      );
+      throw StateError('Billing rule field "$field" cannot be negative.');
     }
 
     return result;
   }
 
-  static bool _readRequiredBool(Map<String, dynamic> data,
-      String field,) {
+  static bool _readRequiredBool(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! bool) {
-      throw StateError(
-        'Billing rule field "$field" is missing or invalid.',
-      );
+      throw StateError('Billing rule field "$field" is missing or invalid.');
     }
 
     return value;
   }
 
-  static DateTime _readRequiredDateTime(Map<String, dynamic> data,
-      String field,) {
+  static DateTime _readRequiredDateTime(
+    Map<String, dynamic> data,
+    String field,
+  ) {
     final value = data[field];
 
     if (value is Timestamp) {
       return value.toDate();
     }
 
-    throw StateError(
-      'Billing rule field "$field" is missing or invalid.',
-    );
+    throw StateError('Billing rule field "$field" is missing or invalid.');
   }
 
-  static DateTime? _readOptionalDateTime(Map<String, dynamic> data,
-      String field,) {
+  static DateTime? _readOptionalDateTime(
+    Map<String, dynamic> data,
+    String field,
+  ) {
     final value = data[field];
 
     if (value == null) {
@@ -190,31 +150,25 @@ class BillingRuleModel extends BillingRule {
       return value.toDate();
     }
 
-    throw StateError(
-      'Billing rule field "$field" is invalid.',
-    );
+    throw StateError('Billing rule field "$field" is invalid.');
   }
 
-  static BillingScopeType _readScopeType(Map<String, dynamic> data,) {
+  static BillingScopeType _readScopeType(Map<String, dynamic> data) {
     final value = data['scopeType'];
 
     if (value is! String) {
-      throw StateError(
-        'Billing rule field "scopeType" is missing or invalid.',
-      );
+      throw StateError('Billing rule field "scopeType" is missing or invalid.');
     }
 
     return BillingScopeType.values.firstWhere(
-          (scope) => scope.name == value,
+      (scope) => scope.name == value,
       orElse: () {
-        throw StateError(
-          'Unknown billing scope type: $value',
-        );
+        throw StateError('Unknown billing scope type: $value');
       },
     );
   }
 
-  static BillingChargeType _readChargeType(Map<String, dynamic> data,) {
+  static BillingChargeType _readChargeType(Map<String, dynamic> data) {
     final value = data['chargeType'];
 
     if (value is! String) {
@@ -224,30 +178,24 @@ class BillingRuleModel extends BillingRule {
     }
 
     return BillingChargeType.values.firstWhere(
-          (type) => type.name == value,
+      (type) => type.name == value,
       orElse: () {
-        throw StateError(
-          'Unknown billing charge type: $value',
-        );
+        throw StateError('Unknown billing charge type: $value');
       },
     );
   }
 
-  static BillingValueType _readValueType(Map<String, dynamic> data,) {
+  static BillingValueType _readValueType(Map<String, dynamic> data) {
     final value = data['valueType'];
 
     if (value is! String) {
-      throw StateError(
-        'Billing rule field "valueType" is missing or invalid.',
-      );
+      throw StateError('Billing rule field "valueType" is missing or invalid.');
     }
 
     return BillingValueType.values.firstWhere(
-          (type) => type.name == value,
+      (type) => type.name == value,
       orElse: () {
-        throw StateError(
-          'Unknown billing value type: $value',
-        );
+        throw StateError('Unknown billing value type: $value');
       },
     );
   }

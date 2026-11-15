@@ -66,9 +66,7 @@ class _TenantInvitationReceiveScreenState
     });
 
     try {
-      final invitation = await ref.read(
-        getInvitationByTokenProvider,
-      )(token);
+      final invitation = await ref.read(getInvitationByTokenProvider)(token);
 
       if (!mounted) {
         return;
@@ -79,7 +77,7 @@ class _TenantInvitationReceiveScreenState
           _isLoading = false;
           _invitation = null;
           _errorMessage =
-          'This invitation does not exist, has expired, '
+              'This invitation does not exist, has expired, '
               'or is no longer available.';
         });
 
@@ -241,10 +239,7 @@ class _TenantInvitationReceiveScreenState
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme
-                    .of(dialogContext)
-                    .colorScheme
-                    .error,
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
               ),
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
@@ -365,9 +360,7 @@ class _TenantInvitationReceiveScreenState
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-      body: SafeArea(
-        child: _buildBody(theme),
-      ),
+      body: SafeArea(child: _buildBody(theme)),
     );
   }
 
@@ -409,7 +402,8 @@ class _TenantInvitationReceiveScreenState
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.errorContainer.withValues(
-                      alpha: 0.4),
+                    alpha: 0.4,
+                  ),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -452,8 +446,7 @@ class _TenantInvitationReceiveScreenState
       );
     }
 
-    if ((!invitation.isPending || invitation.isExpired) &&
-        !_isAccepted) {
+    if ((!invitation.isPending || invitation.isExpired) && !_isAccepted) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -538,9 +531,7 @@ class _TenantInvitationReceiveScreenState
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  _isAccepted
-                      ? 'Tenancy Accepted'
-                      : 'You\'re Invited to Join',
+                  _isAccepted ? 'Tenancy Accepted' : 'You\'re Invited to Join',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
@@ -569,7 +560,8 @@ class _TenantInvitationReceiveScreenState
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.35),
+                  alpha: 0.35,
+                ),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: theme.colorScheme.primary.withValues(alpha: 0.5),
@@ -641,8 +633,8 @@ class _TenantInvitationReceiveScreenState
                   _DetailRow(
                     icon: Icons.apartment_rounded,
                     title: 'Property',
-                    value: invitation.propertyName ??
-                        'Property details unlisted',
+                    value:
+                        invitation.propertyName ?? 'Property details unlisted',
                   ),
                   const Divider(height: 24),
                   _DetailRow(
@@ -654,9 +646,7 @@ class _TenantInvitationReceiveScreenState
                   _DetailRow(
                     icon: Icons.phone_outlined,
                     title: 'Invited Phone Number',
-                    value: invitation.phone
-                        ?.trim()
-                        .isNotEmpty == true
+                    value: invitation.phone?.trim().isNotEmpty == true
                         ? invitation.phone!.trim()
                         : 'Not provided',
                   ),
@@ -678,7 +668,8 @@ class _TenantInvitationReceiveScreenState
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.5),
+                alpha: 0.5,
+              ),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
@@ -714,12 +705,16 @@ class _TenantInvitationReceiveScreenState
                 color: theme.colorScheme.errorContainer.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: theme.colorScheme.error.withValues(alpha: 0.5)),
+                  color: theme.colorScheme.error.withValues(alpha: 0.5),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline_rounded,
-                      color: theme.colorScheme.error, size: 20),
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: theme.colorScheme.error,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -747,13 +742,13 @@ class _TenantInvitationReceiveScreenState
                 onPressed: _isAccepting ? null : _acceptInvitation,
                 icon: _isAccepting
                     ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Icon(Icons.check_circle_outline_rounded, size: 20),
                 label: Text(
                   _isAccepting ? 'Connecting...' : 'Accept Tenancy Invitation',
@@ -776,23 +771,22 @@ class _TenantInvitationReceiveScreenState
                 ),
               ),
             ),
-          ] else
-            ...[
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    context.go(RouteNames.tenantHome);
-                  },
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 20),
-                  label: const Text(
-                    'Proceed to Tenant Dashboard',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+          ] else ...[
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: () {
+                  context.go(RouteNames.tenantHome);
+                },
+                icon: const Icon(Icons.arrow_forward_rounded, size: 20),
+                label: const Text(
+                  'Proceed to Tenant Dashboard',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
-            ],
+            ),
+          ],
         ],
       ),
     );
@@ -870,7 +864,8 @@ class _DetailRow extends StatelessWidget {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.6),
+              alpha: 0.6,
+            ),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, size: 20, color: theme.colorScheme.primary),

@@ -5,9 +5,7 @@ import '../services/billing_rule_resolver.dart';
 class ResolveBillingRule {
   final BillingRuleResolver resolver;
 
-  const ResolveBillingRule({
-    required this.resolver,
-  });
+  const ResolveBillingRule({required this.resolver});
 
   ResolvedBillingRule? call({
     required List<BillingRule> rules,

@@ -4,30 +4,19 @@ import '../../domain/entities/update_billing_rule_request.dart';
 import '../../domain/repositories/billing_rule_repository.dart';
 import '../datasources/billing_rule_datasource.dart';
 
-class BillingRuleRepositoryImpl
-    implements BillingRuleRepository {
+class BillingRuleRepositoryImpl implements BillingRuleRepository {
   final BillingRuleDataSource _dataSource;
 
-  BillingRuleRepositoryImpl({
-    required this._dataSource,
-  });
+  BillingRuleRepositoryImpl({required this._dataSource});
 
   @override
-  Future<BillingRule> createBillingRule(
-      CreateBillingRuleRequest request,
-      ) {
-    return _dataSource.createBillingRule(
-      request: request,
-    );
+  Future<BillingRule> createBillingRule(CreateBillingRuleRequest request) {
+    return _dataSource.createBillingRule(request: request);
   }
 
   @override
-  Future<BillingRule?> getBillingRuleById(
-      String ruleId,
-      ) {
-    return _dataSource.getBillingRuleById(
-      ruleId,
-    );
+  Future<BillingRule?> getBillingRuleById(String ruleId) {
+    return _dataSource.getBillingRuleById(ruleId);
   }
 
   @override
@@ -55,12 +44,8 @@ class BillingRuleRepositoryImpl
   }
 
   @override
-  Future<BillingRule> updateBillingRule(
-      UpdateBillingRuleRequest request,
-      ) {
-    return _dataSource.updateBillingRule(
-      request: request,
-    );
+  Future<BillingRule> updateBillingRule(UpdateBillingRuleRequest request) {
+    return _dataSource.updateBillingRule(request: request);
   }
 
   @override
@@ -68,9 +53,6 @@ class BillingRuleRepositoryImpl
     required String ruleId,
     required String ownerId,
   }) {
-    return _dataSource.deactivateBillingRule(
-      ruleId: ruleId,
-      ownerId: ownerId,
-    );
+    return _dataSource.deactivateBillingRule(ruleId: ruleId, ownerId: ownerId);
   }
 }

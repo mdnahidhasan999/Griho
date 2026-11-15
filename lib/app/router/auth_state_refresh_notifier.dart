@@ -7,11 +7,9 @@ class AuthStateRefreshNotifier extends ChangeNotifier {
   late final StreamSubscription<User?> _subscription;
 
   AuthStateRefreshNotifier() {
-    _subscription = FirebaseAuth.instance.authStateChanges().listen(
-          (_) {
-        notifyListeners();
-      },
-    );
+    _subscription = FirebaseAuth.instance.authStateChanges().listen((_) {
+      notifyListeners();
+    });
   }
 
   @override

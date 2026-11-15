@@ -2,10 +2,7 @@
 // TENANT STATUS
 // ============================================================
 
-enum TenantStatus {
-  active,
-  inactive,
-}
+enum TenantStatus { active, inactive }
 
 // ============================================================
 // TENANT ACCOUNT STATUS
@@ -14,10 +11,7 @@ enum TenantStatus {
 // account with the tenant record.
 // ============================================================
 
-enum TenantAccountStatus {
-  notRegistered,
-  registered,
-}
+enum TenantAccountStatus { notRegistered, registered }
 
 // ============================================================
 // TENANT CONFIRMATION STATUS
@@ -25,11 +19,7 @@ enum TenantAccountStatus {
 // Indicates whether the tenant has confirmed the tenancy.
 // ============================================================
 
-enum TenantConfirmationStatus {
-  pending,
-  confirmed,
-  rejected,
-}
+enum TenantConfirmationStatus { pending, confirmed, rejected }
 
 // ============================================================
 // TENANT ENTITY
@@ -123,21 +113,15 @@ class Tenant {
       name: name ?? this.name,
       phone: phone ?? this.phone,
 
-      email: email == _keep
-          ? this.email
-          : email as String?,
+      email: email == _keep ? this.email : email as String?,
 
-      nidNumber: nidNumber == _keep
-          ? this.nidNumber
-          : nidNumber as String?,
+      nidNumber: nidNumber == _keep ? this.nidNumber : nidNumber as String?,
 
       status: status ?? this.status,
 
-      accountStatus:
-      accountStatus ?? this.accountStatus,
+      accountStatus: accountStatus ?? this.accountStatus,
 
-      confirmationStatus:
-      confirmationStatus ?? this.confirmationStatus,
+      confirmationStatus: confirmationStatus ?? this.confirmationStatus,
 
       tenancyStartedAt: tenancyStartedAt == _keep
           ? this.tenancyStartedAt

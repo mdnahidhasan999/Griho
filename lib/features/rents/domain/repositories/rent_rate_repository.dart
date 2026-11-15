@@ -7,9 +7,7 @@ abstract interface class RentRateRepository {
   // CREATE INITIAL RENT RATE
   // ============================================================
 
-  Future<RentRate> createInitialRentRate(
-      CreateRentRateRequest request,
-      );
+  Future<RentRate> createInitialRentRate(CreateRentRateRequest request);
 
   // ============================================================
   // CURRENT RENT — OWNER

@@ -4,9 +4,7 @@ import '../entities/tenancy_history.dart';
 class GetUnitHistory {
   final TenancyHistoryRepository _repository;
 
-  const GetUnitHistory({
-    required this._repository,
-  });
+  const GetUnitHistory({required this._repository});
 
   Future<List<TenancyHistory>> call({
     required String unitId,
@@ -16,15 +14,11 @@ class GetUnitHistory {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     return _repository.getHistoryByUnitId(

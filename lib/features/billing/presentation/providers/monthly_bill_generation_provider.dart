@@ -5,13 +5,10 @@ import '../../domain/usecases/generate_monthly_bills.dart';
 import 'billing_rule_provider.dart';
 import 'monthly_bill_provider.dart';
 
-final generateMonthlyBillsProvider =
-Provider<GenerateMonthlyBills>((ref) {
-  final billingRuleRepository =
-  ref.read(billingRuleRepositoryProvider);
+final generateMonthlyBillsProvider = Provider<GenerateMonthlyBills>((ref) {
+  final billingRuleRepository = ref.read(billingRuleRepositoryProvider);
 
-  final monthlyBillRepository =
-  ref.read(monthlyBillRepositoryProvider);
+  final monthlyBillRepository = ref.read(monthlyBillRepositoryProvider);
 
   return GenerateMonthlyBills(
     billingRuleRepository: billingRuleRepository,
@@ -24,23 +21,21 @@ Provider<GenerateMonthlyBills>((ref) {
 /// The targets should contain only active tenant/unit
 /// combinations that should receive monthly bills.
 final generatePropertyMonthlyBillsProvider =
-FutureProvider.family<
-    List<MonthlyBill>,
-    GenerateMonthlyBillsParams>(
-      (ref, params) async {
-    final generateMonthlyBills =
-    ref.read(generateMonthlyBillsProvider);
+    FutureProvider.family<List<MonthlyBill>, GenerateMonthlyBillsParams>((
+      ref,
+      params,
+    ) async {
+      final generateMonthlyBills = ref.read(generateMonthlyBillsProvider);
 
-    return generateMonthlyBills(
-      ownerId: params.ownerId,
-      propertyId: params.propertyId,
-      targets: params.targets,
-      billingPeriodStart: params.billingPeriodStart,
-      billingPeriodEnd: params.billingPeriodEnd,
-      dueDate: params.dueDate,
-    );
-  },
-);
+      return generateMonthlyBills(
+        ownerId: params.ownerId,
+        propertyId: params.propertyId,
+        targets: params.targets,
+        billingPeriodStart: params.billingPeriodStart,
+        billingPeriodEnd: params.billingPeriodEnd,
+        dueDate: params.dueDate,
+      );
+    });
 
 class GenerateMonthlyBillsParams {
   final String ownerId;

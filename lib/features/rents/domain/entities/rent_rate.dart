@@ -1,9 +1,4 @@
-enum RentRateSource {
-  initial,
-  property,
-  floor,
-  unit,
-}
+enum RentRateSource { initial, property, floor, unit }
 
 class RentRate {
   final String id;
@@ -92,8 +87,7 @@ class RentRate {
       effectiveFrom: effectiveFrom ?? this.effectiveFrom,
       effectiveTo: effectiveTo ?? this.effectiveTo,
       source: source ?? this.source,
-      previousRentRateId:
-      previousRentRateId ?? this.previousRentRateId,
+      previousRentRateId: previousRentRateId ?? this.previousRentRateId,
       nextRentRateId: nextRentRateId ?? this.nextRentRateId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

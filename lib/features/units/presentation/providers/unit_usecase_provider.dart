@@ -21,8 +21,7 @@ final getUnitProvider = Provider<GetUnit>((ref) {
   return GetUnit(repository);
 });
 
-final getUnitsByPropertyIdProvider =
-Provider<GetUnitsByPropertyId>((ref) {
+final getUnitsByPropertyIdProvider = Provider<GetUnitsByPropertyId>((ref) {
   final repository = ref.read(unitRepositoryProvider);
 
   return GetUnitsByPropertyId(repository);
@@ -40,15 +39,13 @@ final deleteUnitProvider = Provider<DeleteUnit>((ref) {
   return DeleteUnit(repository);
 });
 
-final assignTenantUserProvider =
-Provider<AssignTenantUser>((ref) {
+final assignTenantUserProvider = Provider<AssignTenantUser>((ref) {
   final repository = ref.read(unitRepositoryProvider);
 
   return AssignTenantUser(repository);
 });
 
-final removeTenantUserProvider =
-Provider<RemoveTenantUser>((ref) {
+final removeTenantUserProvider = Provider<RemoveTenantUser>((ref) {
   final repository = ref.read(unitRepositoryProvider);
 
   return RemoveTenantUser(repository);

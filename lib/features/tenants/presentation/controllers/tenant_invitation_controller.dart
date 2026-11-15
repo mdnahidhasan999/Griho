@@ -38,8 +38,7 @@ class TenantInvitationController
     required this._acceptInvitation,
     required this._cancelInvitation,
     required this._expireInvitation,
-  }) :
-        super(const AsyncData(null));
+  }) : super(const AsyncData(null));
 
   // ================================================================
   // CREATE INVITATION
@@ -135,7 +134,7 @@ class TenantInvitationController
   // GET PENDING INVITATION BY PHONE
   // ================================================================
 
-  Future<TenantInvitation?> getPendingInvitationByPhone(String phone,) async {
+  Future<TenantInvitation?> getPendingInvitationByPhone(String phone) async {
     state = const AsyncLoading();
 
     try {
@@ -216,34 +215,21 @@ class TenantInvitationController
 // CONTROLLER PROVIDER
 // ================================================================
 
-final tenantInvitationControllerProvider = StateNotifierProvider<
-    TenantInvitationController,
-    AsyncValue<TenantInvitation?>
->((ref) {
-  return TenantInvitationController(
-    createInvitation: ref.read(
-      createTenantInvitationProvider,
-    ),
-    getInvitation: ref.read(
-      getTenantInvitationProvider,
-    ),
-    getInvitationByToken: ref.read(
-      getInvitationByTokenProvider,
-    ),
-    getPendingInvitation: ref.read(
-      getPendingTenantInvitationProvider,
-    ),
-    getPendingInvitationByPhone: ref.read(
-      getPendingInvitationByPhoneProvider,
-    ),
-    acceptInvitation: ref.read(
-      acceptTenantInvitationProvider,
-    ),
-    cancelInvitation: ref.read(
-      cancelTenantInvitationProvider,
-    ),
-    expireInvitation: ref.read(
-      expireTenantInvitationProvider,
-    ),
-  );
-});
+final tenantInvitationControllerProvider =
+    StateNotifierProvider<
+      TenantInvitationController,
+      AsyncValue<TenantInvitation?>
+    >((ref) {
+      return TenantInvitationController(
+        createInvitation: ref.read(createTenantInvitationProvider),
+        getInvitation: ref.read(getTenantInvitationProvider),
+        getInvitationByToken: ref.read(getInvitationByTokenProvider),
+        getPendingInvitation: ref.read(getPendingTenantInvitationProvider),
+        getPendingInvitationByPhone: ref.read(
+          getPendingInvitationByPhoneProvider,
+        ),
+        acceptInvitation: ref.read(acceptTenantInvitationProvider),
+        cancelInvitation: ref.read(cancelTenantInvitationProvider),
+        expireInvitation: ref.read(expireTenantInvitationProvider),
+      );
+    });

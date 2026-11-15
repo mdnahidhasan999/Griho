@@ -7,10 +7,7 @@ import '../controllers/unit_controller.dart';
 class EditUnitScreen extends ConsumerStatefulWidget {
   final Unit unit;
 
-  const EditUnitScreen({
-    super.key,
-    required this.unit,
-  });
+  const EditUnitScreen({super.key, required this.unit});
 
   @override
   ConsumerState<EditUnitScreen> createState() => _EditUnitScreenState();
@@ -33,13 +30,9 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
       text: widget.unit.floorNumber.toString(),
     );
 
-    _unitNumberController = TextEditingController(
-      text: widget.unit.unitNumber,
-    );
+    _unitNumberController = TextEditingController(text: widget.unit.unitNumber);
 
-    _nameController = TextEditingController(
-      text: widget.unit.name ?? '',
-    );
+    _nameController = TextEditingController(text: widget.unit.name ?? '');
 
     _selectedStatus = widget.unit.status;
   }
@@ -81,13 +74,8 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
       final state = ref.read(unitControllerProvider);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            state.errorMessage ?? 'Unable to update unit.',
-          ),
-          backgroundColor: Theme
-              .of(context)
-              .colorScheme
-              .error,
+          content: Text(state.errorMessage ?? 'Unable to update unit.'),
+          backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -109,14 +97,10 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
     final theme = Theme.of(context);
     final state = ref.watch(unitControllerProvider);
 
-    final currentUnitNumber = _unitNumberController.text
-        .trim()
-        .isNotEmpty
+    final currentUnitNumber = _unitNumberController.text.trim().isNotEmpty
         ? _unitNumberController.text.trim()
         : widget.unit.unitNumber;
-    final currentCustomName = _nameController.text
-        .trim()
-        .isNotEmpty
+    final currentCustomName = _nameController.text.trim().isNotEmpty
         ? _nameController.text.trim()
         : widget.unit.name;
 
@@ -140,7 +124,8 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
                 _UnitSummaryCard(
                   unitNumber: currentUnitNumber,
                   customName: currentCustomName,
-                  floorNumber: int.tryParse(_floorController.text.trim()) ??
+                  floorNumber:
+                      int.tryParse(_floorController.text.trim()) ??
                       widget.unit.floorNumber,
                   status: _selectedStatus,
                 ),
@@ -200,9 +185,7 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
-                        if (value == null || value
-                            .trim()
-                            .isEmpty) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Please enter unit number.';
                         }
                         return null;
@@ -266,13 +249,13 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
                       onChanged: state.isLoading
                           ? null
                           : (status) {
-                        if (status == null) {
-                          return;
-                        }
-                        setState(() {
-                          _selectedStatus = status;
-                        });
-                      },
+                              if (status == null) {
+                                return;
+                              }
+                              setState(() {
+                                _selectedStatus = status;
+                              });
+                            },
                     ),
 
                     const SizedBox(height: 12),
@@ -321,13 +304,13 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
                     onPressed: state.isLoading ? null : _updateUnit,
                     icon: state.isLoading
                         ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Icon(Icons.check_circle_outline_rounded),
                     label: Text(
                       state.isLoading ? 'Saving Changes...' : 'Save Changes',

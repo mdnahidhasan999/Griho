@@ -8,10 +8,8 @@ import 'tenant_invitation_provider.dart';
 // ================================================================
 
 final linkAndAcceptTenantInvitationProvider =
-Provider<LinkAndAcceptTenantInvitation>((ref) {
-  return LinkAndAcceptTenantInvitation(
-    invitationRepository: ref.read(
-      tenantInvitationRepositoryProvider,
-    ),
-  );
-});
+    Provider<LinkAndAcceptTenantInvitation>((ref) {
+      return LinkAndAcceptTenantInvitation(
+        invitationRepository: ref.read(tenantInvitationRepositoryProvider),
+      );
+    });

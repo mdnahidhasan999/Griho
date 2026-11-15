@@ -5,11 +5,10 @@ import 'package:griho/features/tenants/presentation/providers/tenant_invitation_
 
 import '../../../auth/presentation/providers/auth_provider.dart';
 
-final recipientInvitationsProvider =
-StreamProvider<List>((ref) {
+final recipientInvitationsProvider = StreamProvider<List>((ref) {
   final authUser = FirebaseAuth.instance.currentUser;
 
-// Do not expose recipient invitations before email verification.
+  // Do not expose recipient invitations before email verification.
   if (authUser == null || !authUser.emailVerified) {
     return Stream.value(const []);
   }
@@ -18,8 +17,7 @@ StreamProvider<List>((ref) {
 
   return profileAsync.when(
     loading: () => const Stream<List>.empty(),
-    error: (error, stackTrace) =>
-    Stream<List>.error(error, stackTrace),
+    error: (error, stackTrace) => Stream<List>.error(error, stackTrace),
     data: (profile) {
       if (profile == null) {
         return Stream.value(const []);
@@ -28,36 +26,33 @@ StreamProvider<List>((ref) {
       return ref
           .watch(tenantInvitationDataSourceProvider)
           .watchInvitationsForRecipient(
-        phone: profile.phoneNumber,
-        email: authUser.email,
-        grihoId: profile.publicId,
-      )
+            phone: profile.phoneNumber,
+            email: authUser.email,
+            grihoId: profile.publicId,
+          )
           .map(
-            (invitations) =>
-            invitations.where((invitation) {
-              return invitation.status ==
-                  TenantInvitationStatus.pending ||
+            (invitations) => invitations.where((invitation) {
+              return invitation.status == TenantInvitationStatus.pending ||
                   invitation.status == TenantInvitationStatus.accepted ||
                   invitation.status == TenantInvitationStatus.rejected ||
                   invitation.status == TenantInvitationStatus.cancelled;
             }).toList(),
-      );
+          );
     },
-
   );
 });
 
 /// Only pending invitations that have not expired.
-final recipientPendingInvitationsProvider =
-Provider<AsyncValue<List>>((ref) {
-  return ref.watch(recipientInvitationsProvider).whenData(
-        (items) =>
-        items
+final recipientPendingInvitationsProvider = Provider<AsyncValue<List>>((ref) {
+  return ref
+      .watch(recipientInvitationsProvider)
+      .whenData(
+        (items) => items
             .where(
               (invitation) =>
-          invitation.status == TenantInvitationStatus.pending &&
-              !invitation.isExpired,
-        )
+                  invitation.status == TenantInvitationStatus.pending &&
+                  !invitation.isExpired,
+            )
             .toList(),
-  );
+      );
 });

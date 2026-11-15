@@ -11,10 +11,7 @@ class MonthlyRentRateSegment {
     required this.end,
   });
 
-  int get chargeableDays =>
-      end
-          .difference(start)
-          .inDays + 1;
+  int get chargeableDays => end.difference(start).inDays + 1;
 }
 
 class MonthlyRentRateSegmentResolver {
@@ -26,10 +23,7 @@ class MonthlyRentRateSegmentResolver {
     required DateTime chargePeriodEnd,
   }) {
     if (!chargePeriodEnd.isAfter(chargePeriodStart) &&
-        !_isSameCalendarDay(
-          chargePeriodStart,
-          chargePeriodEnd,
-        )) {
+        !_isSameCalendarDay(chargePeriodStart, chargePeriodEnd)) {
       throw ArgumentError(
         'Charge period end must not be before charge period start.',
       );
@@ -41,30 +35,17 @@ class MonthlyRentRateSegmentResolver {
       );
     }
 
-    final normalizedStart = _dateOnly(
-      chargePeriodStart,
-    );
+    final normalizedStart = _dateOnly(chargePeriodStart);
 
-    final normalizedEnd = _dateOnly(
-      chargePeriodEnd,
-    );
+    final normalizedEnd = _dateOnly(chargePeriodEnd);
 
-    final applicableRates = rentRates
-        .where(
-          (rate) =>
-          _overlapsPeriod(
-            rate,
-            normalizedStart,
-            normalizedEnd,
-          ),
-    )
-        .toList()
-      ..sort(
-            (a, b) =>
-            a.effectiveFrom.compareTo(
-              b.effectiveFrom,
-            ),
-      );
+    final applicableRates =
+        rentRates
+            .where(
+              (rate) => _overlapsPeriod(rate, normalizedStart, normalizedEnd),
+            )
+            .toList()
+          ..sort((a, b) => a.effectiveFrom.compareTo(b.effectiveFrom));
 
     if (applicableRates.isEmpty) {
       throw StateError(
@@ -77,29 +58,22 @@ class MonthlyRentRateSegmentResolver {
     DateTime cursor = normalizedStart;
 
     while (!cursor.isAfter(normalizedEnd)) {
-      final rate = _findRateForDate(
-        applicableRates,
-        cursor,
-      );
+      final rate = _findRateForDate(applicableRates, cursor);
 
       if (rate == null) {
         throw StateError(
           'No rent rate is applicable on '
-              '${_formatDate(cursor)}.',
+          '${_formatDate(cursor)}.',
         );
       }
 
-      final rateStart = _dateOnly(
-        rate.effectiveFrom,
-      );
+      final rateStart = _dateOnly(rate.effectiveFrom);
 
       final rateEndExclusive = rate.effectiveTo == null
           ? null
           : _dateOnly(rate.effectiveTo!);
 
-      final segmentStart = cursor.isAfter(rateStart)
-          ? cursor
-          : rateStart;
+      final segmentStart = cursor.isAfter(rateStart) ? cursor : rateStart;
 
       DateTime segmentEnd;
 
@@ -110,17 +84,13 @@ class MonthlyRentRateSegmentResolver {
           const Duration(days: 1),
         );
 
-        segmentEnd = dayBeforeRateEnds.isBefore(
-          normalizedEnd,
-        )
+        segmentEnd = dayBeforeRateEnds.isBefore(normalizedEnd)
             ? dayBeforeRateEnds
             : normalizedEnd;
       }
 
       if (segmentEnd.isBefore(segmentStart)) {
-        throw StateError(
-          'Invalid rent-rate segment detected.',
-        );
+        throw StateError('Invalid rent-rate segment detected.');
       }
 
       segments.add(
@@ -131,28 +101,19 @@ class MonthlyRentRateSegmentResolver {
         ),
       );
 
-      cursor = segmentEnd.add(
-        const Duration(days: 1),
-      );
+      cursor = segmentEnd.add(const Duration(days: 1));
     }
 
-    _validateContinuousCoverage(
-      segments,
-      normalizedStart,
-      normalizedEnd,
-    );
+    _validateContinuousCoverage(segments, normalizedStart, normalizedEnd);
 
     return segments;
   }
 
-  RentRate? _findRateForDate(List<RentRate> rates,
-      DateTime date,) {
+  RentRate? _findRateForDate(List<RentRate> rates, DateTime date) {
     RentRate? selected;
 
     for (final rate in rates) {
-      final effectiveFrom = _dateOnly(
-        rate.effectiveFrom,
-      );
+      final effectiveFrom = _dateOnly(rate.effectiveFrom);
 
       final effectiveTo = rate.effectiveTo == null
           ? null
@@ -162,15 +123,12 @@ class MonthlyRentRateSegmentResolver {
         continue;
       }
 
-      if (effectiveTo != null &&
-          !date.isBefore(effectiveTo)) {
+      if (effectiveTo != null && !date.isBefore(effectiveTo)) {
         continue;
       }
 
       if (selected == null ||
-          rate.effectiveFrom.isAfter(
-            selected.effectiveFrom,
-          )) {
+          rate.effectiveFrom.isAfter(selected.effectiveFrom)) {
         selected = rate;
       }
     }
@@ -178,19 +136,18 @@ class MonthlyRentRateSegmentResolver {
     return selected;
   }
 
-  bool _overlapsPeriod(RentRate rate,
-      DateTime periodStart,
-      DateTime periodEnd,) {
-    final rateStart = _dateOnly(
-      rate.effectiveFrom,
-    );
+  bool _overlapsPeriod(
+    RentRate rate,
+    DateTime periodStart,
+    DateTime periodEnd,
+  ) {
+    final rateStart = _dateOnly(rate.effectiveFrom);
 
     final rateEndExclusive = rate.effectiveTo == null
         ? null
         : _dateOnly(rate.effectiveTo!);
 
-    if (rateEndExclusive != null &&
-        !rateEndExclusive.isAfter(periodStart)) {
+    if (rateEndExclusive != null && !rateEndExclusive.isAfter(periodStart)) {
       return false;
     }
 
@@ -201,32 +158,26 @@ class MonthlyRentRateSegmentResolver {
     return true;
   }
 
-  void _validateContinuousCoverage(List<MonthlyRentRateSegment> segments,
-      DateTime expectedStart,
-      DateTime expectedEnd,) {
+  void _validateContinuousCoverage(
+    List<MonthlyRentRateSegment> segments,
+    DateTime expectedStart,
+    DateTime expectedEnd,
+  ) {
     if (segments.isEmpty) {
-      throw StateError(
-        'Rent-rate segments cannot be empty.',
-      );
+      throw StateError('Rent-rate segments cannot be empty.');
     }
 
-    if (!_isSameCalendarDay(
-      segments.first.start,
-      expectedStart,
-    )) {
+    if (!_isSameCalendarDay(segments.first.start, expectedStart)) {
       throw StateError(
         'Rent-rate history does not cover the beginning '
-            'of the charge period.',
+        'of the charge period.',
       );
     }
 
-    if (!_isSameCalendarDay(
-      segments.last.end,
-      expectedEnd,
-    )) {
+    if (!_isSameCalendarDay(segments.last.end, expectedEnd)) {
       throw StateError(
         'Rent-rate history does not cover the end '
-            'of the charge period.',
+        'of the charge period.',
       );
     }
 
@@ -234,33 +185,23 @@ class MonthlyRentRateSegmentResolver {
       final previous = segments[index - 1];
       final current = segments[index];
 
-      final expectedNextStart = previous.end.add(
-        const Duration(days: 1),
-      );
+      final expectedNextStart = previous.end.add(const Duration(days: 1));
 
-      if (!_isSameCalendarDay(
-        current.start,
-        expectedNextStart,
-      )) {
+      if (!_isSameCalendarDay(current.start, expectedNextStart)) {
         throw StateError(
           'Rent-rate history contains a gap between '
-              '${_formatDate(previous.end)} and '
-              '${_formatDate(current.start)}.',
+          '${_formatDate(previous.end)} and '
+          '${_formatDate(current.start)}.',
         );
       }
     }
   }
 
   DateTime _dateOnly(DateTime value) {
-    return DateTime(
-      value.year,
-      value.month,
-      value.day,
-    );
+    return DateTime(value.year, value.month, value.day);
   }
 
-  bool _isSameCalendarDay(DateTime first,
-      DateTime second,) {
+  bool _isSameCalendarDay(DateTime first, DateTime second) {
     return first.year == second.year &&
         first.month == second.month &&
         first.day == second.day;

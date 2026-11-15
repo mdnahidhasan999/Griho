@@ -5,15 +5,9 @@ import '../repositories/property_repository.dart';
 class CreateProperty {
   final PropertyRepository _repository;
 
-  const CreateProperty({
-    required this._repository,
-  });
+  const CreateProperty({required this._repository});
 
-  Future<Property> call(
-      CreatePropertyRequest request,
-      ) async {
-    return _repository.createProperty(
-      request,
-    );
+  Future<Property> call(CreatePropertyRequest request) async {
+    return _repository.createProperty(request);
   }
 }

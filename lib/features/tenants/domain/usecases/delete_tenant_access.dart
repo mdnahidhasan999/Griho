@@ -12,8 +12,6 @@ class DeleteTenantAccess {
       return;
     }
 
-    await _repository.deleteTenantAccess(
-      normalizedUserId,
-    );
+    await _repository.deleteTenantAccess(normalizedUserId);
   }
 }

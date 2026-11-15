@@ -7,11 +7,7 @@ class CreateUnit {
 
   const CreateUnit(this._repository);
 
-  Future<Unit> call(
-      CreateUnitRequest request,
-      ) async {
-    return _repository.createUnit(
-      request,
-    );
+  Future<Unit> call(CreateUnitRequest request) async {
+    return _repository.createUnit(request);
   }
 }

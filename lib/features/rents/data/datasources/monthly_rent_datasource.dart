@@ -6,9 +6,8 @@ import '../models/monthly_rent_model.dart';
 class MonthlyRentDataSource {
   final FirebaseFirestore _firestore;
 
-  MonthlyRentDataSource({
-    FirebaseFirestore? firestore,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance;
+  MonthlyRentDataSource({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'monthlyRents';
 
@@ -49,70 +48,46 @@ class MonthlyRentDataSource {
     }
 
     if (request.monthlyRate <= 0) {
-      throw ArgumentError(
-        'Monthly rent rate must be greater than zero.',
-      );
+      throw ArgumentError('Monthly rent rate must be greater than zero.');
     }
 
     if (request.amount <= 0) {
-      throw ArgumentError(
-        'Rent amount must be greater than zero.',
-      );
+      throw ArgumentError('Rent amount must be greater than zero.');
     }
 
     if (request.chargeableDays <= 0) {
-      throw ArgumentError(
-        'Chargeable days must be greater than zero.',
-      );
+      throw ArgumentError('Chargeable days must be greater than zero.');
     }
 
     if (request.daysInBillingPeriod <= 0) {
-      throw ArgumentError(
-        'Billing period days must be greater than zero.',
-      );
+      throw ArgumentError('Billing period days must be greater than zero.');
     }
 
     if (request.chargeableDays > request.daysInBillingPeriod) {
-      throw ArgumentError(
-        'Chargeable days cannot exceed billing period days.',
-      );
+      throw ArgumentError('Chargeable days cannot exceed billing period days.');
     }
 
-    if (!request.billingPeriodEnd.isAfter(
-      request.billingPeriodStart,
-    )) {
+    if (!request.billingPeriodEnd.isAfter(request.billingPeriodStart)) {
       throw ArgumentError(
         'Billing period end must be after billing period start.',
       );
     }
 
-    if (request.chargePeriodStart.isBefore(
-      request.billingPeriodStart,
-    )) {
-      throw ArgumentError(
-        'Charge period cannot start before billing period.',
-      );
+    if (request.chargePeriodStart.isBefore(request.billingPeriodStart)) {
+      throw ArgumentError('Charge period cannot start before billing period.');
     }
 
-    if (request.chargePeriodEnd.isAfter(
-      request.billingPeriodEnd,
-    )) {
-      throw ArgumentError(
-        'Charge period cannot end after billing period.',
-      );
+    if (request.chargePeriodEnd.isAfter(request.billingPeriodEnd)) {
+      throw ArgumentError('Charge period cannot end after billing period.');
     }
 
-    if (request.chargePeriodEnd.isBefore(
-      request.chargePeriodStart,
-    )) {
+    if (request.chargePeriodEnd.isBefore(request.chargePeriodStart)) {
       throw ArgumentError(
         'Charge period end cannot be before charge period start.',
       );
     }
 
-    if (request.dueDate.isBefore(
-      request.billingPeriodStart,
-    )) {
+    if (request.dueDate.isBefore(request.billingPeriodStart)) {
       throw ArgumentError(
         'Due date cannot be before the billing period starts.',
       );
@@ -121,21 +96,18 @@ class MonthlyRentDataSource {
     final expectedProrationFactor =
         request.chargeableDays / request.daysInBillingPeriod;
 
-    final calculatedAmount =
-        request.monthlyRate * expectedProrationFactor;
+    final calculatedAmount = request.monthlyRate * expectedProrationFactor;
 
     const double tolerance = 0.01;
 
     if ((request.amount - calculatedAmount).abs() > tolerance) {
       throw ArgumentError(
         'Rent amount does not match the expected '
-            'prorated rent calculation.',
+        'prorated rent calculation.',
       );
     }
 
-    final periodKey = _formatPeriodKey(
-      request.billingPeriodStart,
-    );
+    final periodKey = _formatPeriodKey(request.billingPeriodStart);
 
     // Tenant-aware identity.
     //
@@ -177,25 +149,18 @@ class MonthlyRentDataSource {
       updatedAt: now,
     );
 
-    await _firestore.runTransaction(
-          (transaction) async {
-        final existingSnapshot = await transaction.get(
-          document,
-        );
+    await _firestore.runTransaction((transaction) async {
+      final existingSnapshot = await transaction.get(document);
 
-        if (existingSnapshot.exists) {
-          throw StateError(
-            'Monthly rent already exists for this '
-                'tenant and charge period.',
-          );
-        }
-
-        transaction.set(
-          document,
-          monthlyRent.toFirestore(),
+      if (existingSnapshot.exists) {
+        throw StateError(
+          'Monthly rent already exists for this '
+          'tenant and charge period.',
         );
-      },
-    );
+      }
+
+      transaction.set(document, monthlyRent.toFirestore());
+    });
 
     return monthlyRent;
   }
@@ -204,36 +169,27 @@ class MonthlyRentDataSource {
   // GET BY ID
   // ==========================================================================
 
-  Future<MonthlyRentModel?> getMonthlyRentById(
-      String rentId,
-      ) async {
+  Future<MonthlyRentModel?> getMonthlyRentById(String rentId) async {
     final normalizedRentId = rentId.trim();
 
     if (normalizedRentId.isEmpty) {
       return null;
     }
 
-    final document = await _collection
-        .doc(normalizedRentId)
-        .get();
+    final document = await _collection.doc(normalizedRentId).get();
 
     if (!document.exists) {
       return null;
     }
 
-    return MonthlyRentModel.fromFirestore(
-      document,
-    );
+    return MonthlyRentModel.fromFirestore(document);
   }
-
-
 
   // ==========================================================================
   // GET ALL RENTS FOR UNIT + BILLING PERIOD
   // ==========================================================================
 
-  Future<List<MonthlyRentModel>>
-  getMonthlyRentsByUnitAndPeriod({
+  Future<List<MonthlyRentModel>> getMonthlyRentsByUnitAndPeriod({
     required String unitId,
     required String ownerId,
     required DateTime billingPeriodStart,
@@ -242,49 +198,31 @@ class MonthlyRentDataSource {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     final snapshot = await _collection
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('unitId', isEqualTo: normalizedUnitId)
         .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'unitId',
-      isEqualTo: normalizedUnitId,
-    )
-        .where(
-      'billingPeriodStart',
-      isEqualTo: Timestamp.fromDate(
-        billingPeriodStart,
-      ),
-    )
-        .orderBy(
-      'chargePeriodStart',
-      descending: false,
-    )
+          'billingPeriodStart',
+          isEqualTo: Timestamp.fromDate(billingPeriodStart),
+        )
+        .orderBy('chargePeriodStart', descending: false)
         .get();
 
-    return snapshot.docs
-        .map(MonthlyRentModel.fromFirestore)
-        .toList();
+    return snapshot.docs.map(MonthlyRentModel.fromFirestore).toList();
   }
 
   // ==========================================================================
   // UNIT HISTORY
   // ==========================================================================
 
-  Future<List<MonthlyRentModel>>
-  getMonthlyRentHistoryByUnitId({
+  Future<List<MonthlyRentModel>> getMonthlyRentHistoryByUnitId({
     required String unitId,
     required String ownerId,
   }) async {
@@ -292,47 +230,28 @@ class MonthlyRentDataSource {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     final snapshot = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'unitId',
-      isEqualTo: normalizedUnitId,
-    )
-        .orderBy(
-      'billingPeriodStart',
-      descending: true,
-    )
-        .orderBy(
-      'chargePeriodStart',
-      descending: true,
-    )
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('unitId', isEqualTo: normalizedUnitId)
+        .orderBy('billingPeriodStart', descending: true)
+        .orderBy('chargePeriodStart', descending: true)
         .get();
 
-    return snapshot.docs
-        .map(MonthlyRentModel.fromFirestore)
-        .toList();
+    return snapshot.docs.map(MonthlyRentModel.fromFirestore).toList();
   }
 
   // ==========================================================================
   // TENANT HISTORY
   // ==========================================================================
 
-  Future<List<MonthlyRentModel>>
-  getMonthlyRentHistoryByTenantId({
+  Future<List<MonthlyRentModel>> getMonthlyRentHistoryByTenantId({
     required String tenantId,
     required String ownerId,
   }) async {
@@ -340,47 +259,28 @@ class MonthlyRentDataSource {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedTenantId.isEmpty) {
-      throw ArgumentError(
-        'Tenant ID cannot be empty.',
-      );
+      throw ArgumentError('Tenant ID cannot be empty.');
     }
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
     final snapshot = await _collection
-        .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
-        .where(
-      'tenantId',
-      isEqualTo: normalizedTenantId,
-    )
-        .orderBy(
-      'billingPeriodStart',
-      descending: true,
-    )
-        .orderBy(
-      'chargePeriodStart',
-      descending: true,
-    )
+        .where('ownerId', isEqualTo: normalizedOwnerId)
+        .where('tenantId', isEqualTo: normalizedTenantId)
+        .orderBy('billingPeriodStart', descending: true)
+        .orderBy('chargePeriodStart', descending: true)
         .get();
 
-    return snapshot.docs
-        .map(MonthlyRentModel.fromFirestore)
-        .toList();
+    return snapshot.docs.map(MonthlyRentModel.fromFirestore).toList();
   }
 
   // ==========================================================================
   // PERIOD
   // ==========================================================================
 
-  Future<List<MonthlyRentModel>>
-  getMonthlyRentsByPeriod({
+  Future<List<MonthlyRentModel>> getMonthlyRentsByPeriod({
     required String ownerId,
     required DateTime billingPeriodStart,
     required DateTime billingPeriodEnd,
@@ -388,47 +288,30 @@ class MonthlyRentDataSource {
     final normalizedOwnerId = ownerId.trim();
 
     if (normalizedOwnerId.isEmpty) {
-      throw ArgumentError(
-        'Owner ID cannot be empty.',
-      );
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
-    if (!billingPeriodEnd.isAfter(
-      billingPeriodStart,
-    )) {
+    if (!billingPeriodEnd.isAfter(billingPeriodStart)) {
       throw ArgumentError(
         'Billing period end must be after billing period start.',
       );
     }
 
     final snapshot = await _collection
+        .where('ownerId', isEqualTo: normalizedOwnerId)
         .where(
-      'ownerId',
-      isEqualTo: normalizedOwnerId,
-    )
+          'billingPeriodStart',
+          isEqualTo: Timestamp.fromDate(billingPeriodStart),
+        )
         .where(
-      'billingPeriodStart',
-      isEqualTo: Timestamp.fromDate(
-        billingPeriodStart,
-      ),
-    )
-        .where(
-      'billingPeriodEnd',
-      isEqualTo: Timestamp.fromDate(
-        billingPeriodEnd,
-      ),
-    )
-        .orderBy(
-      'unitId',
-    )
-        .orderBy(
-      'chargePeriodStart',
-    )
+          'billingPeriodEnd',
+          isEqualTo: Timestamp.fromDate(billingPeriodEnd),
+        )
+        .orderBy('unitId')
+        .orderBy('chargePeriodStart')
         .get();
 
-    return snapshot.docs
-        .map(MonthlyRentModel.fromFirestore)
-        .toList();
+    return snapshot.docs.map(MonthlyRentModel.fromFirestore).toList();
   }
 
   // ==========================================================================
@@ -443,13 +326,9 @@ class MonthlyRentDataSource {
     required DateTime chargePeriodStart,
     required DateTime chargePeriodEnd,
   }) {
-    final startKey = _formatDateKey(
-      chargePeriodStart,
-    );
+    final startKey = _formatDateKey(chargePeriodStart);
 
-    final endKey = _formatDateKey(
-      chargePeriodEnd,
-    );
+    final endKey = _formatDateKey(chargePeriodEnd);
 
     return '${ownerId}_${unitId}_${tenantId}_${periodKey}_${startKey}_$endKey';
   }

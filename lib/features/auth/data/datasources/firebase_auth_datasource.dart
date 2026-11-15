@@ -3,9 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 class FirebaseAuthDataSource {
   final FirebaseAuth _firebaseAuth;
 
-  FirebaseAuthDataSource({
-    FirebaseAuth? firebaseAuth,
-  }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  FirebaseAuthDataSource({FirebaseAuth? firebaseAuth})
+    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
 
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
@@ -24,9 +23,7 @@ class FirebaseAuthDataSource {
         onAutoVerified();
       },
       verificationFailed: (FirebaseAuthException error) {
-        onVerificationFailed(
-          error.message ?? 'Phone verification failed.',
-        );
+        onVerificationFailed(error.message ?? 'Phone verification failed.');
       },
       codeSent: (String verificationId, int? resendToken) {
         onCodeSent(verificationId);

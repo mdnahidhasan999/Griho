@@ -18,30 +18,33 @@ class TenantHomeInvitationGateScreen extends ConsumerWidget {
       backgroundColor: theme.colorScheme.surface,
       body: SafeArea(
         child: pendingAsync.when(
-          loading: () =>
-          const _GateLoadingView(message: 'Checking pending invitations...'),
+          loading: () => const _GateLoadingView(
+            message: 'Checking pending invitations...',
+          ),
           error: (e, s) => const TenantHomeScreen(),
           data: (pending) {
             if (pending.isNotEmpty) {
               return TenantInvitationReceiveScreen(
-                  invitationToken: pending.first.token);
+                invitationToken: pending.first.token,
+              );
             }
             final tenantAsync = ref.watch(currentTenantProvider);
             return tenantAsync.when(
-              loading: () =>
-              const _GateLoadingView(message: 'Verifying residency records...'),
-              error: (e, s) =>
-                  _GateErrorView(
-                    title: 'Unable to Load Profile',
-                    message: e.toString(),
-                    onRetry: () => ref.invalidate(currentTenantProvider),
-                  ),
-              data: (tenant) =>
-              tenant == null
-                  ? _GateEmptyProfileView(onRetry: () {
-                ref.invalidate(currentTenantProvider);
-                ref.invalidate(recipientInvitationsProvider);
-              })
+              loading: () => const _GateLoadingView(
+                message: 'Verifying residency records...',
+              ),
+              error: (e, s) => _GateErrorView(
+                title: 'Unable to Load Profile',
+                message: e.toString(),
+                onRetry: () => ref.invalidate(currentTenantProvider),
+              ),
+              data: (tenant) => tenant == null
+                  ? _GateEmptyProfileView(
+                      onRetry: () {
+                        ref.invalidate(currentTenantProvider);
+                        ref.invalidate(recipientInvitationsProvider);
+                      },
+                    )
                   : const TenantHomeScreen(),
             );
           },
@@ -74,7 +77,8 @@ class _GateLoadingView extends StatelessWidget {
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.4),
+                  alpha: 0.4,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -197,7 +201,8 @@ class _GateEmptyProfileView extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.5),
+                  alpha: 0.5,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(

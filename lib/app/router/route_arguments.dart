@@ -11,7 +11,5 @@ class PropertyUnitsRouteArguments {
 class PropertyTenantsRouteArguments {
   final String propertyName;
 
-  const PropertyTenantsRouteArguments({
-    required this.propertyName,
-  });
+  const PropertyTenantsRouteArguments({required this.propertyName});
 }

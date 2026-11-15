@@ -67,9 +67,7 @@ class _UnitListScreenState extends ConsumerState<UnitListScreen> {
   }
 
   Future<void> _openUnitDetails(Unit unit) async {
-    await context.push(
-      RouteNames.unitDetails.replaceFirst(':unitId', unit.id),
-    );
+    await context.push(RouteNames.unitDetails.replaceFirst(':unitId', unit.id));
 
     if (!mounted) {
       return;
@@ -146,22 +144,19 @@ class _UnitListScreenState extends ConsumerState<UnitListScreen> {
       body: SafeArea(
         child: unitsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stackTrace) =>
-              _UnitErrorView(
-                onRetry: () {
-                  ref.invalidate(propertyUnitsProvider(widget.propertyId));
-                },
-              ),
+          error: (error, stackTrace) => _UnitErrorView(
+            onRetry: () {
+              ref.invalidate(propertyUnitsProvider(widget.propertyId));
+            },
+          ),
           data: (units) {
             final totalUnits = units.length;
-            final occupiedUnits =
-                units
-                    .where((u) => u.status == UnitStatus.occupied)
-                    .length;
-            final availableUnits =
-                units
-                    .where((u) => u.status == UnitStatus.available)
-                    .length;
+            final occupiedUnits = units
+                .where((u) => u.status == UnitStatus.occupied)
+                .length;
+            final availableUnits = units
+                .where((u) => u.status == UnitStatus.available)
+                .length;
             final otherUnits = totalUnits - occupiedUnits - availableUnits;
 
             final filteredUnits = _filterUnits(units);
@@ -193,27 +188,30 @@ class _UnitListScreenState extends ConsumerState<UnitListScreen> {
                     controller: _searchController,
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
-                      hintText: 'Search units by number, label, floor, status...',
+                      hintText:
+                          'Search units by number, label, floor, status...',
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: _searchQuery.isEmpty
                           ? null
                           : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                        },
-                        icon: const Icon(Icons.clear_rounded, size: 20),
-                      ),
+                              onPressed: () {
+                                _searchController.clear();
+                              },
+                              icon: const Icon(Icons.clear_rounded, size: 20),
+                            ),
                       filled: true,
                       fillColor: theme.colorScheme.surfaceContainerLow,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide:
-                        BorderSide(color: theme.colorScheme.outlineVariant),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide:
-                        BorderSide(color: theme.colorScheme.outlineVariant),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -255,21 +253,20 @@ class _UnitListScreenState extends ConsumerState<UnitListScreen> {
                   // 4. Content Streams
                   if (units.isEmpty)
                     _EmptyUnitsView(onAddUnit: _addUnit)
+                  else if (sortedUnits.isEmpty)
+                    _NoSearchResultView(query: _searchQuery)
                   else
-                    if (sortedUnits.isEmpty)
-                      _NoSearchResultView(query: _searchQuery)
-                    else
-                      for (final unit in sortedUnits) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _UnitCard(
-                            unit: unit,
-                            onTap: () {
-                              _openUnitDetails(unit);
-                            },
-                          ),
+                    for (final unit in sortedUnits) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _UnitCard(
+                          unit: unit,
+                          onTap: () {
+                            _openUnitDetails(unit);
+                          },
                         ),
-                      ],
+                      ),
+                    ],
                 ],
               ),
             );
@@ -342,8 +339,7 @@ class _PropertyUnitsOverviewCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Unit & Flat Directory ($numberOfFloors ${numberOfFloors ==
-                          1 ? 'Floor' : 'Floors'})',
+                      'Unit & Flat Directory ($numberOfFloors ${numberOfFloors == 1 ? 'Floor' : 'Floors'})',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -461,10 +457,7 @@ class _UnitCard extends StatelessWidget {
   final Unit unit;
   final VoidCallback onTap;
 
-  const _UnitCard({
-    required this.unit,
-    required this.onTap,
-  });
+  const _UnitCard({required this.unit, required this.onTap});
 
   String _floorLabel(int floor) {
     if (floor == 0) {
@@ -642,7 +635,8 @@ class _EmptyUnitsView extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.5),
+                  alpha: 0.5,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -746,10 +740,7 @@ class _UnitErrorView extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),

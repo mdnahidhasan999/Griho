@@ -13,8 +13,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  ConsumerState<OnboardingScreen> createState() =>
-      _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
@@ -68,12 +67,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     final String? email = firebaseUser.email;
 
-    if (email == null || email
-        .trim()
-        .isEmpty) {
+    if (email == null || email.trim().isEmpty) {
       _showMessage(
         'Your account does not have an email address. '
-            'Please sign in again.',
+        'Please sign in again.',
         isError: true,
       );
       return;
@@ -82,7 +79,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // Email/password accounts must verify their email before
     // completing their Griho profile.
     final bool usesEmailPassword = firebaseUser.providerData.any(
-          (provider) => provider.providerId == 'password',
+      (provider) => provider.providerId == 'password',
     );
 
     if (usesEmailPassword && !firebaseUser.emailVerified) {
@@ -99,9 +96,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       return;
     }
 
-    final String phoneNumber = PhoneNumberUtils.clean(
-      _completePhoneNumber,
-    );
+    final String phoneNumber = PhoneNumberUtils.clean(_completePhoneNumber);
 
     if (!PhoneNumberUtils.isValid(phoneNumber)) {
       _showMessage(
@@ -119,18 +114,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       final user = await ref
           .read(authControllerProvider.notifier)
           .completeUserProfile(
-        name: _nameController.text.trim(),
-        phoneNumber: phoneNumber,
-      );
+            name: _nameController.text.trim(),
+            phoneNumber: phoneNumber,
+          );
 
       if (!mounted) return;
 
       if (user == null) {
         final String message =
-            ref
-                .read(authControllerProvider)
-                .errorMessage ??
-                'Unable to complete your profile. Please try again.';
+            ref.read(authControllerProvider).errorMessage ??
+            'Unable to complete your profile. Please try again.';
 
         _showMessage(message, isError: true);
         return;
@@ -168,15 +161,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
-  void _showMessage(String message, {
-    required bool isError,
-  }) {
+  void _showMessage(String message, {required bool isError}) {
     if (!mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    final colorScheme = Theme
-        .of(context)
-        .colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     messenger
       ..hideCurrentSnackBar()
@@ -241,7 +230,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Complete your profile to continue using Griho. '
-                          'Your account details will be associated with your profile.',
+                      'Your account details will be associated with your profile.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,
@@ -260,9 +249,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         hintText: 'Enter your full name',
                         prefixIcon: Icon(Icons.person_outline_rounded),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(
-                            Radius.circular(14),
-                          ),
+                          borderRadius: BorderRadius.all(Radius.circular(14)),
                         ),
                       ),
                       validator: (value) {
@@ -288,9 +275,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       readOnly: true,
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(
-                          Icons.mail_outline_rounded,
-                        ),
+                        prefixIcon: const Icon(Icons.mail_outline_rounded),
                         suffixIcon: Icon(
                           emailVerified
                               ? Icons.verified_rounded
@@ -300,14 +285,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               : theme.colorScheme.onSurfaceVariant,
                         ),
                         filled: true,
-                        fillColor: theme
-                            .colorScheme
-                            .surfaceContainerHighest
+                        fillColor: theme.colorScheme.surfaceContainerHighest
                             .withValues(alpha: 0.4),
                         border: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(
-                            Radius.circular(14),
-                          ),
+                          borderRadius: BorderRadius.all(Radius.circular(14)),
                         ),
                       ),
                     ),
@@ -320,9 +301,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    const _FieldLabel(
-                      label: 'Permanent Phone Number',
-                    ),
+                    const _FieldLabel(label: 'Permanent Phone Number'),
                     const SizedBox(height: 8),
                     IntlPhoneField(
                       controller: _phoneController,
@@ -333,19 +312,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       decoration: const InputDecoration(
                         hintText: 'Enter your phone number',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(
-                            Radius.circular(14),
-                          ),
+                          borderRadius: BorderRadius.all(Radius.circular(14)),
                         ),
                       ),
                       onChanged: (phone) {
                         _completePhoneNumber = phone.completeNumber;
                       },
                       validator: (phone) {
-                        if (phone == null ||
-                            phone.number
-                                .trim()
-                                .isEmpty) {
+                        if (phone == null || phone.number.trim().isEmpty) {
                           return 'Permanent phone number is required.';
                         }
 
@@ -368,7 +342,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         Expanded(
                           child: Text(
                             'Use your permanent phone number. '
-                                'Griho uses it to identify your profile.',
+                            'Griho uses it to identify your profile.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                               height: 1.4,
@@ -382,9 +356,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: theme
-                            .colorScheme
-                            .surfaceContainerHighest
+                        color: theme.colorScheme.surfaceContainerHighest
                             .withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -399,8 +371,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           const Expanded(
                             child: Text(
                               'You do not need to select an account role here. '
-                                  'Your access will be determined by your Griho account '
-                                  'and any applicable property invitation.',
+                              'Your access will be determined by your Griho account '
+                              'and any applicable property invitation.',
                               style: TextStyle(height: 1.45),
                             ),
                           ),
@@ -420,20 +392,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ),
                         child: isLoading
                             ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Text(
-                          'Complete Profile',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                                'Complete Profile',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -457,21 +429,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 class _FieldLabel extends StatelessWidget {
   final String label;
 
-  const _FieldLabel({
-    required this.label,
-  });
+  const _FieldLabel({required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: Theme
-          .of(context)
-          .textTheme
-          .titleSmall
-          ?.copyWith(
-        fontWeight: FontWeight.w700,
-      ),
+      style: Theme.of(
+        context,
+      ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
     );
   }
 }

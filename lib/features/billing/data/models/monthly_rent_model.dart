@@ -28,29 +28,23 @@ class MonthlyRentModel extends MonthlyBill {
     required super.createdAt,
     required super.updatedAt,
   }) : super(
-    billCollection: 'monthlyRents',
-    type: MonthlyBillType.rent,
-    valueType: BillingValueType.fixed,
-  );
+         billCollection: 'monthlyRents',
+         type: MonthlyBillType.rent,
+         valueType: BillingValueType.fixed,
+       );
 
   factory MonthlyRentModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> document,
-      ) {
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
     final data = document.data();
 
     if (data == null) {
-      throw StateError(
-        'Monthly rent document ${document.id} has no data.',
-      );
+      throw StateError('Monthly rent document ${document.id} has no data.');
     }
 
     final amount = _readNumber(data, 'amount');
 
-    final paidAmount = _readOptionalNumber(
-      data,
-      'paidAmount',
-      defaultValue: 0,
-    );
+    final paidAmount = _readOptionalNumber(data, 'paidAmount', defaultValue: 0);
 
     final billingPeriodStart = _readDate(data, 'billingPeriodStart');
     final billingPeriodEnd = _readDate(data, 'billingPeriodEnd');
@@ -73,7 +67,7 @@ class MonthlyRentModel extends MonthlyBill {
 
       // Rent records use rentRateId rather than sourceRuleId.
       sourceRuleId:
-      _readOptionalString(data, 'rentRateId') ??
+          _readOptionalString(data, 'rentRateId') ??
           _readOptionalString(data, 'sourceRuleId') ??
           document.id,
 
@@ -90,25 +84,17 @@ class MonthlyRentModel extends MonthlyBill {
     );
   }
 
-  static String _readRequiredString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String _readRequiredString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! String || value.trim().isEmpty) {
-      throw StateError(
-        'Monthly rent field "$field" is missing or invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is missing or invalid.');
     }
 
     return value.trim();
   }
 
-  static String? _readOptionalString(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! String) {
@@ -120,34 +106,27 @@ class MonthlyRentModel extends MonthlyBill {
     return normalized.isEmpty ? null : normalized;
   }
 
-  static double _readNumber(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static double _readNumber(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is! num) {
-      throw StateError(
-        'Monthly rent field "$field" is missing or invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is missing or invalid.');
     }
 
     final result = value.toDouble();
 
     if (!result.isFinite || result < 0) {
-      throw StateError(
-        'Monthly rent field "$field" has an invalid amount.',
-      );
+      throw StateError('Monthly rent field "$field" has an invalid amount.');
     }
 
     return result;
   }
 
   static double _readOptionalNumber(
-      Map<String, dynamic> data,
-      String field, {
-        required double defaultValue,
-      }) {
+    Map<String, dynamic> data,
+    String field, {
+    required double defaultValue,
+  }) {
     final value = data[field];
 
     if (value == null) {
@@ -155,26 +134,19 @@ class MonthlyRentModel extends MonthlyBill {
     }
 
     if (value is! num) {
-      throw StateError(
-        'Monthly rent field "$field" is invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is invalid.');
     }
 
     final result = value.toDouble();
 
     if (!result.isFinite || result < 0) {
-      throw StateError(
-        'Monthly rent field "$field" is invalid.',
-      );
+      throw StateError('Monthly rent field "$field" is invalid.');
     }
 
     return result;
   }
 
-  static DateTime _readDate(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime _readDate(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is Timestamp) {
@@ -185,15 +157,10 @@ class MonthlyRentModel extends MonthlyBill {
       return value;
     }
 
-    throw StateError(
-      'Monthly rent field "$field" is missing or invalid.',
-    );
+    throw StateError('Monthly rent field "$field" is missing or invalid.');
   }
 
-  static DateTime? _readOptionalDate(
-      Map<String, dynamic> data,
-      String field,
-      ) {
+  static DateTime? _readOptionalDate(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is Timestamp) {

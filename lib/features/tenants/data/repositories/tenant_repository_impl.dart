@@ -66,10 +66,7 @@ class TenantRepositoryImpl implements TenantRepository {
   Future<Tenant?> getTenantByUnitId(String unitId) {
     final ownerId = _currentUserService.requiredUid;
 
-    return _dataSource.getTenantByUnitId(
-      unitId: unitId,
-      ownerId: ownerId,
-    );
+    return _dataSource.getTenantByUnitId(unitId: unitId, ownerId: ownerId);
   }
 
   // ==========================================================================
@@ -93,8 +90,8 @@ class TenantRepositoryImpl implements TenantRepository {
 
   @override
   Future<TenantSearchResult?> searchRegisteredTenantByPublicId(
-      String publicId,
-      ) {
+    String publicId,
+  ) {
     final ownerId = _currentUserService.requiredUid;
 
     return _dataSource.searchRegisteredTenantByPublicId(
@@ -126,10 +123,7 @@ class TenantRepositoryImpl implements TenantRepository {
     required String phone,
     required String ownerId,
   }) {
-    return _dataSource.findTenantByPhone(
-      phone: phone,
-      ownerId: ownerId,
-    );
+    return _dataSource.findTenantByPhone(phone: phone, ownerId: ownerId);
   }
 
   // ==========================================================================
@@ -151,10 +145,7 @@ class TenantRepositoryImpl implements TenantRepository {
       throw ArgumentError('Tenant phone number cannot be empty.');
     }
 
-    final documentId = DateTime
-        .now()
-        .microsecondsSinceEpoch
-        .toString();
+    final documentId = DateTime.now().microsecondsSinceEpoch.toString();
 
     final now = DateTime.now();
 
@@ -203,9 +194,7 @@ class TenantRepositoryImpl implements TenantRepository {
     final ownerId = _currentUserService.requiredUid;
 
     if (tenant.ownerId != ownerId) {
-      throw StateError(
-        'You are not authorized to update this tenant.',
-      );
+      throw StateError('You are not authorized to update this tenant.');
     }
 
     final model = TenantModel.fromEntity(tenant);
@@ -247,9 +236,7 @@ class TenantRepositoryImpl implements TenantRepository {
     final currentUserId = _currentUserService.requiredUid;
 
     if (currentUserId != ownerId) {
-      throw StateError(
-        'You are not authorized to clean up these tenants.',
-      );
+      throw StateError('You are not authorized to clean up these tenants.');
     }
 
     return _dataSource.cleanupDuplicateActiveTenants(
@@ -267,10 +254,7 @@ class TenantRepositoryImpl implements TenantRepository {
   Future<Tenant> endTenancy(String tenantId) async {
     final ownerId = _currentUserService.requiredUid;
 
-    return _dataSource.endTenancy(
-      tenantId: tenantId,
-      ownerId: ownerId,
-    );
+    return _dataSource.endTenancy(tenantId: tenantId, ownerId: ownerId);
   }
 
   // ==========================================================================
@@ -310,9 +294,7 @@ class TenantRepositoryImpl implements TenantRepository {
     final currentUserId = _currentUserService.requiredUid;
 
     if (tenant.ownerId != currentUserId) {
-      throw StateError(
-        'You are not authorized to delete this tenant.',
-      );
+      throw StateError('You are not authorized to delete this tenant.');
     }
 
     await _dataSource.deleteTenant(tenantId);

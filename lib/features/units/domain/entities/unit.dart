@@ -1,9 +1,4 @@
-enum UnitStatus {
-  available,
-  occupied,
-  reserved,
-  inactive,
-}
+enum UnitStatus { available, occupied, reserved, inactive }
 
 class Unit {
   final String id;
@@ -53,9 +48,7 @@ class Unit {
       floorNumber: floorNumber ?? this.floorNumber,
       unitNumber: unitNumber ?? this.unitNumber,
 
-      name: name == _keep
-          ? this.name
-          : name as String?,
+      name: name == _keep ? this.name : name as String?,
 
       status: status ?? this.status,
 

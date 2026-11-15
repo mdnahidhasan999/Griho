@@ -18,7 +18,7 @@ class PropertyModel extends Property {
     required super.updatedAt,
   });
 
-  factory PropertyModel.fromEntity(Property property,) {
+  factory PropertyModel.fromEntity(Property property) {
     return PropertyModel(
       id: property.id,
       propertyCode: property.propertyCode,
@@ -36,74 +36,38 @@ class PropertyModel extends Property {
   }
 
   factory PropertyModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> document,) {
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
     final data = document.data();
 
     if (data == null) {
-      throw StateError(
-        'Property document ${document.id} contains no data.',
-      );
+      throw StateError('Property document ${document.id} contains no data.');
     }
 
     return PropertyModel(
       id: document.id,
 
-      propertyCode: _readPropertyCode(
-        data,
-        document.id,
-      ),
+      propertyCode: _readPropertyCode(data, document.id),
 
-      ownerId: _readRequiredString(
-        data,
-        'ownerId',
-      ),
+      ownerId: _readRequiredString(data, 'ownerId'),
 
-      name: _readRequiredString(
-        data,
-        'name',
-      ),
+      name: _readRequiredString(data, 'name'),
 
-      address: _readOptionalString(
-        data,
-        'address',
-      ),
+      address: _readOptionalString(data, 'address'),
 
-      description: _readOptionalString(
-        data,
-        'description',
-      ),
+      description: _readOptionalString(data, 'description'),
 
-      type: _propertyTypeFromString(
-        _readRequiredString(
-          data,
-          'type',
-        ),
-      ),
+      type: _propertyTypeFromString(_readRequiredString(data, 'type')),
 
-      status: _propertyStatusFromString(
-        _readRequiredString(
-          data,
-          'status',
-        ),
-      ),
+      status: _propertyStatusFromString(_readRequiredString(data, 'status')),
 
-      numberOfFloors: _readNumberOfFloors(
-        data,
-      ),
+      numberOfFloors: _readNumberOfFloors(data),
 
-      tenantUserIds: _readTenantUserIds(
-        data,
-      ),
+      tenantUserIds: _readTenantUserIds(data),
 
-      createdAt: _readDateTime(
-        data,
-        'createdAt',
-      ),
+      createdAt: _readDateTime(data, 'createdAt'),
 
-      updatedAt: _readDateTime(
-        data,
-        'updatedAt',
-      ),
+      updatedAt: _readDateTime(data, 'updatedAt'),
     );
   }
 
@@ -118,12 +82,8 @@ class PropertyModel extends Property {
       'status': status.name,
       'numberOfFloors': numberOfFloors,
       'tenantUserIds': tenantUserIds,
-      'createdAt': Timestamp.fromDate(
-        createdAt,
-      ),
-      'updatedAt': Timestamp.fromDate(
-        updatedAt,
-      ),
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
@@ -131,13 +91,13 @@ class PropertyModel extends Property {
   // PROPERTY CODE
   // ============================================================
 
-  static String _readPropertyCode(Map<String, dynamic> data,
-      String documentId,) {
+  static String _readPropertyCode(
+    Map<String, dynamic> data,
+    String documentId,
+  ) {
     final value = data['propertyCode'];
 
-    if (value is String && value
-        .trim()
-        .isNotEmpty) {
+    if (value is String && value.trim().isNotEmpty) {
       return value.trim();
     }
 
@@ -154,48 +114,33 @@ class PropertyModel extends Property {
     return 'PROP-${_legacyCodeFromDocumentId(documentId)}';
   }
 
-  static String _legacyCodeFromDocumentId(String documentId,) {
+  static String _legacyCodeFromDocumentId(String documentId) {
     final cleaned = documentId
-        .replaceAll(
-      RegExp(r'[^a-zA-Z0-9]'),
-      '',
-    )
+        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
         .toUpperCase();
 
     if (cleaned.length <= 8) {
-      return cleaned.padLeft(
-        8,
-        '0',
-      );
+      return cleaned.padLeft(8, '0');
     }
 
-    return cleaned.substring(
-      0,
-      8,
-    );
+    return cleaned.substring(0, 8);
   }
 
   // ============================================================
   // STRING READERS
   // ============================================================
 
-  static String _readRequiredString(Map<String, dynamic> data,
-      String field,) {
+  static String _readRequiredString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
-    if (value is! String || value
-        .trim()
-        .isEmpty) {
-      throw StateError(
-        'Property field "$field" is missing or invalid.',
-      );
+    if (value is! String || value.trim().isEmpty) {
+      throw StateError('Property field "$field" is missing or invalid.');
     }
 
     return value.trim();
   }
 
-  static String? _readOptionalString(Map<String, dynamic> data,
-      String field,) {
+  static String? _readOptionalString(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value == null) {
@@ -203,9 +148,7 @@ class PropertyModel extends Property {
     }
 
     if (value is! String) {
-      throw StateError(
-        'Property field "$field" is invalid.',
-      );
+      throw StateError('Property field "$field" is invalid.');
     }
 
     final trimmed = value.trim();
@@ -217,7 +160,7 @@ class PropertyModel extends Property {
   // TENANT USER IDS
   // ============================================================
 
-  static List<String> _readTenantUserIds(Map<String, dynamic> data,) {
+  static List<String> _readTenantUserIds(Map<String, dynamic> data) {
     final value = data['tenantUserIds'];
 
     // ----------------------------------------------------------
@@ -233,9 +176,7 @@ class PropertyModel extends Property {
     }
 
     if (value is! List) {
-      throw StateError(
-        'Property field "tenantUserIds" is invalid.',
-      );
+      throw StateError('Property field "tenantUserIds" is invalid.');
     }
 
     return value
@@ -249,7 +190,7 @@ class PropertyModel extends Property {
   // NUMBER OF FLOORS
   // ============================================================
 
-  static int _readNumberOfFloors(Map<String, dynamic> data,) {
+  static int _readNumberOfFloors(Map<String, dynamic> data) {
     final value = data['numberOfFloors'];
 
     // Backward compatibility:
@@ -262,25 +203,20 @@ class PropertyModel extends Property {
       final floors = value.toInt();
 
       if (floors < 1) {
-        throw StateError(
-          'Property field "numberOfFloors" must be at least 1.',
-        );
+        throw StateError('Property field "numberOfFloors" must be at least 1.');
       }
 
       return floors;
     }
 
-    throw StateError(
-      'Property field "numberOfFloors" is invalid.',
-    );
+    throw StateError('Property field "numberOfFloors" is invalid.');
   }
 
   // ============================================================
   // DATE
   // ============================================================
 
-  static DateTime _readDateTime(Map<String, dynamic> data,
-      String field,) {
+  static DateTime _readDateTime(Map<String, dynamic> data, String field) {
     final value = data[field];
 
     if (value is Timestamp) {
@@ -291,22 +227,18 @@ class PropertyModel extends Property {
       return value;
     }
 
-    throw StateError(
-      'Property field "$field" is missing or invalid.',
-    );
+    throw StateError('Property field "$field" is missing or invalid.');
   }
 
   // ============================================================
   // PROPERTY TYPE
   // ============================================================
 
-  static PropertyType _propertyTypeFromString(String value,) {
+  static PropertyType _propertyTypeFromString(String value) {
     return PropertyType.values.firstWhere(
-          (type) => type.name == value,
+      (type) => type.name == value,
       orElse: () {
-        throw StateError(
-          'Unknown property type: $value',
-        );
+        throw StateError('Unknown property type: $value');
       },
     );
   }
@@ -315,13 +247,11 @@ class PropertyModel extends Property {
   // PROPERTY STATUS
   // ============================================================
 
-  static PropertyStatus _propertyStatusFromString(String value,) {
+  static PropertyStatus _propertyStatusFromString(String value) {
     return PropertyStatus.values.firstWhere(
-          (status) => status.name == value,
+      (status) => status.name == value,
       orElse: () {
-        throw StateError(
-          'Unknown property status: $value',
-        );
+        throw StateError('Unknown property status: $value');
       },
     );
   }

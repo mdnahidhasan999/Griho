@@ -1,22 +1,15 @@
 import '../../domain/repositories/phone_lookup_repository.dart';
 import '../datasources/phone_lookup_data_source.dart';
 
-class PhoneLookupRepositoryImpl
-    implements PhoneLookupRepository {
+class PhoneLookupRepositoryImpl implements PhoneLookupRepository {
   final PhoneLookupDataSource _dataSource;
 
-  PhoneLookupRepositoryImpl({
-    PhoneLookupDataSource? dataSource,
-  }) : _dataSource =
-      dataSource ?? PhoneLookupDataSource();
+  PhoneLookupRepositoryImpl({PhoneLookupDataSource? dataSource})
+    : _dataSource = dataSource ?? PhoneLookupDataSource();
 
   @override
-  Future<Map<String, dynamic>?> getUserByPhone(
-      String phoneNumber,
-      ) {
-    return _dataSource.getUserByPhone(
-      phoneNumber,
-    );
+  Future<Map<String, dynamic>?> getUserByPhone(String phoneNumber) {
+    return _dataSource.getUserByPhone(phoneNumber);
   }
 
   @override
@@ -39,11 +32,7 @@ class PhoneLookupRepositoryImpl
   }
 
   @override
-  Future<void> deletePhoneLookup(
-      String phoneNumber,
-      ) {
-    return _dataSource.deletePhoneLookup(
-      phoneNumber,
-    );
+  Future<void> deletePhoneLookup(String phoneNumber) {
+    return _dataSource.deletePhoneLookup(phoneNumber);
   }
 }

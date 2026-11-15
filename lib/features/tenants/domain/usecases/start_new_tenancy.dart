@@ -4,9 +4,7 @@ import '../entities/tenant.dart';
 class StartNewTenancy {
   final TenantRepository _repository;
 
-  const StartNewTenancy({
-    required this._repository,
-  });
+  const StartNewTenancy({required this._repository});
 
   Future<Tenant> call({
     required String tenantId,

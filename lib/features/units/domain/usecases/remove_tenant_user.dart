@@ -5,19 +5,13 @@ class RemoveTenantUser {
 
   const RemoveTenantUser(this._repository);
 
-  Future<void> call({
-    required String unitId,
-  }) async {
+  Future<void> call({required String unitId}) async {
     final normalizedUnitId = unitId.trim();
 
     if (normalizedUnitId.isEmpty) {
-      throw ArgumentError(
-        'Unit ID cannot be empty.',
-      );
+      throw ArgumentError('Unit ID cannot be empty.');
     }
 
-    await _repository.removeTenantUser(
-      unitId: normalizedUnitId,
-    );
+    await _repository.removeTenantUser(unitId: normalizedUnitId);
   }
 }

@@ -1,12 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-enum TenantInvitationStatus {
-  pending,
-  accepted,
-  rejected,
-  cancelled,
-  expired,
-}
+enum TenantInvitationStatus { pending, accepted, rejected, cancelled, expired }
 
 @immutable
 class TenantInvitation {
@@ -108,8 +102,7 @@ class TenantInvitation {
   bool get isExpired => !DateTime.now().isBefore(expiresAt);
 
   /// Whether the invitation is pending and has not expired.
-  bool get isPending =>
-      status == TenantInvitationStatus.pending && !isExpired;
+  bool get isPending => status == TenantInvitationStatus.pending && !isExpired;
 
   /// Returns the first available recipient identifier.
   ///

@@ -15,8 +15,7 @@ class CreateAccountScreen extends ConsumerStatefulWidget {
       _CreateAccountScreenState();
 }
 
-class _CreateAccountScreenState
-    extends ConsumerState<CreateAccountScreen> {
+class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _nameController = TextEditingController();
@@ -40,10 +39,7 @@ class _CreateAccountScreenState
     super.dispose();
   }
 
-  void _showMessage(
-      String message, {
-        bool isError = false,
-      }) {
+  void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context)
@@ -51,9 +47,7 @@ class _CreateAccountScreenState
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: isError
-              ? Theme.of(context).colorScheme.error
-              : null,
+          backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
         ),
       );
   }
@@ -96,8 +90,7 @@ class _CreateAccountScreenState
       return;
     }
 
-    final phoneNumber =
-    PhoneNumberUtils.clean(_completePhoneNumber);
+    final phoneNumber = PhoneNumberUtils.clean(_completePhoneNumber);
 
     if (!PhoneNumberUtils.isValid(phoneNumber)) {
       _showMessage(
@@ -110,17 +103,16 @@ class _CreateAccountScreenState
     final success = await ref
         .read(authControllerProvider.notifier)
         .createAccountWithEmailAndPassword(
-      name: _nameController.text.trim(),
-      phoneNumber: phoneNumber,
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+          name: _nameController.text.trim(),
+          phoneNumber: phoneNumber,
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
 
     if (!mounted) return;
 
     if (!success) {
-      final message =
-          ref.read(authControllerProvider).errorMessage;
+      final message = ref.read(authControllerProvider).errorMessage;
 
       _showMessage(
         message?.isNotEmpty == true
@@ -133,10 +125,7 @@ class _CreateAccountScreenState
 
     _showMessage('Account created successfully.');
 
-    context.go(
-      RouteNames.linkWaiting,
-      extra: _emailController.text.trim(),
-    );
+    context.go(RouteNames.linkWaiting, extra: _emailController.text.trim());
   }
 
   InputDecoration _decoration({
@@ -148,9 +137,7 @@ class _CreateAccountScreenState
       labelText: label,
       prefixIcon: Icon(icon),
       suffixIcon: suffixIcon,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
     );
   }
 
@@ -160,9 +147,7 @@ class _CreateAccountScreenState
     final authState = ref.watch(authControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Account'),
-      ),
+      appBar: AppBar(title: const Text('Create Account')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -214,8 +199,7 @@ class _CreateAccountScreenState
                         icon: Icons.person_outline_rounded,
                       ),
                       validator: (value) {
-                        if (value == null ||
-                            value.trim().length < 2) {
+                        if (value == null || value.trim().length < 2) {
                           return 'Please enter your full name.';
                         }
 
@@ -236,8 +220,7 @@ class _CreateAccountScreenState
                         _completePhoneNumber = phone.completeNumber;
                       },
                       validator: (phone) {
-                        if (phone == null ||
-                            phone.number.trim().isEmpty) {
+                        if (phone == null || phone.number.trim().isEmpty) {
                           return 'Please enter your phone number.';
                         }
 
@@ -267,9 +250,7 @@ class _CreateAccountScreenState
                       controller: _passwordController,
                       enabled: !authState.isLoading,
                       obscureText: _obscurePassword,
-                      autofillHints: const [
-                        AutofillHints.newPassword,
-                      ],
+                      autofillHints: const [AutofillHints.newPassword],
                       decoration: _decoration(
                         label: 'Password',
                         icon: Icons.lock_outline_rounded,
@@ -307,7 +288,7 @@ class _CreateAccountScreenState
                           onPressed: () {
                             setState(() {
                               _obscureConfirmPassword =
-                              !_obscureConfirmPassword;
+                                  !_obscureConfirmPassword;
                             });
                           },
                           icon: Icon(
@@ -334,25 +315,23 @@ class _CreateAccountScreenState
                     SizedBox(
                       height: 52,
                       child: FilledButton(
-                        onPressed: authState.isLoading
-                            ? null
-                            : _createAccount,
+                        onPressed: authState.isLoading ? null : _createAccount,
                         child: authState.isLoading
                             ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Text(
-                          'Create Account',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
+                                'Create Account',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -361,9 +340,7 @@ class _CreateAccountScreenState
                       onPressed: authState.isLoading
                           ? null
                           : () => context.go(RouteNames.login),
-                      child: const Text(
-                        'Already have an account? Sign In',
-                      ),
+                      child: const Text('Already have an account? Sign In'),
                     ),
                   ],
                 ),
