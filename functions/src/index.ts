@@ -1,16 +1,24 @@
 import { initializeApp } from "firebase-admin/app";
 import {
+  FieldValue,
   getFirestore,
   Timestamp,
   type DocumentData,
 } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
+import {
+  onDocumentCreated,
+  onDocumentUpdated,
+} from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
 initializeApp();
 
 const db = getFirestore();
+const messaging = getMessaging();
 
+const REGION = "asia-south1";
 const TIME_ZONE = "Asia/Dhaka";
 const DUE_DAY = 10;
 
@@ -646,8 +654,6 @@ function isRuleEligibleForPeriod({
       return false;
     }
   } else if (rule.valueType === "variable") {
-    // Compare Asia/Dhaka YYYY-MM period keys so Variable rules apply strictly
-    // to their effectiveFrom month and Fixed rules resume the next month.
     return formatPeriod(targetMonth) === formatPeriod(startMonth);
   }
 
@@ -727,13 +733,6 @@ function ruleMatchesTarget(
   }
 }
 
-/**
- * Resolution priority matching Dart BillingRuleResolver:
- * 1. Variable rules override Fixed rules for the target month
- * 2. Scope priority: tenant > unit > floor > property
- * 3. Latest effectiveFrom
- * 4. Rule ID ascending
- */
 function resolveRulesForTarget(
   rules: BillingRule[],
   propertyId: string,
@@ -838,7 +837,7 @@ async function loadExistingMonthlyBillsByKey({
   ownerId: string;
   propertyId: string;
   billingPeriodStart: Date;
-}): Promise> {
+}) {
   const snapshot = await db
     .collection(MONTHLY_BILL_COLLECTION)
     .where("ownerId", "==", ownerId)
@@ -1638,7 +1637,7 @@ export const generateMonthlyBilling = onSchedule(
   {
     schedule: "10 0 1 * *",
     timeZone: TIME_ZONE,
-    region: "asia-south1",
+    region: REGION,
     timeoutSeconds: 540,
     memory: "1GiB",
     maxInstances: 1,
@@ -1749,5 +1748,148 @@ export const generateMonthlyBilling = onSchedule(
         failedRentTargets,
       });
     }
+  },
+);
+
+// ============================================================================
+// FCM PUSH NOTIFICATION HELPER & TRIGGERS
+// ============================================================================
+
+async function sendPushToUser(
+  uid: string | undefined | null,
+  title: string,
+  body: string,
+  route: string,
+): Promise<void> {
+  if (!uid) return;
+  const userSnap = await db.collection("users").doc(uid).get();
+  if (!userSnap.exists) return;
+
+  const tokens: string[] = userSnap.data()?.fcmTokens ?? [];
+  if (!Array.isArray(tokens) || tokens.length === 0) return;
+
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification: { title, body },
+    data: { route },
+  });
+
+  const invalidTokens: string[] = [];
+  response.responses.forEach((res, idx) => {
+    if (!res.success) {
+      invalidTokens.push(tokens[idx]);
+    }
+  });
+
+  if (invalidTokens.length > 0) {
+    await db
+      .collection("users")
+      .doc(uid)
+      .update({
+        fcmTokens: FieldValue.arrayRemove(...invalidTokens),
+      });
+  }
+}
+
+export const onMonthlyBillCreated = onDocumentCreated(
+  { document: "monthlyBills/{billId}", region: REGION },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    await sendPushToUser(
+      data.tenantUserId,
+      "New Utility Bill Generated",
+      `A ${data.type} bill of BDT ${data.amount} has been issued.`,
+      "/tenant/payments",
+    );
+  },
+);
+
+export const onMonthlyRentCreated = onDocumentCreated(
+  { document: "monthlyRents/{rentId}", region: REGION },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    await sendPushToUser(
+      data.tenantUserId,
+      "Monthly Rent Bill Ready",
+      `Your monthly rent bill of BDT ${data.amount} is ready for payment.`,
+      "/tenant/payments",
+    );
+  },
+);
+
+export const onPaymentSubmitted = onDocumentCreated(
+  { document: "paymentTransactions/{paymentId}", region: REGION },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    await sendPushToUser(
+      data.ownerId,
+      "New Payment Submitted",
+      `${data.propertyName ?? "Resident"} (${data.unitName ?? ""}) paid BDT ${data.amount} via ${data.method}.`,
+      "/owner/payments",
+    );
+  },
+);
+
+export const onPaymentReviewed = onDocumentUpdated(
+  { document: "paymentTransactions/{paymentId}", region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after || before.status === after.status) return;
+
+    if (after.status === "confirmed") {
+      await sendPushToUser(
+        after.tenantUserId,
+        "Payment Confirmed",
+        `Your payment of BDT ${after.amount} has been confirmed. Receipt is ready!`,
+        "/tenant/payments",
+      );
+    } else if (after.status === "rejected") {
+      await sendPushToUser(
+        after.tenantUserId,
+        "Payment Rejected",
+        `Your payment of BDT ${after.amount} was rejected: ${after.rejectionReason ?? "Check details"}.`,
+        "/tenant/payments",
+      );
+    }
+  },
+);
+
+export const onBuildingNoticeCreated = onDocumentCreated(
+  { document: "buildingNotices/{noticeId}", region: REGION },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data || !data.propertyId) return;
+
+    const propSnap = await db.collection("properties").doc(data.propertyId).get();
+    const tenantUids: string[] = propSnap.data()?.tenantUserIds ?? [];
+
+    await Promise.all(
+      tenantUids.map((uid) =>
+        sendPushToUser(
+          uid,
+          `${data.propertyName ?? "Building"}: ${data.title}`,
+          data.message ?? "New announcement posted.",
+          "/tenant",
+        ),
+      ),
+    );
+  },
+);
+
+export const onMaintenanceCreated = onDocumentCreated(
+  { document: "maintenanceRequests/{ticketId}", region: REGION },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    await sendPushToUser(
+      data.ownerId,
+      "New Maintenance Request",
+      `${data.propertyName ?? ""} (${data.unitName ?? ""}): ${data.title}`,
+      "/owner",
+    );
   },
 );

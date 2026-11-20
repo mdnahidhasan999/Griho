@@ -1,13 +1,15 @@
+// noinspection SpellCheckingInspection
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../../core/utils/image_compression_helper.dart';
+import '../../../../core/services/firebase_storage_service.dart';
 import '../../domain/entities/app_user.dart';
 import '../providers/auth_provider.dart';
 
@@ -21,16 +23,17 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
-  static const int _maxPhotoBytes = 150 * 1024;
-
   final _formKey = GlobalKey<FormState>();
   final _picker = ImagePicker();
+  final _storageService = FirebaseStorageService();
 
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
   late final TextEditingController _nidController;
 
   String? _photoUrl;
+  String? _initialPhotoUrl;
+  File? _pendingPhotoFile;
   Uint8List? _photoBytes;
 
   bool _isSaving = false;
@@ -44,6 +47,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _nidController = TextEditingController(text: widget.user.nidNumber ?? '');
 
     _photoUrl = widget.user.photoUrl;
+    _initialPhotoUrl = widget.user.photoUrl;
     _photoBytes = _decodeDataUrl(_photoUrl);
   }
 
@@ -68,14 +72,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   ImageProvider? get _photoProvider {
-    final bytes = _photoBytes;
+    if (_pendingPhotoFile != null) {
+      return FileImage(_pendingPhotoFile!);
+    }
 
+    final bytes = _photoBytes;
     if (bytes != null) {
       return MemoryImage(bytes);
     }
 
     final url = _photoUrl;
-
     if (url != null && url.startsWith('http')) {
       return NetworkImage(url);
     }
@@ -138,6 +144,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     setState(() {
                       _photoUrl = null;
                       _photoBytes = null;
+                      _pendingPhotoFile = null;
                     });
                   },
                 ),
@@ -160,44 +167,29 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     try {
       final picked = await _picker.pickImage(
         source: source,
-        maxWidth: kIsWeb ? 512 : 1024,
-        maxHeight: kIsWeb ? 512 : 1024,
-        imageQuality: kIsWeb ? 50 : 90,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
       );
 
       if (picked == null) {
         return;
       }
 
-      final Uint8List bytes;
-
       if (kIsWeb) {
-        // File compression is not available on web, so use the picker's resize.
-        bytes = await picked.readAsBytes();
+        final bytes = await picked.readAsBytes();
+        if (!mounted) return;
+        setState(() {
+          _photoBytes = bytes;
+          _pendingPhotoFile = null;
+        });
       } else {
-        final compressed = await ImageCompressionHelper.compressImage(
-          File(picked.path),
-        );
-
-        if (compressed == null) {
-          throw Exception('Could not process the selected photo.');
-        }
-
-        bytes = await compressed.readAsBytes();
+        if (!mounted) return;
+        setState(() {
+          _pendingPhotoFile = File(picked.path);
+          _photoBytes = null;
+        });
       }
-
-      if (bytes.length > _maxPhotoBytes) {
-        throw Exception('Photo is too large. Please choose another one.');
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _photoBytes = bytes;
-        _photoUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-      });
     } catch (error) {
       _showSnack(_cleanErrorMessage(error), isError: true);
     } finally {
@@ -228,6 +220,28 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     });
 
     try {
+      var finalPhotoUrl = _photoUrl;
+
+      // Upload new photo to Firebase Storage
+      if (!kIsWeb && _pendingPhotoFile != null) {
+        finalPhotoUrl = await _storageService.uploadUserProfilePhoto(
+          userId: widget.user.uid,
+          imageFile: _pendingPhotoFile!,
+        );
+      } else if (kIsWeb &&
+          _photoBytes != null &&
+          !(_photoUrl?.startsWith('data:image') ?? false)) {
+        final fileName = 'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final storageRef = FirebaseStorage.instance.ref().child(
+          'users/${widget.user.uid}/profile/$fileName',
+        );
+        final snap = await storageRef.putData(
+          _photoBytes!,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+        finalPhotoUrl = await snap.ref.getDownloadURL();
+      }
+
       final dataSource = ref.read(userProfileDataSourceProvider);
 
       await dataSource.updateProfile(
@@ -236,9 +250,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         phoneNumber: widget.user.phoneNumber,
         name: name,
         email: email.isEmpty ? null : email,
-        photoUrl: _photoUrl,
+        photoUrl: finalPhotoUrl,
         nidNumber: nid.isEmpty ? null : nid,
       );
+
+      // Clean up previous Firebase Storage avatar if replaced or removed
+      if (_initialPhotoUrl != null &&
+          _initialPhotoUrl != finalPhotoUrl &&
+          _initialPhotoUrl!.contains('firebasestorage')) {
+        await _storageService.deleteFileByUrl(_initialPhotoUrl);
+      }
 
       ref.invalidate(currentUserProfileProvider);
 
@@ -436,7 +457,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       return null;
                     },
                   ),
-
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _nidController,

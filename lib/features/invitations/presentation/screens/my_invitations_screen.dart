@@ -1,4 +1,6 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,11 +8,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-
 import '../providers/work_invitations_providers.dart';
 
-/// One place to receive Manager / Caretaker / Electrician invitations, whatever
-/// console the user is currently in (e.g. a Tenant who is invited as Caretaker).
 class MyInvitationsScreen extends ConsumerStatefulWidget {
   const MyInvitationsScreen({super.key});
 
@@ -52,6 +51,14 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
+      final authUser = FirebaseAuth.instance.currentUser;
+      await authUser?.reload();
+      if (!(FirebaseAuth.instance.currentUser?.emailVerified ?? false)) {
+        throw StateError(
+          'Please verify your email address before responding to an invitation.',
+        );
+      }
+
       final db = FirebaseFirestore.instance;
       final data = inv.data;
       final propertyId = (data['propertyId'] ?? '').toString().trim();
@@ -126,7 +133,6 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
       if (accept) {
         final roles = List<String>.from(profile.availableRoles ?? const []);
         if (!roles.contains(inv.role)) {
-          // Keep the user's current default console; only the roster grows.
           batch.update(db.collection('users').doc(profile.uid), {
             'availableRoles': FieldValue.arrayUnion([inv.role]),
             if (roles.isEmpty) 'defaultDashboard': inv.role,
@@ -163,7 +169,9 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not update invitation: $e'),
+          content: Text(
+            'Could not update invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
+          ),
           backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),

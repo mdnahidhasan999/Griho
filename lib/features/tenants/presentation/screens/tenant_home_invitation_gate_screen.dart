@@ -11,52 +11,67 @@ class TenantHomeInvitationGateScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final pendingAsync = ref.watch(recipientPendingInvitationsProvider);
 
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      body: SafeArea(
-        child: pendingAsync.when(
-          loading: () => const _GateLoadingView(
-            message: 'Checking pending invitations...',
-          ),
-          error: (e, s) => const TenantHomeScreen(),
-          data: (pending) {
-            if (pending.isNotEmpty) {
-              return TenantInvitationReceiveScreen(
-                invitationToken: pending.first.token,
-              );
-            }
-            final tenantAsync = ref.watch(currentTenantProvider);
-            return tenantAsync.when(
-              loading: () => const _GateLoadingView(
-                message: 'Verifying residency records...',
-              ),
-              error: (e, s) => _GateErrorView(
-                title: 'Unable to Load Profile',
-                message: e.toString(),
-                onRetry: () => ref.invalidate(currentTenantProvider),
-              ),
-              data: (tenant) => tenant == null
-                  ? _GateEmptyProfileView(
-                      onRetry: () {
-                        ref.invalidate(currentTenantProvider);
-                        ref.invalidate(recipientInvitationsProvider);
-                      },
-                    )
-                  : const TenantHomeScreen(),
-            );
-          },
+    return pendingAsync.when(
+      loading: () => const _GateScaffold(
+        child: _GateLoadingView(message: 'Checking pending invitations...'),
+      ),
+      error: (e, s) => _GateScaffold(
+        child: _GateErrorView(
+          title: 'Unable to Check Invitations',
+          message: e.toString(),
+          onRetry: () => ref.invalidate(recipientInvitationsProvider),
         ),
       ),
+      data: (pending) {
+        if (pending.isNotEmpty) {
+          return TenantInvitationReceiveScreen(
+            invitationToken: pending.first.token,
+          );
+        }
+
+        final tenantAsync = ref.watch(currentTenantProvider);
+        return tenantAsync.when(
+          loading: () => const _GateScaffold(
+            child: _GateLoadingView(message: 'Verifying residency records...'),
+          ),
+          error: (e, s) => _GateScaffold(
+            child: _GateErrorView(
+              title: 'Unable to Load Profile',
+              message: e.toString(),
+              onRetry: () => ref.invalidate(currentTenantProvider),
+            ),
+          ),
+          data: (tenant) => tenant == null
+              ? _GateScaffold(
+                  child: _GateEmptyProfileView(
+                    onRetry: () {
+                      ref.invalidate(currentTenantProvider);
+                      ref.invalidate(recipientInvitationsProvider);
+                    },
+                  ),
+                )
+              : const TenantHomeScreen(),
+        );
+      },
     );
   }
 }
 
-// ============================================================================
-// GATE LOADING VIEW
-// ============================================================================
+class _GateScaffold extends StatelessWidget {
+  final Widget child;
+
+  const _GateScaffold({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      body: SafeArea(child: child),
+    );
+  }
+}
 
 class _GateLoadingView extends StatelessWidget {
   final String message;
@@ -111,10 +126,6 @@ class _GateLoadingView extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// GATE ERROR VIEW
-// ============================================================================
 
 class _GateErrorView extends StatelessWidget {
   final String title;
@@ -177,10 +188,6 @@ class _GateErrorView extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// GATE EMPTY PROFILE VIEW
-// ============================================================================
 
 class _GateEmptyProfileView extends StatelessWidget {
   final VoidCallback onRetry;

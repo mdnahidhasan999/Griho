@@ -5,46 +5,52 @@ import 'package:flutter/services.dart';
 
 // noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
+import '../../../../core/services/fcm_notification_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../../../team/presentation/providers/team_providers.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/owner_tenants_provider.dart';
+import '../widgets/shared_property_sheets.dart';
 
-Map<String, dynamic> _asMap(Object? raw) {
-  if (raw is Map<String, dynamic>) return raw;
-  if (raw is Map) return Map<String, dynamic>.from(raw);
-  return <String, dynamic>{};
-}
-
-class _NoticePropertyOption {
-  const _NoticePropertyOption({
-    required this.id,
-    required this.name,
-    required this.ownerId,
-  });
-
-  final String id;
-  final String name;
-  final String ownerId;
-}
-
-class OwnerHomeScreen extends ConsumerWidget {
+class OwnerHomeScreen extends ConsumerStatefulWidget {
   const OwnerHomeScreen({super.key});
 
-  void _openMaintenanceSheet(BuildContext context, String ownerId) {
+  @override
+  ConsumerState<OwnerHomeScreen> createState() => _OwnerHomeScreenState();
+}
+
+class _OwnerHomeScreenState extends ConsumerState<OwnerHomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    FcmNotificationService.instance.initialize(
+      onNavigate: (route) {
+        if (mounted) context.push(route);
+      },
+    );
+  }
+
+  void _openMaintenanceSheet(
+    BuildContext context,
+    String ownerId,
+    String ownerName,
+  ) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _OwnerMaintenanceSheet(
+      builder: (_) => BuildingMaintenanceSheet(
         filterField: 'ownerId',
         filterValues: [ownerId],
+        actorName: ownerName,
+        actorRole: 'owner',
       ),
     );
   }
@@ -59,12 +65,13 @@ class OwnerHomeScreen extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _OwnerNoticesSheet(
+      builder: (_) => BuildingNoticesSheet(
         actorUid: uid,
         actorName: userName,
+        actorRole: 'owner',
         properties: properties
             .map(
-              (p) => _NoticePropertyOption(
+              (p) => NoticePropertyOption(
                 id: p.id,
                 name: p.name,
                 ownerId: p.ownerId,
@@ -76,7 +83,7 @@ class OwnerHomeScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final profileAsync = ref.watch(currentUserProfileProvider);
     final properties =
         ref.watch(currentOwnerPropertiesProvider).value ?? const <Property>[];
@@ -173,10 +180,11 @@ class OwnerHomeScreen extends ConsumerWidget {
                 _Header(name: profile.name, publicId: profile.publicId),
                 const SizedBox(height: 16),
 
-                _OpenIssuesBanner(
+                OpenIssuesBanner(
                   filterField: 'ownerId',
                   filterValues: [profile.uid],
-                  onTap: () => _openMaintenanceSheet(context, profile.uid),
+                  onTap: () =>
+                      _openMaintenanceSheet(context, profile.uid, profile.name),
                 ),
 
                 const _SummaryCard(),
@@ -191,7 +199,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
                 _ManageGrid(
                   onOpenIssues: () =>
-                      _openMaintenanceSheet(context, profile.uid),
+                      _openMaintenanceSheet(context, profile.uid, profile.name),
                   onOpenNotices: () => _openNoticesSheet(
                     context,
                     profile.uid,
@@ -288,573 +296,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _OpenIssuesBanner extends StatelessWidget {
-  const _OpenIssuesBanner({
-    required this.filterField,
-    required this.filterValues,
-    required this.onTap,
-  });
-
-  final String filterField;
-  final List<String> filterValues;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    if (filterValues.isEmpty) return const SizedBox.shrink();
-
-    final theme = Theme.of(context);
-
-    final query = filterField == 'ownerId'
-        ? FirebaseFirestore.instance
-              .collection('maintenanceRequests')
-              .where('ownerId', isEqualTo: filterValues.first)
-        : FirebaseFirestore.instance
-              .collection('maintenanceRequests')
-              .where('propertyId', whereIn: filterValues.take(10).toList());
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
-      builder: (context, snap) {
-        final docs = snap.data?.docs ?? const <QueryDocumentSnapshot>[];
-
-        final openCount = docs.where((d) {
-          final s = (_asMap(d.data())['status'] ?? 'open').toString();
-          return s == 'open' || s == 'in_progress';
-        }).length;
-
-        if (openCount == 0) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Material(
-            color: theme.colorScheme.errorContainer,
-            borderRadius: BorderRadius.circular(16),
-            clipBehavior: Clip.antiAlias,
-            child: ListTile(
-              leading: Icon(
-                Icons.report_problem_rounded,
-                color: theme.colorScheme.onErrorContainer,
-              ),
-              title: Text(
-                openCount == 1
-                    ? '1 tenant maintenance issue open'
-                    : '$openCount tenant maintenance issues open',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: theme.colorScheme.onErrorContainer,
-                ),
-              ),
-              subtitle: Text(
-                'Tap to review, assign or mark resolved',
-                style: TextStyle(color: theme.colorScheme.onErrorContainer),
-              ),
-              trailing: Icon(
-                Icons.chevron_right_rounded,
-                color: theme.colorScheme.onErrorContainer,
-              ),
-              onTap: onTap,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _OwnerMaintenanceSheet extends StatelessWidget {
-  const _OwnerMaintenanceSheet({
-    required this.filterField,
-    required this.filterValues,
-  });
-
-  final String filterField;
-  final List<String> filterValues;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    final query = filterField == 'ownerId'
-        ? FirebaseFirestore.instance
-              .collection('maintenanceRequests')
-              .where('ownerId', isEqualTo: filterValues.first)
-        : FirebaseFirestore.instance
-              .collection('maintenanceRequests')
-              .where('propertyId', whereIn: filterValues.take(10).toList());
-
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: StreamBuilder<QuerySnapshot>(
-          stream: query.snapshots(),
-          builder: (context, snap) {
-            if (!snap.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final docs = [...snap.data!.docs];
-
-            docs.sort((a, b) {
-              final at = _asMap(a.data())['createdAt'];
-              final bt = _asMap(b.data())['createdAt'];
-
-              final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
-              final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
-
-              return bm.compareTo(am);
-            });
-
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-              children: [
-                const Text(
-                  'Maintenance & Tenant Issues',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                if (docs.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: Center(child: Text('No issues reported yet.')),
-                  ),
-                for (final doc in docs)
-                  Builder(
-                    builder: (context) {
-                      final d = _asMap(doc.data());
-
-                      final title = (d['title'] ?? 'Issue').toString();
-                      final desc = (d['description'] ?? '').toString();
-                      final prop = (d['propertyName'] ?? '').toString();
-                      final unit = (d['unitName'] ?? '').toString();
-                      final cat = (d['category'] ?? 'general').toString();
-                      final status = (d['status'] ?? 'open').toString();
-                      final tenantName = (d['tenantName'] ?? '').toString();
-
-                      final isDone = status == 'resolved';
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      title,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                  ),
-                                  Chip(
-                                    label: Text(
-                                      status.toUpperCase(),
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                '$prop • $unit (${cat.toUpperCase()})',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                              if (tenantName.isNotEmpty)
-                                Text(
-                                  'Reported by: $tenantName',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              if (desc.isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text(desc, style: theme.textTheme.bodySmall),
-                              ],
-                              if (!isDone) ...[
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    if (status == 'open')
-                                      Expanded(
-                                        child: OutlinedButton(
-                                          onPressed: () {
-                                            doc.reference.update({
-                                              'status': 'in_progress',
-                                              'updatedAt':
-                                                  FieldValue.serverTimestamp(),
-                                            });
-                                          },
-                                          child: const Text('In Progress'),
-                                        ),
-                                      ),
-                                    if (status == 'open')
-                                      const SizedBox(width: 8),
-                                    Expanded(
-                                      child: FilledButton.tonal(
-                                        onPressed: () {
-                                          doc.reference.update({
-                                            'status': 'resolved',
-                                            'updatedAt':
-                                                FieldValue.serverTimestamp(),
-                                          });
-                                        },
-                                        child: const Text('Mark Resolved'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// OWNER BUILDING NOTICES SHEET
-// ============================================================================
-
-class _OwnerNoticesSheet extends StatefulWidget {
-  const _OwnerNoticesSheet({
-    required this.actorUid,
-    required this.actorName,
-    required this.properties,
-  });
-
-  final String actorUid;
-  final String actorName;
-  final List<_NoticePropertyOption> properties;
-
-  @override
-  State<_OwnerNoticesSheet> createState() => _OwnerNoticesSheetState();
-}
-
-class _OwnerNoticesSheetState extends State<_OwnerNoticesSheet> {
-  final _titleCtrl = TextEditingController();
-  final _messageCtrl = TextEditingController();
-  late String _selectedPropertyId;
-  String _priority = 'normal';
-  bool _posting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedPropertyId = widget.properties.isNotEmpty
-        ? widget.properties.first.id
-        : '';
-  }
-
-  @override
-  void dispose() {
-    _titleCtrl.dispose();
-    _messageCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _publishNotice() async {
-    final title = _titleCtrl.text.trim();
-    final message = _messageCtrl.text.trim();
-    if (_selectedPropertyId.isEmpty || title.isEmpty || message.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a building and enter title & message.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final prop = widget.properties.firstWhere(
-      (p) => p.id == _selectedPropertyId,
-      orElse: () => widget.properties.first,
-    );
-
-    setState(() => _posting = true);
-    try {
-      await FirebaseFirestore.instance.collection('buildingNotices').add({
-        'ownerId': widget.actorUid,
-        'propertyId': prop.id,
-        'propertyName': prop.name,
-        'title': title,
-        'message': message,
-        'priority': _priority,
-        'postedByUid': widget.actorUid,
-        'postedByName': widget.actorName,
-        'postedByRole': 'owner',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      _titleCtrl.clear();
-      _messageCtrl.clear();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Notice published to residents!'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not publish notice: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _posting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (widget.properties.isEmpty) {
-      return const SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Center(child: Text('Add a building first to post notices.')),
-        ),
-      );
-    }
-
-    final activePropId =
-        widget.properties.any((p) => p.id == _selectedPropertyId)
-        ? _selectedPropertyId
-        : widget.properties.first.id;
-
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.78,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            children: [
-              const Text(
-                'Building Notices',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Post announcements directly to residents of your building.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (widget.properties.length > 1) ...[
-                DropdownButtonFormField<String>(
-                  initialValue: activePropId,
-                  decoration: const InputDecoration(
-                    labelText: 'Target Building',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: widget.properties
-                      .map(
-                        (p) => DropdownMenuItem<String>(
-                          value: p.id,
-                          child: Text(p.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => _selectedPropertyId = v);
-                  },
-                ),
-                const SizedBox(height: 10),
-              ],
-              TextField(
-                controller: _titleCtrl,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Notice Title *',
-                  hintText: 'e.g. Water Tank Cleaning Tomorrow',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _messageCtrl,
-                maxLines: 2,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Details / Schedule *',
-                  hintText: 'Water supply will be paused from 10 AM to 1 PM.',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _priority,
-                      decoration: const InputDecoration(
-                        labelText: 'Urgency Level',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'normal',
-                          child: Text('Normal'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'important',
-                          child: Text('Important'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'urgent',
-                          child: Text('Urgent'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _priority = v);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 14,
-                      ),
-                    ),
-                    onPressed: _posting ? null : _publishNotice,
-                    icon: _posting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.campaign_rounded, size: 18),
-                    label: const Text('Publish'),
-                  ),
-                ],
-              ),
-              const Divider(height: 28),
-              const Text(
-                'Published Notices',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-              ),
-              const SizedBox(height: 8),
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('buildingNotices')
-                    .where('propertyId', isEqualTo: activePropId)
-                    .snapshots(),
-                builder: (context, snap) {
-                  if (!snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final docs = [...snap.data!.docs];
-                  docs.sort((a, b) {
-                    final at = _asMap(a.data())['createdAt'];
-                    final bt = _asMap(b.data())['createdAt'];
-                    final am = at is Timestamp ? at.millisecondsSinceEpoch : 0;
-                    final bm = bt is Timestamp ? bt.millisecondsSinceEpoch : 0;
-                    return bm.compareTo(am);
-                  });
-
-                  if (docs.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: Center(
-                        child: Text(
-                          'No notices posted for this building yet.',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-
-                  return Column(
-                    children: [
-                      for (final doc in docs)
-                        Builder(
-                          builder: (context) {
-                            final d = _asMap(doc.data());
-                            final isUrgent =
-                                (d['priority'] ?? 'normal') == 'urgent';
-                            final postedBy = (d['postedByName'] ?? 'Admin')
-                                .toString();
-                            final roleLabel = (d['postedByRole'] ?? 'owner')
-                                .toString()
-                                .toUpperCase();
-
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: Icon(
-                                  isUrgent
-                                      ? Icons.priority_high_rounded
-                                      : Icons.campaign_outlined,
-                                  color: isUrgent
-                                      ? Colors.red
-                                      : theme.colorScheme.primary,
-                                ),
-                                title: Text(
-                                  (d['title'] ?? '').toString(),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  '${d['message'] ?? ''}\nBy $postedBy ($roleLabel)',
-                                ),
-                                isThreeLine: true,
-                                trailing: IconButton(
-                                  tooltip: 'Delete notice',
-                                  icon: const Icon(
-                                    Icons.delete_outline_rounded,
-                                    color: Colors.redAccent,
-                                  ),
-                                  onPressed: () => doc.reference.delete(),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SummaryCard extends ConsumerWidget {
   const _SummaryCard();
 
@@ -880,11 +321,9 @@ class _SummaryCard extends ConsumerWidget {
 
     final properties =
         ref.watch(currentOwnerPropertiesProvider).value ?? const <Property>[];
-
     final owned = properties.where((p) => p.ownerId == uid).length;
 
     final tenants = ref.watch(ownerTenantsProvider).value ?? const <Tenant>[];
-
     final activeTenants = tenants
         .where((t) => t.status == TenantStatus.active)
         .length;
@@ -895,24 +334,48 @@ class _SummaryCard extends ConsumerWidget {
         return StreamBuilder<QuerySnapshot>(
           stream: bills,
           builder: (context, billsSnap) {
-            var rent = 0.0;
+            final now = DateTime.now();
+            final latestRateByUnit =
+                <String, ({DateTime from, double amount})>{};
 
             for (final d
                 in ratesSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
-              final m = _asMap(d.data());
+              final m = asJsonMap(d.data());
+              final amount = m['amount'];
+              final fromRaw = m['effectiveFrom'];
+              final toRaw = m['effectiveTo'];
+              final unitId = (m['unitId'] ?? '').toString();
 
-              if (m['effectiveTo'] == null && m['amount'] is num) {
-                rent += (m['amount'] as num).toDouble();
+              if (amount is! num || fromRaw is! Timestamp || unitId.isEmpty) {
+                continue;
+              }
+
+              final from = fromRaw.toDate();
+              if (from.isAfter(now)) continue;
+
+              if (toRaw is Timestamp && !toRaw.toDate().isAfter(now)) {
+                continue;
+              }
+
+              final existing = latestRateByUnit[unitId];
+              if (existing == null || from.isAfter(existing.from)) {
+                latestRateByUnit[unitId] = (
+                  from: from,
+                  amount: amount.toDouble(),
+                );
               }
             }
 
-            var unsettled = 0;
+            final rent = latestRateByUnit.values.fold<double>(
+              0.0,
+              (total, item) => total + item.amount,
+            );
 
+            var unsettled = 0;
             for (final d
                 in billsSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
-              final m = _asMap(d.data());
+              final m = asJsonMap(d.data());
               final s = (m['status'] ?? 'unpaid').toString();
-
               if (s != 'paid' && s != 'cancelled') {
                 unsettled++;
               }
@@ -1059,7 +522,6 @@ class _TeamCard extends ConsumerWidget {
 
     final managers =
         ref.watch(ownerManagersProvider).value ?? const <TeamMember>[];
-
     final staff = ref.watch(ownerStaffProvider).value ?? const <TeamMember>[];
 
     final pending =

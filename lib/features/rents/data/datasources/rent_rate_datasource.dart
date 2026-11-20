@@ -4,6 +4,8 @@ import '../../domain/entities/rent_adjustment.dart';
 import '../../domain/entities/rent_rate.dart';
 import '../models/rent_rate_model.dart';
 
+typedef JsonMap = Map<String, dynamic>;
+
 class RentRateDataSource {
   final FirebaseFirestore _firestore;
 
@@ -11,11 +13,14 @@ class RentRateDataSource {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'rentRates';
+  static const String _unitCollectionName = 'units';
+  static const int _unitsPerBatch = 10;
 
-  static const int _unitsPerBatch = 2;
-
-  CollectionReference<Map<String, dynamic>> get _rentRates =>
+  CollectionReference<JsonMap> get _rentRates =>
       _firestore.collection(_collectionName);
+
+  CollectionReference<JsonMap> get _units =>
+      _firestore.collection(_unitCollectionName);
 
   // ============================================================
   // CREATE INITIAL RENT RATE
@@ -31,31 +36,24 @@ class RentRateDataSource {
     if (ownerId.isEmpty) {
       throw ArgumentError('Owner ID cannot be empty.');
     }
-
     if (propertyId.isEmpty) {
       throw ArgumentError('Property ID cannot be empty.');
     }
-
     if (unitId.isEmpty) {
       throw ArgumentError('Unit ID cannot be empty.');
     }
-
     if (rentRate.amount <= 0) {
       throw ArgumentError('Rent amount must be greater than zero.');
     }
-
     if (rentRate.source != RentRateSource.initial) {
       throw ArgumentError('Initial rent rate must use initial source.');
     }
-
     if (rentRate.previousRentRateId != null) {
       throw ArgumentError('Initial rent rate cannot have a previous rate.');
     }
-
     if (rentRate.nextRentRateId != null) {
       throw ArgumentError('Initial rent rate cannot have a next rate.');
     }
-
     if (rentRate.effectiveTo != null) {
       throw ArgumentError(
         'Initial rent rate must not have an effective end date.',
@@ -94,7 +92,6 @@ class RentRateDataSource {
     await document.set(initialRentRate.toFirestore());
 
     final snapshot = await document.get();
-
     if (!snapshot.exists) {
       throw StateError(
         'Initial rent rate was created but could not be retrieved.',
@@ -105,7 +102,7 @@ class RentRateDataSource {
   }
 
   // ============================================================
-  // GET CURRENT RENT RATE — OWNER
+  // GET CURRENT RENT RATE
   // ============================================================
 
   Future<RentRateModel?> getCurrentRentRate({
@@ -127,18 +124,7 @@ class RentRateDataSource {
   }
 
   // ============================================================
-  // GET APPLICABLE RENT RATE — OWNER
-  // ============================================================
-  //
-  // Rent interval:
-  //
-  // [effectiveFrom, effectiveTo)
-  //
-  // We intentionally read all rates whose effectiveFrom is
-  // before/equal to the requested date and find the first rate
-  // whose interval actually contains that date.
-  //
-  // This correctly handles future scheduled rent changes.
+  // GET APPLICABLE RENT RATE
   // ============================================================
 
   Future<RentRateModel?> getRentRateApplicableAt({
@@ -164,7 +150,6 @@ class RentRateDataSource {
 
     for (final document in snapshot.docs) {
       final rate = RentRateModel.fromFirestore(document);
-
       if (rate.isApplicableAt(effectiveAt)) {
         return rate;
       }
@@ -174,7 +159,7 @@ class RentRateDataSource {
   }
 
   // ============================================================
-  // UNIT HISTORY — OWNER
+  // UNIT HISTORY
   // ============================================================
 
   Future<List<RentRateModel>> getRentRateHistoryByUnitId({
@@ -199,13 +184,6 @@ class RentRateDataSource {
 
   // ============================================================
   // CURRENT RATES BY PROPERTY
-  // ============================================================
-  //
-  // This returns all currently applicable Unit rent rates in a
-  // property, including VACANT units.
-  //
-  // Property/Floor rent adjustment must operate on Units, not
-  // tenants.
   // ============================================================
 
   Future<List<RentRateModel>> getCurrentRentRatesByProperty({
@@ -235,17 +213,7 @@ class RentRateDataSource {
   }
 
   // ============================================================
-  // CURRENT RATES BY FLOOR
-  // ============================================================
-  //
-  // RentRate itself does not store floorNumber.
-  //
-  // Therefore this datasource method cannot reliably filter by
-  // floor unless the Unit layer supplies the relevant Unit IDs.
-  //
-  // It is kept for compatibility with the existing architecture.
-  // The Repository should resolve Units by floor and then obtain
-  // their current rent rates individually.
+  // CURRENT RATES BY FLOOR (FIXED FLOOR FILTERING)
   // ============================================================
 
   Future<List<RentRateModel>> getCurrentRentRatesByFloor({
@@ -260,39 +228,30 @@ class RentRateDataSource {
       return [];
     }
 
-    final now = DateTime.now();
-
-    final snapshot = await _rentRates
-        .where('ownerId', isEqualTo: normalizedOwnerId)
+    // 1. Fetch all unit IDs on the requested floor
+    final floorUnitsSnap = await _units
         .where('propertyId', isEqualTo: normalizedPropertyId)
-        .where('effectiveFrom', isLessThanOrEqualTo: Timestamp.fromDate(now))
-        .orderBy('effectiveFrom', descending: true)
+        .where('floorNumber', isEqualTo: floorNumber)
         .get();
 
-    return _getLatestApplicableRates(
-      documents: snapshot.docs,
-      effectiveAt: now,
+    final floorUnitIds = floorUnitsSnap.docs.map((doc) => doc.id).toSet();
+    if (floorUnitIds.isEmpty) {
+      return [];
+    }
+
+    // 2. Fetch current property rates and filter strictly to this floor's units
+    final propertyRates = await getCurrentRentRatesByProperty(
+      propertyId: normalizedPropertyId,
+      ownerId: normalizedOwnerId,
     );
+
+    return propertyRates
+        .where((rate) => floorUnitIds.contains(rate.unitId))
+        .toList();
   }
 
   // ============================================================
   // CHANGE UNIT RENT
-  // ============================================================
-  //
-  // IMPORTANT:
-  //
-  // There is NO tenantId here.
-  //
-  // Rent belongs to the Unit.
-  //
-  // This works for:
-  //
-  // 1. Occupied unit
-  // 2. Vacant unit
-  // 3. Unit receiving a new tenant
-  //
-  // A new tenant may have a different agreed rent.
-  // That new rent will simply become a new RentRate for the Unit.
   // ============================================================
 
   Future<RentRateModel> changeUnitRent({
@@ -307,11 +266,9 @@ class RentRateDataSource {
     if (normalizedUnitId.isEmpty) {
       throw ArgumentError('Unit ID cannot be empty.');
     }
-
     if (normalizedOwnerId.isEmpty) {
       throw ArgumentError('Owner ID cannot be empty.');
     }
-
     if (amount <= 0) {
       throw ArgumentError('Rent amount must be greater than zero.');
     }
@@ -338,7 +295,6 @@ class RentRateDataSource {
     );
 
     final newDocument = _rentRates.doc();
-
     final now = DateTime.now();
 
     final newRate = RentRateModel(
@@ -358,7 +314,6 @@ class RentRateDataSource {
 
     await _firestore.runTransaction((transaction) async {
       final oldRateReference = _rentRates.doc(currentRate.id);
-
       final freshOldSnapshot = await transaction.get(oldRateReference);
 
       if (!freshOldSnapshot.exists) {
@@ -388,7 +343,7 @@ class RentRateDataSource {
   }
 
   // ============================================================
-  // CHANGE FLOOR RENT
+  // CHANGE FLOOR & PROPERTY RENT
   // ============================================================
 
   Future<List<RentRateModel>> changeFloorRent({
@@ -406,10 +361,6 @@ class RentRateDataSource {
     );
   }
 
-  // ============================================================
-  // CHANGE PROPERTY RENT
-  // ============================================================
-
   Future<List<RentRateModel>> changePropertyRent({
     required List<RentRateModel> currentRates,
     required double amount,
@@ -426,25 +377,7 @@ class RentRateDataSource {
   }
 
   // ============================================================
-  // BULK RENT ADJUSTMENT
-  // ============================================================
-  //
-  // Every supplied RentRate represents a UNIT.
-  //
-  // The Repository is responsible for supplying ALL units,
-  // including vacant units.
-  //
-  // Example:
-  //
-  // Property has 10 units:
-  //   occupied = 6
-  //   vacant   = 4
-  //
-  // Property rent increase must update:
-  //   10 / 10 units
-  //
-  // NOT:
-  //   6 / 6 occupied units.
+  // BULK RENT ADJUSTMENT (OPTIMIZED SINGLE FUTURE CHECK)
   // ============================================================
 
   Future<List<RentRateModel>> _changeBulkRent({
@@ -463,8 +396,8 @@ class RentRateDataSource {
     }
 
     final adjustment = RentAdjustment(type: adjustmentType, amount: amount);
-
     final unitIds = <String>{};
+    final now = DateTime.now();
 
     for (final rate in currentRates) {
       if (!unitIds.add(rate.unitId)) {
@@ -473,7 +406,7 @@ class RentRateDataSource {
         );
       }
 
-      if (!rate.isApplicableAt(DateTime.now())) {
+      if (!rate.isApplicableAt(now)) {
         throw StateError(
           'Supplied rent rate for unit ${rate.unitId} is not currently applicable.',
         );
@@ -486,22 +419,30 @@ class RentRateDataSource {
       }
     }
 
-    for (final rate in currentRates) {
-      await _ensureNoFutureRateConflict(
-        unitId: rate.unitId,
-        ownerId: rate.ownerId,
-        effectiveFrom: effectiveFrom,
-      );
+    // Single query for all future rates across the property instead of N queries
+    final sample = currentRates.first;
+    final futureSnapshot = await _rentRates
+        .where('ownerId', isEqualTo: sample.ownerId)
+        .where('propertyId', isEqualTo: sample.propertyId)
+        .where(
+          'effectiveFrom',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(effectiveFrom),
+        )
+        .get();
+
+    for (final doc in futureSnapshot.docs) {
+      final futureUnitId = (doc.data()['unitId'] ?? '').toString();
+      if (unitIds.contains(futureUnitId)) {
+        throw StateError(
+          'A future rent rate is already scheduled for unit $futureUnitId.',
+        );
+      }
     }
 
     final newRates = <RentRateModel>[];
-
     for (final currentRate in currentRates) {
       final newAmount = adjustment.applyTo(currentRate.amount);
-
       final document = _rentRates.doc();
-
-      final now = DateTime.now();
 
       newRates.add(
         RentRateModel(
@@ -521,21 +462,8 @@ class RentRateDataSource {
       );
     }
 
-    // ==========================================================
-    // FIRESTORE BATCHES
-    // ==========================================================
-    //
-    // Each unit requires:
-    //
-    // 1 update old RentRate
-    // 1 create new RentRate
-    //
-    // Keep the existing conservative two-unit batch size.
-    // ==========================================================
-
     for (var start = 0; start < currentRates.length; start += _unitsPerBatch) {
       final end = (start + _unitsPerBatch).clamp(0, currentRates.length);
-
       final batch = _firestore.batch();
 
       for (var index = start; index < end; index++) {
@@ -543,7 +471,6 @@ class RentRateDataSource {
         final newRate = newRates[index];
 
         final oldReference = _rentRates.doc(currentRate.id);
-
         final newReference = _rentRates.doc(newRate.id);
 
         batch.update(oldReference, {
@@ -560,10 +487,6 @@ class RentRateDataSource {
 
     return newRates;
   }
-
-  // ============================================================
-  // ENSURE NO FUTURE RATE CONFLICT
-  // ============================================================
 
   Future<void> _ensureNoFutureRateConflict({
     required String unitId,
@@ -588,23 +511,17 @@ class RentRateDataSource {
     }
   }
 
-  // ============================================================
-  // GET LATEST APPLICABLE RATES
-  // ============================================================
-
   List<RentRateModel> _getLatestApplicableRates({
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> documents,
+    required List<QueryDocumentSnapshot<JsonMap>> documents,
     required DateTime effectiveAt,
   }) {
     final latestByUnit = <String, RentRateModel>{};
 
     for (final document in documents) {
       final rate = RentRateModel.fromFirestore(document);
-
       if (!rate.isApplicableAt(effectiveAt)) {
         continue;
       }
-
       latestByUnit.putIfAbsent(rate.unitId, () => rate);
     }
 

@@ -3,6 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../domain/entities/monthly_bill.dart';
 
+typedef JsonMap = Map<String, dynamic>;
+typedef StringMap = Map<String, String>;
+typedef DoubleMap = Map<String, double>;
+typedef PaymentQueryStream = Stream<QuerySnapshot<JsonMap>>;
+
 enum PaymentMethod { cash, bank, bkash, nagad, other }
 
 enum PaymentReviewStatus { pending, confirmed, rejected }
@@ -15,70 +20,65 @@ class PaymentWorkflowDataSource {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
-  CollectionReference<Map<String, dynamic>> get _payments =>
+  CollectionReference<JsonMap> get _payments =>
       _firestore.collection('paymentTransactions');
 
-  CollectionReference<Map<String, dynamic>> _billCollection(
-    String collectionName,
-  ) {
+  CollectionReference<JsonMap> get _managerAccess =>
+      _firestore.collection('managerAccess');
+
+  CollectionReference<JsonMap> _billCollection(String collectionName) {
     if (collectionName != 'monthlyBills' && collectionName != 'monthlyRents') {
       throw ArgumentError('Unsupported bill collection.');
     }
-
     return _firestore.collection(collectionName);
   }
 
   String _normalizeBillCollection(String? value) {
     final normalized = value?.trim();
-
     if (normalized == null || normalized.isEmpty) {
       return 'monthlyBills';
     }
-
     if (normalized != 'monthlyBills' && normalized != 'monthlyRents') {
       throw ArgumentError('Unsupported bill collection.');
     }
-
     return normalized;
   }
 
   String get _currentUid {
     final user = _auth.currentUser;
-
     if (user == null) {
       throw StateError('Please sign in before continuing.');
     }
-
     return user.uid;
   }
 
-  double _readAmount(
-    Map<String, dynamic> data,
-    String field, {
-    double? defaultValue,
-  }) {
-    final value = data[field];
+  Future<bool> _canReviewPropertyPayment({
+    required String uid,
+    required String ownerId,
+    required String propertyId,
+  }) async {
+    if (uid == ownerId) return true;
+    final accessDoc = await _managerAccess.doc('${uid}_$propertyId').get();
+    return accessDoc.exists && accessDoc.data()?['status'] == 'active';
+  }
 
+  double _readAmount(JsonMap data, String field, {double? defaultValue}) {
+    final value = data[field];
     if (value == null && defaultValue != null) {
       return defaultValue;
     }
-
     if (value is! num) {
       throw StateError('Invalid bill amount data: $field.');
     }
-
     final amount = value.toDouble();
-
     if (!amount.isFinite) {
       throw StateError('Invalid bill amount data: $field.');
     }
-
     return amount;
   }
 
-  bool _isClosedBill(Map<String, dynamic> bill) {
+  bool _isClosedBill(JsonMap bill) {
     final status = bill['status'];
-
     return status == MonthlyBillStatus.paid.name ||
         status == MonthlyBillStatus.cancelled.name;
   }
@@ -101,18 +101,16 @@ class PaymentWorkflowDataSource {
     }
 
     final remaining = billAmount - paidAmount - pendingAmount;
-
     if (remaining <= 0 || requestedAmount > remaining + 0.001) {
       throw StateError('Payment exceeds the remaining payable balance.');
     }
   }
 
   void _validatePaymentOwnership({
-    required Map<String, dynamic> bill,
-    required Map<String, dynamic> payment,
-    required String ownerId,
+    required JsonMap bill,
+    required JsonMap payment,
   }) {
-    if (bill['ownerId'] != ownerId ||
+    if (bill['ownerId'] != payment['ownerId'] ||
         bill['tenantUserId'] != payment['tenantUserId'] ||
         bill['tenantId'] != payment['tenantId'] ||
         bill['propertyId'] != payment['propertyId'] ||
@@ -123,11 +121,9 @@ class PaymentWorkflowDataSource {
 
   String? _cleanOptional(String? value) {
     final normalized = value?.trim();
-
     if (normalized == null || normalized.isEmpty) {
       return null;
     }
-
     return normalized;
   }
 
@@ -142,176 +138,33 @@ class PaymentWorkflowDataSource {
     String? reference,
     String? note,
     String? batchId,
+    String? proofUrl,
   }) async {
-    final uid = _currentUid;
-
-    final normalizedBillId = billId.trim();
-    final normalizedCollection = _normalizeBillCollection(billCollection);
-
-    if (normalizedBillId.isEmpty) {
-      throw ArgumentError('Bill ID is required.');
-    }
-
-    if (!amount.isFinite || amount <= 0) {
-      throw ArgumentError('Payment amount must be greater than zero.');
-    }
-
-    final billRef = _billCollection(normalizedCollection).doc(normalizedBillId);
-    final paymentRef = _payments.doc();
-
-    final normalizedBatchId = batchId?.trim().isNotEmpty == true
-        ? batchId!.trim()
-        : paymentRef.id;
-
-    // Fetch proper details from bill and related collections
-    final billDocSnap = await billRef.get();
-    String grihoId = '—';
-    String propertyName = 'Property';
-    String unitName = 'Unit';
-
-    if (billDocSnap.exists) {
-      final billData = billDocSnap.data()!;
-      final propertyId = billData['propertyId']?.toString();
-      final unitId = billData['unitId']?.toString();
-      final tenantId = billData['tenantId']?.toString();
-
-      // 1. Get Griho ID (publicId from users collection)
-      final userDoc = await _firestore.collection('users').doc(uid).get();
-      if (userDoc.exists) {
-        grihoId =
-            userDoc.data()?['publicId'] ??
-            userDoc.data()?['phoneNumber'] ??
-            '—';
-      }
-
-      // 2. Get Property Name
-      if (propertyId != null && propertyId.isNotEmpty) {
-        final propDoc = await _firestore
-            .collection('properties')
-            .doc(propertyId)
-            .get();
-        if (propDoc.exists) {
-          propertyName = propDoc.data()?['name'] ?? 'Property';
-        }
-      }
-
-      // 3. Get Unit Name
-      if (unitId != null && unitId.isNotEmpty) {
-        final unitDoc = await _firestore.collection('units').doc(unitId).get();
-        if (unitDoc.exists) {
-          final uData = unitDoc.data();
-          unitName =
-              uData?['name'] ??
-              (uData?['unitNumber'] != null
-                  ? 'Unit ${uData?['unitNumber']}'
-                  : 'Unit');
-        }
-      }
-
-      // Fallback to tenant doc if property/unit still default
-      if (tenantId != null && tenantId.isNotEmpty) {
-        final tenantDoc = await _firestore
-            .collection('tenants')
-            .doc(tenantId)
-            .get();
-        if (tenantDoc.exists) {
-          final tData = tenantDoc.data()!;
-          if (grihoId == '—') {
-            grihoId = tData['grihoId'] ?? tData['phone'] ?? '—';
-          }
-        }
-      }
-    }
-
-    await _firestore.runTransaction((transaction) async {
-      final billSnapshot = await transaction.get(billRef);
-
-      if (!billSnapshot.exists) {
-        throw StateError('Bill not found.');
-      }
-
-      final bill = billSnapshot.data()!;
-
-      if (bill['tenantUserId'] != uid) {
-        throw StateError('You cannot submit payment for this bill.');
-      }
-
-      if (_isClosedBill(bill)) {
-        throw StateError('This bill cannot receive payments.');
-      }
-
-      final billAmount = _readAmount(bill, 'amount');
-      final paidAmount = _readAmount(bill, 'paidAmount', defaultValue: 0);
-      final pendingAmount = _readAmount(
-        bill,
-        'pendingPaymentAmount',
-        defaultValue: 0,
-      );
-
-      _validatePaymentAmount(
-        billAmount: billAmount,
-        paidAmount: paidAmount,
-        pendingAmount: pendingAmount,
-        requestedAmount: amount,
-      );
-
-      final ownerId = bill['ownerId'];
-      final propertyId = bill['propertyId'];
-      final unitId = bill['unitId'];
-      final tenantId = bill['tenantId'];
-
-      if (ownerId is! String ||
-          propertyId is! String ||
-          unitId is! String ||
-          tenantId is! String) {
-        throw StateError('Bill ownership data is invalid.');
-      }
-
-      transaction.update(billRef, {
-        'pendingPaymentAmount': pendingAmount + amount,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(paymentRef, {
-        'batchId': normalizedBatchId,
-        'billId': normalizedBillId,
-        'ownerId': ownerId,
-        'propertyId': propertyId,
-        'propertyName': propertyName,
-        'unitId': unitId,
-        'unitName': unitName,
-        'tenantId': tenantId,
-        'grihoId': grihoId,
-        'tenantUserId': uid,
-        'amount': amount,
-        'billCollection': normalizedCollection,
-        'method': method.name,
-        'reference': _cleanOptional(reference),
-        'note': _cleanOptional(note),
-        'status': PaymentReviewStatus.pending.name,
-        'reservationApplied': true,
-        'rejectionReason': null,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'reviewedAt': null,
-        'reviewedBy': null,
-      });
-    });
-
-    return paymentRef.id;
+    final result = await submitPayments(
+      amountsByBillId: {billId: amount},
+      collectionsByBillId: {billId: billCollection},
+      method: method,
+      reference: reference,
+      note: note,
+      batchId: batchId,
+      proofUrl: proofUrl,
+    );
+    return result[billId.trim()]!;
   }
 
   // ------------------------------------------------------------
-  // SUBMIT MULTIPLE PAYMENTS (COMBINED PAYMENT)
+  // SUBMIT MULTIPLE PAYMENTS (SINGLE ATOMIC TRANSACTION)
   // ------------------------------------------------------------
-  Future<Map<String, String>> submitPayments({
-    required Map<String, double> amountsByBillId,
-    required Map<String, String> collectionsByBillId,
+  Future<StringMap> submitPayments({
+    required DoubleMap amountsByBillId,
+    required StringMap collectionsByBillId,
     required PaymentMethod method,
     String? reference,
     String? note,
+    String? batchId,
+    String? proofUrl,
   }) async {
-    _currentUid;
+    final uid = _currentUid;
 
     if (amountsByBillId.isEmpty) {
       throw ArgumentError('Select at least one bill.');
@@ -325,30 +178,199 @@ class PaymentWorkflowDataSource {
       throw ArgumentError('Every selected bill must have a collection name.');
     }
 
-    final batchId = _payments.doc().id;
-    final createdPayments = <String, String>{};
+    final normalizedBatchId = batchId?.trim().isNotEmpty == true
+        ? batchId!.trim()
+        : _payments.doc().id;
+
+    String grihoId = '—';
+    String tenantName = 'Resident';
+    final userDoc = await _firestore.collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      final uData = userDoc.data()!;
+      grihoId = (uData['publicId'] ?? uData['phoneNumber'] ?? '—').toString();
+      tenantName = (uData['name'] ?? 'Resident').toString();
+    }
+
+    final propertyNameCache = <String, String>{};
+    final unitNameCache = <String, String>{};
+    final entries = <_PreparedPaymentItem>[];
 
     for (final entry in amountsByBillId.entries) {
-      final billId = entry.key;
+      final normalizedBillId = entry.key.trim();
+      if (normalizedBillId.isEmpty) {
+        throw ArgumentError('Bill ID is required.');
+      }
 
-      final paymentId = await submitPayment(
-        billId: billId,
-        amount: entry.value,
-        method: method,
-        billCollection: collectionsByBillId[billId]!,
-        reference: reference,
-        note: note,
-        batchId: batchId,
+      final requestedAmount = entry.value;
+      if (!requestedAmount.isFinite || requestedAmount <= 0) {
+        throw ArgumentError('Payment amount must be greater than zero.');
+      }
+
+      final normalizedCollection = _normalizeBillCollection(
+        collectionsByBillId[entry.key],
       );
 
-      createdPayments[billId] = paymentId;
+      final billRef = _billCollection(
+        normalizedCollection,
+      ).doc(normalizedBillId);
+      final billPreSnap = await billRef.get();
+      if (!billPreSnap.exists || billPreSnap.data() == null) {
+        throw StateError('Bill $normalizedBillId not found.');
+      }
+
+      final preData = billPreSnap.data()!;
+      final propertyId = (preData['propertyId'] ?? '').toString().trim();
+      final unitId = (preData['unitId'] ?? '').toString().trim();
+
+      if (propertyId.isNotEmpty && !propertyNameCache.containsKey(propertyId)) {
+        final propDoc = await _firestore
+            .collection('properties')
+            .doc(propertyId)
+            .get();
+        propertyNameCache[propertyId] = (propDoc.data()?['name'] ?? 'Property')
+            .toString();
+      }
+
+      if (unitId.isNotEmpty && !unitNameCache.containsKey(unitId)) {
+        final unitDoc = await _firestore.collection('units').doc(unitId).get();
+        final uData = unitDoc.data();
+        unitNameCache[unitId] =
+            (uData?['name'] ??
+                    (uData?['unitNumber'] != null
+                        ? 'Unit ${uData?['unitNumber']}'
+                        : 'Unit'))
+                .toString();
+      }
+
+      entries.add(
+        _PreparedPaymentItem(
+          billId: normalizedBillId,
+          collectionName: normalizedCollection,
+          billRef: billRef,
+          paymentRef: _payments.doc(),
+          requestedAmount: requestedAmount,
+          propertyName: propertyNameCache[propertyId] ?? 'Property',
+          unitName: unitNameCache[unitId] ?? 'Unit',
+        ),
+      );
     }
+
+    final createdPayments = <String, String>{};
+    final cleanedRef = _cleanOptional(reference);
+    final cleanedNote = _cleanOptional(note);
+    final cleanedProof = _cleanOptional(proofUrl);
+
+    await _firestore.runTransaction((transaction) async {
+      final billSnapshots = <DocumentSnapshot<JsonMap>>[];
+      for (final item in entries) {
+        billSnapshots.add(await transaction.get(item.billRef));
+      }
+
+      final validatedBills = <JsonMap>[];
+      for (var i = 0; i < entries.length; i++) {
+        final item = entries[i];
+        final snap = billSnapshots[i];
+
+        if (!snap.exists || snap.data() == null) {
+          throw StateError('Bill ${item.billId} no longer exists.');
+        }
+
+        final bill = snap.data()!;
+        if (bill['tenantUserId'] != uid) {
+          throw StateError('You cannot submit payment for this bill.');
+        }
+
+        if (_isClosedBill(bill)) {
+          throw StateError('This bill cannot receive payments.');
+        }
+
+        final billAmount = _readAmount(bill, 'amount');
+        final paidAmount = _readAmount(bill, 'paidAmount', defaultValue: 0);
+        final pendingAmount = _readAmount(
+          bill,
+          'pendingPaymentAmount',
+          defaultValue: 0,
+        );
+
+        _validatePaymentAmount(
+          billAmount: billAmount,
+          paidAmount: paidAmount,
+          pendingAmount: pendingAmount,
+          requestedAmount: item.requestedAmount,
+        );
+
+        final ownerId = bill['ownerId'];
+        final propertyId = bill['propertyId'];
+        final unitId = bill['unitId'];
+        final tenantId = bill['tenantId'];
+
+        if (ownerId is! String ||
+            propertyId is! String ||
+            unitId is! String ||
+            tenantId is! String) {
+          throw StateError('Bill ownership data is invalid.');
+        }
+
+        validatedBills.add(bill);
+      }
+
+      for (var i = 0; i < entries.length; i++) {
+        final item = entries[i];
+        final bill = validatedBills[i];
+        final pendingAmount = _readAmount(
+          bill,
+          'pendingPaymentAmount',
+          defaultValue: 0,
+        );
+
+        final billType = item.collectionName == 'monthlyRents'
+            ? 'rent'
+            : (bill['type'] ?? 'utility').toString();
+
+        transaction.update(item.billRef, {
+          'pendingPaymentAmount': pendingAmount + item.requestedAmount,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        transaction.set(item.paymentRef, {
+          'batchId': normalizedBatchId,
+          'billId': item.billId,
+          'billType': billType,
+          'billTitle': bill['title'],
+          'billingPeriodStart': bill['billingPeriodStart'],
+          'ownerId': bill['ownerId'],
+          'propertyId': bill['propertyId'],
+          'propertyName': item.propertyName,
+          'unitId': bill['unitId'],
+          'unitName': item.unitName,
+          'tenantId': bill['tenantId'],
+          'tenantName': tenantName,
+          'grihoId': grihoId,
+          'tenantUserId': uid,
+          'amount': item.requestedAmount,
+          'billCollection': item.collectionName,
+          'method': method.name,
+          'reference': cleanedRef,
+          'note': cleanedNote,
+          'proofUrl': cleanedProof,
+          'status': PaymentReviewStatus.pending.name,
+          'reservationApplied': true,
+          'rejectionReason': null,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'reviewedAt': null,
+          'reviewedBy': null,
+        });
+
+        createdPayments[item.billId] = item.paymentRef.id;
+      }
+    });
 
     return createdPayments;
   }
 
   // ------------------------------------------------------------
-  // CONFIRM PAYMENT (OWNER ACTION)
+  // CONFIRM PAYMENT (OWNER OR ACTIVE MANAGER)
   // ------------------------------------------------------------
   Future<void> confirmPayment({required String paymentId}) async {
     final uid = _currentUid;
@@ -359,20 +381,31 @@ class PaymentWorkflowDataSource {
     }
 
     final paymentRef = _payments.doc(normalizedPaymentId);
+    final preSnap = await paymentRef.get();
+    if (!preSnap.exists || preSnap.data() == null) {
+      throw StateError('Payment request not found.');
+    }
+
+    final preData = preSnap.data()!;
+    final authorized = await _canReviewPropertyPayment(
+      uid: uid,
+      ownerId: (preData['ownerId'] ?? '').toString(),
+      propertyId: (preData['propertyId'] ?? '').toString(),
+    );
+
+    if (!authorized) {
+      throw StateError(
+        'Only the property owner or an active manager can confirm payment.',
+      );
+    }
 
     await _firestore.runTransaction((transaction) async {
       final paymentSnapshot = await transaction.get(paymentRef);
-
-      if (!paymentSnapshot.exists) {
+      if (!paymentSnapshot.exists || paymentSnapshot.data() == null) {
         throw StateError('Payment request not found.');
       }
 
       final payment = paymentSnapshot.data()!;
-
-      if (payment['ownerId'] != uid) {
-        throw StateError('Only the bill owner can confirm payment.');
-      }
-
       if (payment['status'] != PaymentReviewStatus.pending.name) {
         throw StateError('This payment has already been reviewed.');
       }
@@ -396,12 +429,12 @@ class PaymentWorkflowDataSource {
       final billRef = _billCollection(billCollection).doc(billId);
       final billSnapshot = await transaction.get(billRef);
 
-      if (!billSnapshot.exists) {
+      if (!billSnapshot.exists || billSnapshot.data() == null) {
         throw StateError('Associated bill not found.');
       }
 
       final bill = billSnapshot.data()!;
-      _validatePaymentOwnership(bill: bill, payment: payment, ownerId: uid);
+      _validatePaymentOwnership(bill: bill, payment: payment);
 
       if (_isClosedBill(bill)) {
         throw StateError('This bill cannot receive this payment.');
@@ -455,7 +488,7 @@ class PaymentWorkflowDataSource {
   }
 
   // ------------------------------------------------------------
-  // REJECT PAYMENT (OWNER ACTION)
+  // REJECT PAYMENT (OWNER OR ACTIVE MANAGER)
   // ------------------------------------------------------------
   Future<void> rejectPayment({
     required String paymentId,
@@ -474,20 +507,31 @@ class PaymentWorkflowDataSource {
     }
 
     final paymentRef = _payments.doc(normalizedPaymentId);
+    final preSnap = await paymentRef.get();
+    if (!preSnap.exists || preSnap.data() == null) {
+      throw StateError('Payment request not found.');
+    }
+
+    final preData = preSnap.data()!;
+    final authorized = await _canReviewPropertyPayment(
+      uid: uid,
+      ownerId: (preData['ownerId'] ?? '').toString(),
+      propertyId: (preData['propertyId'] ?? '').toString(),
+    );
+
+    if (!authorized) {
+      throw StateError(
+        'Only the property owner or an active manager can reject payment.',
+      );
+    }
 
     await _firestore.runTransaction((transaction) async {
       final paymentSnapshot = await transaction.get(paymentRef);
-
-      if (!paymentSnapshot.exists) {
+      if (!paymentSnapshot.exists || paymentSnapshot.data() == null) {
         throw StateError('Payment request not found.');
       }
 
       final payment = paymentSnapshot.data()!;
-
-      if (payment['ownerId'] != uid) {
-        throw StateError('Only the bill owner can reject payment.');
-      }
-
       if (payment['status'] != PaymentReviewStatus.pending.name) {
         throw StateError('This payment has already been reviewed.');
       }
@@ -511,12 +555,12 @@ class PaymentWorkflowDataSource {
       final billRef = _billCollection(billCollection).doc(billId);
       final billSnapshot = await transaction.get(billRef);
 
-      if (!billSnapshot.exists) {
+      if (!billSnapshot.exists || billSnapshot.data() == null) {
         throw StateError('Associated bill not found.');
       }
 
       final bill = billSnapshot.data()!;
-      _validatePaymentOwnership(bill: bill, payment: payment, ownerId: uid);
+      _validatePaymentOwnership(bill: bill, payment: payment);
 
       if (payment['reservationApplied'] == true) {
         final pendingAmount = _readAmount(
@@ -553,25 +597,25 @@ class PaymentWorkflowDataSource {
   // ------------------------------------------------------------
   // STREAMS
   // ------------------------------------------------------------
-  Stream<QuerySnapshot<Map<String, dynamic>>> watchTenantPayments() {
+  PaymentQueryStream watchTenantPayments() {
     final uid = _currentUid;
     return _payments.where('tenantUserId', isEqualTo: uid).snapshots();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> watchOwnerPayments({
+  PaymentQueryStream watchOwnerPayments({
     required String ownerId,
     bool pendingOnly = false,
   }) {
-    final uid = _currentUid;
+    _currentUid;
     final normalizedOwnerId = ownerId.trim();
 
-    if (normalizedOwnerId.isEmpty || normalizedOwnerId != uid) {
-      throw StateError('You can only view your own property payments.');
+    if (normalizedOwnerId.isEmpty) {
+      throw ArgumentError('Owner ID cannot be empty.');
     }
 
-    Query<Map<String, dynamic>> query = _payments.where(
+    Query<JsonMap> query = _payments.where(
       'ownerId',
-      isEqualTo: uid,
+      isEqualTo: normalizedOwnerId,
     );
 
     if (pendingOnly) {
@@ -583,4 +627,51 @@ class PaymentWorkflowDataSource {
 
     return query.snapshots();
   }
+
+  PaymentQueryStream watchManagedPropertyPayments({
+    required List<String> propertyIds,
+    bool pendingOnly = false,
+  }) {
+    _currentUid;
+    final scopedIds = propertyIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .take(10)
+        .toList();
+
+    if (scopedIds.isEmpty) {
+      return const Stream.empty();
+    }
+
+    Query<JsonMap> query = _payments.where('propertyId', whereIn: scopedIds);
+
+    if (pendingOnly) {
+      query = query.where(
+        'status',
+        isEqualTo: PaymentReviewStatus.pending.name,
+      );
+    }
+
+    return query.snapshots();
+  }
+}
+
+class _PreparedPaymentItem {
+  final String billId;
+  final String collectionName;
+  final DocumentReference<JsonMap> billRef;
+  final DocumentReference<JsonMap> paymentRef;
+  final double requestedAmount;
+  final String propertyName;
+  final String unitName;
+
+  const _PreparedPaymentItem({
+    required this.billId,
+    required this.collectionName,
+    required this.billRef,
+    required this.paymentRef,
+    required this.requestedAmount,
+    required this.propertyName,
+    required this.unitName,
+  });
 }

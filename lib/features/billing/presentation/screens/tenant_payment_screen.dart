@@ -1,13 +1,22 @@
+// noinspection SpellCheckingInspection
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/services/firebase_storage_service.dart';
+import '../../../../core/services/pdf_receipt_service.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
 import '../../data/datasources/payment_workflow_datasource.dart';
 import '../../domain/entities/monthly_bill.dart';
 import '../providers/monthly_bill_provider.dart';
 import '../providers/payment_workflow_provider.dart';
 
+typedef JsonMap = Map<String, dynamic>;
 typedef _DocList = List<QueryDocumentSnapshot>;
 typedef _BillList = List<MonthlyBill>;
 
@@ -29,8 +38,10 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
   final _referenceController = TextEditingController();
   final _noteController = TextEditingController();
+  final _picker = ImagePicker();
 
   PaymentMethod _method = PaymentMethod.bkash;
+  File? _proofImageFile;
   bool _submitting = false;
 
   @override
@@ -45,13 +56,13 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     super.dispose();
   }
 
-  Map<String, dynamic> _docData(QueryDocumentSnapshot doc) {
+  JsonMap _docData(QueryDocumentSnapshot doc) {
     final raw = doc.data();
-    if (raw is Map<String, dynamic>) {
+    if (raw is JsonMap) {
       return raw;
     }
     if (raw is Map) {
-      return Map<String, dynamic>.from(raw);
+      return JsonMap.from(raw);
     }
     return <String, dynamic>{};
   }
@@ -62,7 +73,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 
   bool _isPayable(MonthlyBill bill) {
-    // 1. যদি বিলটি ইতিমধ্যে সম্পূর্ণ পেইড বা ক্যানসেল হয়, তবে দেখাবে না।
     if (bill.status == MonthlyBillStatus.paid ||
         bill.status == MonthlyBillStatus.cancelled ||
         _remaining(bill) <= 0.001) {
@@ -116,6 +126,25 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
         .fold<double>(0.0, (total, bill) => total + _enteredAmount(bill));
   }
 
+  Future<void> _pickProofImage() async {
+    if (_submitting || kIsWeb) return;
+    try {
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+      if (picked != null && mounted) {
+        setState(() {
+          _proofImageFile = File(picked.path);
+        });
+      }
+    } catch (e) {
+      _message('Could not select image: $e');
+    }
+  }
+
   Future<void> _submit(List<MonthlyBill> payableBills, String tenantUid) async {
     final selectedBills = payableBills
         .where((bill) => _selectedBillIds.contains(bill.id))
@@ -160,6 +189,17 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     });
 
     try {
+      String? uploadedProofUrl;
+      if (_proofImageFile != null && !kIsWeb) {
+        final sampleBill = selectedBills.first;
+        final tempBatchKey = DateTime.now().millisecondsSinceEpoch.toString();
+        uploadedProofUrl = await FirebaseStorageService().uploadPaymentProof(
+          propertyId: sampleBill.propertyId,
+          paymentId: '${tenantUid}_$tempBatchKey',
+          imageFile: _proofImageFile!,
+        );
+      }
+
       final createdPayments = await ref
           .read(paymentWorkflowDataSourceProvider)
           .submitPayments(
@@ -170,12 +210,14 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
             note: _noteController.text.trim().isEmpty
                 ? null
                 : _noteController.text.trim(),
+            proofUrl: uploadedProofUrl,
           );
 
       if (!mounted) return;
 
       setState(() {
         _selectedBillIds.clear();
+        _proofImageFile = null;
 
         for (final bill in selectedBills) {
           _amountControllers[bill.id]?.text = _remaining(
@@ -218,6 +260,85 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // ------------------------------------------------------------
+  // PDF RECEIPT GENERATOR FOR PAYMENT GROUP
+  // ------------------------------------------------------------
+
+  PaymentReceiptData _buildReceiptData(
+    _PaymentGroup group,
+    List<MonthlyBill> allBills,
+  ) {
+    final profile = ref.read(currentUserProfileProvider).value;
+    final dashboard = ref.read(tenantDashboardProvider).value;
+
+    final firstData = _docData(group.payments.first);
+    final issuedAt = firstData['createdAt'] is Timestamp
+        ? (firstData['createdAt'] as Timestamp).toDate()
+        : DateTime.now();
+
+    final items = group.payments.map((doc) {
+      final data = _docData(doc);
+      final amount = (data['amount'] is num)
+          ? (data['amount'] as num).toDouble()
+          : 0.0;
+      final title = _paymentBillTitle(data, allBills);
+      final periodRaw = data['billingPeriodStart'];
+      final periodLabel = periodRaw is Timestamp
+          ? _formatMonthYear(periodRaw.toDate())
+          : 'Monthly Charge';
+
+      return ReceiptLineItem(
+        title: title,
+        periodLabel: periodLabel,
+        amount: amount,
+      );
+    }).toList();
+
+    final shortReceiptId = group.id.replaceFirst('legacy_', '');
+    final receiptNo = shortReceiptId.length > 10
+        ? shortReceiptId.substring(0, 10)
+        : shortReceiptId;
+
+    return PaymentReceiptData(
+      receiptNumber: receiptNo,
+      status: group.status,
+      issuedAt: issuedAt,
+      tenantName: (firstData['tenantName'] ?? profile?.name ?? 'Resident')
+          .toString(),
+      tenantGrihoId: (firstData['grihoId'] ?? profile?.publicId ?? '')
+          .toString(),
+      propertyName:
+          (firstData['propertyName'] ??
+                  dashboard?.currentPropertyName ??
+                  'Property')
+              .toString(),
+      unitName:
+          (firstData['unitName'] ?? dashboard?.currentUnitDisplayName ?? 'Unit')
+              .toString(),
+      paymentMethod: group.method,
+      referenceNumber: group.reference,
+      note: (firstData['note'] ?? '').toString(),
+      items: items,
+    );
+  }
+
+  Future<void> _openPdfReceipt(
+    _PaymentGroup group,
+    List<MonthlyBill> allBills, {
+    required bool share,
+  }) async {
+    try {
+      final receiptData = _buildReceiptData(group, allBills);
+      if (share) {
+        await PdfReceiptService.shareReceiptPdf(receiptData);
+      } else {
+        await PdfReceiptService.previewOrPrintReceipt(receiptData);
+      }
+    } catch (e) {
+      _message('Could not generate PDF receipt: $e');
+    }
   }
 
   // ------------------------------------------------------------
@@ -280,7 +401,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     return result;
   }
 
-  int _createdAtMillis(Map<String, dynamic> data) {
+  int _createdAtMillis(JsonMap data) {
     return _createdAtMillisFromValue(data['createdAt']);
   }
 
@@ -329,7 +450,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     }
   }
 
-  String _paymentBillTitle(Map<String, dynamic> data, List<MonthlyBill> bills) {
+  String _paymentBillTitle(JsonMap data, List<MonthlyBill> bills) {
     final billId = (data['billId'] ?? '').toString();
     final collection = (data['billCollection'] ?? 'monthlyBills').toString();
 
@@ -347,7 +468,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 
   // ------------------------------------------------------------
-  // PAYMENT HISTORY WIDGET (CUSTOM COLLAPSIBLE)
+  // PAYMENT HISTORY WIDGET
   // ------------------------------------------------------------
 
   Widget _buildPaymentHistory(
@@ -483,6 +604,41 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          // PDF Money Receipt Buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _openPdfReceipt(
+                                    group,
+                                    bills,
+                                    share: false,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.picture_as_pdf_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('PDF Receipt'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: FilledButton.tonalIcon(
+                                  onPressed: () => _openPdfReceipt(
+                                    group,
+                                    bills,
+                                    share: true,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.share_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Share Receipt'),
                                 ),
                               ),
                             ],
@@ -655,7 +811,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       (id) => !payableBills.any((bill) => bill.id == id),
     );
 
-    // Pre-initialize controllers so no new controller creation happens mid-frame
     for (final bill in payableBills) {
       _amountControllerFor(bill);
     }
@@ -773,7 +928,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 _selectedBillIds
                                   ..clear()
                                   ..addAll(payableBills.map((bill) => bill.id));
-                                // Auto-expand all months when Select All is pressed
                                 _expandedMonthKeys.addAll(
                                   monthlyGroups.map((g) => g.periodKey),
                                 );
@@ -900,6 +1054,44 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                             isDense: true,
                           ),
                         ),
+                        if (!kIsWeb) ...[
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _submitting
+                                      ? null
+                                      : _pickProofImage,
+                                  icon: const Icon(
+                                    Icons.attach_file_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    _proofImageFile == null
+                                        ? 'Attach Receipt Screenshot (Optional)'
+                                        : 'Screenshot Attached',
+                                  ),
+                                ),
+                              ),
+                              if (_proofImageFile != null) ...[
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  tooltip: 'Remove screenshot',
+                                  onPressed: _submitting
+                                      ? null
+                                      : () => setState(
+                                          () => _proofImageFile = null,
+                                        ),
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         TextField(
                           controller: _noteController,
@@ -983,7 +1175,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 
   // ------------------------------------------------------------
-  // CUSTOM COLLAPSIBLE MONTH CARD (NO EXPANSIONTILE CRASH)
+  // CUSTOM COLLAPSIBLE MONTH CARD
   // ------------------------------------------------------------
 
   Widget _buildMonthCollapsibleCard(_MonthlyPayableGroup group) {
@@ -1025,11 +1217,11 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
     final totalMonthAmount = group.bills.fold<double>(
       0.0,
-      (s, b) => s + b.amount,
+      (total, b) => total + b.amount,
     );
     final totalMonthDue = group.bills.fold<double>(
       0.0,
-      (s, b) => s + _remaining(b),
+      (total, b) => total + _remaining(b),
     );
 
     final allSelectedInMonth = group.bills.every(
@@ -1052,7 +1244,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Collapsible Header
           InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () {
@@ -1145,7 +1336,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
             ),
           ),
 
-          // Expanded Body
           if (isExpanded)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),

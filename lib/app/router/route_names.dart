@@ -66,12 +66,11 @@ abstract final class RouteNames {
   static const propertyTenants = '/owner/properties/:propertyId/tenants';
 
   // ============================================================
-  // TENANT ACCOUNT LINK & INVITATION
+  // TENANT INVITATION & HISTORY
   // ============================================================
-
-  static const tenantAccountLink = '/tenant-account-link';
-
   static const tenantInvitation = '/i/:invitationToken';
+  static const tenantInvitations = '/tenant/invitations';
+  static const tenantTenancyHistory = '/tenant/tenancy-history';
 
   static String tenantInvitationPath(String invitationToken) {
     final token = invitationToken.trim();
@@ -88,13 +87,7 @@ abstract final class RouteNames {
   // ============================================================
   static const ownerBillingSetup = '/owner/billing/setup';
   static const ownerBillingRules = '/owner/billing/rules';
-  static const billingRules = '/owner/billing-rules';
   static const editBillingRule = '/owner/billing-rules/:ruleId/edit';
   static const ownerPayments = '/owner/payments';
   static const tenantPayments = '/tenant/payments';
-
-  // ============================================================
-  // TENANT INVITATIONS
-  // ============================================================
-  static const tenantInvitations = '/tenant/invitations';
 }

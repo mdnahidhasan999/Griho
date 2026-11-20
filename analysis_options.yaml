@@ -1,6 +1,8 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  errors:
+    avoid_types_as_parameter_names: ignore
   exclude:
     - "build/**"
     - ".dart_tool/**"

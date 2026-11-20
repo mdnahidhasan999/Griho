@@ -1,3 +1,4 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
+import '../../../../core/services/fcm_notification_service.dart';
 import '../../../billing/presentation/widgets/tenant_current_bills_card.dart';
 import '../../../invitations/presentation/providers/work_invitations_providers.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
@@ -14,7 +16,9 @@ import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/domain/entities/tenant_invitation.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
-import '../../../tenants/presentation/screens/tenant_tenancy_history_screen.dart';
+
+typedef JsonMap = Map<String, dynamic>;
+typedef TypedQuerySnapshot = QuerySnapshot<JsonMap>;
 
 class TenantHomeScreen extends ConsumerStatefulWidget {
   const TenantHomeScreen({super.key});
@@ -24,6 +28,16 @@ class TenantHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    FcmNotificationService.instance.initialize(
+      onNavigate: (route) {
+        if (mounted) context.push(route);
+      },
+    );
+  }
+
   Future<void> _refresh() async {
     ref.invalidate(tenantDashboardProvider);
     await ref.read(tenantDashboardProvider.future);
@@ -37,11 +51,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
 
   void _openPayments() => context.push(RouteNames.tenantPayments);
 
-  void _openTenancyHistory() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TenantTenancyHistoryScreen()),
-    );
-  }
+  void _openTenancyHistory() => context.push(RouteNames.tenantTenancyHistory);
 
   void _reportIssue(TenantDashboardData d) {
     showModalBottomSheet<void>(
@@ -478,7 +488,7 @@ class _ActionGrid extends StatelessWidget {
 }
 
 // ============================================================================
-// REPORT ISSUE  ->  maintenanceRequests (owner assigns, caretaker/electrician resolve)
+// REPORT ISSUE -> maintenanceRequests
 // ============================================================================
 
 class _ReportIssueSheet extends StatefulWidget {
@@ -680,7 +690,7 @@ class _MyRequestsSheet extends StatelessWidget {
         height: MediaQuery.of(context).size.height * 0.6,
         child: uid == null
             ? const Center(child: Text('Please sign in again.'))
-            : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            : StreamBuilder<TypedQuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('maintenanceRequests')
                     .where('tenantUserId', isEqualTo: uid)
@@ -792,7 +802,7 @@ class _NoticesSheet extends StatelessWidget {
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.6,
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        child: StreamBuilder<TypedQuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('buildingNotices')
               .where('propertyId', isEqualTo: propertyId)
@@ -908,7 +918,6 @@ class _DigitalResidencyPass extends ConsumerWidget {
       ),
       child: Stack(
         children: [
-          // Ambient Glow Element
           Positioned(
             right: -24,
             top: -24,
@@ -927,7 +936,6 @@ class _DigitalResidencyPass extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Badge Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -993,7 +1001,6 @@ class _DigitalResidencyPass extends ConsumerWidget {
 
                 const SizedBox(height: 18),
 
-                // Property & Unit Title
                 Text(
                   propertyName,
                   style: theme.textTheme.headlineSmall?.copyWith(
@@ -1026,7 +1033,6 @@ class _DigitalResidencyPass extends ConsumerWidget {
                 Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
                 const SizedBox(height: 14),
 
-                // Financial & Occupancy Sub-Metrics
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

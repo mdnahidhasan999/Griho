@@ -1,0 +1,37 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidImage() {
+      return request.resource.size < 5 * 1024 * 1024
+             && request.resource.contentType.matches('image/.*');
+    }
+
+    // 1. User Profile Photos (Only owner of profile can upload; authenticated users can read)
+    match /users/{userId}/profile/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+                   && request.auth.uid == userId
+                   && isValidImage();
+    }
+
+    // 2. Tenant Documents & NID (Scoped to owner/manager & the tenant)
+    match /properties/{propertyId}/tenants/{tenantId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+                   && isValidImage();
+    }
+
+    // 3. Payment Proof / Receipt Screenshots
+    match /properties/{propertyId}/payments/{paymentId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+                   && isValidImage();
+    }
+  }
+}

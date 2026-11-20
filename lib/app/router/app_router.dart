@@ -8,21 +8,22 @@ import '../../features/auth/presentation/screens/create_account_screen.dart';
 import '../../features/auth/presentation/screens/edit_profile_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/link_waiting_screen.dart';
-import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
-
+import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/role_selection_screen.dart';
 import '../../features/billing/domain/entities/billing_rule.dart';
 import '../../features/billing/presentation/screens/edit_billing_rule_screen.dart';
 import '../../features/billing/presentation/screens/owner_billing_rules_screen.dart';
 import '../../features/billing/presentation/screens/owner_billing_setup_screen.dart';
+import '../../features/billing/presentation/screens/owner_payment_management_screen.dart';
+import '../../features/billing/presentation/screens/tenant_payment_screen.dart';
 import '../../features/home/presentation/screens/activity_audit_log_screen.dart';
 import '../../features/home/presentation/screens/caretaker_home_screen.dart';
 import '../../features/home/presentation/screens/electrician_home_screen.dart';
 import '../../features/home/presentation/screens/manager_home_screen.dart';
 import '../../features/home/presentation/screens/owner_home_screen.dart';
-
 import '../../features/home/presentation/screens/owner_welcome_screen.dart';
+import '../../features/invitations/presentation/screens/my_invitations_screen.dart';
 import '../../features/more/presentation/screens/more_screen.dart';
 import '../../features/properties/domain/entities/property.dart';
 import '../../features/properties/presentation/screens/add_property_screen.dart';
@@ -30,15 +31,14 @@ import '../../features/properties/presentation/screens/edit_property_screen.dart
 import '../../features/properties/presentation/screens/manager_invitations_screen.dart';
 import '../../features/properties/presentation/screens/property_details_screen.dart';
 import '../../features/properties/presentation/screens/property_list_screen.dart';
-
 import '../../features/rents/presentation/screens/central_rent_control_screen.dart';
 import '../../features/rents/presentation/screens/change_unit_rent_screen.dart';
 import '../../features/rents/presentation/screens/monthly_rent_screen.dart';
 import '../../features/rents/presentation/screens/rent_management_screen.dart';
 import '../../features/rents/presentation/screens/rent_rate_history_screen.dart';
-
 import '../../features/splash/presentation/screens/splash_screen.dart';
-
+import '../../features/team/presentation/screens/invite_team_member_screen.dart';
+import '../../features/team/presentation/screens/owner_team_screen.dart';
 import '../../features/tenants/domain/entities/tenant.dart';
 import '../../features/tenants/presentation/screens/add_tenant_screen.dart';
 import '../../features/tenants/presentation/screens/edit_tenant_screen.dart';
@@ -48,27 +48,22 @@ import '../../features/tenants/presentation/screens/tenant_home_invitation_gate_
 import '../../features/tenants/presentation/screens/tenant_invitation_receive_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_invitations_screen.dart';
 import '../../features/tenants/presentation/screens/tenant_list_screen.dart';
-
+import '../../features/tenants/presentation/screens/tenant_tenancy_history_screen.dart';
 import '../../features/units/domain/entities/unit.dart';
 import '../../features/units/presentation/screens/add_unit_screen.dart';
 import '../../features/units/presentation/screens/edit_unit_screen.dart';
 import '../../features/units/presentation/screens/unit_details_screen.dart';
 import '../../features/units/presentation/screens/unit_list_screen.dart';
-import '../../features/billing/presentation/screens/owner_payment_management_screen.dart';
-import '../../features/billing/presentation/screens/tenant_payment_screen.dart';
-
-import '../../features/team/presentation/screens/invite_team_member_screen.dart';
-import '../../features/team/presentation/screens/owner_team_screen.dart';
 import 'auth_route_guard.dart';
 import 'auth_state_refresh_notifier.dart';
 import 'route_arguments.dart';
 import 'route_names.dart';
-import '../../features/invitations/presentation/screens/my_invitations_screen.dart';
 
 abstract final class AppRouter {
   static GoRouter create(Ref ref) {
     final guard = AuthRouteGuard(ref);
     final authRefreshNotifier = AuthStateRefreshNotifier();
+    ref.onDispose(authRefreshNotifier.dispose);
 
     return GoRouter(
       initialLocation: RouteNames.splash,
@@ -88,7 +83,7 @@ abstract final class AppRouter {
         ),
 
         // ========================================================
-        // LOGIN (Email/Password & Google Sign-In)
+        // AUTH
         // ========================================================
         GoRoute(
           path: RouteNames.login,
@@ -117,16 +112,12 @@ abstract final class AppRouter {
             return const CreateAccountScreen();
           },
         ),
-
         GoRoute(
           path: RouteNames.forgotPassword,
           builder: (context, state) {
             return const ForgotPasswordScreen();
           },
         ),
-        // ========================================================
-        // LINK WAITING SCREEN
-        // ========================================================
         GoRoute(
           path: RouteNames.linkWaiting,
           builder: (context, state) {
@@ -134,14 +125,9 @@ abstract final class AppRouter {
             return LinkWaitingScreen(email: email ?? '');
           },
         ),
-
-        // ========================================================
-        // ONBOARDING (Profile Setup with Permanent Phone)
-        // ========================================================
         GoRoute(
           path: RouteNames.onboarding,
           builder: (context, state) {
-            // এখান থেকে prefilledEmail রিমুভ করা হয়েছে
             return const OnboardingScreen();
           },
         ),
@@ -157,8 +143,9 @@ abstract final class AppRouter {
             return const MoreScreen();
           },
         ),
+
         // ========================================================
-        // OWNER WELCOME / SETUP
+        // OWNER WELCOME & HOME
         // ========================================================
         GoRoute(
           path: RouteNames.ownerWelcome,
@@ -166,15 +153,13 @@ abstract final class AppRouter {
             return const OwnerWelcomeScreen();
           },
         ),
-        // ========================================================
-        // OWNER HOME
-        // ========================================================
         GoRoute(
           path: RouteNames.ownerHome,
           builder: (context, state) {
             return const OwnerHomeScreen();
           },
         ),
+
         // ========================================================
         // PROPERTY
         // ========================================================
@@ -347,6 +332,7 @@ abstract final class AppRouter {
           path: RouteNames.activityLogs,
           builder: (context, state) => const ActivityAuditLogScreen(),
         ),
+
         // ========================================================
         // BILLING
         // ========================================================
@@ -455,7 +441,7 @@ abstract final class AppRouter {
         ),
 
         // ========================================================
-        // TENANT INVITATION
+        // TENANT INVITATION & HISTORY
         // ========================================================
         GoRoute(
           path: RouteNames.tenantInvitation,
@@ -474,21 +460,25 @@ abstract final class AppRouter {
             );
           },
         ),
-
         GoRoute(
           path: RouteNames.myInvitations,
           builder: (context, state) => const MyInvitationsScreen(),
         ),
-
         GoRoute(
           path: RouteNames.tenantInvitations,
           builder: (context, state) {
             return const TenantInvitationsScreen();
           },
         ),
+        GoRoute(
+          path: RouteNames.tenantTenancyHistory,
+          builder: (context, state) {
+            return const TenantTenancyHistoryScreen();
+          },
+        ),
 
         // ========================================================
-        // OTHER ROLES
+        // OTHER ROLES & TEAM
         // ========================================================
         GoRoute(
           path: RouteNames.managerHome,
@@ -508,7 +498,6 @@ abstract final class AppRouter {
             return const ElectricianHomeScreen();
           },
         ),
-
         GoRoute(
           path: RouteNames.ownerTeam,
           builder: (context, state) => const OwnerTeamScreen(),
@@ -535,18 +524,20 @@ abstract final class AppRouter {
         ),
 
         // ========================================================
-        // EDIT PROFILE
+        // PROFILE & PASSWORD
         // ========================================================
         GoRoute(
           path: RouteNames.editProfile,
           builder: (context, state) {
-            final user = state.extra as AppUser;
+            final user = state.extra as AppUser?;
+            if (user == null) {
+              return const Scaffold(
+                body: Center(child: Text('Invalid user profile information.')),
+              );
+            }
             return EditProfileScreen(user: user);
           },
         ),
-        // ========================================================
-        // CHANGE PASSWORD
-        // ========================================================
         GoRoute(
           path: RouteNames.changePassword,
           builder: (context, state) {

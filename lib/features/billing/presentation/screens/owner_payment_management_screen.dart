@@ -2,15 +2,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/audit_logger_service.dart';
+import '../../../../core/services/pdf_receipt_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../providers/payment_workflow_provider.dart';
 
+typedef JsonMap = Map<String, dynamic>;
 typedef _DocList = List<QueryDocumentSnapshot>;
 
 class OwnerPaymentManagementScreen extends ConsumerStatefulWidget {
@@ -33,13 +33,13 @@ class _OwnerPaymentManagementScreenState
   final Map<String, String> _tenantNames = <String, String>{};
   final Set<String> _loadingMetaIds = <String>{};
 
-  Map<String, dynamic> _docData(QueryDocumentSnapshot doc) {
+  JsonMap _docData(QueryDocumentSnapshot doc) {
     final raw = doc.data();
-    if (raw is Map<String, dynamic>) {
+    if (raw is JsonMap) {
       return raw;
     }
     if (raw is Map) {
-      return Map<String, dynamic>.from(raw);
+      return JsonMap.from(raw);
     }
     return <String, dynamic>{};
   }
@@ -278,8 +278,10 @@ class _OwnerPaymentManagementScreenState
       final unitId = (firstData['unitId'] ?? '').toString().trim();
 
       final rawGrihoId = (firstData['grihoId'] ?? '').toString().trim();
+      final rawTenantName = (firstData['tenantName'] ?? '').toString().trim();
       final rawPropName = (firstData['propertyName'] ?? '').toString().trim();
       final rawUnitName = (firstData['unitName'] ?? '').toString().trim();
+      final proofUrl = (firstData['proofUrl'] ?? '').toString().trim();
 
       final userKey = tenantUserId.isNotEmpty ? tenantUserId : tenantId;
 
@@ -292,11 +294,12 @@ class _OwnerPaymentManagementScreenState
         resolvedGrihoId = 'GRI-MEMBER';
       }
 
-      final resolvedTenantName =
-          _tenantNames[userKey] ??
-          (rawGrihoId.isNotEmpty && !rawGrihoId.startsWith('GRI-')
-              ? rawGrihoId
-              : 'Resident');
+      final resolvedTenantName = rawTenantName.isNotEmpty
+          ? rawTenantName
+          : (_tenantNames[userKey] ??
+                (rawGrihoId.isNotEmpty && !rawGrihoId.startsWith('GRI-')
+                    ? rawGrihoId
+                    : 'Resident'));
 
       final resolvedPropName =
           (rawPropName.isNotEmpty && rawPropName != 'Property')
@@ -334,6 +337,7 @@ class _OwnerPaymentManagementScreenState
         method: (firstData['method'] ?? 'other').toString(),
         reference: (firstData['reference'] ?? '').toString(),
         note: (firstData['note'] ?? '').toString(),
+        proofUrl: proofUrl,
         createdAt: firstData['createdAt'],
       );
     }).toList();
@@ -425,6 +429,105 @@ class _OwnerPaymentManagementScreenState
       return 'Service Charge';
     }
     return 'Utility Bill';
+  }
+
+  Future<void> _openPdfReceipt(
+    _PaymentGroup group, {
+    required bool share,
+  }) async {
+    try {
+      final issuedAt = group.createdAt is Timestamp
+          ? (group.createdAt as Timestamp).toDate()
+          : DateTime.now();
+
+      final items = group.payments.map((doc) {
+        final data = _docData(doc);
+        final amount = (data['amount'] is num)
+            ? (data['amount'] as num).toDouble()
+            : 0.0;
+        final billId = (data['billId'] ?? '').toString();
+        final collection = (data['billCollection'] ?? 'monthlyBills')
+            .toString();
+
+        return ReceiptLineItem(
+          title: _formatChargeType(billId, collection),
+          periodLabel: _formatBillingMonth(billId),
+          amount: amount,
+        );
+      }).toList();
+
+      final shortId = group.id.replaceFirst('legacy_', '');
+      final receiptNo = shortId.length > 10
+          ? shortId.substring(0, 10)
+          : shortId;
+
+      final receiptData = PaymentReceiptData(
+        receiptNumber: receiptNo,
+        status: group.status,
+        issuedAt: issuedAt,
+        tenantName: group.tenantName,
+        tenantGrihoId: group.grihoId,
+        propertyName: group.propertyName,
+        unitName: group.unitName,
+        paymentMethod: group.method,
+        referenceNumber: group.reference,
+        note: group.note,
+        items: items,
+      );
+
+      if (share) {
+        await PdfReceiptService.shareReceiptPdf(receiptData);
+      } else {
+        await PdfReceiptService.previewOrPrintReceipt(receiptData);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not generate PDF receipt: $e')),
+      );
+    }
+  }
+
+  void _showProofPreview(String imageUrl) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(
+              title: const Text('Payment Screenshot'),
+              automaticallyImplyLeading: false,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ],
+            ),
+            InteractiveViewer(
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                loadingBuilder: (_, child, progress) {
+                  if (progress == null) return child;
+                  return const Padding(
+                    padding: EdgeInsets.all(40),
+                    child: CircularProgressIndicator(),
+                  );
+                },
+                errorBuilder: (_, _, _) => const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Text('Unable to load screenshot.'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _reviewGroupPayment(_PaymentGroup group, bool confirm) async {
@@ -1058,6 +1161,64 @@ class _OwnerPaymentManagementScreenState
                                                   label: 'Tenant Note',
                                                   value: group.note,
                                                 ),
+                                              if (group
+                                                  .proofUrl
+                                                  .isNotEmpty) ...[
+                                                const SizedBox(height: 8),
+                                                OutlinedButton.icon(
+                                                  onPressed: () =>
+                                                      _showProofPreview(
+                                                        group.proofUrl,
+                                                      ),
+                                                  icon: const Icon(
+                                                    Icons.image_outlined,
+                                                    size: 18,
+                                                  ),
+                                                  label: const Text(
+                                                    'View Payment Screenshot',
+                                                  ),
+                                                ),
+                                              ],
+                                              const SizedBox(height: 10),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: OutlinedButton.icon(
+                                                      onPressed: () =>
+                                                          _openPdfReceipt(
+                                                            group,
+                                                            share: false,
+                                                          ),
+                                                      icon: const Icon(
+                                                        Icons
+                                                            .picture_as_pdf_rounded,
+                                                        size: 18,
+                                                      ),
+                                                      label: const Text(
+                                                        'PDF Receipt',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child:
+                                                        FilledButton.tonalIcon(
+                                                          onPressed: () =>
+                                                              _openPdfReceipt(
+                                                                group,
+                                                                share: true,
+                                                              ),
+                                                          icon: const Icon(
+                                                            Icons.share_rounded,
+                                                            size: 18,
+                                                          ),
+                                                          label: const Text(
+                                                            'Share Receipt',
+                                                          ),
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
                                               const SizedBox(height: 14),
                                               Text(
                                                 'Included Charges (${group.payments.length})',
@@ -1336,6 +1497,7 @@ class _PaymentGroup {
   final String method;
   final String reference;
   final String note;
+  final String proofUrl;
   final dynamic createdAt;
 
   const _PaymentGroup({
@@ -1352,6 +1514,7 @@ class _PaymentGroup {
     required this.method,
     required this.reference,
     required this.note,
+    required this.proofUrl,
     required this.createdAt,
   });
 }

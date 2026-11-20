@@ -1,4 +1,6 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
@@ -37,11 +39,9 @@ const Map<String, _RoleInfo> _roles = {
   ),
 };
 
-/// ম্যানেজার, কেয়ারটেকার ও ইলেক্ট্রিশিয়ান — তিনজনের জন্য একটাই আমন্ত্রণ স্ক্রিন।
 class InviteTeamMemberScreen extends ConsumerStatefulWidget {
   const InviteTeamMemberScreen({super.key, this.initialRole = 'manager'});
 
-  /// 'manager' | 'caretaker' | 'electrician'
   final String initialRole;
 
   @override
@@ -106,50 +106,67 @@ class _InviteTeamMemberScreenState
       return;
     }
 
-    final db = FirebaseFirestore.instance;
-    String? phone;
-    String? targetEmail;
-    String? targetGrihoId;
-    String? targetUserId;
-    String identifier = '';
-
-    if (_method == _InviteMethod.phone) {
-      final valid = _validatedPhone();
-      if (valid == null) {
-        _snack('Please enter a valid international phone number.', error: true);
-        return;
-      }
-      phone = valid;
-      identifier = valid;
-      try {
-        final doc = await db.collection('phone_lookups').doc(valid).get();
-        if (doc.exists) {
-          final d = doc.data()!;
-          targetUserId = (d['uid'] ?? '').toString().trim();
-          targetGrihoId = (d['publicId'] ?? '').toString().trim();
-          targetEmail = (d['email'] ?? '').toString().trim().toLowerCase();
-        }
-      } catch (_) {}
-    } else if (_method == _InviteMethod.email) {
-      targetEmail = _emailController.text.trim().toLowerCase();
-      identifier = targetEmail;
-    } else {
-      targetGrihoId = _grihoIdController.text.trim().toUpperCase();
-      identifier = targetGrihoId;
-      try {
-        final doc = await db.collection('public_ids').doc(targetGrihoId).get();
-        if (doc.exists) {
-          final d = doc.data()!;
-          targetUserId = (d['uid'] ?? '').toString().trim();
-          phone = (d['phoneNumber'] ?? '').toString().trim();
-          targetEmail = (d['email'] ?? '').toString().trim().toLowerCase();
-        }
-      } catch (_) {}
+    final authUser = FirebaseAuth.instance.currentUser;
+    if (authUser == null) {
+      _snack('You must be signed in to send invitations.', error: true);
+      return;
     }
 
     setState(() => _isLoading = true);
 
     try {
+      await authUser.reload();
+      if (!(FirebaseAuth.instance.currentUser?.emailVerified ?? false)) {
+        throw StateError(
+          'Please verify your email address before sending an invitation.',
+        );
+      }
+
+      final db = FirebaseFirestore.instance;
+      String? phone;
+      String? targetEmail;
+      String? targetGrihoId;
+      String? targetUserId;
+      String identifier = '';
+
+      if (_method == _InviteMethod.phone) {
+        final valid = _validatedPhone();
+        if (valid == null) {
+          throw ArgumentError(
+            'Please enter a valid international phone number.',
+          );
+        }
+        phone = valid;
+        identifier = valid;
+        try {
+          final doc = await db.collection('phone_lookups').doc(valid).get();
+          if (doc.exists) {
+            final d = doc.data()!;
+            targetUserId = (d['uid'] ?? '').toString().trim();
+            targetGrihoId = (d['publicId'] ?? '').toString().trim();
+            targetEmail = (d['email'] ?? '').toString().trim().toLowerCase();
+          }
+        } catch (_) {}
+      } else if (_method == _InviteMethod.email) {
+        targetEmail = _emailController.text.trim().toLowerCase();
+        identifier = targetEmail;
+      } else {
+        targetGrihoId = _grihoIdController.text.trim().toUpperCase();
+        identifier = targetGrihoId;
+        try {
+          final doc = await db
+              .collection('public_ids')
+              .doc(targetGrihoId)
+              .get();
+          if (doc.exists) {
+            final d = doc.data()!;
+            targetUserId = (d['uid'] ?? '').toString().trim();
+            phone = (d['phoneNumber'] ?? '').toString().trim();
+            targetEmail = (d['email'] ?? '').toString().trim().toLowerCase();
+          }
+        } catch (_) {}
+      }
+
       final profile = await ref.read(currentUserProfileProvider.future);
       if (profile == null) throw StateError('Owner profile not found.');
 
@@ -191,16 +208,14 @@ class _InviteTeamMemberScreenState
           actionTitle: '${_roles[_role]!.label} invited',
           details: '${_nameController.text.trim()} • $identifier',
         );
-      } catch (_) {
-        // The invitation is already sent; a log failure must not block the user.
-      }
+      } catch (_) {}
 
       if (!mounted) return;
       _snack('${_roles[_role]!.label} invitation sent for ${property.name}!');
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      _snack('Failed to send invitation: $e', error: true);
+      _snack(e.toString().replaceFirst('Bad state: ', ''), error: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -266,7 +281,6 @@ class _InviteTeamMemberScreenState
           }
 
           _selectedProperty ??= properties.first;
-          // keep selection valid if the list changed
           if (!properties.any((p) => p.id == _selectedProperty!.id)) {
             _selectedProperty = properties.first;
           }
@@ -278,7 +292,6 @@ class _InviteTeamMemberScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Role selector
                   Text(
                     'Role',
                     style: theme.textTheme.labelLarge?.copyWith(
@@ -337,7 +350,6 @@ class _InviteTeamMemberScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  // Building
                   DropdownButtonFormField<Property>(
                     key: ValueKey(_selectedProperty!.id),
                     initialValue: _selectedProperty,
@@ -361,7 +373,6 @@ class _InviteTeamMemberScreenState
                   ),
                   const SizedBox(height: 16),
 
-                  // Name
                   TextFormField(
                     controller: _nameController,
                     textCapitalization: TextCapitalization.words,
@@ -384,7 +395,6 @@ class _InviteTeamMemberScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  // Method
                   Text(
                     'Invite Recipient Method',
                     style: theme.textTheme.labelLarge?.copyWith(

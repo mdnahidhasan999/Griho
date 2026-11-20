@@ -1,8 +1,6 @@
 // noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/presentation/controllers/auth_role_resolver.dart';
@@ -15,8 +13,6 @@ class AuthRouteGuard {
 
   const AuthRouteGuard(this.ref);
 
-  // uid -> (fetchedAt, active access roles). Avoids a Firestore round-trip
-  // on every navigation; the real protection is always Firestore rules.
   static final Map<String, ({DateTime at, Set<String> roles})> _accessCache =
       {};
   static const Duration _accessTtl = Duration(seconds: 20);
@@ -55,7 +51,7 @@ class AuthRouteGuard {
         if (role == 'caretaker' || role == 'electrician') roles.add(role);
       }
     } catch (_) {
-      // On error treat as "no active access" (fail closed).
+      // Fail closed on error.
     }
 
     _accessCache[uid] = (at: DateTime.now(), roles: roles);
@@ -77,9 +73,7 @@ class AuthRouteGuard {
     final isRoleSelectionRoute = path == RouteNames.roleSelection;
     final isOwnerWelcomeRoute = path == RouteNames.ownerWelcome;
     final isTenantInvitationRoute = path.startsWith('/i/');
-    final isTenantAccountLinkRoute = path == RouteNames.tenantAccountLink;
 
-    // ড্যাশবোর্ড এবং সব সাব-রুট শনাক্তকরণ
     final isOwnerSection =
         path == RouteNames.ownerHome || path.startsWith('/owner/');
     final isManagerSection =
@@ -91,12 +85,13 @@ class AuthRouteGuard {
     final isElectricianSection =
         path == RouteNames.electricianHome || path.startsWith('/electrician/');
 
-    // Owner-only routes (a manager must NOT open these, even with active access)
+    // Owner-only routes (aligned with firestore.rules)
     final isOwnerExclusiveRoute =
         path == RouteNames.addProperty ||
         path == RouteNames.addManager ||
         path == RouteNames.ownerTeam ||
-        RegExp(r'^/owner/properties/[^/]+/edit$').hasMatch(path);
+        RegExp(r'^/owner/properties/[^/]+/edit$').hasMatch(path) ||
+        RegExp(r'^/owner/properties/[^/]+/units/add$').hasMatch(path);
 
     final isProtectedSection =
         isOwnerSection ||
@@ -128,11 +123,6 @@ class AuthRouteGuard {
           isLinkWaitingRoute) {
         return null;
       }
-
-      if (isTenantAccountLinkRoute) {
-        return RouteNames.login;
-      }
-
       return RouteNames.login;
     }
 
@@ -141,13 +131,15 @@ class AuthRouteGuard {
     }
 
     final userProfileRepository = ref.read(userProfileRepositoryProvider);
+    final profile = await userProfileRepository.getUserByUid(firebaseUser.uid);
 
     if (isOnboardingRoute) {
-      final profile = await userProfileRepository.getUserByUid(
-        firebaseUser.uid,
-      );
-
       if (profile == null) {
+        return null;
+      }
+
+      final phoneNumber = profile.phoneNumber?.trim() ?? '';
+      if (phoneNumber.isEmpty) {
         return null;
       }
 
@@ -155,76 +147,35 @@ class AuthRouteGuard {
       return AuthDestinationMapper.routeFor(destination);
     }
 
+    // Enforce completed profile & phone number for ALL authenticated routes
+    if (profile == null || (profile.phoneNumber?.trim() ?? '').isEmpty) {
+      return RouteNames.onboarding;
+    }
+
     if (isRoleSelectionRoute) {
-      final profile = await userProfileRepository.getUserByUid(
-        firebaseUser.uid,
-      );
-
-      if (profile == null) {
-        return RouteNames.onboarding;
-      }
-
-      final phoneNumber = profile.phoneNumber?.trim() ?? '';
-      if (phoneNumber.isEmpty) {
-        return RouteNames.onboarding;
-      }
-
       final destination = AuthRoleResolver.resolve(profile);
       if (destination == AuthUserDestination.roleSelection) {
         return null;
       }
-
       return AuthDestinationMapper.routeFor(destination);
     }
 
+    final roles = profile.availableRoles
+        .map((role) => role.trim().toLowerCase())
+        .toSet();
+
     if (isOwnerWelcomeRoute) {
-      final profile = await userProfileRepository.getUserByUid(
-        firebaseUser.uid,
-      );
-
-      if (profile == null) {
-        return RouteNames.onboarding;
-      }
-
-      final phoneNumber = profile.phoneNumber?.trim() ?? '';
-      if (phoneNumber.isEmpty) {
-        return RouteNames.onboarding;
-      }
-
-      final availableRoles = profile.availableRoles
-          .map((role) => role.trim().toLowerCase())
-          .toSet();
-
-      if (!availableRoles.contains('owner')) {
+      if (!roles.contains('owner')) {
         final destination = AuthRoleResolver.resolve(profile);
         if (destination == AuthUserDestination.roleSelection) {
           return RouteNames.roleSelection;
         }
         return AuthDestinationMapper.routeFor(destination);
       }
-
       return null;
     }
 
     if (isProtectedSection) {
-      final profile = await userProfileRepository.getUserByUid(
-        firebaseUser.uid,
-      );
-
-      if (profile == null) {
-        return RouteNames.onboarding;
-      }
-
-      final phoneNumber = profile.phoneNumber?.trim() ?? '';
-      if (phoneNumber.isEmpty) {
-        return RouteNames.onboarding;
-      }
-
-      final roles = profile.availableRoles
-          .map((role) => role.trim().toLowerCase())
-          .toSet();
-
-      // Roles with an ACTIVE assignment right now (suspended / revoked excluded).
       final activeAccess = await _activeAccessRoles(firebaseUser.uid);
       final hasActiveManager = activeAccess.contains('manager');
 
@@ -237,7 +188,7 @@ class AuthRouteGuard {
         return hasActiveManager ? RouteNames.managerHome : defaultFallbackRoute;
       }
 
-      // 2) /owner and /owner/*  -> owner, or a manager with ACTIVE access
+      // 2) /owner and /owner/* -> owner, or a manager with ACTIVE access
       if (isOwnerSection) {
         if (path == RouteNames.ownerHome) {
           if (roles.contains('owner')) return null;
@@ -249,7 +200,7 @@ class AuthRouteGuard {
         return defaultFallbackRoute;
       }
 
-      // 3) /manager  -> manager role (needed to accept invitations / see suspended state)
+      // 3) /manager
       if (isManagerSection) {
         return (roles.contains('manager') || hasActiveManager)
             ? null
@@ -261,8 +212,7 @@ class AuthRouteGuard {
         return roles.contains('tenant') ? null : defaultFallbackRoute;
       }
 
-      // 5) Staff dashboards (role needed to accept invitations; data is
-      //    protected by Firestore rules, which require ACTIVE staffAccess)
+      // 5) Caretaker & Electrician
       if (isCaretakerSection) {
         return roles.contains('caretaker') ? null : defaultFallbackRoute;
       }
