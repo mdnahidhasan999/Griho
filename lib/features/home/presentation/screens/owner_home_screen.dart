@@ -1,11 +1,7 @@
 // noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
@@ -17,6 +13,7 @@ import '../../../properties/presentation/providers/current_owner_properties_prov
 import '../../../team/presentation/providers/team_providers.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/owner_tenants_provider.dart';
+import '../widgets/griho_home_chrome.dart';
 import '../widgets/shared_property_sheets.dart';
 
 class OwnerHomeScreen extends ConsumerStatefulWidget {
@@ -90,57 +87,11 @@ class _OwnerHomeScreenState extends ConsumerState<OwnerHomeScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      extendBody: true,
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        centerTitle: false,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.tertiary,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.apartment_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Griho',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                Text(
-                  'Owner Console',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
+      appBar: GrihoHomeAppBar(
+        consoleLabel: 'Owner Console',
+        extraActions: [
           IconButton(
             tooltip: 'Activity & audit trail',
             icon: const Icon(Icons.history_rounded),
@@ -175,9 +126,12 @@ class _OwnerHomeScreenState extends ConsumerState<OwnerHomeScreen> {
             },
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 105),
               children: [
-                _Header(name: profile.name, publicId: profile.publicId),
+                GrihoHomeTopHeader(
+                  name: profile.name,
+                  publicId: profile.publicId,
+                ),
                 const SizedBox(height: 16),
 
                 OpenIssuesBanner(
@@ -222,76 +176,9 @@ class _OwnerHomeScreenState extends ConsumerState<OwnerHomeScreen> {
           );
         },
       ),
-      bottomNavigationBar: AppBottomNavigation(
+      bottomNavigationBar: const AppBottomNavigation(
         selectedDestination: GrihoNavigationDestination.home,
-        onHomeTap: () => context.go(RouteNames.ownerHome),
-        onMoreTap: () => context.push(RouteNames.more),
       ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.name, required this.publicId});
-
-  final String name;
-  final String publicId;
-
-  String _greeting() {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _greeting(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (publicId.isNotEmpty)
-          ActionChip(
-            avatar: const Icon(Icons.badge_outlined, size: 16),
-            label: Text(
-              publicId,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
-            ),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: publicId));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Owner ID copied.'),
-                  duration: Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-          ),
-      ],
     );
   }
 }

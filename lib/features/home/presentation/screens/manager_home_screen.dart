@@ -2,7 +2,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,6 +10,7 @@ import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/fcm_notification_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../widgets/griho_home_chrome.dart';
 import '../widgets/manager_portal_sheets.dart';
 import '../widgets/shared_property_sheets.dart';
 
@@ -87,7 +87,6 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
       }
     }
 
-    // Fallback sequential read if any query errored out
     if (results.isEmpty && queries.isNotEmpty) {
       for (final future in queries) {
         try {
@@ -187,7 +186,9 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to process invitation: $e'),
+          content: Text(
+            'Unable to process invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
+          ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -197,13 +198,6 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
         setState(() => _busy = false);
       }
     }
-  }
-
-  String _greeting() {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
   }
 
   void _openManagerIssuesSheet(
@@ -263,57 +257,11 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
     final firestore = FirebaseFirestore.instance;
 
     return Scaffold(
+      extendBody: true,
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        centerTitle: false,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.tertiary,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.admin_panel_settings_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Griho',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                Text(
-                  'Manager Console',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
+      appBar: GrihoHomeAppBar(
+        consoleLabel: 'Manager Console',
+        extraActions: [
           IconButton(
             tooltip: 'Activity & audit trail',
             icon: const Icon(Icons.history_rounded),
@@ -556,82 +504,12 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         16,
                                         4,
                                         16,
-                                        40,
+                                        105,
                                       ),
                                       children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    _greeting(),
-                                                    style: theme
-                                                        .textTheme
-                                                        .bodySmall
-                                                        ?.copyWith(
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onSurfaceVariant,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                  ),
-                                                  Text(
-                                                    profile.name,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: theme
-                                                        .textTheme
-                                                        .headlineSmall
-                                                        ?.copyWith(
-                                                          fontWeight:
-                                                              FontWeight.w900,
-                                                          letterSpacing: -0.5,
-                                                        ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            if (profile.publicId.isNotEmpty)
-                                              ActionChip(
-                                                avatar: const Icon(
-                                                  Icons.badge_outlined,
-                                                  size: 16,
-                                                ),
-                                                label: Text(
-                                                  profile.publicId,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w800,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                                onPressed: () {
-                                                  Clipboard.setData(
-                                                    ClipboardData(
-                                                      text: profile.publicId,
-                                                    ),
-                                                  );
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Griho ID copied.',
-                                                      ),
-                                                      duration: Duration(
-                                                        seconds: 2,
-                                                      ),
-                                                      behavior: SnackBarBehavior
-                                                          .floating,
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                          ],
+                                        GrihoHomeTopHeader(
+                                          name: profile.name,
+                                          publicId: profile.publicId,
                                         ),
                                         const SizedBox(height: 16),
 
@@ -966,10 +844,8 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
           );
         },
       ),
-      bottomNavigationBar: AppBottomNavigation(
+      bottomNavigationBar: const AppBottomNavigation(
         selectedDestination: GrihoNavigationDestination.home,
-        onHomeTap: () => context.go(RouteNames.managerHome),
-        onMoreTap: () => context.push(RouteNames.more),
       ),
     );
   }

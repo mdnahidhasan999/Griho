@@ -4,12 +4,13 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
+import '../../../../core/navigation/app_bottom_navigation.dart';
+import '../../../../core/services/fcm_notification_service.dart';
 import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../invitations/presentation/providers/work_invitations_providers.dart';
@@ -72,7 +73,7 @@ class MoreScreen extends ConsumerWidget {
           ),
           FilledButton.icon(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            icon: const Icon(Icons.add_home_work_rounded, size: 18),
+            icon: const Icon(Iconsax.home_hashtag, size: 18),
             label: const Text('Activate Owner Console'),
           ),
         ],
@@ -91,26 +92,15 @@ class MoreScreen extends ConsumerWidget {
       ref.invalidate(currentUserProfileProvider);
 
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Owner Console activated! You can now add your property.',
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
+      GrihoFeedback.showSuccess(
+        context,
+        'Owner Console activated! You can now add your property.',
       );
 
       context.go(RouteNames.ownerHome);
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to activate Owner role: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      GrihoFeedback.showError(context, 'Unable to activate Owner role: $e');
     }
   }
 
@@ -120,22 +110,20 @@ class MoreScreen extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
+      extendBody: true,
       appBar: AppBar(title: const Text('More')),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const GrihoLoadingView(message: 'Loading account...'),
         error: (error, stackTrace) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Unable to load account information.'),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () {
-                  ref.invalidate(currentUserProfileProvider);
-                },
-                child: const Text('Try Again'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load account',
+              subtitle: 'Please check your connection and try again.',
+              actionLabel: 'Try Again',
+              onAction: () => ref.invalidate(currentUserProfileProvider),
+            ),
           ),
         ),
         data: (profile) {
@@ -155,7 +143,7 @@ class MoreScreen extends ConsumerWidget {
                   effectiveRoles.contains('manager');
 
               return ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
                 children: [
                   Card(
                     child: Padding(
@@ -210,9 +198,9 @@ class MoreScreen extends ConsumerWidget {
                         child: ListTile(
                           leading: CircleAvatar(
                             backgroundColor: theme.colorScheme.primary,
-                            child: const Icon(
-                              Icons.add_home_work_rounded,
-                              color: Colors.white,
+                            child: Icon(
+                              Iconsax.home_hashtag,
+                              color: theme.colorScheme.onPrimary,
                               size: 20,
                             ),
                           ),
@@ -223,7 +211,7 @@ class MoreScreen extends ConsumerWidget {
                           subtitle: const Text(
                             'Register your own buildings & manage tenants',
                           ),
-                          trailing: const Icon(Icons.arrow_forward_rounded),
+                          trailing: const Icon(Iconsax.arrow_right_3),
                           onTap: () =>
                               _activateOwnerRole(context, ref, profile.uid),
                         ),
@@ -232,7 +220,7 @@ class MoreScreen extends ConsumerWidget {
                   const SizedBox(height: 20),
                   Text('Account', style: theme.textTheme.titleSmall),
                   MoreMenuItem(
-                    icon: Icons.person_outline_rounded,
+                    icon: Iconsax.user,
                     title: 'Profile',
                     subtitle: 'View and edit your profile',
                     onTap: () {
@@ -240,7 +228,7 @@ class MoreScreen extends ConsumerWidget {
                     },
                   ),
                   MoreMenuItem(
-                    icon: Icons.lock_outline_rounded,
+                    icon: Iconsax.lock,
                     title: 'Change Password',
                     subtitle: 'Update your account password',
                     onTap: () {
@@ -248,7 +236,7 @@ class MoreScreen extends ConsumerWidget {
                     },
                   ),
                   MoreMenuItem(
-                    icon: Icons.home_outlined,
+                    icon: Iconsax.home_2,
                     title: 'Default Account',
                     subtitle: 'Choose your default dashboard',
                     onTap: () {
@@ -263,7 +251,7 @@ class MoreScreen extends ConsumerWidget {
                   ),
                   if (effectiveRoles.length > 1)
                     MoreMenuItem(
-                      icon: Icons.swap_horiz_rounded,
+                      icon: Iconsax.arrange_square,
                       title: 'Switch Account Console',
                       subtitle:
                           'Switch between your Owner, Manager, Staff & Resident views',
@@ -281,7 +269,7 @@ class MoreScreen extends ConsumerWidget {
                   Text('Activities & Audit', style: theme.textTheme.titleSmall),
                   if (isOwnerOrManager)
                     MoreMenuItem(
-                      icon: Icons.history_edu_rounded,
+                      icon: Iconsax.document_text,
                       title: 'Activity & Audit Trail',
                       subtitle:
                           'Track manager actions, rent changes & billing logs',
@@ -291,7 +279,7 @@ class MoreScreen extends ConsumerWidget {
                     ),
                   if (effectiveRoles.contains('owner'))
                     MoreMenuItem(
-                      icon: Icons.groups_rounded,
+                      icon: Iconsax.people,
                       title: 'Team & Work Orders',
                       subtitle: 'Managers, caretakers, electricians & tasks',
                       onTap: () {
@@ -307,7 +295,7 @@ class MoreScreen extends ConsumerWidget {
                               ?.length ??
                           0;
                       return MoreMenuItem(
-                        icon: Icons.work_outline_rounded,
+                        icon: Iconsax.briefcase,
                         title: count > 0
                             ? 'Work Invitations ($count new)'
                             : 'Work Invitations',
@@ -321,7 +309,7 @@ class MoreScreen extends ConsumerWidget {
                     },
                   ),
                   MoreMenuItem(
-                    icon: Icons.mail_outline_rounded,
+                    icon: Iconsax.sms,
                     title: 'Tenancy Invitations',
                     subtitle: 'View your residential invitations',
                     onTap: () {
@@ -331,14 +319,14 @@ class MoreScreen extends ConsumerWidget {
                   const Divider(height: 32),
                   Text('Preferences', style: theme.textTheme.titleSmall),
                   MoreMenuItem(
-                    icon: Icons.settings_outlined,
+                    icon: Iconsax.setting_2,
                     title: 'Settings',
                     onTap: () {
                       _showComingSoon(context, 'Settings');
                     },
                   ),
                   MoreMenuItem(
-                    icon: Icons.help_outline_rounded,
+                    icon: Iconsax.message_question,
                     title: 'Help & Support',
                     onTap: () {
                       _showComingSoon(context, 'Help & Support');
@@ -346,7 +334,7 @@ class MoreScreen extends ConsumerWidget {
                   ),
                   const Divider(height: 32),
                   MoreMenuItem(
-                    icon: Icons.logout_rounded,
+                    icon: Iconsax.logout,
                     title: 'Logout',
                     subtitle: 'Sign out of your account',
                     isDestructive: true,
@@ -359,6 +347,9 @@ class MoreScreen extends ConsumerWidget {
             },
           );
         },
+      ),
+      bottomNavigationBar: const AppBottomNavigation(
+        selectedDestination: GrihoNavigationDestination.more,
       ),
     );
   }
@@ -489,8 +480,6 @@ class MoreScreen extends ConsumerWidget {
     required String role,
     required bool openDashboard,
   }) async {
-    final messenger = ScaffoldMessenger.of(context);
-
     try {
       await ref
           .read(userProfileRepositoryProvider)
@@ -505,8 +494,9 @@ class MoreScreen extends ConsumerWidget {
       if (openDashboard) {
         context.go(_routeForRole(role));
       } else {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Default account: ${_roleLabel(role)}')),
+        GrihoFeedback.showSuccess(
+          context,
+          'Default account: ${_roleLabel(role)}',
         );
       }
     } catch (error) {
@@ -514,9 +504,8 @@ class MoreScreen extends ConsumerWidget {
         context.go(_routeForRole(role));
         return;
       }
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Unable to change account.')),
-      );
+      if (!context.mounted) return;
+      GrihoFeedback.showError(context, 'Unable to change account.');
     }
   }
 
@@ -547,12 +536,14 @@ class MoreScreen extends ConsumerWidget {
       return;
     }
 
+    await FcmNotificationService.instance.removeTokenOnLogout();
     await ref.read(authControllerProvider.notifier).signOut();
   }
 
   void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature integration is not connected yet.')),
+    GrihoFeedback.showInfo(
+      context,
+      '$feature integration is not connected yet.',
     );
   }
 }

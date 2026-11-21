@@ -1,20 +1,29 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+// noinspection SpellCheckingInspection
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../core/design_system/design_system.dart';
 import 'router/app_router_provider.dart';
-import 'theme/app_theme.dart';
+
+typedef AppRouter = GoRouter;
 
 class GrihoApp extends ConsumerWidget {
   const GrihoApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final router = ref.watch(appRouterProvider);
+    final AppRouter router = ref.watch(appRouterProvider);
+    final ThemeMode themeMode = ref.watch(grihoThemeModeProvider);
 
     return MaterialApp.router(
       title: 'Griho',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
+      theme: GrihoTheme.light(),
+      darkTheme: GrihoTheme.dark(),
+      themeMode: themeMode,
       routerConfig: router,
     );
   }

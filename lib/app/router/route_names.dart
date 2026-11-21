@@ -12,9 +12,11 @@ abstract final class RouteNames {
   static const String changePassword = '/change-password';
 
   // ============================================================
-  // HOME
+  // COMMON TABS & HOME
   // ============================================================
   static const ownerHome = '/owner';
+  static const notices = '/notices';
+  static const myInvitations = '/invitations';
   static const more = '/more';
   static const ownerWelcome = '/owner/welcome';
   static const managerHome = '/manager';
@@ -31,7 +33,6 @@ abstract final class RouteNames {
   static const propertyDetails = '/owner/properties/:propertyId';
   static const editProperty = '/owner/properties/:propertyId/edit';
   static const String ownerManagers = '/owner/managers';
-  static const String myInvitations = '/invitations';
   static const String ownerTeam = '/owner/team';
   static const String addManager = '/owner/add-manager';
 

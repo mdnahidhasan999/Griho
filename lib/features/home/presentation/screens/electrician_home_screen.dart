@@ -1,9 +1,7 @@
 // noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,7 +9,12 @@ import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/audit_logger_service.dart';
+import '../../../../core/services/fcm_notification_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../widgets/griho_home_chrome.dart';
+
+typedef JsonMap = Map<String, dynamic>;
+typedef _DocList = List<QueryDocumentSnapshot>;
 
 class ElectricianHomeScreen extends ConsumerStatefulWidget {
   const ElectricianHomeScreen({super.key});
@@ -21,30 +24,43 @@ class ElectricianHomeScreen extends ConsumerStatefulWidget {
       _ElectricianHomeScreenState();
 }
 
-class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
-    with SingleTickerProviderStateMixin {
+class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen> {
   bool _busy = false;
   String? _selectedPropertyId;
-  late final TabController _tabController;
+
+  Future<_DocList>? _invitesFuture;
+  String? _cachedForUid;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    FcmNotificationService.instance.initialize(
+      onNavigate: (route) {
+        if (mounted) context.push(route);
+      },
+    );
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+  Future<_DocList> _getOrFetchInvites(dynamic profile) {
+    final uid = profile.uid.toString().trim();
+    if (_invitesFuture == null || _cachedForUid != uid) {
+      _cachedForUid = uid;
+      _invitesFuture = _fetchElectricianInvites(profile);
+    }
+    return _invitesFuture!;
   }
 
-  Future<List<QueryDocumentSnapshot>> _fetchElectricianInvites(
-    dynamic profile,
-  ) async {
+  void _refreshInvites(dynamic profile) {
+    setState(() {
+      _cachedForUid = profile.uid.toString().trim();
+      _invitesFuture = _fetchElectricianInvites(profile);
+    });
+  }
+
+  Future<_DocList> _fetchElectricianInvites(dynamic profile) async {
     final firestore = FirebaseFirestore.instance;
     final col = firestore.collection('staffInvitations');
-    final Map<String, QueryDocumentSnapshot> results = {};
+    final results = <String, QueryDocumentSnapshot>{};
 
     final uid = profile.uid.toString().trim();
     final phone = (profile.phoneNumber ?? '').toString().trim();
@@ -66,7 +82,7 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
       try {
         final snap = await future;
         for (final doc in snap.docs) {
-          final data = doc.data() as Map<String, dynamic>? ?? {};
+          final data = doc.data() as JsonMap? ?? <String, dynamic>{};
           if ((data['staffRole'] ?? '') == 'electrician') {
             results[doc.id] = doc;
           }
@@ -86,8 +102,16 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
     setState(() => _busy = true);
 
     try {
+      final authUser = FirebaseAuth.instance.currentUser;
+      await authUser?.reload();
+      if (!(FirebaseAuth.instance.currentUser?.emailVerified ?? false)) {
+        throw StateError(
+          'Please verify your email address before responding to an invitation.',
+        );
+      }
+
       final firestore = FirebaseFirestore.instance;
-      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final data = doc.data() as JsonMap? ?? <String, dynamic>{};
       final propertyId = (data['propertyId'] ?? '').toString().trim();
       final ownerId = (data['ownerId'] ?? '').toString().trim();
 
@@ -139,7 +163,7 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
       ref.invalidate(currentUserProfileProvider);
 
       if (!mounted) return;
-      setState(() {});
+      _refreshInvites(profile);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -155,7 +179,9 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error processing invitation: $e'),
+          content: Text(
+            'Error processing invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
+          ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -166,7 +192,7 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
   }
 
   Future<void> _showLogMeterReadingDialog({
-    required Map<String, dynamic> activeAssignment,
+    required JsonMap activeAssignment,
     required dynamic profile,
   }) async {
     final unitCtrl = TextEditingController();
@@ -311,6 +337,47 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
     }
   }
 
+  void _openRepairsSheet(String propertyId, String actorName) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.72,
+          child: _ElectricalRepairsSheet(
+            propertyId: propertyId,
+            actorName: actorName,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openMeterLogsSheet(
+    String propertyId,
+    JsonMap activeAssignment,
+    dynamic profile,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.72,
+          child: _MeterLogsSheet(
+            propertyId: propertyId,
+            onAddReading: () => _showLogMeterReadingDialog(
+              activeAssignment: activeAssignment,
+              profile: profile,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -318,52 +385,10 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
     final firestore = FirebaseFirestore.instance;
 
     return Scaffold(
+      extendBody: true,
+
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade800,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.electrical_services_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Griho',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text(
-                  'Electrician Console',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.electric_meter_outlined), text: 'Meter Logs'),
-            Tab(icon: Icon(Icons.bolt_rounded), text: 'Electrical Repairs'),
-          ],
-        ),
-      ),
+      appBar: const GrihoHomeAppBar(consoleLabel: 'Electrician Console'),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -379,76 +404,87 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
                 .where('staffRole', isEqualTo: 'electrician')
                 .snapshots(),
             builder: (context, accessSnap) {
-              return FutureBuilder<List<QueryDocumentSnapshot>>(
-                future: _fetchElectricianInvites(profile),
+              return FutureBuilder<_DocList>(
+                future: _getOrFetchInvites(profile),
                 builder: (context, inviteSnap) {
                   final invites = inviteSnap.data ?? [];
                   final pendingInvites = invites.where((d) {
-                    final map = d.data() as Map<String, dynamic>? ?? {};
+                    final map = d.data() as JsonMap? ?? <String, dynamic>{};
                     return (map['status'] ?? 'pending') == 'pending';
                   }).toList();
 
                   final accessDocs = accessSnap.data?.docs ?? [];
                   final activeAccessList = accessDocs
-                      .map((d) => d.data() as Map<String, dynamic>? ?? {})
+                      .map((d) => d.data() as JsonMap? ?? <String, dynamic>{})
                       .where((m) => (m['status'] ?? 'active') == 'active')
                       .toList();
 
                   if (activeAccessList.isEmpty) {
-                    return ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        _ElectricianHeader(
-                          name: profile.name,
-                          publicId: profile.publicId,
-                        ),
-                        const SizedBox(height: 16),
-                        for (final inv in pendingInvites)
-                          _ElectricianInviteBanner(
-                            doc: inv,
-                            busy: _busy,
-                            onAccept: () =>
-                                _respondToInvite(inv, profile, true),
-                            onDecline: () =>
-                                _respondToInvite(inv, profile, false),
+                    return RefreshIndicator(
+                      onRefresh: () async => _refreshInvites(profile),
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 105),
+                        children: [
+                          GrihoHomeTopHeader(
+                            name: profile.name,
+                            publicId: profile.publicId,
                           ),
-                        const SizedBox(height: 24),
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: theme.colorScheme.outlineVariant,
+                          const SizedBox(height: 16),
+                          for (final inv in pendingInvites)
+                            _ElectricianInviteBanner(
+                              doc: inv,
+                              busy: _busy,
+                              onAccept: () =>
+                                  _respondToInvite(inv, profile, true),
+                              onDecline: () =>
+                                  _respondToInvite(inv, profile, false),
+                            ),
+                          Container(
+                            padding: const EdgeInsets.all(22),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: theme.colorScheme.outlineVariant,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primaryContainer
+                                        .withValues(alpha: 0.45),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.electrical_services_outlined,
+                                    size: 40,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No Active Building Assignment',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Provide your Griho ID (${profile.publicId}) or Phone (${profile.phoneNumber}) to the property owner to get authorized for meter readings and electrical repairs.',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.electrical_services_outlined,
-                                size: 48,
-                                color: Colors.amber.shade800,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No Active Building Assignment',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Provide your Griho ID (${profile.publicId}) or Phone (${profile.phoneNumber}) to the property owner to get authorized for meter readings and electrical repairs.',
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     );
                   }
 
@@ -458,79 +494,249 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
                   );
                   final activePropertyId =
                       (currentAssignment['propertyId'] ?? '').toString();
+                  final activePropertyName =
+                      (currentAssignment['propertyName'] ?? 'Assigned Building')
+                          .toString();
 
-                  return Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                        child: Column(
-                          children: [
-                            _ElectricianHeader(
-                              name: profile.name,
-                              publicId: profile.publicId,
-                            ),
-                            if (pendingInvites.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              for (final inv in pendingInvites)
-                                _ElectricianInviteBanner(
-                                  doc: inv,
-                                  busy: _busy,
-                                  onAccept: () =>
-                                      _respondToInvite(inv, profile, true),
-                                  onDecline: () =>
-                                      _respondToInvite(inv, profile, false),
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: firestore
+                        .collection('meterReadings')
+                        .where('propertyId', isEqualTo: activePropertyId)
+                        .snapshots(),
+                    builder: (context, metersSnap) {
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: firestore
+                            .collection('maintenanceRequests')
+                            .where('propertyId', isEqualTo: activePropertyId)
+                            .snapshots(),
+                        builder: (context, repairsSnap) {
+                          final meterDocs = metersSnap.data?.docs ?? [];
+                          var totalMeterAmount = 0.0;
+                          for (final d in meterDocs) {
+                            final m =
+                                d.data() as JsonMap? ?? <String, dynamic>{};
+                            final amt = m['calculatedAmount'];
+                            if (amt is num) {
+                              totalMeterAmount += amt.toDouble();
+                            }
+                          }
+
+                          final electricalDocs = (repairsSnap.data?.docs ?? [])
+                              .where((doc) {
+                                final d =
+                                    doc.data() as JsonMap? ??
+                                    <String, dynamic>{};
+                                return (d['category'] ?? 'electrical') ==
+                                    'electrical';
+                              })
+                              .toList();
+
+                          final openRepairs = electricalDocs.where((doc) {
+                            final d =
+                                doc.data() as JsonMap? ?? <String, dynamic>{};
+                            final s = (d['status'] ?? 'open').toString();
+                            return s == 'open' || s == 'in_progress';
+                          }).toList();
+
+                          return RefreshIndicator(
+                            onRefresh: () async => _refreshInvites(profile),
+                            child: ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+                              children: [
+                                GrihoHomeTopHeader(
+                                  name: profile.name,
+                                  publicId: profile.publicId,
                                 ),
-                            ],
-                            if (activeAccessList.length > 1) ...[
-                              const SizedBox(height: 10),
-                              DropdownButtonFormField<String>(
-                                initialValue: activePropertyId,
-                                decoration: const InputDecoration(
-                                  labelText: 'Assigned Building',
-                                  prefixIcon: Icon(Icons.apartment_rounded),
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
+                                const SizedBox(height: 16),
+
+                                if (pendingInvites.isNotEmpty)
+                                  for (final inv in pendingInvites)
+                                    _ElectricianInviteBanner(
+                                      doc: inv,
+                                      busy: _busy,
+                                      onAccept: () =>
+                                          _respondToInvite(inv, profile, true),
+                                      onDecline: () =>
+                                          _respondToInvite(inv, profile, false),
+                                    ),
+
+                                if (activeAccessList.length > 1) ...[
+                                  DropdownButtonFormField<String>(
+                                    initialValue: activePropertyId,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Assigned Building',
+                                      prefixIcon: Icon(Icons.apartment_rounded),
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    items: activeAccessList
+                                        .map(
+                                          (a) => DropdownMenuItem<String>(
+                                            value: a['propertyId'].toString(),
+                                            child: Text(
+                                              (a['propertyName'] ?? 'Building')
+                                                  .toString(),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (v) {
+                                      if (v != null) {
+                                        setState(() => _selectedPropertyId = v);
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 14),
+                                ],
+
+                                // Unified Dark Hero Console Card
+                                _ElectricianSummaryCard(
+                                  propertyName: activePropertyName,
+                                  openRepairs: openRepairs.length,
+                                  meterCount: meterDocs.length,
+                                  totalBilled: totalMeterAmount,
                                 ),
-                                items: activeAccessList
-                                    .map(
-                                      (a) => DropdownMenuItem<String>(
-                                        value: a['propertyId'].toString(),
-                                        child: Text(
-                                          (a['propertyName'] ?? 'Building')
-                                              .toString(),
+                                const SizedBox(height: 14),
+
+                                // Primary Action Buttons
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: FilledButton.icon(
+                                        style: FilledButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
                                         ),
+                                        onPressed: () =>
+                                            _showLogMeterReadingDialog(
+                                              activeAssignment:
+                                                  currentAssignment,
+                                              profile: profile,
+                                            ),
+                                        icon: const Icon(
+                                          Icons.electric_meter_rounded,
+                                          size: 20,
+                                        ),
+                                        label: const Text('Log meter'),
                                       ),
-                                    )
-                                    .toList(),
-                                onChanged: (v) {
-                                  if (v != null) {
-                                    setState(() => _selectedPropertyId = v);
-                                  }
-                                },
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _MeterReadingsTab(
-                              propertyId: activePropertyId,
-                              onAddReading: () => _showLogMeterReadingDialog(
-                                activeAssignment: currentAssignment,
-                                profile: profile,
-                              ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                        ),
+                                        onPressed: () => _openRepairsSheet(
+                                          activePropertyId,
+                                          profile.name,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.bolt_rounded,
+                                          size: 20,
+                                        ),
+                                        label: const Text('Repairs'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 22),
+
+                                Text(
+                                  'Quick actions',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+
+                                // Unified 2-Column Quick Actions Grid
+                                GridView.count(
+                                  crossAxisCount: 2,
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  mainAxisSpacing: 10,
+                                  crossAxisSpacing: 10,
+                                  childAspectRatio: 2.3,
+                                  children: [
+                                    _QuickTile(
+                                      icon: Icons.electric_meter_outlined,
+                                      title: 'Log meter',
+                                      subtitle: 'Record kWh usage',
+                                      color: Colors.amber.shade800,
+                                      onTap: () => _showLogMeterReadingDialog(
+                                        activeAssignment: currentAssignment,
+                                        profile: profile,
+                                      ),
+                                    ),
+                                    _QuickTile(
+                                      icon: Icons.receipt_long_rounded,
+                                      title: 'Meter logs',
+                                      subtitle: '${meterDocs.length} recorded',
+                                      color: Colors.teal,
+                                      onTap: () => _openMeterLogsSheet(
+                                        activePropertyId,
+                                        currentAssignment,
+                                        profile,
+                                      ),
+                                    ),
+                                    _QuickTile(
+                                      icon: Icons.bolt_rounded,
+                                      title: 'Electrical repairs',
+                                      subtitle: '${openRepairs.length} open',
+                                      color: Colors.deepOrange,
+                                      onTap: () => _openRepairsSheet(
+                                        activePropertyId,
+                                        profile.name,
+                                      ),
+                                    ),
+                                    _QuickTile(
+                                      icon: Icons.campaign_outlined,
+                                      title: 'Notice board',
+                                      subtitle: 'View building alerts',
+                                      color: Colors.indigo,
+                                      onTap: () =>
+                                          context.go(RouteNames.notices),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 22),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Electrical repair tickets',
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                    ),
+                                    if (electricalDocs.isNotEmpty)
+                                      TextButton(
+                                        onPressed: () => _openRepairsSheet(
+                                          activePropertyId,
+                                          profile.name,
+                                        ),
+                                        child: const Text('View all'),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                _ElectricalRepairsList(
+                                  docs: electricalDocs.take(4).toList(),
+                                  actorName: profile.name,
+                                ),
+                              ],
                             ),
-                            _ElectricalRepairsTab(
-                              propertyId: activePropertyId,
-                              actorName: profile.name,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          );
+                        },
+                      );
+                    },
                   );
                 },
               );
@@ -538,75 +744,206 @@ class _ElectricianHomeScreenState extends ConsumerState<ElectricianHomeScreen>
           );
         },
       ),
-      bottomNavigationBar: AppBottomNavigation(
+      bottomNavigationBar: const AppBottomNavigation(
         selectedDestination: GrihoNavigationDestination.home,
-        onHomeTap: () => context.go(RouteNames.electricianHome),
-        onMoreTap: () => context.push(RouteNames.more),
       ),
     );
   }
 }
 
-class _ElectricianHeader extends StatelessWidget {
-  final String name;
-  final String publicId;
+class _ElectricianSummaryCard extends StatelessWidget {
+  const _ElectricianSummaryCard({
+    required this.propertyName,
+    required this.openRepairs,
+    required this.meterCount,
+    required this.totalBilled,
+  });
 
-  const _ElectricianHeader({required this.name, required this.publicId});
-
-  String _greeting() {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
+  final String propertyName;
+  final int openRepairs;
+  final int meterCount;
+  final double totalBilled;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final billedText = totalBilled == totalBilled.roundToDouble()
+        ? totalBilled.toStringAsFixed(0)
+        : totalBilled.toStringAsFixed(2);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E222D), Color(0xFF141720)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text(
-                _greeting(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+              Icon(
+                Icons.apartment_rounded,
+                size: 14,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'ASSIGNED BUILDING',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
                 ),
               ),
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            propertyName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _DarkMetric(
+                label: 'Open repairs',
+                value: '$openRepairs',
+                highlight: openRepairs > 0,
+              ),
+              _DarkMetric(label: 'Meter logs', value: '$meterCount'),
+              _DarkMetric(label: 'Logged value', value: '৳$billedText'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DarkMetric extends StatelessWidget {
+  const _DarkMetric({
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  final String label;
+  final String value;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: highlight ? Colors.amberAccent : Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickTile extends StatelessWidget {
+  const _QuickTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, size: 20, color: color),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
-        if (publicId.isNotEmpty)
-          ActionChip(
-            avatar: const Icon(Icons.badge_outlined, size: 16),
-            label: Text(
-              publicId,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
-            ),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: publicId));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Griho ID copied.'),
-                  duration: Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-          ),
-      ],
+      ),
     );
   }
 }
@@ -626,12 +963,12 @@ class _ElectricianInviteBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final data = doc.data() as Map<String, dynamic>? ?? {};
+    final data = doc.data() as JsonMap? ?? <String, dynamic>{};
     final propName = (data['propertyName'] ?? 'Building').toString();
     final ownerName = (data['ownerName'] ?? 'Property Owner').toString();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.amber.withValues(alpha: 0.14),
@@ -671,250 +1008,289 @@ class _ElectricianInviteBanner extends StatelessWidget {
   }
 }
 
-class _MeterReadingsTab extends StatelessWidget {
-  final String propertyId;
-  final VoidCallback onAddReading;
+class _ElectricalRepairsList extends StatelessWidget {
+  const _ElectricalRepairsList({required this.docs, required this.actorName});
 
-  const _MeterReadingsTab({
-    required this.propertyId,
-    required this.onAddReading,
-  });
+  final _DocList docs;
+  final String actorName;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: onAddReading,
-        icon: const Icon(Icons.electric_meter_rounded),
-        label: const Text('Log Meter Reading'),
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('meterReadings')
-            .where('propertyId', isEqualTo: propertyId)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final docs = snapshot.data?.docs ?? [];
-          if (docs.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No unit electricity meter readings logged yet. Tap "Log Meter Reading" below to record monthly kWh consumption.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
+    if (docs.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+        ),
+        child: Center(
+          child: Text(
+            'No electrical repair tickets pending.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
 
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final d = docs[index].data() as Map<String, dynamic>? ?? {};
-              final unitLabel = (d['unitLabel'] ?? 'Unit').toString();
-              final prev = (d['previousReading'] ?? 0).toString();
-              final curr = (d['currentReading'] ?? 0).toString();
-              final consumed = (d['consumedUnits'] ?? 0).toString();
-              final amount = (d['calculatedAmount'] ?? 0).toString();
+    return Column(
+      children: [
+        for (final doc in docs)
+          Builder(
+            builder: (context) {
+              final d = doc.data() as JsonMap? ?? <String, dynamic>{};
+              final title = (d['title'] ?? 'Electrical Issue').toString();
+              final desc = (d['description'] ?? '').toString();
+              final unitName = (d['unitName'] ?? 'Building').toString();
+              final status = (d['status'] ?? 'open').toString();
+              final isResolved = status == 'resolved';
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.amber.withValues(alpha: 0.16),
-                      child: Icon(
-                        Icons.bolt_rounded,
-                        color: Colors.amber.shade900,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            unitLabel,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
                             style: const TextStyle(
                               fontWeight: FontWeight.w800,
-                              fontSize: 15,
+                              fontSize: 14,
                             ),
                           ),
-                          Text(
-                            'Reading: $prev → $curr kWh ($consumed kWh used)',
-                            style: theme.textTheme.bodySmall,
+                        ),
+                        Chip(
+                          label: Text(
+                            status.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
-                        ],
-                      ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
                     ),
                     Text(
-                      '৳$amount',
+                      unitName,
                       style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                         color: theme.colorScheme.primary,
                       ),
                     ),
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(desc, style: theme.textTheme.bodySmall),
+                    ],
+                    if (!isResolved) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          if (status == 'open')
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  doc.reference.update({
+                                    'status': 'in_progress',
+                                    'handledByName': actorName,
+                                    'handledByRole': 'electrician',
+                                    'updatedAt': FieldValue.serverTimestamp(),
+                                  });
+                                },
+                                child: const Text('Start Repair'),
+                              ),
+                            ),
+                          if (status == 'open') const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton.tonal(
+                              onPressed: () {
+                                doc.reference.update({
+                                  'status': 'resolved',
+                                  'handledByName': actorName,
+                                  'handledByRole': 'electrician',
+                                  'updatedAt': FieldValue.serverTimestamp(),
+                                });
+                              },
+                              child: const Text('Mark Completed'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               );
             },
-          );
-        },
-      ),
+          ),
+      ],
     );
   }
 }
 
-class _ElectricalRepairsTab extends StatelessWidget {
+class _ElectricalRepairsSheet extends StatelessWidget {
   final String propertyId;
   final String actorName;
 
-  const _ElectricalRepairsTab({
+  const _ElectricalRepairsSheet({
     required this.propertyId,
     required this.actorName,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('maintenanceRequests')
           .where('propertyId', isEqualTo: propertyId)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        final allDocs = snapshot.data?.docs ?? [];
-        final docs = allDocs.where((doc) {
-          final d = doc.data() as Map<String, dynamic>? ?? {};
+        final docs = (snapshot.data?.docs ?? []).where((doc) {
+          final d = doc.data() as JsonMap? ?? <String, dynamic>{};
           return (d['category'] ?? 'electrical') == 'electrical';
         }).toList();
 
-        if (docs.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'No electrical repair tickets pending for this building.',
-                textAlign: TextAlign.center,
-              ),
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            const Text(
+              'All Electrical Repair Tickets',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
             ),
-          );
+            const SizedBox(height: 12),
+            _ElectricalRepairsList(docs: docs, actorName: actorName),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MeterLogsSheet extends StatelessWidget {
+  final String propertyId;
+  final VoidCallback onAddReading;
+
+  const _MeterLogsSheet({required this.propertyId, required this.onAddReading});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('meterReadings')
+          .where('propertyId', isEqualTo: propertyId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
         }
+        final docs = snapshot.data?.docs ?? [];
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final doc = docs[index];
-            final d = doc.data() as Map<String, dynamic>? ?? {};
-            final title = (d['title'] ?? 'Electrical Issue').toString();
-            final desc = (d['description'] ?? '').toString();
-            final unitName = (d['unitName'] ?? 'Building').toString();
-            final status = (d['status'] ?? 'open').toString();
-            final isResolved = status == 'resolved';
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: theme.colorScheme.outlineVariant),
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Electricity Meter Readings',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    onAddReading();
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Log kWh'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (docs.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text('No unit electricity meter readings logged yet.'),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                          ),
-                        ),
+            for (final doc in docs)
+              Builder(
+                builder: (context) {
+                  final d = doc.data() as JsonMap? ?? <String, dynamic>{};
+                  final unitLabel = (d['unitLabel'] ?? 'Unit').toString();
+                  final prev = (d['previousReading'] ?? 0).toString();
+                  final curr = (d['currentReading'] ?? 0).toString();
+                  final consumed = (d['consumedUnits'] ?? 0).toString();
+                  final amount = (d['calculatedAmount'] ?? 0).toString();
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant,
                       ),
-                      Chip(
-                        label: Text(
-                          status.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ],
-                  ),
-                  Text(
-                    unitName,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: theme.colorScheme.primary,
                     ),
-                  ),
-                  if (desc.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(desc, style: theme.textTheme.bodySmall),
-                  ],
-                  if (!isResolved) ...[
-                    const SizedBox(height: 12),
-                    Row(
+                    child: Row(
                       children: [
-                        if (status == 'open')
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () {
-                                doc.reference.update({
-                                  'status': 'in_progress',
-                                  'handledByName': actorName,
-                                  'handledByRole': 'electrician',
-                                  'updatedAt': FieldValue.serverTimestamp(),
-                                });
-                              },
-                              child: const Text('Start Repair'),
-                            ),
+                        CircleAvatar(
+                          backgroundColor: Colors.amber.withValues(alpha: 0.16),
+                          child: Icon(
+                            Icons.bolt_rounded,
+                            color: Colors.amber.shade900,
                           ),
-                        if (status == 'open') const SizedBox(width: 10),
+                        ),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: FilledButton.tonal(
-                            onPressed: () {
-                              doc.reference.update({
-                                'status': 'resolved',
-                                'handledByName': actorName,
-                                'handledByRole': 'electrician',
-                                'updatedAt': FieldValue.serverTimestamp(),
-                              });
-                            },
-                            child: const Text('Mark Completed'),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                unitLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              Text(
+                                'Reading: $prev → $curr kWh ($consumed kWh used)',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '৳$amount',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            color: theme.colorScheme.primary,
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ],
+                  );
+                },
               ),
-            );
-          },
+          ],
         );
       },
     );

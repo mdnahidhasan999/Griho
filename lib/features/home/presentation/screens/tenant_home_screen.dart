@@ -16,6 +16,7 @@ import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/domain/entities/tenant_invitation.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
+import '../widgets/griho_home_chrome.dart';
 
 typedef JsonMap = Map<String, dynamic>;
 typedef TypedQuerySnapshot = QuerySnapshot<JsonMap>;
@@ -100,57 +101,9 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      extendBody: true,
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        centerTitle: false,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.tertiary,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.apartment_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Griho',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                Text(
-                  'Resident Portal',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+      appBar: const GrihoHomeAppBar(consoleLabel: 'Resident Portal'),
       body: dashboardAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) =>
@@ -163,9 +116,12 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 105),
               children: [
-                _Header(dashboard: dashboard, onCopy: () => _copyId(publicId)),
+                GrihoHomeTopHeader(
+                  name: dashboard.displayName,
+                  publicId: publicId,
+                ),
                 const SizedBox(height: 16),
 
                 if (dashboard.hasPendingInvitation) ...[
@@ -322,72 +278,9 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
           );
         },
       ),
-      bottomNavigationBar: AppBottomNavigation(
+      bottomNavigationBar: const AppBottomNavigation(
         selectedDestination: GrihoNavigationDestination.home,
-        onHomeTap: () => context.go(RouteNames.tenantHome),
-        onMoreTap: () => context.push(RouteNames.more),
       ),
-    );
-  }
-}
-
-// ============================================================================
-// HEADER
-// ============================================================================
-
-class _Header extends StatelessWidget {
-  const _Header({required this.dashboard, required this.onCopy});
-
-  final TenantDashboardData dashboard;
-  final VoidCallback onCopy;
-
-  String _greeting() {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final publicId = dashboard.appUser?.publicId ?? '';
-
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _greeting(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                dashboard.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (publicId.isNotEmpty)
-          ActionChip(
-            avatar: const Icon(Icons.badge_outlined, size: 16),
-            label: Text(
-              publicId,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
-            ),
-            onPressed: onCopy,
-          ),
-      ],
     );
   }
 }

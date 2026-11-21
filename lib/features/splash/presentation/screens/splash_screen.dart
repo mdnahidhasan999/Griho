@@ -1,11 +1,11 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/auth_destination_mapper.dart';
 import '../../../../app/router/route_names.dart';
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_text_styles.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../auth/presentation/controllers/auth_role_resolver.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
@@ -114,12 +114,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return RouteNames.onboarding;
     }
 
-    // ফিক্স: profile.role এর জায়গায় defaultDashboard প্রিন্ট করা হয়েছে
     debugPrint(
       'SPLASH: Profile identified: ${profile.publicId} (Default View: ${profile.defaultDashboard})',
     );
 
-    // ফিক্স: profile.role এর বদলে সরাসরি profile পাস করা হয়েছে
     final destination = AuthRoleResolver.resolve(profile);
     return AuthDestinationMapper.routeFor(destination);
   }
@@ -143,35 +141,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 children: [
                   const Spacer(),
 
-                  // Brand Logo Mark
-                  Container(
-                    width: 96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(28),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.28),
-                          blurRadius: 24,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.apartment_rounded,
-                      size: 50,
-                      color: Colors.white,
-                    ),
-                  ),
+                  // Custom Brand Logo Mark
+                  const GrihoLogo(size: 96),
 
                   const SizedBox(height: 24),
 
                   // App Title
                   Text(
                     'Griho',
-                    style: AppTextStyles.headlineLarge.copyWith(
+                    style: theme.textTheme.headlineLarge?.copyWith(
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.5,
                       color: theme.colorScheme.onSurface,
@@ -184,7 +162,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   Text(
                     'Manage Every Home with Confidence',
                     textAlign: TextAlign.center,
-                    style: AppTextStyles.bodyMedium.copyWith(
+                    style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w500,
                     ),
@@ -209,8 +187,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        Icons.shield_outlined,
-                        size: 14,
+                        Iconsax.shield_tick,
+                        size: 15,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 6),
