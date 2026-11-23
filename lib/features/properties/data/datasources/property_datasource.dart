@@ -1,7 +1,10 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../domain/entities/property.dart';
 import '../models/property_model.dart';
+
+typedef PropertyJsonMap = Map<String, dynamic>;
 
 class PropertyDataSource {
   final FirebaseFirestore _firestore;
@@ -11,7 +14,7 @@ class PropertyDataSource {
 
   static const String _collectionName = 'properties';
 
-  CollectionReference<Map<String, dynamic>> get _properties =>
+  CollectionReference<PropertyJsonMap> get _properties =>
       _firestore.collection(_collectionName);
 
   // ============================================================
@@ -113,7 +116,7 @@ class PropertyDataSource {
   }
 
   // ============================================================
-  // UPDATE PROPERTY
+  // UPDATE PROPERTY (NO EXTRA POST-UPDATE READ)
   // ============================================================
 
   Future<PropertyModel> updateProperty(PropertyModel property) async {
@@ -127,17 +130,13 @@ class PropertyDataSource {
       throw ArgumentError('Property ID cannot be empty.');
     }
 
-    final document = _properties.doc(propertyId);
+    final updatedModel = PropertyModel.fromEntity(
+      property.copyWith(updatedAt: DateTime.now()),
+    );
 
-    await document.update(property.toFirestore());
+    await _properties.doc(propertyId).update(updatedModel.toFirestore());
 
-    final updatedDocument = await document.get();
-
-    if (!updatedDocument.exists) {
-      throw StateError('Property was updated but could not be retrieved.');
-    }
-
-    return PropertyModel.fromFirestore(updatedDocument);
+    return updatedModel;
   }
 
   // ============================================================
@@ -155,14 +154,7 @@ class PropertyDataSource {
   }
 
   // ============================================================
-  // ADD TENANT USER TO PROPERTY
-  // ============================================================
-  //
-  // Adds a linked tenant Firebase UID to the property's
-  // access-control list.
-  //
-  // This UID is internal security data.
-  // It must never be displayed directly in the UI.
+  // ADD / REMOVE TENANT USER ACCESS
   // ============================================================
 
   Future<void> addTenantUserToProperty({
@@ -186,14 +178,6 @@ class PropertyDataSource {
     });
   }
 
-  // ============================================================
-  // REMOVE TENANT USER FROM PROPERTY
-  // ============================================================
-  //
-  // Removes a linked tenant Firebase UID from the property's
-  // access-control list.
-  // ============================================================
-
   Future<void> removeTenantUserFromProperty({
     required String propertyId,
     required String tenantUserId,
@@ -201,11 +185,7 @@ class PropertyDataSource {
     final normalizedPropertyId = propertyId.trim();
     final normalizedTenantUserId = tenantUserId.trim();
 
-    if (normalizedPropertyId.isEmpty) {
-      return;
-    }
-
-    if (normalizedTenantUserId.isEmpty) {
+    if (normalizedPropertyId.isEmpty || normalizedTenantUserId.isEmpty) {
       return;
     }
 
@@ -233,7 +213,6 @@ class PropertyDataSource {
     }
 
     final latest = PropertyModel.fromFirestore(snapshot.docs.first);
-
     final match = RegExp(r'(\d+)$').firstMatch(latest.propertyCode);
 
     if (match == null) {
@@ -241,7 +220,6 @@ class PropertyDataSource {
     }
 
     final latestNumber = int.tryParse(match.group(1)!) ?? 0;
-
     final nextNumber = latestNumber + 1;
 
     return 'PROP-${nextNumber.toString().padLeft(4, '0')}';

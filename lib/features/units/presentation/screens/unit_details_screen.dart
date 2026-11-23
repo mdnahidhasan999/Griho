@@ -1,9 +1,11 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
@@ -15,7 +17,9 @@ import '../../../tenants/presentation/providers/tenancy_history_provider.dart';
 import '../../domain/entities/unit.dart';
 import '../controllers/unit_controller.dart';
 import '../providers/property_units_provider.dart';
+import '../providers/unit_provider.dart';
 import '../providers/unit_usecase_provider.dart';
+import '../widgets/unit_ui_helpers.dart';
 
 class UnitDetailsScreen extends ConsumerStatefulWidget {
   final String unitId;
@@ -37,21 +41,14 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUnit();
+    _loadUnit(forceRefresh: false);
   }
 
-  // ============================================================
-  // LOAD UNIT + ACTIVE TENANTS
-  // ============================================================
-
-  Future<void> _loadUnit() async {
+  Future<void> _loadUnit({bool forceRefresh = true}) async {
     try {
-      final getUnit = ref.read(getUnitProvider);
-      final getActiveTenantsByUnitId = ref.read(
-        getActiveTenantsByUnitIdProvider,
-      );
-
-      final unit = await getUnit(widget.unitId);
+      final unit = forceRefresh
+          ? await ref.read(getUnitProvider)(widget.unitId)
+          : await ref.read(unitByIdProvider(widget.unitId).future);
 
       if (!mounted) {
         return;
@@ -60,6 +57,9 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       List<Tenant> activeTenants = [];
 
       if (unit != null) {
+        final getActiveTenantsByUnitId = ref.read(
+          getActiveTenantsByUnitIdProvider,
+        );
         activeTenants = await getActiveTenantsByUnitId(unit.id);
 
         if (activeTenants.isEmpty && unit.status == UnitStatus.occupied) {
@@ -67,6 +67,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
               .collection('tenants')
               .where('unitId', isEqualTo: unit.id)
               .where('status', isEqualTo: 'active')
+              .limit(10)
               .get();
 
           activeTenants = snap.docs
@@ -97,10 +98,6 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     }
   }
 
-  // ============================================================
-  // EDIT UNIT
-  // ============================================================
-
   Future<void> _editUnit() async {
     final unit = _unit;
 
@@ -117,18 +114,11 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       return;
     }
 
-    setState(() {
-      _unit = updatedUnit;
-    });
-
+    // Update local state directly and invalidate caches without extra immediate read.
+    setState(() => _unit = updatedUnit);
+    ref.invalidate(unitByIdProvider(updatedUnit.id));
     ref.invalidate(propertyUnitsProvider(updatedUnit.propertyId));
-
-    await _loadUnit();
   }
-
-  // ============================================================
-  // DELETE UNIT
-  // ============================================================
 
   Future<void> _deleteUnit() async {
     final unit = _unit;
@@ -148,18 +138,14 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Cancel'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.error,
               ),
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Delete'),
             ),
           ],
@@ -171,9 +157,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       return;
     }
 
-    setState(() {
-      _isDeleting = true;
-    });
+    setState(() => _isDeleting = true);
 
     final controller = ref.read(unitControllerProvider.notifier);
     final success = await controller.deleteUnit(unitId: unit.id);
@@ -183,29 +167,18 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     }
 
     if (success) {
+      ref.invalidate(unitByIdProvider(unit.id));
       ref.invalidate(propertyUnitsProvider(unit.propertyId));
+      GrihoFeedback.showSuccess(context, 'Unit deleted.');
       context.pop();
       return;
     }
 
-    setState(() {
-      _isDeleting = false;
-    });
+    setState(() => _isDeleting = false);
 
     final errorMessage = ref.read(unitControllerProvider).errorMessage;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(errorMessage ?? 'Unable to delete unit.'),
-        backgroundColor: Theme.of(context).colorScheme.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    GrihoFeedback.showError(context, errorMessage ?? 'Unable to delete unit.');
   }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -214,14 +187,25 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Unit Details')),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const GrihoLoadingView(message: 'Loading unit details...'),
       );
     }
 
     if (_errorMessage != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Unit Details')),
-        body: _ErrorView(message: _errorMessage!, onRetry: _loadUnit),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load unit',
+              subtitle: _errorMessage!,
+              actionLabel: 'Retry',
+              onAction: () => _loadUnit(forceRefresh: true),
+            ),
+          ),
+        ),
       );
     }
 
@@ -230,7 +214,17 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     if (unit == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Unit Details')),
-        body: const _NotFoundView(),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.home_2,
+              title: 'Unit Not Found',
+              subtitle:
+                  'The requested unit record does not exist or may have been deleted.',
+            ),
+          ),
+        ),
       );
     }
 
@@ -239,19 +233,16 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text(
-          'Unit Details',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: const Text('Unit Details'),
         actions: [
           IconButton(
             tooltip: 'Edit Unit',
-            icon: const Icon(Icons.edit_outlined),
+            icon: const Icon(Iconsax.edit_2),
             onPressed: _isDeleting ? null : _editUnit,
           ),
           IconButton(
             tooltip: 'Delete Unit',
-            icon: const Icon(Icons.delete_outline_rounded),
+            icon: const Icon(Iconsax.trash),
             onPressed: _isDeleting ? null : _deleteUnit,
           ),
         ],
@@ -259,25 +250,21 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
       body: Stack(
         children: [
           propertyAsync.when(
-            loading: () {
-              return _UnitDetails(
-                unit: unit,
-                activeTenants: _activeTenants,
-                property: null,
-                historyAsync: null,
-                onReload: _loadUnit,
-              );
-            },
-            error: (_, _) {
-              return _UnitDetails(
-                unit: unit,
-                activeTenants: _activeTenants,
-                property: null,
-                historyAsync: null,
-                propertyLoadError: true,
-                onReload: _loadUnit,
-              );
-            },
+            loading: () => _UnitDetails(
+              unit: unit,
+              activeTenants: _activeTenants,
+              property: null,
+              historyAsync: null,
+              onReload: () => _loadUnit(forceRefresh: true),
+            ),
+            error: (_, _) => _UnitDetails(
+              unit: unit,
+              activeTenants: _activeTenants,
+              property: null,
+              historyAsync: null,
+              propertyLoadError: true,
+              onReload: () => _loadUnit(forceRefresh: true),
+            ),
             data: (Property? property) {
               if (property == null) {
                 return _UnitDetails(
@@ -286,7 +273,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
                   property: null,
                   historyAsync: null,
                   propertyLoadError: true,
-                  onReload: _loadUnit,
+                  onReload: () => _loadUnit(forceRefresh: true),
                 );
               }
 
@@ -302,7 +289,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
                 activeTenants: _activeTenants,
                 property: property,
                 historyAsync: historyAsync,
-                onReload: _loadUnit,
+                onReload: () => _loadUnit(forceRefresh: true),
               );
             },
           ),
@@ -314,14 +301,7 @@ class _UnitDetailsScreenState extends ConsumerState<UnitDetailsScreen> {
                   child: Card(
                     child: Padding(
                       padding: EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Deleting unit...'),
-                        ],
-                      ),
+                      child: GrihoLoadingView(message: 'Deleting unit...'),
                     ),
                   ),
                 ),
@@ -358,6 +338,7 @@ class _UnitDetails extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return RefreshIndicator(
       onRefresh: () async {
+        ref.invalidate(unitByIdProvider(unit.id));
         ref.invalidate(propertyByIdProvider(unit.propertyId));
         if (property != null) {
           ref.invalidate(
@@ -376,23 +357,18 @@ class _UnitDetails extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
-          // 1. Hero Unit Header
           _HeroUnitHeader(unit: unit, property: property),
-
           const SizedBox(height: 16),
-
-          // 2. Unit Information Specifications
-          _buildSectionCard(
-            context,
+          GrihoSectionCard(
             title: 'Unit Specifications',
             subtitle: 'Location and space identifiers',
-            icon: Icons.meeting_room_outlined,
+            icon: Iconsax.home_2,
             children: [
               _InfoRow(label: 'Unit Number', value: unit.unitNumber),
               const SizedBox(height: 10),
               _InfoRow(
                 label: 'Floor Level',
-                value: _floorLabel(unit.floorNumber),
+                value: formatUnitFloorLabel(unit.floorNumber),
               ),
               const SizedBox(height: 10),
               _InfoRow(
@@ -402,7 +378,10 @@ class _UnitDetails extends ConsumerWidget {
                     : 'Not provided',
               ),
               const SizedBox(height: 10),
-              _InfoRow(label: 'Status', value: _statusLabel(unit.status)),
+              _InfoRow(
+                label: 'Status',
+                value: unitStatusLabel(unit.status, detailed: true),
+              ),
               const SizedBox(height: 10),
               if (property != null)
                 _CurrentRentInfo(unitId: unit.id, ownerId: property!.ownerId)
@@ -410,24 +389,15 @@ class _UnitDetails extends ConsumerWidget {
                 const _InfoRow(label: 'Current Rent', value: 'Unavailable'),
             ],
           ),
-
           const SizedBox(height: 18),
-
-          // 3. Current Occupants Section
-          _TenantSection(unit: unit, tenants: activeTenants),
-
+          _TenantSection(tenants: activeTenants),
           const SizedBox(height: 18),
-
-          // 4. Direct Rent Invoices, Rate Update & History Card
           _ManageRentCard(
             unit: unit,
+            ownerId: property?.ownerId,
             hasActiveTenant: activeTenants.isNotEmpty,
-            onReload: onReload,
           ),
-
           const SizedBox(height: 18),
-
-          // 5. Tenancy History Section
           _UnitHistorySection(
             historyAsync: historyAsync,
             propertyLoadError: propertyLoadError,
@@ -435,83 +405,6 @@ class _UnitDetails extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  Widget _buildSectionCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _floorLabel(int floor) {
-    if (floor == 0) {
-      return 'Ground Floor';
-    }
-    if (floor == 1) {
-      return '1st Floor';
-    }
-    if (floor == 2) {
-      return '2nd Floor';
-    }
-    if (floor == 3) {
-      return '3rd Floor';
-    }
-    return '$floor-th Floor';
-  }
-
-  String _statusLabel(UnitStatus status) {
-    switch (status) {
-      case UnitStatus.available:
-        return 'Available / Vacant';
-      case UnitStatus.occupied:
-        return 'Occupied';
-      case UnitStatus.reserved:
-        return 'Reserved';
-      case UnitStatus.inactive:
-        return 'Inactive / Maintenance';
-    }
   }
 }
 
@@ -525,32 +418,9 @@ class _HeroUnitHeader extends StatelessWidget {
 
   const _HeroUnitHeader({required this.unit, required this.property});
 
-  String _floorLabel(int floor) {
-    if (floor == 0) {
-      return 'Ground Floor';
-    }
-    if (floor == 1) {
-      return '1st Floor';
-    }
-    if (floor == 2) {
-      return '2nd Floor';
-    }
-    if (floor == 3) {
-      return '3rd Floor';
-    }
-    return '$floor-th Floor';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    final (label, color) = switch (unit.status) {
-      UnitStatus.available => ('Available', Colors.blue.shade800),
-      UnitStatus.occupied => ('Occupied', Colors.green.shade800),
-      UnitStatus.reserved => ('Reserved', Colors.amber.shade900),
-      UnitStatus.inactive => ('Inactive', Colors.grey.shade800),
-    };
 
     return Container(
       decoration: BoxDecoration(
@@ -572,8 +442,8 @@ class _HeroUnitHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(
-                  Icons.door_front_door_rounded,
-                  size: 28,
+                  Iconsax.home_2,
+                  size: 26,
                   color: theme.colorScheme.onPrimaryContainer,
                 ),
               ),
@@ -601,24 +471,7 @@ class _HeroUnitHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                  ),
-                ),
-              ),
+              UnitStatusChip(status: unit.status),
             ],
           ),
           const SizedBox(height: 16),
@@ -627,8 +480,8 @@ class _HeroUnitHeader extends StatelessWidget {
           Row(
             children: [
               Icon(
-                Icons.apartment_rounded,
-                size: 18,
+                Iconsax.buildings_2,
+                size: 17,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 8),
@@ -650,7 +503,7 @@ class _HeroUnitHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  _floorLabel(unit.floorNumber),
+                  formatUnitFloorLabel(unit.floorNumber),
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: theme.colorScheme.onSurfaceVariant,
@@ -684,7 +537,7 @@ class _CurrentRentInfo extends ConsumerWidget {
 
     return rentAsync.when(
       loading: () => const _LoadingInfoRow(label: 'Current Rent'),
-      error: (error, _) => const _InfoRow(
+      error: (_, _) => const _InfoRow(
         label: 'Current Rent',
         value: 'Unable to load rent rate',
       ),
@@ -718,113 +571,58 @@ class _CurrentRentInfo extends ConsumerWidget {
 // ============================================================================
 
 class _TenantSection extends StatelessWidget {
-  final Unit unit;
   final List<Tenant> tenants;
 
-  const _TenantSection({required this.unit, required this.tenants});
+  const _TenantSection({required this.tenants});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.people_alt_outlined,
-                      size: 20,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Current Residents',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                if (tenants.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${tenants.length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Active tenants linked to this residential unit',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+    return GrihoSectionCard(
+      title: tenants.isEmpty
+          ? 'Current Residents'
+          : 'Current Residents (${tenants.length})',
+      subtitle: 'Active tenants linked to this residential unit',
+      icon: Iconsax.people,
+      children: [
+        if (tenants.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.4,
               ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
-            const SizedBox(height: 16),
-            if (tenants.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.4,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: theme.colorScheme.outlineVariant),
+            child: Row(
+              children: [
+                Icon(
+                  Iconsax.user_remove,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.person_off_outlined,
-                      size: 22,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'This unit is currently vacant with no active tenants assigned.',
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.35,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'This unit is currently vacant with no active tenants assigned.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          height: 1.35,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              )
-            else
-              for (var i = 0; i < tenants.length; i++) ...[
-                _TenantTile(tenant: tenants[i]),
-                if (i != tenants.length - 1) ...[const SizedBox(height: 10)],
               ],
+            ),
+          )
+        else
+          for (var i = 0; i < tenants.length; i++) ...[
+            _TenantTile(tenant: tenants[i]),
+            if (i != tenants.length - 1) const SizedBox(height: 10),
           ],
-        ),
-      ),
+      ],
     );
   }
 }
@@ -904,7 +702,7 @@ class _TenantTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              const Icon(Icons.chevron_right_rounded, size: 20),
+              const Icon(Iconsax.arrow_right_3, size: 16),
             ],
           ),
         ),
@@ -925,137 +723,85 @@ class _TenantTile extends StatelessWidget {
 // MANAGE RENT & INVOICES QUICK ACTIONS CARD
 // ============================================================================
 
-class _ManageRentCard extends StatelessWidget {
+class _ManageRentCard extends ConsumerWidget {
   final Unit unit;
+  final String? ownerId;
   final bool hasActiveTenant;
-  final VoidCallback onReload;
 
   const _ManageRentCard({
     required this.unit,
+    required this.ownerId,
     required this.hasActiveTenant,
-    required this.onReload,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GrihoSectionCard(
+      title: 'Rent & Billing Operations',
+      subtitle:
+          'Generate monthly rent invoices, update recurring rent, or view rate changes.',
+      icon: Iconsax.wallet_check,
+      children: [
+        GrihoPrimaryButton(
+          label: 'Monthly Rent Invoices',
+          icon: Iconsax.receipt_item,
+          onPressed: () {
+            context.push(
+              RouteNames.unitMonthlyRent.replaceFirst(':unitId', unit.id),
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.payments_outlined,
-                    size: 20,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'Rent & Billing Operations',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Generate monthly rent invoices, update recurring rent for this unit, or view historical rate changes.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 1. Primary Action: Monthly Rent Invoices
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: () {
-                  context.push(
-                    RouteNames.unitMonthlyRent.replaceFirst(':unitId', unit.id),
-                  );
-                },
-                icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                label: const Text(
-                  'Monthly Rent Invoices',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            // 2. Secondary Actions: Update Unit Rent & Rate History
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 44,
-                    child: FilledButton.tonalIcon(
-                      onPressed: hasActiveTenant
-                          ? () async {
-                              await context.push(
-                                RouteNames.changeUnitRent.replaceFirst(
-                                  ':unitId',
-                                  unit.id,
-                                ),
-                              );
-                              onReload();
-                            }
-                          : null,
-                      icon: const Icon(Icons.edit_outlined, size: 16),
-                      label: const Text(
-                        'Update Rent',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: SizedBox(
-                    height: 44,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        context.push(
-                          RouteNames.unitRentRateHistory.replaceFirst(
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: hasActiveTenant
+                    ? () async {
+                        await context.push(
+                          RouteNames.changeUnitRent.replaceFirst(
                             ':unitId',
                             unit.id,
                           ),
                         );
-                      },
-                      icon: const Icon(Icons.history_rounded, size: 16),
-                      label: const Text(
-                        'Rate History',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
+                        if (ownerId != null && ownerId!.isNotEmpty) {
+                          ref.invalidate(
+                            currentRentRateProvider((
+                              unitId: unit.id,
+                              ownerId: ownerId!,
+                            )),
+                          );
+                        }
+                      }
+                    : null,
+                icon: const Icon(Iconsax.edit_2, size: 16),
+                label: const Text(
+                  'Update Rent',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-              ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  context.push(
+                    RouteNames.unitRentRateHistory.replaceFirst(
+                      ':unitId',
+                      unit.id,
+                    ),
+                  );
+                },
+                icon: const Icon(Iconsax.clock, size: 16),
+                label: const Text(
+                  'Rate History',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -1078,34 +824,44 @@ class _UnitHistorySection extends StatelessWidget {
     final theme = Theme.of(context);
 
     if (propertyLoadError) {
-      return _buildHistoryContainer(
-        context,
-        children: const [
+      return const GrihoSectionCard(
+        title: 'Tenancy History',
+        subtitle: 'Past lease agreements and previous residents',
+        icon: Iconsax.clock,
+        children: [
           Text('Unable to load property information for historical records.'),
         ],
       );
     }
 
     if (historyAsync == null) {
-      return _buildHistoryContainer(
-        context,
-        children: const [LinearProgressIndicator()],
+      return const GrihoSectionCard(
+        title: 'Tenancy History',
+        subtitle: 'Past lease agreements and previous residents',
+        icon: Iconsax.clock,
+        children: [LinearProgressIndicator()],
       );
     }
 
     return historyAsync!.when(
-      loading: () => _buildHistoryContainer(
-        context,
-        children: const [LinearProgressIndicator()],
+      loading: () => const GrihoSectionCard(
+        title: 'Tenancy History',
+        subtitle: 'Past lease agreements and previous residents',
+        icon: Iconsax.clock,
+        children: [LinearProgressIndicator()],
       ),
-      error: (_, _) => _buildHistoryContainer(
-        context,
-        children: const [Text('Unable to load historical tenancy records.')],
+      error: (_, _) => const GrihoSectionCard(
+        title: 'Tenancy History',
+        subtitle: 'Past lease agreements and previous residents',
+        icon: Iconsax.clock,
+        children: [Text('Unable to load historical tenancy records.')],
       ),
       data: (histories) {
         if (histories.isEmpty) {
-          return _buildHistoryContainer(
-            context,
+          return GrihoSectionCard(
+            title: 'Tenancy History',
+            subtitle: 'Past lease agreements and previous residents',
+            icon: Iconsax.clock,
             children: [
               Text(
                 'No previous completed tenancies recorded for this unit.',
@@ -1117,90 +873,18 @@ class _UnitHistorySection extends StatelessWidget {
           );
         }
 
-        return _buildHistoryContainer(
-          context,
-          count: histories.length,
+        return GrihoSectionCard(
+          title: 'Tenancy History (${histories.length})',
+          subtitle: 'Past lease agreements and previous residents',
+          icon: Iconsax.clock,
           children: [
             for (var index = 0; index < histories.length; index++) ...[
               _UnitHistoryItem(history: histories[index]),
-              if (index != histories.length - 1) ...[const Divider(height: 24)],
+              if (index != histories.length - 1) const Divider(height: 24),
             ],
           ],
         );
       },
-    );
-  }
-
-  Widget _buildHistoryContainer(
-    BuildContext context, {
-    int? count,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.history_rounded,
-                      size: 20,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Tenancy History',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                if (count != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$count',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Past lease agreements and previous residents',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1296,13 +980,10 @@ class _UnitHistoryItem extends StatelessWidget {
   }
 
   String _formatDuration(DateTime startedAt, DateTime endedAt) {
-    final difference = endedAt.difference(startedAt);
-    final days = difference.inDays;
-
+    final days = endedAt.difference(startedAt).inDays;
     if (days <= 0) {
       return 'Less than 1 day';
     }
-
     return '$days ${days == 1 ? 'day' : 'days'}';
   }
 
@@ -1315,7 +996,7 @@ class _UnitHistoryItem extends StatelessWidget {
 }
 
 // ============================================================================
-// STATUS & ACCOUNT CHIPS
+// STATUS & HELPER ROWS
 // ============================================================================
 
 class _TenantStatusChip extends StatelessWidget {
@@ -1326,21 +1007,20 @@ class _TenantStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = status == TenantStatus.active;
+    final color = isActive ? GrihoColors.emerald : GrihoColors.warning;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        color: isActive
-            ? Colors.green.withValues(alpha: 0.12)
-            : Colors.orange.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.14),
       ),
       child: Text(
         isActive ? 'Active' : 'Inactive',
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: isActive ? Colors.green.shade800 : Colors.orange.shade800,
+          color: color,
         ),
       ),
     );
@@ -1363,7 +1043,7 @@ class _AccountStatusChip extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         color: isRegistered
-            ? Colors.teal.withValues(alpha: 0.12)
+            ? GrihoColors.emerald.withValues(alpha: 0.14)
             : Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
       child: Text(
@@ -1372,17 +1052,13 @@ class _AccountStatusChip extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: isRegistered
-              ? Colors.teal.shade800
+              ? GrihoColors.emerald
               : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );
   }
 }
-
-// ============================================================================
-// DETAIL & HELPER ROWS
-// ============================================================================
 
 class _InfoRow extends StatelessWidget {
   final String label;
@@ -1486,84 +1162,6 @@ class _LoadingInfoRow extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 1.5),
         ),
       ],
-    );
-  }
-}
-
-// ============================================================================
-// ERROR & NOT FOUND VIEWS
-// ============================================================================
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorView({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.redAccent,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NotFoundView extends StatelessWidget {
-  const _NotFoundView();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.door_sliding_outlined,
-              size: 56,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Unit Not Found',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'The requested unit record does not exist or may have been deleted.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

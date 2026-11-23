@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 
+import '../../../../core/design_system/design_system.dart';
+import '../../../../core/design_system/widgets/griho_picker_field.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../../../core/utils/phone_number_utils.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -24,17 +26,17 @@ class _RoleInfo {
 const Map<String, _RoleInfo> _roles = {
   'manager': _RoleInfo(
     'Manager',
-    Icons.admin_panel_settings_rounded,
+    Iconsax.shield_tick,
     'Runs residents, rent, bills and payments for the building.',
   ),
   'caretaker': _RoleInfo(
     'Caretaker',
-    Icons.handyman_rounded,
+    Iconsax.broom,
     'Handles plumbing and general maintenance, visitor log and notices.',
   ),
   'electrician': _RoleInfo(
     'Electrician',
-    Icons.electrical_services_rounded,
+    Iconsax.electricity,
     'Handles electrical repairs and records meter readings.',
   ),
 };
@@ -80,54 +82,66 @@ class _InviteTeamMemberScreenState
     super.dispose();
   }
 
-  void _snack(String message, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: error ? Colors.red : Colors.green,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   String? _validatedPhone() {
     final clean = PhoneNumberUtils.clean(_phoneNumber);
-    if (!PhoneNumberUtils.isValid(clean)) return null;
+    if (!PhoneNumberUtils.isValid(clean)) {
+      return null;
+    }
     return PhoneNumberUtils.normalize(clean);
   }
 
   Future<void> _send(List<Property> properties) async {
-    if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    final profile = ref.read(currentUserProfileProvider).value;
 
     final property =
-        _selectedProperty ?? (properties.isNotEmpty ? properties.first : null);
+    (_selectedProperty != null &&
+        properties.any((p) => p.id == _selectedProperty!.id))
+        ? _selectedProperty
+        : (properties.isNotEmpty ? properties.first : null);
     if (property == null) {
-      _snack('Please select or create a property first.', error: true);
+      GrihoFeedback.showError(
+        context,
+        'Please select or create a property first.',
+      );
       return;
     }
 
     final authUser = FirebaseAuth.instance.currentUser;
     if (authUser == null) {
-      _snack('You must be signed in to send invitations.', error: true);
+      GrihoFeedback.showError(
+        context,
+        'You must be signed in to send invitations.',
+      );
+      return;
+    }
+
+    if (!authUser.emailVerified) {
+      GrihoFeedback.showWarning(
+        context,
+        'Please verify your email address before sending an invitation.',
+      );
+      return;
+    }
+
+    if (profile == null) {
+      GrihoFeedback.showError(context, 'Owner profile not found.');
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      await authUser.reload();
-      if (!(FirebaseAuth.instance.currentUser?.emailVerified ?? false)) {
-        throw StateError(
-          'Please verify your email address before sending an invitation.',
-        );
-      }
-
       final db = FirebaseFirestore.instance;
       String? phone;
       String? targetEmail;
       String? targetGrihoId;
       String? targetUserId;
-      String identifier = '';
+      var identifier = '';
 
       if (_method == _InviteMethod.phone) {
         final valid = _validatedPhone();
@@ -140,8 +154,8 @@ class _InviteTeamMemberScreenState
         identifier = valid;
         try {
           final doc = await db.collection('phone_lookups').doc(valid).get();
-          if (doc.exists) {
-            final d = doc.data()!;
+          final d = doc.data();
+          if (doc.exists && d != null) {
             targetUserId = (d['uid'] ?? '').toString().trim();
             targetGrihoId = (d['publicId'] ?? '').toString().trim();
             targetEmail = (d['email'] ?? '').toString().trim().toLowerCase();
@@ -158,17 +172,14 @@ class _InviteTeamMemberScreenState
               .collection('public_ids')
               .doc(targetGrihoId)
               .get();
-          if (doc.exists) {
-            final d = doc.data()!;
+          final d = doc.data();
+          if (doc.exists && d != null) {
             targetUserId = (d['uid'] ?? '').toString().trim();
             phone = (d['phoneNumber'] ?? '').toString().trim();
             targetEmail = (d['email'] ?? '').toString().trim().toLowerCase();
           }
         } catch (_) {}
       }
-
-      final profile = await ref.read(currentUserProfileProvider.future);
-      if (profile == null) throw StateError('Owner profile not found.');
 
       final isManager = _role == 'manager';
       final docRef = db
@@ -199,91 +210,90 @@ class _InviteTeamMemberScreenState
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      try {
-        await AuditLoggerService.log(
-          ownerId: profile.uid,
-          propertyId: property.id,
-          propertyName: property.name,
-          category: 'manager',
-          actionTitle: '${_roles[_role]!.label} invited',
-          details: '${_nameController.text.trim()} • $identifier',
-        );
-      } catch (_) {}
+      await AuditLoggerService.log(
+        ownerId: profile.uid,
+        propertyId: property.id,
+        propertyName: property.name,
+        category: 'manager',
+        actionTitle: '${_roles[_role]!.label} invited',
+        details: '${_nameController.text.trim()} • $identifier',
+      );
 
-      if (!mounted) return;
-      _snack('${_roles[_role]!.label} invitation sent for ${property.name}!');
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showSuccess(
+        context,
+        '${_roles[_role]!.label} invitation sent for ${property.name}!',
+      );
       Navigator.of(context).pop();
     } catch (e) {
-      if (!mounted) return;
-      _snack(e.toString().replaceFirst('Bad state: ', ''), error: true);
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(
+        context,
+        e.toString().replaceFirst(
+          RegExp(r'^(Bad state: |Invalid argument\(s\): )'),
+          '',
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final uid = ref.watch(currentUserProfileProvider).value?.uid;
+    final profile = ref.watch(currentUserProfileProvider).value;
+    final uid = profile?.uid;
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
     final info = _roles[_role]!;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Invite to your team',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
+      appBar: AppBar(title: const Text('Invite to your team')),
       body: propertiesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) =>
-            Center(child: Text('Unable to load properties: $err')),
+        loading: () => const GrihoLoadingView(message: 'Loading properties...'),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load properties',
+              subtitle: err.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentOwnerPropertiesProvider),
+            ),
+          ),
+        ),
         data: (all) {
           final properties = uid == null
               ? all
               : all.where((p) => p.ownerId == uid).toList();
 
           if (properties.isEmpty) {
-            return Center(
+            return const Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.apartment_rounded,
-                      size: 48,
-                      color: theme.colorScheme.outlineVariant,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No properties available.',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Please create at least one building before inviting your team.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.buildings_2,
+                  title: 'No properties available',
+                  subtitle:
+                  'Please create at least one building before inviting your team.',
                 ),
               ),
             );
           }
 
-          _selectedProperty ??= properties.first;
-          if (!properties.any((p) => p.id == _selectedProperty!.id)) {
-            _selectedProperty = properties.first;
-          }
+          final selectedProperty =
+          (_selectedProperty != null &&
+              properties.any((p) => p.id == _selectedProperty!.id))
+              ? _selectedProperty!
+              : properties.first;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -306,7 +316,7 @@ class _InviteTeamMemberScreenState
                         ButtonSegment(
                           value: e.key,
                           label: Text(e.value.label),
-                          icon: Icon(e.value.icon, size: 18),
+                          icon: Icon(e.value.icon, size: 17),
                         ),
                     ],
                     selected: {_role},
@@ -349,44 +359,41 @@ class _InviteTeamMemberScreenState
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  DropdownButtonFormField<Property>(
-                    key: ValueKey(_selectedProperty!.id),
-                    initialValue: _selectedProperty,
-                    decoration: const InputDecoration(
-                      labelText: 'Select Building / Property *',
-                      prefixIcon: Icon(Icons.domain_rounded),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(12)),
-                      ),
-                    ),
-                    items: [
-                      for (final p in properties)
-                        DropdownMenuItem(
-                          value: p,
-                          child: Text('${p.name} (${p.propertyCode})'),
-                        ),
-                    ],
+                  GrihoPickerField<Property>(
+                    label: 'Select Building / Property *',
+                    hint: 'Choose a building',
+                    sheetTitle: 'Select Building / Property',
+                    searchHint: 'Search by building name or code...',
+                    icon: Iconsax.buildings_2,
+                    items: properties,
+                    value: selectedProperty,
+                    enabled: !_isLoading,
+                    itemTitle: (p) => p.name,
+                    itemSubtitle: (p) => p.propertyCode.trim().isNotEmpty
+                        ? 'Code: ${p.propertyCode}'
+                        : null,
                     onChanged: (p) => setState(() => _selectedProperty = p),
                     validator: (v) =>
-                        v == null ? 'Please select a property' : null,
+                    v == null ? 'Please select a property.' : null,
                   ),
                   const SizedBox(height: 16),
-
                   TextFormField(
                     controller: _nameController,
                     textCapitalization: TextCapitalization.words,
                     textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
                       labelText: '${info.label} Full Name *',
-                      prefixIcon: const Icon(Icons.person_outline_rounded),
-                      border: const OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                      prefixIcon: const Icon(
+                        Iconsax.user,
+                        color: GrihoColors.emerald,
+                        size: 19,
                       ),
                     ),
                     validator: (v) {
                       final t = v?.trim() ?? '';
-                      if (t.isEmpty) return 'Please enter full name.';
+                      if (t.isEmpty) {
+                        return 'Please enter full name.';
+                      }
                       if (t.length < 2) {
                         return 'Name must be at least 2 characters.';
                       }
@@ -394,7 +401,6 @@ class _InviteTeamMemberScreenState
                     },
                   ),
                   const SizedBox(height: 20),
-
                   Text(
                     'Invite Recipient Method',
                     style: theme.textTheme.labelLarge?.copyWith(
@@ -407,17 +413,17 @@ class _InviteTeamMemberScreenState
                       ButtonSegment(
                         value: _InviteMethod.phone,
                         label: Text('Phone'),
-                        icon: Icon(Icons.phone_outlined),
+                        icon: Icon(Iconsax.call, size: 16),
                       ),
                       ButtonSegment(
                         value: _InviteMethod.email,
                         label: Text('Email'),
-                        icon: Icon(Icons.email_outlined),
+                        icon: Icon(Iconsax.sms, size: 16),
                       ),
                       ButtonSegment(
                         value: _InviteMethod.grihoId,
                         label: Text('Griho ID'),
-                        icon: Icon(Icons.badge_outlined),
+                        icon: Icon(Iconsax.personalcard, size: 16),
                       ),
                     ],
                     selected: {_method},
@@ -425,16 +431,12 @@ class _InviteTeamMemberScreenState
                         setState(() => _method = v.first),
                   ),
                   const SizedBox(height: 16),
-
                   if (_method == _InviteMethod.phone)
                     IntlPhoneField(
                       controller: _phoneController,
                       initialCountryCode: 'BD',
                       decoration: InputDecoration(
                         labelText: '${info.label} Phone Number *',
-                        border: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                        ),
                       ),
                       onChanged: (p) => _phoneNumber = p.completeNumber,
                       validator: (p) {
@@ -447,7 +449,6 @@ class _InviteTeamMemberScreenState
                         return null;
                       },
                     ),
-
                   if (_method == _InviteMethod.email)
                     TextFormField(
                       controller: _emailController,
@@ -456,9 +457,10 @@ class _InviteTeamMemberScreenState
                       decoration: InputDecoration(
                         labelText: '${info.label} Email Address *',
                         hintText: 'e.g. name@example.com',
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        border: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                        prefixIcon: const Icon(
+                          Iconsax.sms,
+                          color: GrihoColors.emerald,
+                          size: 19,
                         ),
                       ),
                       validator: (v) {
@@ -474,7 +476,6 @@ class _InviteTeamMemberScreenState
                         return null;
                       },
                     ),
-
                   if (_method == _InviteMethod.grihoId)
                     TextFormField(
                       controller: _grihoIdController,
@@ -483,9 +484,10 @@ class _InviteTeamMemberScreenState
                       decoration: const InputDecoration(
                         labelText: 'Recipient Griho ID *',
                         hintText: 'e.g. GRI-U3GLWKJK',
-                        prefixIcon: Icon(Icons.badge_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                        prefixIcon: Icon(
+                          Iconsax.personalcard,
+                          color: GrihoColors.emerald,
+                          size: 19,
                         ),
                       ),
                       validator: (v) {
@@ -501,37 +503,14 @@ class _InviteTeamMemberScreenState
                         return null;
                       },
                     ),
-
                   const SizedBox(height: 32),
-                  SizedBox(
-                    height: 52,
-                    child: FilledButton.icon(
-                      onPressed: _isLoading ? null : () => _send(properties),
-                      icon: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.send_rounded, size: 20),
-                      label: Text(
-                        _isLoading
-                            ? 'Sending Invitation...'
-                            : 'Send ${info.label} Invitation',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: FilledButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
+                  GrihoPrimaryButton(
+                    label: _isLoading
+                        ? 'Sending Invitation...'
+                        : 'Send ${info.label} Invitation',
+                    icon: Iconsax.send_1,
+                    isLoading: _isLoading,
+                    onPressed: () => _send(properties),
                   ),
                 ],
               ),

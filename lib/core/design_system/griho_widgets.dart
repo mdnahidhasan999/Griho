@@ -1,6 +1,7 @@
 // noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 
 import 'griho_colors.dart';
 
@@ -105,7 +106,49 @@ class GrihoLogo extends StatelessWidget {
 }
 
 // ============================================================================
-// 2. BRANDED LOADING WIDGET
+// 2. HEADER ICON BADGE (AUTH & ONBOARDING SCREENS)
+// ============================================================================
+
+class GrihoIconBadge extends StatelessWidget {
+  const GrihoIconBadge({
+    super.key,
+    required this.icon,
+    this.size = 72,
+    this.isSuccess = false,
+  });
+
+  final IconData icon;
+  final double size;
+  final bool isSuccess;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bgColor = isSuccess
+        ? GrihoColors.emerald.withValues(alpha: 0.16)
+        : theme.colorScheme.primaryContainer;
+    final fgColor = isSuccess
+        ? GrihoColors.emerald
+        : theme.colorScheme.onPrimaryContainer;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(size * 0.3),
+        ),
+        child: Icon(icon, size: size * 0.5, color: fgColor),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 3. BRANDED LOADING WIDGET
 // ============================================================================
 
 class GrihoLoadingView extends StatelessWidget {
@@ -151,7 +194,7 @@ class GrihoLoadingView extends StatelessWidget {
 }
 
 // ============================================================================
-// 3. EMPTY / STATUS DISPLAY STATE (DAY & NIGHT ADAPTIVE)
+// 4. EMPTY / STATUS DISPLAY STATE (DAY & NIGHT ADAPTIVE)
 // ============================================================================
 
 class GrihoStatusState extends StatelessWidget {
@@ -227,7 +270,72 @@ class GrihoStatusState extends StatelessWidget {
 }
 
 // ============================================================================
-// 4. REUSABLE TEXT FIELD
+// 5. REUSABLE SECTION CARD
+// ============================================================================
+
+class GrihoSectionCard extends StatelessWidget {
+  const GrihoSectionCard({
+    super.key,
+    required this.title,
+    required this.children,
+    this.subtitle,
+    this.icon,
+  });
+
+  final String title;
+  final String? subtitle;
+  final IconData? icon;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (subtitle != null && subtitle!.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 6. REUSABLE TEXT FIELD
 // ============================================================================
 
 class GrihoTextField extends StatelessWidget {
@@ -240,11 +348,18 @@ class GrihoTextField extends StatelessWidget {
     this.suffixIcon,
     this.keyboardType,
     this.obscureText = false,
+    this.minLines,
     this.maxLines = 1,
+    this.maxLength,
+    this.counterText,
     this.enabled = true,
+    this.readOnly = false,
     this.validator,
     this.onChanged,
+    this.onFieldSubmitted,
     this.textCapitalization = TextCapitalization.none,
+    this.textInputAction,
+    this.autofillHints,
   });
 
   final TextEditingController controller;
@@ -254,26 +369,40 @@ class GrihoTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final TextInputType? keyboardType;
   final bool obscureText;
+  final int? minLines;
   final int maxLines;
+  final int? maxLength;
+  final String? counterText;
   final bool enabled;
+  final bool readOnly;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onFieldSubmitted;
   final TextCapitalization textCapitalization;
+  final TextInputAction? textInputAction;
+  final Iterable<String>? autofillHints;
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
       enabled: enabled,
+      readOnly: readOnly,
       keyboardType: keyboardType,
       obscureText: obscureText,
-      maxLines: maxLines,
+      minLines: minLines,
+      maxLines: obscureText ? 1 : maxLines,
+      maxLength: maxLength,
       validator: validator,
       onChanged: onChanged,
+      onFieldSubmitted: onFieldSubmitted,
       textCapitalization: textCapitalization,
+      textInputAction: textInputAction,
+      autofillHints: autofillHints,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
+        counterText: counterText,
         prefixIcon: prefixIcon != null
             ? Icon(prefixIcon, color: GrihoColors.emerald, size: 20)
             : null,
@@ -284,7 +413,114 @@ class GrihoTextField extends StatelessWidget {
 }
 
 // ============================================================================
-// 5. REUSABLE PRIMARY & SECONDARY BUTTONS
+// 7. REUSABLE PASSWORD FIELD (BUILT-IN VISIBILITY TOGGLE)
+// ============================================================================
+
+class GrihoPasswordField extends StatefulWidget {
+  const GrihoPasswordField({
+    super.key,
+    required this.controller,
+    required this.label,
+    this.hint,
+    this.prefixIcon = Iconsax.lock,
+    this.enabled = true,
+    this.validator,
+    this.textInputAction,
+    this.onFieldSubmitted,
+    this.autofillHints,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String? hint;
+  final IconData prefixIcon;
+  final bool enabled;
+  final String? Function(String?)? validator;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onFieldSubmitted;
+  final Iterable<String>? autofillHints;
+
+  @override
+  State<GrihoPasswordField> createState() => _GrihoPasswordFieldState();
+}
+
+class _GrihoPasswordFieldState extends State<GrihoPasswordField> {
+  bool _obscure = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GrihoTextField(
+      controller: widget.controller,
+      label: widget.label,
+      hint: widget.hint,
+      prefixIcon: widget.prefixIcon,
+      enabled: widget.enabled,
+      obscureText: _obscure,
+      validator: widget.validator,
+      textInputAction: widget.textInputAction,
+      onFieldSubmitted: widget.onFieldSubmitted,
+      autofillHints: widget.autofillHints,
+      suffixIcon: IconButton(
+        tooltip: _obscure ? 'Show password' : 'Hide password',
+        onPressed: () => setState(() => _obscure = !_obscure),
+        icon: Icon(
+          _obscure ? Iconsax.eye : Iconsax.eye_slash,
+          size: 20,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 8. REUSABLE INTERNATIONAL PHONE FIELD
+// ============================================================================
+
+class GrihoPhoneField extends StatelessWidget {
+  const GrihoPhoneField({
+    super.key,
+    required this.controller,
+    required this.onCompleteNumberChanged,
+    this.label = 'Phone Number',
+    this.hint,
+    this.enabled = true,
+    this.initialCountryCode = 'BD',
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onCompleteNumberChanged;
+  final String label;
+  final String? hint;
+  final bool enabled;
+  final String initialCountryCode;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntlPhoneField(
+      controller: controller,
+      initialCountryCode: initialCountryCode,
+      enabled: enabled,
+      keyboardType: TextInputType.phone,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      decoration: InputDecoration(labelText: label, hintText: hint),
+      onChanged: (phone) => onCompleteNumberChanged(phone.completeNumber),
+      validator: (phone) {
+        if (phone == null || phone.number.trim().isEmpty) {
+          return 'Please enter your phone number.';
+        }
+        if (!phone.isValidNumber()) {
+          return 'Please enter a valid phone number.';
+        }
+        return null;
+      },
+    );
+  }
+}
+
+// ============================================================================
+// 9. REUSABLE PRIMARY & SECONDARY BUTTONS
 // ============================================================================
 
 class GrihoPrimaryButton extends StatelessWidget {
@@ -305,9 +541,10 @@ class GrihoPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return FilledButton(
       style: FilledButton.styleFrom(
-        minimumSize: fullWidth ? const Size(double.infinity, 50) : null,
+        minimumSize: fullWidth ? const Size(double.infinity, 52) : null,
       ),
       onPressed: isLoading ? null : onPressed,
       child: Row(
@@ -315,10 +552,13 @@ class GrihoPrimaryButton extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (isLoading) ...[
-            const SizedBox(
+            SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: theme.colorScheme.onPrimary,
+              ),
             ),
             const SizedBox(width: 10),
           ] else if (icon != null) ...[
@@ -350,7 +590,7 @@ class GrihoSecondaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return OutlinedButton(
       style: OutlinedButton.styleFrom(
-        minimumSize: fullWidth ? const Size(double.infinity, 50) : null,
+        minimumSize: fullWidth ? const Size(double.infinity, 52) : null,
       ),
       onPressed: onPressed,
       child: Row(
@@ -362,5 +602,76 @@ class GrihoSecondaryButton extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ============================================================================
+// 10. SHARED FORM VALIDATORS
+// ============================================================================
+
+abstract final class GrihoValidators {
+  static final RegExp _emailPattern = RegExp(
+    r'^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$',
+  );
+
+  static String? name(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) {
+      return 'Please enter your full name.';
+    }
+    if (v.length < 2) {
+      return 'Name must contain at least 2 characters.';
+    }
+    return null;
+  }
+
+  static String? email(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) {
+      return 'Please enter your email address.';
+    }
+    if (!_emailPattern.hasMatch(v)) {
+      return 'Please enter a valid email address.';
+    }
+    return null;
+  }
+
+  static String? optionalEmail(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) {
+      return null;
+    }
+    if (!_emailPattern.hasMatch(v)) {
+      return 'Please enter a valid email address.';
+    }
+    return null;
+  }
+
+  static String? requiredPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your password.';
+    }
+    return null;
+  }
+
+  static String? newPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please create a password.';
+    }
+    if (value.length < 6) {
+      return 'Password must contain at least 6 characters.';
+    }
+    return null;
+  }
+
+  static String? optionalNid(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) {
+      return null;
+    }
+    if (!RegExp(r'^(\d{10}|\d{13}|\d{17})$').hasMatch(v)) {
+      return 'NID must be 10, 13 or 17 digits.';
+    }
+    return null;
   }
 }

@@ -1,9 +1,10 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/utils/phone_number_utils.dart';
 import '../providers/auth_controller.dart';
 
@@ -26,9 +27,6 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
 
   String _completePhoneNumber = '';
 
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
-
   @override
   void dispose() {
     _nameController.dispose();
@@ -37,50 +35,6 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
-  }
-
-  void _showMessage(String message, {bool isError = false}) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-        ),
-      );
-  }
-
-  String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-
-    if (email.isEmpty) {
-      return 'Please enter your email address.';
-    }
-
-    final pattern = RegExp(
-      r'^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@'
-      r'[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$',
-    );
-
-    if (!pattern.hasMatch(email)) {
-      return 'Please enter a valid email address.';
-    }
-
-    return null;
-  }
-
-  String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please create a password.';
-    }
-
-    if (value.length < 6) {
-      return 'Password must contain at least 6 characters.';
-    }
-
-    return null;
   }
 
   Future<void> _createAccount() async {
@@ -93,9 +47,9 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
     final phoneNumber = PhoneNumberUtils.clean(_completePhoneNumber);
 
     if (!PhoneNumberUtils.isValid(phoneNumber)) {
-      _showMessage(
+      GrihoFeedback.showError(
+        context,
         'Please enter a valid international phone number.',
-        isError: true,
       );
       return;
     }
@@ -113,32 +67,17 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
 
     if (!success) {
       final message = ref.read(authControllerProvider).errorMessage;
-
-      _showMessage(
+      GrihoFeedback.showError(
+        context,
         message?.isNotEmpty == true
             ? message!
             : 'Unable to create your account. Please try again.',
-        isError: true,
       );
       return;
     }
 
-    _showMessage('Account created successfully.');
-
+    GrihoFeedback.showSuccess(context, 'Account created successfully.');
     context.go(RouteNames.linkWaiting, extra: _emailController.text.trim());
-  }
-
-  InputDecoration _decoration({
-    required String label,
-    required IconData icon,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon),
-      suffixIcon: suffixIcon,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-    );
   }
 
   @override
@@ -159,183 +98,88 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 72,
-                      height: 72,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Icon(
-                        Icons.person_add_alt_1_rounded,
-                        size: 36,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                    const GrihoIconBadge(icon: Iconsax.user_add),
+                    const SizedBox(height: 22),
                     Text(
                       'Create Your Griho Account',
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       'Enter your details to get started.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 28),
-
-                    TextFormField(
+                    const SizedBox(height: 24),
+                    GrihoTextField(
                       controller: _nameController,
+                      label: 'Full Name',
+                      prefixIcon: Iconsax.user,
                       enabled: !authState.isLoading,
                       textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
                       autofillHints: const [AutofillHints.name],
-                      decoration: _decoration(
-                        label: 'Full Name',
-                        icon: Icons.person_outline_rounded,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.trim().length < 2) {
-                          return 'Please enter your full name.';
-                        }
-
-                        return null;
-                      },
+                      validator: GrihoValidators.name,
                     ),
-                    const SizedBox(height: 18),
-
-                    IntlPhoneField(
+                    const SizedBox(height: 16),
+                    GrihoPhoneField(
                       controller: _phoneController,
-                      initialCountryCode: 'BD',
                       enabled: !authState.isLoading,
-                      decoration: _decoration(
-                        label: 'Phone Number',
-                        icon: Icons.phone_outlined,
-                      ),
-                      onChanged: (phone) {
-                        _completePhoneNumber = phone.completeNumber;
-                      },
-                      validator: (phone) {
-                        if (phone == null || phone.number.trim().isEmpty) {
-                          return 'Please enter your phone number.';
-                        }
-
-                        if (!phone.isValidNumber()) {
-                          return 'Please enter a valid phone number.';
-                        }
-
-                        return null;
+                      onCompleteNumberChanged: (value) {
+                        _completePhoneNumber = value;
                       },
                     ),
-                    const SizedBox(height: 18),
-
-                    TextFormField(
+                    const SizedBox(height: 12),
+                    GrihoTextField(
                       controller: _emailController,
+                      label: 'Email Address',
+                      prefixIcon: Iconsax.sms,
                       enabled: !authState.isLoading,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
                       autofillHints: const [AutofillHints.email],
-                      decoration: _decoration(
-                        label: 'Email Address',
-                        icon: Icons.email_outlined,
-                      ),
-                      validator: _validateEmail,
+                      validator: GrihoValidators.email,
                     ),
-                    const SizedBox(height: 18),
-
-                    TextFormField(
+                    const SizedBox(height: 16),
+                    GrihoPasswordField(
                       controller: _passwordController,
+                      label: 'Password',
                       enabled: !authState.isLoading,
-                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.next,
                       autofillHints: const [AutofillHints.newPassword],
-                      decoration: _decoration(
-                        label: 'Password',
-                        icon: Icons.lock_outline_rounded,
-                        suffixIcon: IconButton(
-                          tooltip: _obscurePassword
-                              ? 'Show password'
-                              : 'Hide password',
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                        ),
-                      ),
-                      validator: _validatePassword,
+                      validator: GrihoValidators.newPassword,
                     ),
-                    const SizedBox(height: 18),
-
-                    TextFormField(
+                    const SizedBox(height: 16),
+                    GrihoPasswordField(
                       controller: _confirmPasswordController,
+                      label: 'Confirm Password',
+                      prefixIcon: Iconsax.lock_1,
                       enabled: !authState.isLoading,
-                      obscureText: _obscureConfirmPassword,
-                      decoration: _decoration(
-                        label: 'Confirm Password',
-                        icon: Icons.lock_reset_rounded,
-                        suffixIcon: IconButton(
-                          tooltip: _obscureConfirmPassword
-                              ? 'Show password'
-                              : 'Hide password',
-                          onPressed: () {
-                            setState(() {
-                              _obscureConfirmPassword =
-                                  !_obscureConfirmPassword;
-                            });
-                          },
-                          icon: Icon(
-                            _obscureConfirmPassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                        ),
-                      ),
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) {
+                        if (!authState.isLoading) _createAccount();
+                      },
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please confirm your password.';
                         }
-
                         if (value != _passwordController.text) {
                           return 'The passwords do not match.';
                         }
-
                         return null;
                       },
                     ),
-                    const SizedBox(height: 28),
-
-                    SizedBox(
-                      height: 52,
-                      child: FilledButton(
-                        onPressed: authState.isLoading ? null : _createAccount,
-                        child: authState.isLoading
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                'Create Account',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                      ),
+                    const SizedBox(height: 26),
+                    GrihoPrimaryButton(
+                      label: 'Create Account',
+                      icon: Iconsax.user_tick,
+                      isLoading: authState.isLoading,
+                      onPressed: _createAccount,
                     ),
-                    const SizedBox(height: 16),
-
+                    const SizedBox(height: 14),
                     TextButton(
                       onPressed: authState.isLoading
                           ? null

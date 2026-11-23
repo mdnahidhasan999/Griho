@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
@@ -65,7 +66,9 @@ class GrihoHomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
     AppUser profile,
   ) async {
     final roles = profile.availableRoles;
-    if (roles.length <= 1) return;
+    if (roles.length <= 1) {
+      return;
+    }
 
     await showDialog<void>(
       context: context,
@@ -93,7 +96,9 @@ class GrihoHomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 ),
                 onTap: () async {
                   Navigator.of(dialogContext).pop();
-                  if (isCurrent) return;
+                  if (isCurrent) {
+                    return;
+                  }
 
                   try {
                     await ref
@@ -116,7 +121,6 @@ class GrihoHomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final profile = ref.watch(currentUserProfileProvider).value;
     final hasMultipleRoles = (profile?.availableRoles.length ?? 0) > 1;
 
@@ -125,52 +129,12 @@ class GrihoHomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
       scrolledUnderElevation: 0,
       backgroundColor: Colors.transparent,
       centerTitle: false,
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [theme.colorScheme.primary, theme.colorScheme.tertiary],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.apartment_rounded,
-              size: 20,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Griho',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              Text(
-                consoleLabel,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      title: GrihoLogo(size: 38, showWordmark: true, subtitle: consoleLabel),
       actions: [
         if (hasMultipleRoles && profile != null)
           IconButton(
             tooltip: 'Switch role',
-            icon: const Icon(Icons.swap_horiz_rounded),
+            icon: const Icon(Iconsax.arrange_square),
             onPressed: () => _showQuickRoleSwitcher(context, ref, profile),
           ),
         ...extraActions,
@@ -193,8 +157,12 @@ class GrihoHomeTopHeader extends StatelessWidget {
 
   String _greeting() {
     final h = DateTime.now().hour;
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
+    if (h < 12) {
+      return 'Good morning';
+    }
+    if (h < 17) {
+      return 'Good afternoon';
+    }
     return 'Good evening';
   }
 
@@ -229,20 +197,18 @@ class GrihoHomeTopHeader extends StatelessWidget {
         ),
         if (publicId.isNotEmpty)
           ActionChip(
-            avatar: const Icon(Icons.badge_outlined, size: 16),
+            avatar: Icon(
+              Iconsax.copy,
+              size: 15,
+              color: theme.colorScheme.primary,
+            ),
             label: Text(
               publicId,
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
             ),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: publicId));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Griho ID copied.'),
-                  duration: Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              GrihoFeedback.showSuccess(context, 'Griho ID copied.');
             },
           ),
       ],

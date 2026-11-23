@@ -1,443 +1,29 @@
 // noinspection SpellCheckingInspection
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
+import 'griho_home_components.dart';
 
 // ============================================================================
-// 1. MANAGER EXECUTIVE HEADER
-// ============================================================================
-
-class ManagerExecutiveHeader extends StatelessWidget {
-  final String name;
-  final String publicId;
-
-  const ManagerExecutiveHeader({
-    super.key,
-    required this.name,
-    required this.publicId,
-  });
-
-  String _greetingText() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    _greetingText(),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (publicId.isNotEmpty)
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: publicId));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Manager Griho ID copied to clipboard.'),
-                  duration: Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: theme.colorScheme.outlineVariant),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.fingerprint_rounded,
-                    size: 15,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    publicId,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// 2. MANAGER VAULT HERO CARD
-// ============================================================================
-
-class ManagerVaultCard extends StatelessWidget {
-  final double unpaidDue;
-  final int activeTenantsCount;
-  final int buildingsCount;
-  final int unpaidInvoicesCount;
-
-  const ManagerVaultCard({
-    super.key,
-    required this.unpaidDue,
-    required this.activeTenantsCount,
-    required this.buildingsCount,
-    required this.unpaidInvoicesCount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E222D), Color(0xFF141720)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'OPERATIONAL COLLECTION VAULT',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.75),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.0,
-                    fontSize: 11,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.teal.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: const Text(
-                    'Manager Access',
-                    style: TextStyle(
-                      color: Colors.tealAccent,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Outstanding Rent & Bills to Collect',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                const Text(
-                  '৳ ',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  unpaidDue.toStringAsFixed(0),
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _VaultMetricItem(
-                  label: 'Assigned',
-                  value: '$buildingsCount Buildings',
-                ),
-                _VaultMetricItem(
-                  label: 'Active Leases',
-                  value: '$activeTenantsCount Tenants',
-                ),
-                _VaultMetricItem(
-                  label: 'Open Dues',
-                  value: '$unpaidInvoicesCount Bills',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _VaultMetricItem extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _VaultMetricItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.5),
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// 3. PULSE & SUB ACTION TILES
-// ============================================================================
-
-class ManagerPulseTile extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const ManagerPulseTile({
-    super.key,
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, size: 16, color: color),
-                  ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 16,
-                    color: Colors.grey,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                value,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                title,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ManagerSubActionTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Color color;
-  final VoidCallback onTap;
-
-  const ManagerSubActionTile({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, size: 20, color: color),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// 4. INTERACTIVE UNITS & VACANCY EXPLORER SHEET
+// 1. INTERACTIVE UNITS & VACANCY EXPLORER SHEET
 // ============================================================================
 
 void showManagerUnitsSheet({
   required BuildContext context,
-  required List<QueryDocumentSnapshot> unitDocs,
+  required HomeDocList unitDocs,
   required Map<String, String> propertyNames,
   String initialFilter = 'all',
 }) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) => _ManagerUnitsSheetContent(
+    builder: (_) => _ManagerUnitsSheetContent(
       unitDocs: unitDocs,
       propertyNames: propertyNames,
       initialFilter: initialFilter,
@@ -446,7 +32,7 @@ void showManagerUnitsSheet({
 }
 
 class _ManagerUnitsSheetContent extends StatefulWidget {
-  final List<QueryDocumentSnapshot> unitDocs;
+  final HomeDocList unitDocs;
   final Map<String, String> propertyNames;
   final String initialFilter;
 
@@ -475,10 +61,14 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
     final theme = Theme.of(context);
 
     final filteredDocs = widget.unitDocs.where((doc) {
-      final d = doc.data() as Map<String, dynamic>;
+      final d = homeAsMap(doc.data());
       final status = (d['status'] ?? 'available').toString();
-      if (_filter == 'available') return status == 'available';
-      if (_filter == 'occupied') return status != 'available';
+      if (_filter == 'available') {
+        return status == 'available';
+      }
+      if (_filter == 'occupied') {
+        return status != 'available';
+      }
       return true;
     }).toList();
 
@@ -491,9 +81,8 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
                     child: Column(
@@ -516,7 +105,7 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Iconsax.close_circle),
                   ),
                 ],
               ),
@@ -536,14 +125,14 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
             const Divider(height: 12),
             Expanded(
               child: filteredDocs.isEmpty
-                  ? Center(
+                  ? const Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'No matching units found in assigned properties.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                        padding: EdgeInsets.all(24),
+                        child: GrihoStatusState(
+                          icon: Iconsax.buildings_2,
+                          title: 'No matching units',
+                          subtitle:
+                              'No matching units found in assigned properties.',
                         ),
                       ),
                     )
@@ -553,7 +142,7 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                       itemCount: filteredDocs.length,
                       itemBuilder: (_, i) {
                         final doc = filteredDocs[i];
-                        final d = doc.data() as Map<String, dynamic>;
+                        final d = homeAsMap(doc.data());
                         final unitId = doc.id;
                         final unitNum = (d['unitNumber'] ?? '').toString();
                         final name = (d['name'] ?? '').toString();
@@ -563,6 +152,9 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                         final propName =
                             widget.propertyNames[propId] ?? 'Assigned Building';
                         final isAvailable = status == 'available';
+                        final badgeColor = isAvailable
+                            ? GrihoColors.emerald
+                            : theme.colorScheme.onSurfaceVariant;
 
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
@@ -572,9 +164,9 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                               borderRadius: BorderRadius.circular(16),
                               side: BorderSide(
                                 color: isAvailable
-                                    ? Colors.green.withValues(alpha: 0.5)
+                                    ? GrihoColors.emerald.withValues(alpha: 0.5)
                                     : theme.colorScheme.outlineVariant,
-                                width: isAvailable ? 1.5 : 1.0,
+                                width: isAvailable ? 1.4 : 1.0,
                               ),
                             ),
                             clipBehavior: Clip.antiAlias,
@@ -600,19 +192,20 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                                           decoration: BoxDecoration(
                                             color:
                                                 (isAvailable
-                                                        ? Colors.green
+                                                        ? GrihoColors.emerald
                                                         : Colors.indigo)
-                                                    .withValues(alpha: 0.12),
+                                                    .withValues(alpha: 0.14),
                                             borderRadius: BorderRadius.circular(
                                               12,
                                             ),
                                           ),
                                           child: Icon(
                                             isAvailable
-                                                ? Icons.meeting_room_outlined
-                                                : Icons.door_front_door_rounded,
+                                                ? Iconsax.home_2
+                                                : Iconsax.building,
+                                            size: 20,
                                             color: isAvailable
-                                                ? Colors.green.shade700
+                                                ? GrihoColors.emerald
                                                 : Colors.indigo,
                                           ),
                                         ),
@@ -650,11 +243,9 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                                             vertical: 5,
                                           ),
                                           decoration: BoxDecoration(
-                                            color:
-                                                (isAvailable
-                                                        ? Colors.green
-                                                        : Colors.blueGrey)
-                                                    .withValues(alpha: 0.14),
+                                            color: badgeColor.withValues(
+                                              alpha: 0.14,
+                                            ),
                                             borderRadius: BorderRadius.circular(
                                               20,
                                             ),
@@ -664,9 +255,7 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                                             style: TextStyle(
                                               fontSize: 10,
                                               fontWeight: FontWeight.w900,
-                                              color: isAvailable
-                                                  ? Colors.green.shade800
-                                                  : Colors.blueGrey.shade800,
+                                              color: badgeColor,
                                             ),
                                           ),
                                         ),
@@ -689,7 +278,7 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                                             );
                                           },
                                           icon: const Icon(
-                                            Icons.info_outline_rounded,
+                                            Iconsax.info_circle,
                                             size: 16,
                                           ),
                                           label: const Text('Unit & Rent Info'),
@@ -710,7 +299,7 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
                                               );
                                             },
                                             icon: const Icon(
-                                              Icons.person_add_rounded,
+                                              Iconsax.user_add,
                                               size: 16,
                                             ),
                                             label: const Text('Assign Tenant'),
@@ -739,22 +328,22 @@ class _ManagerUnitsSheetContentState extends State<_ManagerUnitsSheetContent> {
 }
 
 // ============================================================================
-// 5. INTERACTIVE TENANTS & LEASES DIRECTORY SHEET
+// 2. INTERACTIVE TENANTS & LEASES DIRECTORY SHEET
 // ============================================================================
 
 void showManagerTenantsSheet({
   required BuildContext context,
-  required List<QueryDocumentSnapshot> tenantDocs,
+  required HomeDocList tenantDocs,
   required Map<String, String> propertyNames,
 }) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) => _ManagerTenantsSheetContent(
+    builder: (_) => _ManagerTenantsSheetContent(
       tenantDocs: tenantDocs,
       propertyNames: propertyNames,
     ),
@@ -762,7 +351,7 @@ void showManagerTenantsSheet({
 }
 
 class _ManagerTenantsSheetContent extends StatefulWidget {
-  final List<QueryDocumentSnapshot> tenantDocs;
+  final HomeDocList tenantDocs;
   final Map<String, String> propertyNames;
 
   const _ManagerTenantsSheetContent({
@@ -784,10 +373,14 @@ class _ManagerTenantsSheetContentState
     final theme = Theme.of(context);
 
     final filtered = widget.tenantDocs.where((doc) {
-      final d = doc.data() as Map<String, dynamic>;
+      final d = homeAsMap(doc.data());
       final status = (d['status'] ?? 'inactive').toString();
-      if (_statusFilter == 'active') return status == 'active';
-      if (_statusFilter == 'inactive') return status != 'active';
+      if (_statusFilter == 'active') {
+        return status == 'active';
+      }
+      if (_statusFilter == 'inactive') {
+        return status != 'active';
+      }
       return true;
     }).toList();
 
@@ -800,9 +393,8 @@ class _ManagerTenantsSheetContentState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
                     child: Column(
@@ -825,7 +417,7 @@ class _ManagerTenantsSheetContentState
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Iconsax.close_circle),
                   ),
                 ],
               ),
@@ -846,14 +438,13 @@ class _ManagerTenantsSheetContentState
             const Divider(height: 12),
             Expanded(
               child: filtered.isEmpty
-                  ? Center(
+                  ? const Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'No residents found for this filter.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                        padding: EdgeInsets.all(24),
+                        child: GrihoStatusState(
+                          icon: Iconsax.people,
+                          title: 'No residents found',
+                          subtitle: 'No residents match the selected filter.',
                         ),
                       ),
                     )
@@ -863,7 +454,7 @@ class _ManagerTenantsSheetContentState
                       itemCount: filtered.length,
                       itemBuilder: (_, i) {
                         final doc = filtered[i];
-                        final d = doc.data() as Map<String, dynamic>;
+                        final d = homeAsMap(doc.data());
                         final tenantId = doc.id;
                         final name = (d['name'] ?? 'Resident').toString();
                         final phone = (d['phone'] ?? '').toString();
@@ -873,7 +464,6 @@ class _ManagerTenantsSheetContentState
                             widget.propertyNames[propId] ?? 'Assigned Building';
                         final isActive = status == 'active';
 
-                        // FIX: Container(BoxDecoration)-এর বদলে Material ব্যবহার করা হয়েছে
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Material(
@@ -920,15 +510,18 @@ class _ManagerTenantsSheetContentState
                                         : 'Former Tenant • Tap to View / Re-activate',
                                     style: TextStyle(
                                       color: isActive
-                                          ? Colors.teal
-                                          : Colors.grey,
+                                          ? GrihoColors.emerald
+                                          : theme.colorScheme.onSurfaceVariant,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 11,
                                     ),
                                   ),
                                 ],
                               ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
+                              trailing: const Icon(
+                                Iconsax.arrow_right_3,
+                                size: 18,
+                              ),
                               onTap: () {
                                 Navigator.pop(context);
                                 context.push(
@@ -946,17 +539,13 @@ class _ManagerTenantsSheetContentState
             ),
             Padding(
               padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    context.push(RouteNames.addTenant);
-                  },
-                  icon: const Icon(Icons.person_add_rounded),
-                  label: const Text('Register New Resident'),
-                ),
+              child: GrihoPrimaryButton(
+                label: 'Register New Resident',
+                icon: Iconsax.user_add,
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.push(RouteNames.addTenant);
+                },
               ),
             ),
           ],

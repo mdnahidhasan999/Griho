@@ -1,6 +1,8 @@
+// noinspection SpellCheckingInspection
 import 'package:griho/features/tenants/domain/entities/tenancy_billing_target.dart';
 
 import '../../../tenants/domain/entities/repositories/tenancy_history_repository.dart';
+import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 
 class TenancyBillingTargetResolver {
@@ -8,16 +10,6 @@ class TenancyBillingTargetResolver {
 
   const TenancyBillingTargetResolver({required this._repository});
 
-  /// Resolves all tenancies that overlap the requested billing period.
-  ///
-  /// Historical ended tenancies are loaded from TenancyHistory.
-  /// Current active tenancies are resolved from the current Tenant records.
-  ///
-  /// Billing period:
-  ///   [billingPeriodStart, billingPeriodEnd)
-  ///
-  /// Tenancy dates:
-  ///   [startedAt, endedAt] inclusive.
   Future<List<TenancyBillingTarget>> resolve({
     required String ownerId,
     required String propertyId,
@@ -32,7 +24,6 @@ class TenancyBillingTargetResolver {
     if (normalizedOwnerId.isEmpty) {
       throw ArgumentError('Owner ID is required.');
     }
-
     if (normalizedPropertyId.isEmpty) {
       throw ArgumentError('Property ID is required.');
     }
@@ -47,6 +38,7 @@ class TenancyBillingTargetResolver {
     }
 
     final floorByUnitId = <String, String>{};
+    final validUnits = <({String unitId, String floorId})>[];
 
     for (final unit in units) {
       final unitId = unit.unitId.trim();
@@ -56,106 +48,94 @@ class TenancyBillingTargetResolver {
         continue;
       }
 
-      floorByUnitId[unitId] = floorId;
+      if (floorByUnitId.putIfAbsent(unitId, () => floorId) == floorId) {
+        validUnits.add((unitId: unitId, floorId: floorId));
+      }
     }
 
     final targets = <TenancyBillingTarget>[];
 
-    // ============================================================
-    // 1. HISTORICAL ENDED TENANCIES
-    // ============================================================
-
-    for (final unit in units) {
-      final unitId = unit.unitId.trim();
-      final floorId = unit.floorId.trim();
-
-      if (unitId.isEmpty || floorId.isEmpty) {
-        continue;
-      }
-
-      final histories = await _repository.getHistoryByUnitId(
-        unitId: unitId,
-        ownerId: normalizedOwnerId,
+    // 1. Fetch historical ended tenancies for all units concurrently.
+    if (validUnits.isNotEmpty) {
+      final historyLists = await Future.wait<List<TenancyHistory>>(
+        validUnits.map(
+          (unit) => _repository.getHistoryByUnitId(
+            unitId: unit.unitId,
+            ownerId: normalizedOwnerId,
+          ),
+        ),
       );
 
-      for (final history in histories) {
-        if (history.propertyId != normalizedPropertyId) {
-          continue;
+      for (var i = 0; i < validUnits.length; i++) {
+        final floorId = validUnits[i].floorId;
+        final histories = historyLists[i];
+
+        for (final history in histories) {
+          if (history.propertyId != normalizedPropertyId) {
+            continue;
+          }
+
+          final overlap = _resolveOverlap(
+            tenancyStart: history.startedAt,
+            tenancyEnd: history.endedAt,
+            billingStart: periodStart,
+            billingEndExclusive: periodEndExclusive,
+          );
+
+          if (overlap == null) {
+            continue;
+          }
+
+          targets.add(
+            TenancyBillingTarget(
+              floorId: floorId,
+              unitId: history.unitId,
+              tenantId: history.tenantId,
+              tenantUserId: history.tenantUserId,
+              tenancyHistoryId: history.id,
+              tenancyStart: overlap.$1,
+              tenancyEnd: overlap.$2,
+            ),
+          );
         }
-
-        final overlap = _resolveOverlap(
-          tenancyStart: history.startedAt,
-          tenancyEnd: history.endedAt,
-          billingStart: periodStart,
-          billingEndExclusive: periodEndExclusive,
-        );
-
-        if (overlap == null) {
-          continue;
-        }
-
-        targets.add(
-          TenancyBillingTarget(
-            floorId: floorId,
-            unitId: history.unitId,
-            tenantId: history.tenantId,
-            tenantUserId: history.tenantUserId,
-            tenancyHistoryId: history.id,
-            tenancyStart: overlap.$1,
-            tenancyEnd: overlap.$2,
-          ),
-        );
       }
     }
 
-    // ============================================================
-    // 2. CURRENT ACTIVE TENANCIES
-    // ============================================================
+    // 2. Resolve current active tenancies.
+    final billingEndInclusive = periodEndExclusive.subtract(
+      const Duration(days: 1),
+    );
 
     for (final tenant in currentTenants) {
       if (tenant.status != TenantStatus.active) {
         continue;
       }
-
-      if (tenant.ownerId != normalizedOwnerId) {
-        continue;
-      }
-
-      if (tenant.propertyId != normalizedPropertyId) {
+      if (tenant.ownerId != normalizedOwnerId ||
+          tenant.propertyId != normalizedPropertyId) {
         continue;
       }
 
       final unitId = tenant.unitId.trim();
-
       if (unitId.isEmpty) {
         continue;
       }
 
       final floorId = floorByUnitId[unitId];
-
       if (floorId == null || floorId.isEmpty) {
         continue;
       }
 
       final tenancyStartedAt = tenant.tenancyStartedAt;
-
       if (tenancyStartedAt == null) {
         continue;
       }
 
       final tenancyStart = _dateOnly(tenancyStartedAt);
-
-      final billingEndInclusive = periodEndExclusive.subtract(
-        const Duration(days: 1),
-      );
-
       final overlapStart = tenancyStart.isAfter(periodStart)
           ? tenancyStart
           : periodStart;
 
-      final overlapEnd = billingEndInclusive;
-
-      if (overlapStart.isAfter(overlapEnd)) {
+      if (overlapStart.isAfter(billingEndInclusive)) {
         continue;
       }
 
@@ -167,49 +147,34 @@ class TenancyBillingTargetResolver {
           tenantUserId: tenant.userId,
           tenancyHistoryId: null,
           tenancyStart: overlapStart,
-          tenancyEnd: overlapEnd,
+          tenancyEnd: billingEndInclusive,
         ),
       );
     }
 
-    // ============================================================
-    // 3. REMOVE DUPLICATE TENANCY TARGETS
-    // ============================================================
-
+    // 3. Deduplicate and sort deterministically.
     final uniqueTargets = <String, TenancyBillingTarget>{};
-
     for (final target in targets) {
-      final key = _targetKey(target);
-
-      uniqueTargets[key] = target;
+      uniqueTargets[_targetKey(target)] = target;
     }
 
-    final result = uniqueTargets.values.toList();
+    final result = uniqueTargets.values.toList()
+      ..sort((a, b) {
+        final unitComparison = a.unitId.compareTo(b.unitId);
+        if (unitComparison != 0) {
+          return unitComparison;
+        }
 
-    // Stable ordering:
-    // Unit → tenancy start → tenant.
-    result.sort((a, b) {
-      final unitComparison = a.unitId.compareTo(b.unitId);
+        final startComparison = a.tenancyStart.compareTo(b.tenancyStart);
+        if (startComparison != 0) {
+          return startComparison;
+        }
 
-      if (unitComparison != 0) {
-        return unitComparison;
-      }
-
-      final startComparison = a.tenancyStart.compareTo(b.tenancyStart);
-
-      if (startComparison != 0) {
-        return startComparison;
-      }
-
-      return a.tenantId.compareTo(b.tenantId);
-    });
+        return a.tenantId.compareTo(b.tenantId);
+      });
 
     return result;
   }
-
-  // ============================================================
-  // OVERLAP RESOLUTION
-  // ============================================================
 
   (DateTime, DateTime)? _resolveOverlap({
     required DateTime tenancyStart,
@@ -243,10 +208,6 @@ class TenancyBillingTargetResolver {
     return (overlapStart, overlapEnd);
   }
 
-  // ============================================================
-  // DUPLICATE KEY
-  // ============================================================
-
   String _targetKey(TenancyBillingTarget target) {
     return [
       target.unitId,
@@ -256,11 +217,6 @@ class TenancyBillingTargetResolver {
     ].join('_');
   }
 
-  // ============================================================
-  // DATE NORMALIZATION
-  // ============================================================
-
-  DateTime _dateOnly(DateTime value) {
-    return DateTime(value.year, value.month, value.day);
-  }
+  DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
 }

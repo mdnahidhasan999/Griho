@@ -2,22 +2,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_arguments.dart';
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
+import '../../../properties/domain/entities/property.dart';
+import '../../../properties/presentation/controllers/property_controller.dart';
+import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../tenants/data/models/tenant_model.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/property_tenants_provider.dart';
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
-import '../../domain/entities/property.dart';
-import '../controllers/property_controller.dart';
-import '../providers/current_owner_properties_provider.dart';
-import '../providers/property_usecase_provider.dart';
 
 class PropertyDetailsScreen extends ConsumerStatefulWidget {
   final String propertyId;
@@ -30,47 +29,10 @@ class PropertyDetailsScreen extends ConsumerStatefulWidget {
 }
 
 class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
-  Property? _property;
-
-  bool _isLoading = true;
   bool _isDeleting = false;
-  String? _errorMessage;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadProperty();
-  }
-
-  Future<void> _loadProperty() async {
-    try {
-      final getProperty = ref.read(getPropertyProvider);
-      final property = await getProperty(widget.propertyId);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _property = property;
-        _isLoading = false;
-        _errorMessage = null;
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isLoading = false;
-        _errorMessage = error.toString();
-      });
-    }
-  }
-
-  Future<void> _editProperty() async {
-    final property = _property;
-    if (property == null || _isDeleting) {
+  Future<void> _editProperty(Property property) async {
+    if (_isDeleting) {
       return;
     }
 
@@ -85,20 +47,13 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
       return;
     }
 
-    setState(() {
-      _property = result;
-    });
-
+    // Only invalidate property providers; editing property info does not alter units or tenants.
     ref.invalidate(currentOwnerPropertiesProvider);
-    ref.invalidate(propertyUnitsProvider(result.id));
-    ref.invalidate(propertyTenantsProvider(result.id));
-
-    await _loadProperty();
+    ref.invalidate(propertyByIdProvider(result.id));
   }
 
-  Future<void> _deleteProperty() async {
-    final property = _property;
-    if (property == null || _isDeleting) {
+  Future<void> _deleteProperty(Property property) async {
+    if (_isDeleting) {
       return;
     }
 
@@ -113,18 +68,14 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Cancel'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.error,
               ),
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Delete'),
             ),
           ],
@@ -136,9 +87,7 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
       return;
     }
 
-    setState(() {
-      _isDeleting = true;
-    });
+    setState(() => _isDeleting = true);
 
     final controller = ref.read(propertyControllerProvider.notifier);
     final success = await controller.deleteProperty(propertyId: property.id);
@@ -149,97 +98,104 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
 
     if (success) {
       ref.invalidate(currentOwnerPropertiesProvider);
+      ref.invalidate(propertyByIdProvider(property.id));
+      GrihoFeedback.showSuccess(context, 'Property deleted.');
       context.pop();
       return;
     }
 
-    setState(() {
-      _isDeleting = false;
-    });
+    setState(() => _isDeleting = false);
 
     final errorMessage = ref.read(propertyControllerProvider).errorMessage;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(errorMessage ?? 'Unable to delete property.'),
-        backgroundColor: Theme.of(context).colorScheme.error,
-        behavior: SnackBarBehavior.floating,
-      ),
+    GrihoFeedback.showError(
+      context,
+      errorMessage ?? 'Unable to delete property.',
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final propertyAsync = ref.watch(propertyByIdProvider(widget.propertyId));
 
-    if (_isLoading) {
-      return Scaffold(
+    return propertyAsync.when(
+      loading: () => Scaffold(
         appBar: AppBar(title: const Text('Property Details')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_errorMessage != null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Property Details')),
-        body: _ErrorView(message: _errorMessage!, onRetry: _loadProperty),
-      );
-    }
-
-    final property = _property;
-    if (property == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Property Details')),
-        body: const _NotFoundView(),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Property Details',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Edit Property',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _isDeleting ? null : _editProperty,
-          ),
-          IconButton(
-            tooltip: 'Delete Property',
-            icon: const Icon(Icons.delete_outline_rounded),
-            onPressed: _isDeleting ? null : _deleteProperty,
-          ),
-        ],
+        body: const GrihoLoadingView(message: 'Loading property...'),
       ),
-      body: Stack(
-        children: [
-          _PropertyDetailsContent(property: property, onReload: _loadProperty),
-          if (_isDeleting)
-            Positioned.fill(
-              child: ColoredBox(
-                color: Colors.black.withValues(alpha: 0.45),
-                child: const Center(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Deleting property records...'),
-                        ],
+      error: (error, _) => Scaffold(
+        appBar: AppBar(title: const Text('Property Details')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load property',
+              subtitle: error.toString(),
+              actionLabel: 'Retry',
+              onAction: () =>
+                  ref.invalidate(propertyByIdProvider(widget.propertyId)),
+            ),
+          ),
+        ),
+      ),
+      data: (property) {
+        if (property == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Property Details')),
+            body: const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.buildings_2,
+                  title: 'Property not found',
+                  subtitle: 'This property may have been removed.',
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: theme.colorScheme.surface,
+          appBar: AppBar(
+            title: const Text('Property Details'),
+            actions: [
+              IconButton(
+                tooltip: 'Edit Property',
+                icon: const Icon(Iconsax.edit_2),
+                onPressed: _isDeleting ? null : () => _editProperty(property),
+              ),
+              IconButton(
+                tooltip: 'Delete Property',
+                icon: const Icon(Iconsax.trash),
+                onPressed: _isDeleting ? null : () => _deleteProperty(property),
+              ),
+            ],
+          ),
+          body: Stack(
+            children: [
+              _PropertyDetailsContent(property: property),
+              if (_isDeleting)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    child: const Center(
+                      child: Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: GrihoLoadingView(
+                            message: 'Deleting property records...',
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -250,12 +206,8 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
 
 class _PropertyDetailsContent extends ConsumerWidget {
   final Property property;
-  final VoidCallback onReload;
 
-  const _PropertyDetailsContent({
-    required this.property,
-    required this.onReload,
-  });
+  const _PropertyDetailsContent({required this.property});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -264,52 +216,38 @@ class _PropertyDetailsContent extends ConsumerWidget {
 
     return RefreshIndicator(
       onRefresh: () async {
-        ref.invalidate(propertyUnitsProvider(property.id));
-        ref.invalidate(propertyTenantsProvider(property.id));
-        onReload();
+        await Future.wait([
+          ref.refresh(propertyByIdProvider(property.id).future),
+          ref.refresh(propertyUnitsProvider(property.id).future),
+          ref.refresh(propertyTenantsProvider(property.id).future),
+        ]).catchError((_) => const <Object?>[]);
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
-          // 1. Hero Property Card
           _HeroPropertyHeader(property: property),
-
           const SizedBox(height: 14),
-
-          // 2. Metric Counters (Floors, Units, Occupied, Vacant)
           _PropertyMetricRow(
             numberOfFloors: property.numberOfFloors,
             unitsAsync: unitsAsync,
           ),
-
           const SizedBox(height: 20),
-
-          // 3. Units Section
           _UnitsSection(
             propertyId: property.id,
             propertyName: property.name,
             numberOfFloors: property.numberOfFloors,
             unitsAsync: unitsAsync,
           ),
-
           const SizedBox(height: 20),
-
-          // 4. Tenants Section
           _TenantsSection(
             propertyId: property.id,
             propertyName: property.name,
             tenantsAsync: tenantsAsync,
           ),
-
           const SizedBox(height: 20),
-
-          // 5. Unified Rent & Tariff Control Card
           _PropertyRentManagementCard(property: property),
-
           const SizedBox(height: 20),
-
-          // 6. Property Guidelines & Address Overview
           _PropertyInfoOverview(property: property),
         ],
       ),
@@ -330,6 +268,7 @@ class _HeroPropertyHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isActive = property.status == PropertyStatus.active;
+    final statusColor = isActive ? GrihoColors.emerald : GrihoColors.warning;
 
     return Container(
       decoration: BoxDecoration(
@@ -352,7 +291,7 @@ class _HeroPropertyHeader extends StatelessWidget {
                 ),
                 child: Icon(
                   _propertyTypeIcon(property.type),
-                  size: 28,
+                  size: 26,
                   color: theme.colorScheme.onPrimaryContainer,
                 ),
               ),
@@ -382,19 +321,14 @@ class _HeroPropertyHeader extends StatelessWidget {
                           padding: EdgeInsets.zero,
                           iconSize: 16,
                           tooltip: 'Copy Property Code',
-                          icon: const Icon(Icons.copy_rounded),
+                          icon: const Icon(Iconsax.copy),
                           onPressed: () {
                             Clipboard.setData(
                               ClipboardData(text: property.propertyCode),
                             );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Property code copied to clipboard.',
-                                ),
-                                duration: Duration(seconds: 2),
-                                behavior: SnackBarBehavior.floating,
-                              ),
+                            GrihoFeedback.showSuccess(
+                              context,
+                              'Property code copied to clipboard.',
                             );
                           },
                         ),
@@ -409,9 +343,7 @@ class _HeroPropertyHeader extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: isActive
-                      ? Colors.green.withValues(alpha: 0.15)
-                      : Colors.orange.withValues(alpha: 0.15),
+                  color: statusColor.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -419,9 +351,7 @@ class _HeroPropertyHeader extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: isActive
-                        ? Colors.green.shade800
-                        : Colors.orange.shade800,
+                    color: statusColor,
                   ),
                 ),
               ),
@@ -433,8 +363,8 @@ class _HeroPropertyHeader extends StatelessWidget {
           Row(
             children: [
               Icon(
-                Icons.location_on_outlined,
-                size: 18,
+                Iconsax.location,
+                size: 17,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 8),
@@ -455,16 +385,11 @@ class _HeroPropertyHeader extends StatelessWidget {
     );
   }
 
-  IconData _propertyTypeIcon(PropertyType type) {
-    switch (type) {
-      case PropertyType.residential:
-        return Icons.apartment_rounded;
-      case PropertyType.commercial:
-        return Icons.storefront_rounded;
-      case PropertyType.mixedUse:
-        return Icons.domain_rounded;
-    }
-  }
+  IconData _propertyTypeIcon(PropertyType type) => switch (type) {
+    PropertyType.residential => Iconsax.home_2,
+    PropertyType.commercial => Iconsax.shop,
+    PropertyType.mixedUse => Iconsax.buildings_2,
+  };
 }
 
 // ============================================================================
@@ -484,13 +409,15 @@ class _PropertyMetricRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return unitsAsync.when(
       loading: () => const LinearProgressIndicator(),
-      error: (err, stack) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (units) {
         final totalUnits = units.length;
         final occupiedUnits = units
             .where((u) => u.status == UnitStatus.occupied)
             .length;
-        final vacantUnits = totalUnits - occupiedUnits;
+        final vacantUnits = units
+            .where((u) => u.status == UnitStatus.available)
+            .length;
 
         return Row(
           children: [
@@ -498,7 +425,7 @@ class _PropertyMetricRow extends StatelessWidget {
               child: _MetricBadge(
                 label: 'Floors',
                 value: '$numberOfFloors',
-                icon: Icons.layers_outlined,
+                icon: Iconsax.layer,
               ),
             ),
             const SizedBox(width: 8),
@@ -506,7 +433,7 @@ class _PropertyMetricRow extends StatelessWidget {
               child: _MetricBadge(
                 label: 'Total Units',
                 value: '$totalUnits',
-                icon: Icons.door_front_door_outlined,
+                icon: Iconsax.building,
               ),
             ),
             const SizedBox(width: 8),
@@ -514,8 +441,8 @@ class _PropertyMetricRow extends StatelessWidget {
               child: _MetricBadge(
                 label: 'Occupied',
                 value: '$occupiedUnits',
-                icon: Icons.person_outline,
-                highlightColor: Colors.teal,
+                icon: Iconsax.user,
+                highlightColor: GrihoColors.emerald,
               ),
             ),
             const SizedBox(width: 8),
@@ -523,7 +450,7 @@ class _PropertyMetricRow extends StatelessWidget {
               child: _MetricBadge(
                 label: 'Vacant',
                 value: '$vacantUnits',
-                icon: Icons.check_circle_outline,
+                icon: Iconsax.tick_circle,
                 highlightColor: Colors.blueAccent,
               ),
             ),
@@ -659,15 +586,11 @@ class _UnitsSection extends ConsumerWidget {
                   children: [
                     IconButton(
                       tooltip: 'Add Unit',
-                      icon: const Icon(Icons.add_circle_outline, size: 20),
-                      onPressed: () {
-                        _addUnit(context, ref);
-                      },
+                      icon: const Icon(Iconsax.add_circle, size: 20),
+                      onPressed: () => _addUnit(context, ref),
                     ),
                     TextButton(
-                      onPressed: () {
-                        _openUnitList(context);
-                      },
+                      onPressed: () => _openUnitList(context),
                       child: const Text('View All'),
                     ),
                   ],
@@ -677,28 +600,27 @@ class _UnitsSection extends ConsumerWidget {
             const SizedBox(height: 8),
             unitsAsync.when(
               loading: () => const LinearProgressIndicator(),
-              error: (error, stack) => Text('Unable to load units: $error'),
+              error: (error, _) => Text('Unable to load units: $error'),
               data: (units) {
                 if (units.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
                       child: Column(
                         children: [
                           Icon(
-                            Icons.door_front_door_outlined,
-                            size: 36,
+                            Iconsax.home_2,
+                            size: 34,
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(height: 8),
                           const Text('No units added to this property yet.'),
                           const SizedBox(height: 12),
-                          FilledButton.icon(
-                            onPressed: () {
-                              _addUnit(context, ref);
-                            },
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('Add First Unit'),
+                          GrihoPrimaryButton(
+                            label: 'Add First Unit',
+                            icon: Iconsax.add,
+                            fullWidth: false,
+                            onPressed: () => _addUnit(context, ref),
                           ),
                         ],
                       ),
@@ -735,6 +657,20 @@ class _UnitCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isOccupied = unit.status == UnitStatus.occupied;
+    final isAvailable = unit.status == UnitStatus.available;
+    final badgeColor = isOccupied
+        ? GrihoColors.emerald
+        : isAvailable
+        ? Colors.blueAccent
+        : GrihoColors.warning;
+    final statusName = unit.status.name;
+    final badgeLabel = isOccupied
+        ? 'Occupied'
+        : isAvailable
+        ? 'Available'
+        : statusName.isNotEmpty
+        ? statusName[0].toUpperCase() + statusName.substring(1)
+        : 'Other';
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -745,8 +681,8 @@ class _UnitCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(
-          Icons.apartment_rounded,
-          size: 20,
+          Iconsax.building,
+          size: 18,
           color: theme.colorScheme.primary,
         ),
       ),
@@ -761,24 +697,20 @@ class _UnitCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: isOccupied
-                  ? Colors.green.withValues(alpha: 0.12)
-                  : Colors.blue.withValues(alpha: 0.12),
+              color: badgeColor.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              isOccupied ? 'Occupied' : 'Available',
+              badgeLabel,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: isOccupied
-                    ? Colors.green.shade800
-                    : Colors.blue.shade800,
+                color: badgeColor,
               ),
             ),
           ),
           const SizedBox(width: 6),
-          const Icon(Icons.chevron_right, size: 18),
+          const Icon(Iconsax.arrow_right_3, size: 16),
         ],
       ),
       onTap: () {
@@ -789,10 +721,10 @@ class _UnitCard extends StatelessWidget {
 }
 
 // ============================================================================
-// TENANTS SECTION
+// TENANTS SECTION (FALLBACK ONLY ON PROVIDER ERROR TO PREVENT EXTRA READS)
 // ============================================================================
 
-class _TenantsSection extends ConsumerWidget {
+class _TenantsSection extends ConsumerStatefulWidget {
   final String propertyId;
   final String propertyName;
   final AsyncValue<List<Tenant>> tenantsAsync;
@@ -803,32 +735,89 @@ class _TenantsSection extends ConsumerWidget {
     required this.tenantsAsync,
   });
 
-  Future<void> _openTenantList(BuildContext context) async {
+  @override
+  ConsumerState<_TenantsSection> createState() => _TenantsSectionState();
+}
+
+class _TenantsSectionState extends ConsumerState<_TenantsSection> {
+  Future<List<Tenant>>? _fallbackFuture;
+
+  @override
+  void didUpdateWidget(covariant _TenantsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.propertyId != widget.propertyId) {
+      _fallbackFuture = null;
+    }
+  }
+
+  Future<List<Tenant>> _getFallbackTenants() {
+    _fallbackFuture ??= FirebaseFirestore.instance
+        .collection('tenants')
+        .where('propertyId', isEqualTo: widget.propertyId)
+        .where('status', isEqualTo: 'active')
+        .limit(20)
+        .get()
+        .then((snap) => snap.docs.map(TenantModel.fromFirestore).toList());
+    return _fallbackFuture!;
+  }
+
+  Future<void> _openTenantList() async {
     await context.push(
-      RouteNames.propertyTenants.replaceFirst(':propertyId', propertyId),
-      extra: PropertyTenantsRouteArguments(propertyName: propertyName),
+      RouteNames.propertyTenants.replaceFirst(':propertyId', widget.propertyId),
+      extra: PropertyTenantsRouteArguments(propertyName: widget.propertyName),
     );
   }
 
-  Future<void> _addTenant(BuildContext context, WidgetRef ref) async {
+  Future<void> _addTenant() async {
     await context.push(RouteNames.addTenant);
-    if (!context.mounted) {
+    if (!mounted) {
       return;
     }
-    ref.invalidate(propertyTenantsProvider(propertyId));
+    setState(() => _fallbackFuture = null);
+    ref.invalidate(propertyTenantsProvider(widget.propertyId));
   }
 
-  Future<List<Tenant>> _loadFallbackTenants() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('tenants')
-        .where('propertyId', isEqualTo: propertyId)
-        .where('status', isEqualTo: 'active')
-        .get();
-    return snap.docs.map((doc) => TenantModel.fromFirestore(doc)).toList();
+  Widget _buildEmptyState(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(
+              Iconsax.people,
+              size: 34,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 8),
+            const Text('No active tenants assigned yet.'),
+            const SizedBox(height: 12),
+            GrihoPrimaryButton(
+              label: 'Assign Tenant',
+              icon: Iconsax.user_add,
+              fullWidth: false,
+              onPressed: _addTenant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewList(List<Tenant> activeTenants) {
+    final previewTenants = activeTenants.take(4).toList();
+    return Column(
+      children: [
+        for (var i = 0; i < previewTenants.length; i++) ...[
+          _TenantCard(tenant: previewTenants[i]),
+          if (i != previewTenants.length - 1)
+            const Divider(height: 1, indent: 56),
+        ],
+      ],
+    );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Material(
@@ -856,18 +845,11 @@ class _TenantsSection extends ConsumerWidget {
                   children: [
                     IconButton(
                       tooltip: 'Assign Tenant',
-                      icon: const Icon(
-                        Icons.person_add_alt_1_outlined,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        _addTenant(context, ref);
-                      },
+                      icon: const Icon(Iconsax.user_add, size: 20),
+                      onPressed: _addTenant,
                     ),
                     TextButton(
-                      onPressed: () {
-                        _openTenantList(context);
-                      },
+                      onPressed: _openTenantList,
                       child: const Text('View All'),
                     ),
                   ],
@@ -875,74 +857,34 @@ class _TenantsSection extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            tenantsAsync.when(
+            widget.tenantsAsync.when(
               loading: () => const LinearProgressIndicator(),
-              error: (err, stack) => Text('Unable to load tenants: $err'),
+              error: (_, _) => FutureBuilder<List<Tenant>>(
+                future: _getFallbackTenants(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const LinearProgressIndicator();
+                  }
+                  if (snapshot.hasError) {
+                    return const Text('Unable to load tenants.');
+                  }
+                  final fallbackList = snapshot.data ?? const <Tenant>[];
+                  if (fallbackList.isEmpty) {
+                    return _buildEmptyState(theme);
+                  }
+                  return _buildPreviewList(fallbackList);
+                },
+              ),
               data: (tenants) {
                 final activeTenants = tenants
                     .where((t) => t.status == TenantStatus.active)
                     .toList();
 
-                if (activeTenants.isNotEmpty) {
-                  final previewTenants = activeTenants.take(4).toList();
-                  return Column(
-                    children: [
-                      for (var i = 0; i < previewTenants.length; i++) ...[
-                        _TenantCard(tenant: previewTenants[i]),
-                        if (i != previewTenants.length - 1)
-                          const Divider(height: 1, indent: 56),
-                      ],
-                    ],
-                  );
+                if (activeTenants.isEmpty) {
+                  return _buildEmptyState(theme);
                 }
 
-                // ম্যানেজার অ্যাকাউন্ট থেকে ownerId ফিল্টারের কারণে খালি আসলে সরাসরি propertyId দিয়ে লোড করা
-                return FutureBuilder<List<Tenant>>(
-                  future: _loadFallbackTenants(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const LinearProgressIndicator();
-                    }
-                    final fallbackList = snapshot.data ?? [];
-                    if (fallbackList.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.people_outline_rounded,
-                                size: 36,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(height: 8),
-                              const Text('No active tenants assigned yet.'),
-                              const SizedBox(height: 12),
-                              FilledButton.icon(
-                                onPressed: () {
-                                  _addTenant(context, ref);
-                                },
-                                icon: const Icon(Icons.person_add, size: 18),
-                                label: const Text('Assign Tenant'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    final preview = fallbackList.take(4).toList();
-                    return Column(
-                      children: [
-                        for (var i = 0; i < preview.length; i++) ...[
-                          _TenantCard(tenant: preview[i]),
-                          if (i != preview.length - 1)
-                            const Divider(height: 1, indent: 56),
-                        ],
-                      ],
-                    );
-                  },
-                );
+                return _buildPreviewList(activeTenants);
               },
             ),
           ],
@@ -960,13 +902,14 @@ class _TenantCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final trimmedName = tenant.name.trim();
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
         backgroundColor: theme.colorScheme.primaryContainer,
         child: Text(
-          tenant.name.isNotEmpty ? tenant.name[0].toUpperCase() : 'T',
+          trimmedName.isNotEmpty ? trimmedName[0].toUpperCase() : 'T',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: theme.colorScheme.onPrimaryContainer,
@@ -978,7 +921,7 @@ class _TenantCard extends StatelessWidget {
         style: const TextStyle(fontWeight: FontWeight.w700),
       ),
       subtitle: Text(tenant.phone),
-      trailing: const Icon(Icons.chevron_right, size: 18),
+      trailing: const Icon(Iconsax.arrow_right_3, size: 16),
       onTap: () {
         context.push(
           RouteNames.tenantDetails.replaceFirst(':tenantId', tenant.id),
@@ -1022,7 +965,7 @@ class _PropertyRentManagementCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    Icons.currency_exchange_rounded,
+                    Iconsax.money_change,
                     size: 20,
                     color: theme.colorScheme.onPrimaryContainer,
                   ),
@@ -1045,19 +988,10 @@ class _PropertyRentManagementCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: () {
-                  context.push(RouteNames.centralRentControl);
-                },
-                icon: const Icon(Icons.tune_rounded, size: 18),
-                label: const Text(
-                  'Open Rent & Tariff Control Hub',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
+            GrihoPrimaryButton(
+              label: 'Open Rent & Tariff Control Hub',
+              icon: Iconsax.setting_4,
+              onPressed: () => context.push(RouteNames.centralRentControl),
             ),
           ],
         ),
@@ -1109,54 +1043,6 @@ class _PropertyInfoOverview extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// HELPERS & ERROR VIEWS
-// ============================================================================
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorView({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.redAccent,
-            ),
-            const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NotFoundView extends StatelessWidget {
-  const _NotFoundView();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text('Property not found.', textAlign: TextAlign.center),
       ),
     );
   }

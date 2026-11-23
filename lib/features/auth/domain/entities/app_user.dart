@@ -6,6 +6,12 @@ class AppUser {
   final String? email;
   final String? photoUrl;
   final String? nidNumber;
+  final DateTime? dateOfBirth;
+  final String? occupation;
+  final String? gender;
+  final String? maritalStatus;
+  final String? nidFrontUrl;
+  final String? nidBackUrl;
 
   // The dashboard selected to open by default.
   final String? defaultDashboard;
@@ -24,6 +30,12 @@ class AppUser {
     this.email,
     this.photoUrl,
     this.nidNumber,
+    this.dateOfBirth,
+    this.occupation,
+    this.gender,
+    this.maritalStatus,
+    this.nidFrontUrl,
+    this.nidBackUrl,
     this.defaultDashboard,
     this.availableRoles = const [],
     required this.isActive,
@@ -39,6 +51,12 @@ class AppUser {
     String? email,
     String? photoUrl,
     String? nidNumber,
+    DateTime? dateOfBirth,
+    String? occupation,
+    String? gender,
+    String? maritalStatus,
+    String? nidFrontUrl,
+    String? nidBackUrl,
     String? defaultDashboard,
     List<String>? availableRoles,
     bool? isActive,
@@ -53,6 +71,12 @@ class AppUser {
       email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
       nidNumber: nidNumber ?? this.nidNumber,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      occupation: occupation ?? this.occupation,
+      gender: gender ?? this.gender,
+      maritalStatus: maritalStatus ?? this.maritalStatus,
+      nidFrontUrl: nidFrontUrl ?? this.nidFrontUrl,
+      nidBackUrl: nidBackUrl ?? this.nidBackUrl,
       defaultDashboard: defaultDashboard ?? this.defaultDashboard,
       availableRoles: availableRoles ?? this.availableRoles,
       isActive: isActive ?? this.isActive,

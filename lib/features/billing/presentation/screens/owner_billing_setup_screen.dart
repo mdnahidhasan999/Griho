@@ -2,11 +2,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/design_system.dart';
+import '../../../../core/design_system/widgets/griho_picker_field.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../../../tenants/data/models/tenant_model.dart';
 import '../../../tenants/domain/entities/tenant.dart';
@@ -15,7 +16,9 @@ import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
 import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/create_billing_rule_request.dart';
+import '../controllers/generate_monthly_charges_controller.dart';
 import '../providers/billing_rule_provider.dart';
+import '../widgets/billing_ui_helpers.dart';
 
 class OwnerBillingSetupScreen extends ConsumerStatefulWidget {
   const OwnerBillingSetupScreen({super.key});
@@ -57,6 +60,24 @@ class _OwnerBillingSetupScreenState
     super.dispose();
   }
 
+  String? _resolvePropertyId(List<Property> properties) {
+    if (_selectedPropertyId != null &&
+        properties.any((p) => p.id == _selectedPropertyId)) {
+      return _selectedPropertyId;
+    }
+    if (properties.length == 1) {
+      return properties.first.id;
+    }
+    return null;
+  }
+
+  String? _resolveScopeId(String? effectivePropertyId) {
+    if (_scopeType == BillingScopeType.property) {
+      return effectivePropertyId;
+    }
+    return _selectedScopeId;
+  }
+
   Future<void> _selectEffectiveMonth() async {
     final now = DateTime.now();
     final initialDate = _effectiveMonth ?? DateTime(now.year, now.month, 1);
@@ -78,37 +99,24 @@ class _OwnerBillingSetupScreenState
     });
   }
 
-  String _scopeTypeLabel(BillingScopeType type) {
-    switch (type) {
-      case BillingScopeType.property:
-        return 'Entire Property';
-      case BillingScopeType.floor:
-        return 'Specific Floor';
-      case BillingScopeType.unit:
-        return 'Specific Unit';
-      case BillingScopeType.tenant:
-        return 'Specific Tenant';
-    }
-  }
+  String _scopeTypeLabel(BillingScopeType type) => switch (type) {
+    BillingScopeType.property => 'Entire Property',
+    BillingScopeType.floor => 'Specific Floor',
+    BillingScopeType.unit => 'Specific Unit',
+    BillingScopeType.tenant => 'Specific Tenant',
+  };
 
-  IconData _scopeTypeIcon(BillingScopeType type) {
-    switch (type) {
-      case BillingScopeType.property:
-        return Icons.apartment_rounded;
-      case BillingScopeType.floor:
-        return Icons.layers_outlined;
-      case BillingScopeType.unit:
-        return Icons.door_front_door_outlined;
-      case BillingScopeType.tenant:
-        return Icons.person_outline_rounded;
-    }
-  }
+  IconData _scopeTypeIcon(BillingScopeType type) => switch (type) {
+    BillingScopeType.property => Iconsax.buildings_2,
+    BillingScopeType.floor => Iconsax.layer,
+    BillingScopeType.unit => Iconsax.home_2,
+    BillingScopeType.tenant => Iconsax.user,
+  };
 
   void _changeScopeType(BillingScopeType? value) {
     if (value == null) {
       return;
     }
-
     setState(() {
       _scopeType = value;
       _selectedScopeId = value == BillingScopeType.property
@@ -118,43 +126,40 @@ class _OwnerBillingSetupScreenState
   }
 
   List<int> _getFloorNumbers(List<Unit> units) {
-    final floors = <int>{};
-    for (final unit in units) {
-      floors.add(unit.floorNumber);
-    }
+    final floors = <int>{for (final unit in units) unit.floorNumber};
     return floors.toList()..sort();
   }
 
-  String _floorLabel(int floorNumber) {
-    if (floorNumber == 0) {
-      return 'Ground Floor';
-    }
-    if (floorNumber == 1) {
-      return '1st Floor';
-    }
-    if (floorNumber == 2) {
-      return '2nd Floor';
-    }
-    if (floorNumber == 3) {
-      return '3rd Floor';
-    }
-    return 'Floor $floorNumber';
-  }
+  String _floorLabel(int floorNumber) => switch (floorNumber) {
+    0 => 'Ground Floor',
+    1 => '1st Floor',
+    2 => '2nd Floor',
+    3 => '3rd Floor',
+    _ => 'Floor $floorNumber',
+  };
 
   String _unitLabel(Unit unit) {
     final unitNumber = unit.unitNumber.trim();
-    if (unit.name != null && unit.name!.trim().isNotEmpty) {
-      return '${unit.name!.trim()} (Unit $unitNumber)';
+    final customName = unit.name?.trim() ?? '';
+    if (customName.isNotEmpty) {
+      return '$customName (Unit $unitNumber)';
     }
     return 'Unit $unitNumber';
   }
 
-  String _tenantLabel(Tenant tenant) {
-    final name = tenant.name.trim();
-    if (tenant.phone.trim().isNotEmpty) {
-      return '$name (${tenant.phone.trim()})';
+  String? _unitSubtitle(Unit unit) {
+    final parts = <String>[_floorLabel(unit.floorNumber)];
+    if (unit.name != null && unit.name!.trim().isNotEmpty) {
+      parts.add('Unit ${unit.unitNumber.trim()}');
     }
-    return name;
+    return parts.join(' • ');
+  }
+
+  String _tenantLabel(Tenant tenant) => tenant.name.trim();
+
+  String? _tenantSubtitle(Tenant tenant) {
+    final phone = tenant.phone.trim();
+    return phone.isNotEmpty ? phone : null;
   }
 
   Future<List<Tenant>> _loadFallbackActiveTenants(String propertyId) async {
@@ -162,57 +167,54 @@ class _OwnerBillingSetupScreenState
         .collection('tenants')
         .where('propertyId', isEqualTo: propertyId)
         .where('status', isEqualTo: 'active')
+        .limit(200)
         .get();
-    return snap.docs.map((doc) => TenantModel.fromFirestore(doc)).toList();
+    return snap.docs.map(TenantModel.fromFirestore).toList();
   }
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) {
+  Future<void> _save(List<Property> properties) async {
+    FocusScope.of(context).unfocus();
+    if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
-    if (_selectedPropertyId == null || _selectedPropertyId!.trim().isEmpty) {
-      _showMessage('Please select a target property.');
+    final propertyId = _resolvePropertyId(properties)?.trim();
+    if (propertyId == null || propertyId.isEmpty) {
+      GrihoFeedback.showError(context, 'Please select a target property.');
       return;
     }
 
-    if (_selectedScopeId == null || _selectedScopeId!.trim().isEmpty) {
-      _showMessage('Please select the specific scope target.');
+    final scopeId = _resolveScopeId(propertyId)?.trim();
+    if (scopeId == null || scopeId.isEmpty) {
+      GrihoFeedback.showError(context, 'Please select the specific target.');
       return;
     }
 
     if (_effectiveMonth == null) {
-      _showMessage('Please select an effective month.');
+      GrihoFeedback.showError(context, 'Please select an effective month.');
       return;
     }
 
-    final authState = ref.read(authStateProvider);
-    final firebaseUser = authState.value;
-
+    final firebaseUser = ref.read(authStateProvider).value;
     if (firebaseUser == null) {
-      _showMessage('You are not signed in.');
+      GrihoFeedback.showError(context, 'You are not signed in.');
       return;
     }
 
-    final properties = ref.read(currentOwnerPropertiesProvider).value ?? [];
     final selectedProperty = properties
-        .where((p) => p.id == _selectedPropertyId!.trim())
+        .where((p) => p.id == propertyId)
         .firstOrNull;
-
-    // ম্যানেজার রুল তৈরি করলেও যেন প্রপার্টির আসল মালিকের ownerId ব্যবহৃত হয়
     final ownerId = (selectedProperty?.ownerId ?? firebaseUser.uid).trim();
-    final amount = double.tryParse(_amountController.text.trim());
 
-    if (amount == null || amount < 0) {
-      _showMessage('Please enter a valid positive amount.');
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount == null || !amount.isFinite || amount < 0) {
+      GrihoFeedback.showError(context, 'Please enter a valid positive amount.');
       return;
     }
 
     final title = _titleController.text.trim();
 
-    setState(() {
-      _isSaving = true;
-    });
+    setState(() => _isSaving = true);
 
     try {
       final effectiveTo = _valueType == BillingValueType.variable
@@ -221,9 +223,9 @@ class _OwnerBillingSetupScreenState
 
       final request = CreateBillingRuleRequest(
         ownerId: ownerId,
-        propertyId: _selectedPropertyId!.trim(),
+        propertyId: propertyId,
         scopeType: _scopeType,
-        scopeId: _selectedScopeId!.trim(),
+        scopeId: scopeId,
         chargeType: _chargeType,
         valueType: _valueType,
         amount: amount,
@@ -233,8 +235,7 @@ class _OwnerBillingSetupScreenState
         isActive: _isActive,
       );
 
-      final createBillingRule = ref.read(createBillingRuleProvider);
-      final rule = await createBillingRule(request);
+      final rule = await ref.read(createBillingRuleProvider)(request);
 
       if (!mounted) {
         return;
@@ -243,100 +244,24 @@ class _OwnerBillingSetupScreenState
       ref.invalidate(
         propertyBillingRulesProvider((
           ownerId: ownerId,
-          propertyId: _selectedPropertyId!.trim(),
+          propertyId: propertyId,
         )),
       );
+      ref
+          .read(generateMonthlyChargesControllerProvider.notifier)
+          .invalidateMonthSyncLock(ownerId: ownerId, propertyId: propertyId);
 
-      _showMessage('Billing rule created successfully.');
-
-      if (context.mounted) {
-        Navigator.of(context).pop(rule);
-      }
+      GrihoFeedback.showSuccess(context, 'Billing rule created successfully.');
+      Navigator.of(context).pop(rule);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      _showMessage(_cleanErrorMessage(error));
+      GrihoFeedback.showError(context, cleanBillingError(error));
     } finally {
       if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
+        setState(() => _isSaving = false);
       }
-    }
-  }
-
-  String _cleanErrorMessage(Object error) {
-    final message = error.toString();
-    if (message.startsWith('Exception: ')) {
-      return message.substring(11);
-    }
-    if (message.startsWith('Invalid argument(s): ')) {
-      return message.substring(21);
-    }
-    return message;
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-      );
-  }
-
-  String _formatMonth(DateTime date) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${months[date.month - 1]} ${date.year}';
-  }
-
-  String _chargeTypeLabel(BillingChargeType type) {
-    switch (type) {
-      case BillingChargeType.water:
-        return 'Water Bill';
-      case BillingChargeType.gas:
-        return 'Gas Bill';
-      case BillingChargeType.garbage:
-        return 'Garbage Collection';
-      case BillingChargeType.serviceCharge:
-        return 'Service / Maintenance';
-      case BillingChargeType.electricity:
-        return 'Electricity Bill';
-      case BillingChargeType.other:
-        return 'Other Utility';
-    }
-  }
-
-  IconData _chargeTypeIcon(BillingChargeType type) {
-    switch (type) {
-      case BillingChargeType.water:
-        return Icons.water_drop_outlined;
-      case BillingChargeType.gas:
-        return Icons.local_fire_department_outlined;
-      case BillingChargeType.garbage:
-        return Icons.delete_outline_rounded;
-      case BillingChargeType.serviceCharge:
-        return Icons.cleaning_services_outlined;
-      case BillingChargeType.electricity:
-        return Icons.bolt_rounded;
-      case BillingChargeType.other:
-        return Icons.category_outlined;
     }
   }
 
@@ -344,15 +269,12 @@ class _OwnerBillingSetupScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final propertiesAsync = ref.watch(currentOwnerPropertiesProvider);
+    final properties = propertiesAsync.value ?? const <Property>[];
+    final effectivePropertyId = _resolvePropertyId(properties);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Billing Setup',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Billing Setup')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -374,8 +296,8 @@ class _OwnerBillingSetupScreenState
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Icon(
-                      Icons.receipt_long_rounded,
-                      size: 26,
+                      Iconsax.receipt_item,
+                      size: 24,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
@@ -404,139 +326,91 @@ class _OwnerBillingSetupScreenState
                 ],
               ),
             ),
-
             const SizedBox(height: 18),
-
-            _buildSectionCard(
+            GrihoSectionCard(
               title: '1. Target & Scope',
               subtitle: 'Select where this billing rule applies',
-              icon: Icons.account_tree_outlined,
+              icon: Iconsax.hierarchy,
               children: [
                 propertiesAsync.when(
                   loading: () => const LinearProgressIndicator(),
-                  error: (error, stack) =>
-                      const Text('Unable to load properties.'),
-                  data: (properties) {
-                    if (properties.isEmpty) {
+                  error: (_, _) => const Text('Unable to load properties.'),
+                  data: (props) {
+                    if (props.isEmpty) {
                       return const Text(
                         'No properties found. Please add a property first.',
                       );
                     }
 
-                    if (_selectedPropertyId == null && properties.length == 1) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (!mounted) return;
-                        setState(() {
-                          _selectedPropertyId = properties.first.id;
-                          if (_scopeType == BillingScopeType.property) {
-                            _selectedScopeId = properties.first.id;
-                          }
-                        });
-                      });
-                    }
+                    final selectedProperty = props
+                        .where((p) => p.id == effectivePropertyId)
+                        .firstOrNull;
 
-                    return DropdownButtonFormField<String>(
-                      initialValue:
-                          properties.any((p) => p.id == _selectedPropertyId)
-                          ? _selectedPropertyId
+                    return GrihoPickerField<Property>(
+                      label: 'Select Property',
+                      hint: 'Choose a building',
+                      sheetTitle: 'Select Property',
+                      searchHint: 'Search by building name or code...',
+                      icon: Iconsax.buildings_2,
+                      items: props,
+                      value: selectedProperty,
+                      enabled: !_isSaving,
+                      itemTitle: (p) => p.name,
+                      itemSubtitle: (p) => p.propertyCode.trim().isNotEmpty
+                          ? 'Code: ${p.propertyCode}'
                           : null,
-                      decoration: const InputDecoration(
-                        labelText: 'Select Property',
-                        prefixIcon: Icon(Icons.apartment_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        for (final property in properties)
-                          DropdownMenuItem<String>(
-                            value: property.id,
-                            child: Text(
-                              '${property.name} (${property.propertyCode})',
-                            ),
-                          ),
-                      ],
-                      onChanged: _isSaving
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _selectedPropertyId = value;
-                                _selectedScopeId =
-                                    _scopeType == BillingScopeType.property
-                                    ? value
-                                    : null;
-                              });
-                            },
-                      validator: (value) {
-                        if (value == null) {
-                          return 'Please select a property.';
-                        }
-                        return null;
+                      onChanged: (property) {
+                        setState(() {
+                          _selectedPropertyId = property.id;
+                          _selectedScopeId =
+                              _scopeType == BillingScopeType.property
+                              ? property.id
+                              : null;
+                        });
                       },
+                      validator: (_) => effectivePropertyId == null
+                          ? 'Please select a property.'
+                          : null,
                     );
                   },
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<BillingScopeType>(
-                  initialValue: _scopeType,
-                  decoration: const InputDecoration(
-                    labelText: 'Rule Scope Perimeter',
-                    prefixIcon: Icon(Icons.tune_rounded),
-                    border: OutlineInputBorder(),
-                  ),
-                  items: BillingScopeType.values.map((type) {
-                    return DropdownMenuItem<BillingScopeType>(
-                      value: type,
-                      child: Row(
-                        children: [
-                          Icon(_scopeTypeIcon(type), size: 18),
-                          const SizedBox(width: 8),
-                          Text(_scopeTypeLabel(type)),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: _isSaving ? null : _changeScopeType,
+                GrihoPickerField<BillingScopeType>(
+                  label: 'Rule Scope Perimeter',
+                  sheetTitle: 'Select Rule Scope',
+                  icon: Iconsax.setting_4,
+                  itemIcon: _scopeTypeIcon(_scopeType),
+                  items: BillingScopeType.values,
+                  value: _scopeType,
+                  enabled: !_isSaving,
+                  itemTitle: _scopeTypeLabel,
+                  onChanged: _changeScopeType,
                 ),
+
                 if (_scopeType != BillingScopeType.property) ...[
                   const SizedBox(height: 16),
-                  _buildScopeSelector(context),
+                  _buildScopeSelector(effectivePropertyId),
                 ],
               ],
             ),
-
             const SizedBox(height: 18),
-
-            _buildSectionCard(
+            GrihoSectionCard(
               title: '2. Charge Information',
               subtitle: 'Specify category, recurrence, and amount',
-              icon: Icons.payments_outlined,
+              icon: Iconsax.wallet_3,
               children: [
-                DropdownButtonFormField<BillingChargeType>(
-                  initialValue: _chargeType,
-                  decoration: const InputDecoration(
-                    labelText: 'Charge Category',
-                    prefixIcon: Icon(Icons.category_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                  items: BillingChargeType.values.map((type) {
-                    return DropdownMenuItem<BillingChargeType>(
-                      value: type,
-                      child: Row(
-                        children: [
-                          Icon(_chargeTypeIcon(type), size: 18),
-                          const SizedBox(width: 8),
-                          Text(_chargeTypeLabel(type)),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: _isSaving
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            setState(() => _chargeType = value);
-                          }
-                        },
+                GrihoPickerField<BillingChargeType>(
+                  label: 'Charge Category',
+                  sheetTitle: 'Select Charge Category',
+                  icon: Iconsax.category,
+                  itemIcon: billingChargeTypeIcon(_chargeType),
+                  items: BillingChargeType.values,
+                  value: _chargeType,
+                  enabled: !_isSaving,
+                  itemTitle: billingChargeTypeLabel,
+                  onChanged: (value) => setState(() => _chargeType = value),
                 ),
+
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _titleController,
@@ -545,8 +419,11 @@ class _OwnerBillingSetupScreenState
                   decoration: const InputDecoration(
                     labelText: 'Custom Label / Note (Optional)',
                     hintText: 'e.g. October Water Bill',
-                    prefixIcon: Icon(Icons.label_outline_rounded),
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(
+                      Iconsax.tag,
+                      color: GrihoColors.emerald,
+                      size: 19,
+                    ),
                   ),
                   validator: (value) {
                     if (_chargeType == BillingChargeType.other &&
@@ -568,13 +445,13 @@ class _OwnerBillingSetupScreenState
                   segments: const [
                     ButtonSegment(
                       value: BillingValueType.fixed,
-                      label: Text('Fixed (Monthly Recurring)'),
-                      icon: Icon(Icons.repeat_rounded),
+                      label: Text('Fixed (Monthly)'),
+                      icon: Icon(Iconsax.repeat, size: 16),
                     ),
                     ButtonSegment(
                       value: BillingValueType.variable,
-                      label: Text('Variable (Month Specific)'),
-                      icon: Icon(Icons.edit_calendar_rounded),
+                      label: Text('Variable (1 Mo)'),
+                      icon: Icon(Iconsax.calendar_1, size: 16),
                     ),
                   ],
                   selected: {_valueType},
@@ -598,12 +475,15 @@ class _OwnerBillingSetupScreenState
                     labelText: 'Charge Amount',
                     hintText: '0.00',
                     prefixText: '৳ ',
-                    prefixIcon: Icon(Icons.currency_exchange_rounded),
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(
+                      Iconsax.money_2,
+                      color: GrihoColors.emerald,
+                      size: 19,
+                    ),
                   ),
                   validator: (val) {
                     final amount = double.tryParse(val?.trim() ?? '');
-                    if (amount == null || amount < 0) {
+                    if (amount == null || !amount.isFinite || amount < 0) {
                       return 'Enter a valid positive amount.';
                     }
                     return null;
@@ -611,84 +491,63 @@ class _OwnerBillingSetupScreenState
                 ),
               ],
             ),
-
             const SizedBox(height: 18),
-
-            _buildSectionCard(
+            GrihoSectionCard(
               title: '3. Schedule & Status',
               subtitle: 'Effective month and activation toggle',
-              icon: Icons.calendar_month_outlined,
+              icon: Iconsax.calendar_1,
               children: [
                 InkWell(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   onTap: _isSaving ? null : _selectEffectiveMonth,
                   child: InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'Effective Month',
-                      prefixIcon: Icon(Icons.calendar_month_outlined),
-                      suffixIcon: Icon(Icons.chevron_right_rounded),
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(
+                        Iconsax.calendar_1,
+                        color: GrihoColors.emerald,
+                        size: 19,
+                      ),
+                      suffixIcon: Icon(Iconsax.arrow_right_3, size: 16),
                     ),
                     child: Text(
                       _effectiveMonth == null
                           ? 'Select month'
-                          : _formatMonth(_effectiveMonth!),
+                          : formatBillingMonthYear(_effectiveMonth!),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
                 const SizedBox(height: 14),
-                Material(
-                  color: Colors.transparent,
-                  child: SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Activate Rule Immediately',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: Text(
-                      _isActive
-                          ? 'This rule will be applied when generating monthly invoices.'
-                          : 'Rule is deactivated and will be ignored during invoice generation.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    value: _isActive,
-                    onChanged: _isSaving
-                        ? null
-                        : (val) => setState(() => _isActive = val),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Activate Rule Immediately',
+                    style: TextStyle(fontWeight: FontWeight.w700),
                   ),
+                  subtitle: Text(
+                    _isActive
+                        ? 'This rule will be applied when generating monthly invoices.'
+                        : 'Rule is deactivated and will be ignored during invoice generation.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  value: _isActive,
+                  onChanged: _isSaving
+                      ? null
+                      : (val) => setState(() => _isActive = val),
                 ),
               ],
             ),
-
             const SizedBox(height: 28),
-
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: _isSaving ? null : _save,
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.check_circle_outline_rounded),
-                label: Text(
-                  _isSaving
-                      ? 'Creating Rule...'
-                      : 'Save & Activate Billing Rule',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+            GrihoPrimaryButton(
+              label: _isSaving
+                  ? 'Creating Rule...'
+                  : 'Save & Activate Billing Rule',
+              icon: Iconsax.tick_circle,
+              isLoading: _isSaving,
+              onPressed: () => _save(properties),
             ),
           ],
         ),
@@ -696,83 +555,33 @@ class _OwnerBillingSetupScreenState
     );
   }
 
-  Widget _buildSectionCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildScopeSelector(BuildContext context) {
-    final propertyId = _selectedPropertyId?.trim();
-
+  Widget _buildScopeSelector(String? selectedPropertyId) {
+    final propertyId = selectedPropertyId?.trim();
     if (propertyId == null || propertyId.isEmpty) {
-      return const InputDecorator(
-        decoration: InputDecoration(
-          labelText: 'Scope Target',
-          border: OutlineInputBorder(),
-        ),
-        child: Text('Please choose a property first.'),
+      return GrihoPickerField<String>(
+        label: 'Scope Target',
+        hint: 'Please choose a property first.',
+        items: const [],
+        value: null,
+        enabled: false,
+        itemTitle: (s) => s,
+        onChanged: (_) {},
       );
     }
 
-    switch (_scopeType) {
-      case BillingScopeType.property:
-        return const SizedBox.shrink();
-      case BillingScopeType.floor:
-        return _buildFloorSelector(propertyId);
-      case BillingScopeType.unit:
-        return _buildUnitSelector(propertyId);
-      case BillingScopeType.tenant:
-        return _buildTenantSelector(propertyId);
-    }
+    return switch (_scopeType) {
+      BillingScopeType.property => const SizedBox.shrink(),
+      BillingScopeType.floor => _buildFloorSelector(propertyId),
+      BillingScopeType.unit => _buildUnitSelector(propertyId),
+      BillingScopeType.tenant => _buildTenantSelector(propertyId),
+    };
   }
 
   Widget _buildFloorSelector(String propertyId) {
     final unitsAsync = ref.watch(propertyUnitsProvider(propertyId));
     return unitsAsync.when(
       loading: () => const LinearProgressIndicator(),
-      error: (err, stack) => const Text('Error loading floors.'),
+      error: (_, _) => const Text('Error loading floors.'),
       data: (units) {
         final floors = _getFloorNumbers(units);
         if (floors.isEmpty) {
@@ -782,28 +591,24 @@ class _OwnerBillingSetupScreenState
         final selectedFloor = _selectedScopeId == null
             ? null
             : int.tryParse(_selectedScopeId!);
+        final activeFloor =
+            (selectedFloor != null && floors.contains(selectedFloor))
+            ? selectedFloor
+            : null;
 
-        return DropdownButtonFormField<int>(
-          initialValue: floors.contains(selectedFloor) ? selectedFloor : null,
-          decoration: const InputDecoration(
-            labelText: 'Target Floor',
-            prefixIcon: Icon(Icons.layers_outlined),
-            border: OutlineInputBorder(),
-          ),
-          items: floors
-              .map(
-                (f) => DropdownMenuItem(value: f, child: Text(_floorLabel(f))),
-              )
-              .toList(),
-          onChanged: _isSaving
-              ? null
-              : (val) => setState(() => _selectedScopeId = val?.toString()),
-          validator: (val) {
-            if (val == null) {
-              return 'Please select a floor.';
-            }
-            return null;
-          },
+        return GrihoPickerField<int>(
+          label: 'Target Floor',
+          hint: 'Choose a floor',
+          sheetTitle: 'Select Target Floor',
+          searchHint: 'Search floor...',
+          icon: Iconsax.layer,
+          items: floors,
+          value: activeFloor,
+          enabled: !_isSaving,
+          itemTitle: _floorLabel,
+          onChanged: (val) => setState(() => _selectedScopeId = val.toString()),
+          validator: (_) =>
+              activeFloor == null ? 'Please select a floor.' : null,
         );
       },
     );
@@ -813,36 +618,30 @@ class _OwnerBillingSetupScreenState
     final unitsAsync = ref.watch(propertyUnitsProvider(propertyId));
     return unitsAsync.when(
       loading: () => const LinearProgressIndicator(),
-      error: (err, stack) => const Text('Error loading units.'),
+      error: (_, _) => const Text('Error loading units.'),
       data: (units) {
         if (units.isEmpty) {
           return const Text('No units found in this property.');
         }
 
-        return DropdownButtonFormField<String>(
-          initialValue: units.any((u) => u.id == _selectedScopeId)
-              ? _selectedScopeId
-              : null,
-          decoration: const InputDecoration(
-            labelText: 'Target Unit',
-            prefixIcon: Icon(Icons.door_front_door_outlined),
-            border: OutlineInputBorder(),
-          ),
-          items: units
-              .map(
-                (u) =>
-                    DropdownMenuItem(value: u.id, child: Text(_unitLabel(u))),
-              )
-              .toList(),
-          onChanged: _isSaving
-              ? null
-              : (val) => setState(() => _selectedScopeId = val),
-          validator: (val) {
-            if (val == null) {
-              return 'Please select a unit.';
-            }
-            return null;
-          },
+        final selectedUnit = units
+            .where((u) => u.id == _selectedScopeId)
+            .firstOrNull;
+
+        return GrihoPickerField<Unit>(
+          label: 'Target Unit',
+          hint: 'Choose a unit',
+          sheetTitle: 'Select Target Unit',
+          searchHint: 'Search by unit or floor...',
+          icon: Iconsax.home_2,
+          items: units,
+          value: selectedUnit,
+          enabled: !_isSaving,
+          itemTitle: _unitLabel,
+          itemSubtitle: _unitSubtitle,
+          onChanged: (unit) => setState(() => _selectedScopeId = unit.id),
+          validator: (_) =>
+              selectedUnit == null ? 'Please select a unit.' : null,
         );
       },
     );
@@ -852,83 +651,51 @@ class _OwnerBillingSetupScreenState
     final tenantsAsync = ref.watch(propertyTenantsProvider(propertyId));
     return tenantsAsync.when(
       loading: () => const LinearProgressIndicator(),
-      error: (err, stack) => const Text('Error loading tenants.'),
+      error: (_, _) => FutureBuilder<List<Tenant>>(
+        future: _loadFallbackActiveTenants(propertyId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const LinearProgressIndicator();
+          }
+          final fallbackTenants = snapshot.data ?? const <Tenant>[];
+          if (fallbackTenants.isEmpty) {
+            return const Text('No active tenants found in this property.');
+          }
+          return _tenantPicker(fallbackTenants);
+        },
+      ),
       data: (tenants) {
         final activeTenants = tenants
             .where((t) => t.status == TenantStatus.active)
             .toList();
 
-        if (activeTenants.isNotEmpty) {
-          return DropdownButtonFormField<String>(
-            initialValue: activeTenants.any((t) => t.id == _selectedScopeId)
-                ? _selectedScopeId
-                : null,
-            decoration: const InputDecoration(
-              labelText: 'Target Tenant',
-              prefixIcon: Icon(Icons.person_outline_rounded),
-              border: OutlineInputBorder(),
-            ),
-            items: activeTenants
-                .map(
-                  (t) => DropdownMenuItem(
-                    value: t.id,
-                    child: Text(_tenantLabel(t)),
-                  ),
-                )
-                .toList(),
-            onChanged: _isSaving
-                ? null
-                : (val) => setState(() => _selectedScopeId = val),
-            validator: (val) {
-              if (val == null) {
-                return 'Please select a tenant.';
-              }
-              return null;
-            },
-          );
+        if (activeTenants.isEmpty) {
+          return const Text('No active tenants found in this property.');
         }
-
-        return FutureBuilder<List<Tenant>>(
-          future: _loadFallbackActiveTenants(propertyId),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const LinearProgressIndicator();
-            }
-            final fallbackTenants = snapshot.data ?? [];
-            if (fallbackTenants.isEmpty) {
-              return const Text('No active tenants found in this property.');
-            }
-
-            return DropdownButtonFormField<String>(
-              initialValue: fallbackTenants.any((t) => t.id == _selectedScopeId)
-                  ? _selectedScopeId
-                  : null,
-              decoration: const InputDecoration(
-                labelText: 'Target Tenant',
-                prefixIcon: Icon(Icons.person_outline_rounded),
-                border: OutlineInputBorder(),
-              ),
-              items: fallbackTenants
-                  .map(
-                    (t) => DropdownMenuItem(
-                      value: t.id,
-                      child: Text(_tenantLabel(t)),
-                    ),
-                  )
-                  .toList(),
-              onChanged: _isSaving
-                  ? null
-                  : (val) => setState(() => _selectedScopeId = val),
-              validator: (val) {
-                if (val == null) {
-                  return 'Please select a tenant.';
-                }
-                return null;
-              },
-            );
-          },
-        );
+        return _tenantPicker(activeTenants);
       },
+    );
+  }
+
+  Widget _tenantPicker(List<Tenant> activeTenants) {
+    final selectedTenant = activeTenants
+        .where((t) => t.id == _selectedScopeId)
+        .firstOrNull;
+
+    return GrihoPickerField<Tenant>(
+      label: 'Target Tenant',
+      hint: 'Choose an active tenant',
+      sheetTitle: 'Select Target Tenant',
+      searchHint: 'Search by name or phone...',
+      icon: Iconsax.user,
+      items: activeTenants,
+      value: selectedTenant,
+      enabled: !_isSaving,
+      itemTitle: _tenantLabel,
+      itemSubtitle: _tenantSubtitle,
+      onChanged: (tenant) => setState(() => _selectedScopeId = tenant.id),
+      validator: (_) =>
+          selectedTenant == null ? 'Please select a tenant.' : null,
     );
   }
 }

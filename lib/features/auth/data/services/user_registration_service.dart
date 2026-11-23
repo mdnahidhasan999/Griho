@@ -1,8 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../../core/utils/phone_number_utils.dart';
 import '../../../tenants/data/datasources/tenant_invitation_data_source.dart';
 import '../../domain/entities/app_user.dart';
 import '../../domain/entities/registration_intent.dart';
+import '../datasources/phone_lookup_data_source.dart';
 import '../datasources/user_profile_datasource.dart';
 import '../models/app_user_model.dart';
 import 'griho_id_generator.dart';
@@ -22,21 +24,25 @@ class UserRegistrationService {
   final FirebaseAuth _firebaseAuth;
   final GrihoIdGenerator _grihoIdGenerator;
   final UserProfileDataSource _userProfileDataSource;
+  final PhoneLookupDataSource _phoneLookupDataSource;
   final TenantInvitationDataSource _tenantInvitationDataSource;
 
   UserRegistrationService({
     FirebaseAuth? firebaseAuth,
     GrihoIdGenerator? grihoIdGenerator,
     UserProfileDataSource? userProfileDataSource,
+    PhoneLookupDataSource? phoneLookupDataSource,
     TenantInvitationDataSource? tenantInvitationDataSource,
   }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
        _grihoIdGenerator = grihoIdGenerator ?? GrihoIdGenerator(),
        _userProfileDataSource =
            userProfileDataSource ?? UserProfileDataSource(),
+       _phoneLookupDataSource =
+           phoneLookupDataSource ?? PhoneLookupDataSource(),
        _tenantInvitationDataSource =
            tenantInvitationDataSource ?? TenantInvitationDataSource();
 
-  // Retrieves an existing Griho profile using the Firebase UID.
+  /// Retrieves an existing Griho profile using the Firebase UID.
   Future<AppUserModel?> getUserProfileByFirebaseUid(String uid) async {
     final normalizedUid = uid.trim();
     if (normalizedUid.isEmpty) {
@@ -45,7 +51,7 @@ class UserRegistrationService {
     return _userProfileDataSource.getUserByUid(normalizedUid);
   }
 
-  // Creates a new Griho profile or completes an existing incomplete profile.
+  /// Creates a new Griho profile or completes an existing incomplete profile.
   Future<AppUser> createOrUpdateUserProfile({
     required User firebaseUser,
     required String name,
@@ -58,95 +64,38 @@ class UserRegistrationService {
         'The authenticated Firebase user does not match the requested profile.',
       );
     }
-    final normalizedName = name.trim();
-    if (normalizedName.isEmpty) {
-      throw ArgumentError('Name cannot be empty.');
-    }
+
+    final normalizedName = _requireNonEmptyName(name);
     final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(phoneNumber);
+
     final existingUser = await _userProfileDataSource.getUserByUid(
       firebaseUser.uid,
     );
+
     if (existingUser != null) {
-      final existingPhone = existingUser.phoneNumber?.trim() ?? '';
-      if (existingPhone.isNotEmpty) {
-        final normalizedExistingPhone = PhoneNumberUtils.normalizeAndValidate(
-          existingPhone,
-        );
-        if (normalizedExistingPhone != normalizedPhone) {
-          throw StateError(
-            'The phone number is already set and cannot be changed.',
-          );
-        }
-        return existingUser;
-      }
-      await _ensurePhoneAvailable(
-        phoneNumber: normalizedPhone,
-        currentUid: firebaseUser.uid,
+      return _completeExistingUserProfile(
+        existingUser: existingUser,
+        firebaseUser: firebaseUser,
+        normalizedName: normalizedName,
+        normalizedPhone: normalizedPhone,
       );
-      final updatedUser = AppUserModel(
-        uid: existingUser.uid,
-        publicId: existingUser.publicId,
-        name: normalizedName,
-        phoneNumber: normalizedPhone,
-        email: firebaseUser.email ?? existingUser.email,
-        photoUrl: firebaseUser.photoURL ?? existingUser.photoUrl,
-        defaultDashboard: existingUser.defaultDashboard,
-        availableRoles: existingUser.availableRoles,
-        isActive: existingUser.isActive,
-        createdAt: existingUser.createdAt,
-        updatedAt: DateTime.now(),
-      );
-      await _userProfileDataSource.updateUser(updatedUser);
-      return updatedUser;
     }
+
     await _ensurePhoneAvailable(
       phoneNumber: normalizedPhone,
       currentUid: firebaseUser.uid,
     );
-    final publicId = await _grihoIdGenerator.generateAndReserve();
-    final now = DateTime.now();
-    final newUser = AppUserModel(
-      uid: firebaseUser.uid,
-      publicId: publicId,
+
+    return _createNewUserWithReservedId(
+      firebaseUser: firebaseUser,
       name: normalizedName,
       phoneNumber: normalizedPhone,
-      email: firebaseUser.email,
-      photoUrl: firebaseUser.photoURL,
       defaultDashboard: null,
       availableRoles: const [],
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
     );
-    try {
-      await _userProfileDataSource.createUser(newUser);
-      return newUser;
-    } catch (error) {
-      try {
-        await _grihoIdGenerator.releaseReservation(publicId);
-      } catch (_) {
-        // Preserve the original profile creation error.
-      }
-      rethrow;
-    }
   }
 
-  // Checks whether a phone number is already associated with another user.
-  Future<void> _ensurePhoneAvailable({
-    required String phoneNumber,
-    required String currentUid,
-  }) async {
-    final existingUser = await _userProfileDataSource.getUserByPhone(
-      phoneNumber,
-    );
-    if (existingUser != null && existingUser.uid != currentUid) {
-      throw StateError(
-        'This phone number is already associated with another account.',
-      );
-    }
-  }
-
-  // Registers a user using the existing registration intent flow.
+  /// Registers a user using the existing registration intent flow.
   Future<UserRegistrationResult> register({
     required RegistrationIntent intent,
     required String name,
@@ -158,150 +107,153 @@ class UserRegistrationService {
         'An authenticated Firebase user is required for registration.',
       );
     }
-    final normalizedName = name.trim();
-    if (normalizedName.isEmpty) {
-      throw ArgumentError('Name cannot be empty.');
-    }
+
+    final normalizedName = _requireNonEmptyName(name);
     final normalizedPhone = PhoneNumberUtils.normalizeAndValidate(phoneNumber);
+
     final existingUser = await _userProfileDataSource.getUserByUid(
       firebaseUser.uid,
     );
+
     if (existingUser != null) {
-      final existingPhone = existingUser.phoneNumber?.trim() ?? '';
-      if (existingPhone.isNotEmpty) {
-        final normalizedExistingPhone = PhoneNumberUtils.normalizeAndValidate(
-          existingPhone,
-        );
-        if (normalizedExistingPhone != normalizedPhone) {
-          throw StateError(
-            'The phone number is already set and cannot be changed.',
-          );
-        }
-        return UserRegistrationResult(user: existingUser);
-      }
-      await _ensurePhoneAvailable(
-        phoneNumber: normalizedPhone,
-        currentUid: firebaseUser.uid,
+      final user = await _completeExistingUserProfile(
+        existingUser: existingUser,
+        firebaseUser: firebaseUser,
+        normalizedName: normalizedName,
+        normalizedPhone: normalizedPhone,
       );
-      final updatedUser = AppUserModel(
-        uid: existingUser.uid,
-        publicId: existingUser.publicId,
-        name: normalizedName,
-        phoneNumber: normalizedPhone,
-        email: firebaseUser.email ?? existingUser.email,
-        photoUrl: firebaseUser.photoURL ?? existingUser.photoUrl,
-        defaultDashboard: existingUser.defaultDashboard,
-        availableRoles: existingUser.availableRoles,
-        isActive: existingUser.isActive,
-        createdAt: existingUser.createdAt,
-        updatedAt: DateTime.now(),
-      );
-      await _userProfileDataSource.updateUser(updatedUser);
-      return UserRegistrationResult(user: updatedUser);
+      return UserRegistrationResult(user: user);
     }
+
     await _ensurePhoneAvailable(
       phoneNumber: normalizedPhone,
       currentUid: firebaseUser.uid,
     );
+
     if (intent == RegistrationIntent.tenant) {
-      return _registerTenant(
+      final invitation = await _tenantInvitationDataSource
+          .getPendingInvitationByPhone(normalizedPhone);
+      final user = await _createNewUserWithReservedId(
         firebaseUser: firebaseUser,
         name: normalizedName,
         phoneNumber: normalizedPhone,
+        defaultDashboard: null,
+        availableRoles: const [],
       );
+      return UserRegistrationResult(user: user, invitationId: invitation?.id);
     }
-    final user = await _registerOwner(
+
+    final ownerUser = await _createNewUserWithReservedId(
       firebaseUser: firebaseUser,
       name: normalizedName,
       phoneNumber: normalizedPhone,
-    );
-    return UserRegistrationResult(user: user);
-  }
-
-  // Registers a property owner.
-  Future<AppUser> _registerOwner({
-    required User firebaseUser,
-    required String name,
-    required String phoneNumber,
-  }) async {
-    final publicId = await _grihoIdGenerator.generateAndReserve();
-    final now = DateTime.now();
-    final user = AppUserModel(
-      uid: firebaseUser.uid,
-      publicId: publicId,
-      name: name,
-      phoneNumber: phoneNumber,
-      email: firebaseUser.email,
-      photoUrl: firebaseUser.photoURL,
       defaultDashboard: 'owner',
       availableRoles: const ['owner'],
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
     );
-    try {
-      await _userProfileDataSource.createUser(user);
-      return user;
-    } catch (error) {
-      try {
-        await _grihoIdGenerator.releaseReservation(publicId);
-      } catch (_) {
-        // Preserve the original profile creation error.
-      }
-      rethrow;
-    }
+    return UserRegistrationResult(user: ownerUser);
   }
 
-  // Registers a tenant and checks for a pending invitation.
-  Future<UserRegistrationResult> _registerTenant({
+  String _requireNonEmptyName(String name) {
+    final normalized = name.trim();
+    if (normalized.isEmpty) {
+      throw ArgumentError('Name cannot be empty.');
+    }
+    return normalized;
+  }
+
+  Future<AppUser> _completeExistingUserProfile({
+    required AppUserModel existingUser,
     required User firebaseUser,
-    required String name,
-    required String phoneNumber,
+    required String normalizedName,
+    required String normalizedPhone,
   }) async {
-    final invitation = await _tenantInvitationDataSource
-        .getPendingInvitationByPhone(phoneNumber);
-    final user = await _registerTenantUser(
-      firebaseUser: firebaseUser,
-      name: name,
-      phoneNumber: phoneNumber,
-    );
-    if (invitation == null) {
-      return UserRegistrationResult(user: user);
+    final existingPhone = existingUser.phoneNumber?.trim() ?? '';
+    if (existingPhone.isNotEmpty) {
+      final normalizedExistingPhone = PhoneNumberUtils.normalizeAndValidate(
+        existingPhone,
+      );
+      if (normalizedExistingPhone != normalizedPhone) {
+        throw StateError(
+          'The phone number is already set and cannot be changed.',
+        );
+      }
+      return existingUser;
     }
-    return UserRegistrationResult(user: user, invitationId: invitation.id);
+
+    await _ensurePhoneAvailable(
+      phoneNumber: normalizedPhone,
+      currentUid: firebaseUser.uid,
+    );
+
+    final updatedUser = AppUserModel(
+      uid: existingUser.uid,
+      publicId: existingUser.publicId,
+      name: normalizedName,
+      phoneNumber: normalizedPhone,
+      email: firebaseUser.email ?? existingUser.email,
+      photoUrl: firebaseUser.photoURL ?? existingUser.photoUrl,
+      defaultDashboard: existingUser.defaultDashboard,
+      availableRoles: existingUser.availableRoles,
+      isActive: existingUser.isActive,
+      createdAt: existingUser.createdAt,
+      updatedAt: DateTime.now(),
+    );
+
+    await _userProfileDataSource.updateUser(updatedUser);
+    return updatedUser;
   }
 
-  // Creates a tenant profile without granting tenant dashboard access.
-  Future<AppUser> _registerTenantUser({
+  Future<AppUser> _createNewUserWithReservedId({
     required User firebaseUser,
     required String name,
     required String phoneNumber,
+    required String? defaultDashboard,
+    required List<String> availableRoles,
   }) async {
     final publicId = await _grihoIdGenerator.generateAndReserve();
     final now = DateTime.now();
-    final user = AppUserModel(
+
+    final newUser = AppUserModel(
       uid: firebaseUser.uid,
       publicId: publicId,
       name: name,
       phoneNumber: phoneNumber,
       email: firebaseUser.email,
       photoUrl: firebaseUser.photoURL,
-      defaultDashboard: null,
-      availableRoles: const [],
+      defaultDashboard: defaultDashboard,
+      availableRoles: availableRoles,
       isActive: true,
       createdAt: now,
       updatedAt: now,
     );
+
     try {
-      await _userProfileDataSource.createUser(user);
-      return user;
-    } catch (error) {
+      await _userProfileDataSource.createUser(newUser);
+      return newUser;
+    } catch (_) {
       try {
         await _grihoIdGenerator.releaseReservation(publicId);
       } catch (_) {
         // Preserve the original profile creation error.
       }
       rethrow;
+    }
+  }
+
+  /// Checks phone availability in 1 Firestore read via phone_lookups.
+  Future<void> _ensurePhoneAvailable({
+    required String phoneNumber,
+    required String currentUid,
+  }) async {
+    final lookup = await _phoneLookupDataSource.getUserByPhone(phoneNumber);
+    final existingUid = lookup?['uid'];
+
+    if (existingUid is String &&
+        existingUid.trim().isNotEmpty &&
+        existingUid.trim() != currentUid) {
+      throw StateError(
+        'This phone number is already associated with another account.',
+      );
     }
   }
 }

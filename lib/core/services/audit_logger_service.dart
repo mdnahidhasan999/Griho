@@ -2,10 +2,25 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+typedef _JsonMap = Map<String, dynamic>;
+typedef _DocSnap = DocumentSnapshot<_JsonMap>;
+
 class AuditLoggerService {
   AuditLoggerService._();
 
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  static String? _cachedActorUid;
+  static String? _cachedActorName;
+  static String? _cachedActorGrihoId;
+  static final Map<String, String> _propertyNameCache = <String, String>{};
+
+  static void clearCache() {
+    _cachedActorUid = null;
+    _cachedActorName = null;
+    _cachedActorGrihoId = null;
+    _propertyNameCache.clear();
+  }
 
   /// যেকোনো গুরুত্বপূর্ণ অপারেশনের অডিট লগ রেকর্ড করার মেথড
   static Future<void> log({
@@ -21,39 +36,69 @@ class AuditLoggerService {
   }) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) return;
+      if (currentUser == null) {
+        return;
+      }
 
       final actorUid = currentUser.uid;
       final isOwner = actorUid == ownerId;
       final resolvedRole = actorRole ?? (isOwner ? 'owner' : 'manager');
+      final normalizedPropId = propertyId.trim();
 
       String actorName = isOwner ? 'Property Owner' : 'Manager';
       String actorGrihoId = '';
+      String resolvedPropertyName = (propertyName ?? '').trim();
 
-      // ইউজারের নাম ও Griho ID নিয়ে আসা
-      final userDoc = await _firestore.collection('users').doc(actorUid).get();
-      if (userDoc.exists) {
-        final data = userDoc.data() ?? {};
-        actorName = (data['name'] ?? actorName).toString();
-        actorGrihoId = (data['publicId'] ?? '').toString();
+      if (resolvedPropertyName.isNotEmpty && normalizedPropId.isNotEmpty) {
+        _propertyNameCache[normalizedPropId] = resolvedPropertyName;
+      } else if (resolvedPropertyName.isEmpty &&
+          _propertyNameCache.containsKey(normalizedPropId)) {
+        resolvedPropertyName = _propertyNameCache[normalizedPropId]!;
       }
 
-      // প্রপার্টির নাম না থাকলে লোড করা
-      String resolvedPropertyName = (propertyName ?? '').trim();
-      if (resolvedPropertyName.isEmpty && propertyId.isNotEmpty) {
-        final propDoc = await _firestore
-            .collection('properties')
-            .doc(propertyId)
-            .get();
-        if (propDoc.exists) {
-          resolvedPropertyName = (propDoc.data()?['name'] ?? 'Building')
-              .toString();
+      final needsActorFetch = _cachedActorUid != actorUid;
+      final needsPropertyFetch =
+          resolvedPropertyName.isEmpty && normalizedPropId.isNotEmpty;
+
+      if (needsActorFetch || needsPropertyFetch) {
+        final futures = <Future<_DocSnap>>[
+          if (needsActorFetch)
+            _firestore.collection('users').doc(actorUid).get(),
+          if (needsPropertyFetch)
+            _firestore.collection('properties').doc(normalizedPropId).get(),
+        ];
+
+        final results = await Future.wait(futures);
+        var idx = 0;
+
+        if (needsActorFetch) {
+          final userDoc = results[idx++];
+          final data = userDoc.data() ?? const <String, dynamic>{};
+          _cachedActorUid = actorUid;
+          _cachedActorName = (data['name'] ?? actorName).toString();
+          _cachedActorGrihoId = (data['publicId'] ?? '').toString();
+        }
+
+        if (needsPropertyFetch) {
+          final propDoc = results[idx];
+          if (propDoc.exists) {
+            final fetchedName = (propDoc.data()?['name'] ?? 'Building')
+                .toString()
+                .trim();
+            if (fetchedName.isNotEmpty) {
+              resolvedPropertyName = fetchedName;
+              _propertyNameCache[normalizedPropId] = fetchedName;
+            }
+          }
         }
       }
 
+      actorName = _cachedActorName ?? actorName;
+      actorGrihoId = _cachedActorGrihoId ?? actorGrihoId;
+
       await _firestore.collection('activityLogs').add({
         'ownerId': ownerId,
-        'propertyId': propertyId,
+        'propertyId': normalizedPropId,
         'propertyName': resolvedPropertyName.isEmpty
             ? 'Assigned Building'
             : resolvedPropertyName,
@@ -64,7 +109,7 @@ class AuditLoggerService {
         'category': category,
         'actionTitle': actionTitle,
         'details': details,
-        'metadata': metadata ?? {},
+        'metadata': metadata ?? const <String, dynamic>{},
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (_) {

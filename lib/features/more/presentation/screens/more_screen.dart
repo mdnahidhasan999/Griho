@@ -16,55 +16,66 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../invitations/presentation/providers/work_invitations_providers.dart';
 import '../widgets/more_menu_item.dart';
 
+/// Cached effective roles provider — avoids querying Firestore on every MoreScreen rebuild.
+final effectiveUserRolesProvider = FutureProvider<List<String>>((ref) async {
+  final profile = await ref.watch(currentUserProfileProvider.future);
+  if (profile == null) {
+    return const [];
+  }
+
+  final roles = <String>{...profile.availableRoles};
+  final db = FirebaseFirestore.instance;
+
+  await Future.wait([
+    if (!roles.contains('manager'))
+      db
+          .collection('managerAccess')
+          .where('userId', isEqualTo: profile.uid)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get()
+          .then((snap) {
+        if (snap.docs.isNotEmpty) {
+          roles.add('manager');
+        }
+      })
+          .catchError((_) {}),
+    if (!roles.contains('caretaker') || !roles.contains('electrician'))
+      db
+          .collection('staffAccess')
+          .where('userId', isEqualTo: profile.uid)
+          .where('status', isEqualTo: 'active')
+          .limit(10)
+          .get()
+          .then((snap) {
+        for (final d in snap.docs) {
+          final r = (d.data()['staffRole'] ?? '').toString();
+          if (r == 'caretaker' || r == 'electrician') {
+            roles.add(r);
+          }
+        }
+      })
+          .catchError((_) {}),
+  ]);
+
+  return roles.toList();
+});
+
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
 
-  Future<List<String>> _resolveEffectiveRoles(
-    String uid,
-    List<String> storedRoles,
-  ) async {
-    final roles = <String>{...storedRoles};
-
-    try {
-      final activeManagerAccess = await FirebaseFirestore.instance
-          .collection('managerAccess')
-          .where('userId', isEqualTo: uid)
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get();
-
-      if (activeManagerAccess.docs.isNotEmpty) {
-        roles.add('manager');
-      }
-    } catch (_) {}
-
-    try {
-      final staff = await FirebaseFirestore.instance
-          .collection('staffAccess')
-          .where('userId', isEqualTo: uid)
-          .where('status', isEqualTo: 'active')
-          .get();
-      for (final d in staff.docs) {
-        final r = (d.data()['staffRole'] ?? '').toString();
-        if (r == 'caretaker' || r == 'electrician') roles.add(r);
-      }
-    } catch (_) {}
-
-    return roles.toList();
-  }
-
   Future<void> _activateOwnerRole(
-    BuildContext context,
-    WidgetRef ref,
-    String uid,
-  ) async {
+      BuildContext context,
+      WidgetRef ref,
+      String uid,
+      ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Become a Property Owner?'),
         content: const Text(
           'Unlock the Owner Console to register your own buildings, manage units, and invite tenants or managers.\n\n'
-          'You will still keep your existing Resident or Manager access and can switch between consoles anytime.',
+              'You will still keep your existing Resident or Manager access and can switch between consoles anytime.',
         ),
         actions: [
           TextButton(
@@ -80,7 +91,9 @@ class MoreScreen extends ConsumerWidget {
       ),
     );
 
-    if (confirmed != true || !context.mounted) return;
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
 
     try {
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
@@ -91,7 +104,9 @@ class MoreScreen extends ConsumerWidget {
 
       ref.invalidate(currentUserProfileProvider);
 
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
       GrihoFeedback.showSuccess(
         context,
         'Owner Console activated! You can now add your property.',
@@ -99,7 +114,9 @@ class MoreScreen extends ConsumerWidget {
 
       context.go(RouteNames.ownerHome);
     } catch (e) {
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
       GrihoFeedback.showError(context, 'Unable to activate Owner role: $e');
     }
   }
@@ -107,6 +124,7 @@ class MoreScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentUserProfileProvider);
+    final effectiveRolesAsync = ref.watch(effectiveUserRolesProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -114,7 +132,7 @@ class MoreScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('More')),
       body: profileAsync.when(
         loading: () => const GrihoLoadingView(message: 'Loading account...'),
-        error: (error, stackTrace) => Center(
+        error: (_, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: GrihoStatusState(
@@ -128,223 +146,206 @@ class MoreScreen extends ConsumerWidget {
         ),
         data: (profile) {
           if (profile == null) {
-            return const Center(child: Text('User profile not found.'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.user_remove,
+                  title: 'User profile not found',
+                  subtitle: 'Please sign in again.',
+                ),
+              ),
+            );
           }
 
-          return FutureBuilder<List<String>>(
-            future: _resolveEffectiveRoles(profile.uid, profile.availableRoles),
-            builder: (context, rolesSnapshot) {
-              final effectiveRoles =
-                  rolesSnapshot.data ?? profile.availableRoles;
-              final isOwnerOrManager =
-                  profile.defaultDashboard == 'owner' ||
+          final effectiveRoles =
+              effectiveRolesAsync.value ?? profile.availableRoles;
+          final isOwnerOrManager =
+              profile.defaultDashboard == 'owner' ||
                   profile.defaultDashboard == 'manager' ||
                   effectiveRoles.contains('owner') ||
                   effectiveRoles.contains('manager');
 
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          _ProfileAvatar(
-                            name: profile.name,
-                            photoUrl: profile.photoUrl,
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  profile.name,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(profile.publicId),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Active Console: ${_roleLabel(profile.defaultDashboard)}',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      _ProfileAvatar(
+                        name: profile.name,
+                        photoUrl: profile.photoUrl,
                       ),
-                    ),
-                  ),
-                  if (!effectiveRoles.contains('owner'))
-                    Padding(
-                      padding: const EdgeInsets.only(top: 14, bottom: 2),
-                      child: Material(
-                        color: theme.colorScheme.primaryContainer.withValues(
-                          alpha: 0.45,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          side: BorderSide(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.4,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              profile.name,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: theme.colorScheme.primary,
-                            child: Icon(
-                              Iconsax.home_hashtag,
-                              color: theme.colorScheme.onPrimary,
-                              size: 20,
+                            const SizedBox(height: 4),
+                            Text(profile.publicId),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Active Console: ${_roleLabel(profile.defaultDashboard)}',
+                              style: theme.textTheme.bodySmall,
                             ),
-                          ),
-                          title: const Text(
-                            'Become a Property Owner',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          subtitle: const Text(
-                            'Register your own buildings & manage tenants',
-                          ),
-                          trailing: const Icon(Iconsax.arrow_right_3),
-                          onTap: () =>
-                              _activateOwnerRole(context, ref, profile.uid),
+                          ],
                         ),
                       ),
-                    ),
-                  const SizedBox(height: 20),
-                  Text('Account', style: theme.textTheme.titleSmall),
-                  MoreMenuItem(
-                    icon: Iconsax.user,
-                    title: 'Profile',
-                    subtitle: 'View and edit your profile',
-                    onTap: () {
-                      context.push(RouteNames.editProfile, extra: profile);
-                    },
+                    ],
                   ),
-                  MoreMenuItem(
-                    icon: Iconsax.lock,
-                    title: 'Change Password',
-                    subtitle: 'Update your account password',
-                    onTap: () {
-                      context.push(RouteNames.changePassword);
-                    },
+                ),
+              ),
+              if (!effectiveRoles.contains('owner'))
+                Padding(
+                  padding: const EdgeInsets.only(top: 14, bottom: 2),
+                  child: Material(
+                    color: theme.colorScheme.primaryContainer.withValues(
+                      alpha: 0.45,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: theme.colorScheme.primary,
+                        child: Icon(
+                          Iconsax.home_hashtag,
+                          color: theme.colorScheme.onPrimary,
+                          size: 20,
+                        ),
+                      ),
+                      title: const Text(
+                        'Become a Property Owner',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: const Text(
+                        'Register your own buildings & manage tenants',
+                      ),
+                      trailing: const Icon(Iconsax.arrow_right_3, size: 18),
+                      onTap: () =>
+                          _activateOwnerRole(context, ref, profile.uid),
+                    ),
                   ),
-                  MoreMenuItem(
-                    icon: Iconsax.home_2,
-                    title: 'Default Account',
-                    subtitle: 'Choose your default dashboard',
-                    onTap: () {
-                      _showDefaultAccountDialog(
-                        context,
-                        ref,
-                        profile.uid,
-                        effectiveRoles,
-                        profile.defaultDashboard,
-                      );
-                    },
-                  ),
-                  if (effectiveRoles.length > 1)
-                    MoreMenuItem(
-                      icon: Iconsax.arrange_square,
-                      title: 'Switch Account Console',
-                      subtitle:
-                          'Switch between your Owner, Manager, Staff & Resident views',
-                      onTap: () {
-                        _showSwitchAccountDialog(
-                          context,
-                          ref,
-                          profile.uid,
-                          effectiveRoles,
-                          profile.defaultDashboard,
-                        );
-                      },
-                    ),
-                  const Divider(height: 32),
-                  Text('Activities & Audit', style: theme.textTheme.titleSmall),
-                  if (isOwnerOrManager)
-                    MoreMenuItem(
-                      icon: Iconsax.document_text,
-                      title: 'Activity & Audit Trail',
-                      subtitle:
-                          'Track manager actions, rent changes & billing logs',
-                      onTap: () {
-                        context.push(RouteNames.activityLogs);
-                      },
-                    ),
-                  if (effectiveRoles.contains('owner'))
-                    MoreMenuItem(
-                      icon: Iconsax.people,
-                      title: 'Team & Work Orders',
-                      subtitle: 'Managers, caretakers, electricians & tasks',
-                      onTap: () {
-                        context.push(RouteNames.ownerTeam);
-                      },
-                    ),
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final count =
-                          ref
-                              .watch(pendingWorkInvitationsProvider)
-                              .value
-                              ?.length ??
+                ),
+              const SizedBox(height: 20),
+              Text('Account', style: theme.textTheme.titleSmall),
+              MoreMenuItem(
+                icon: Iconsax.user,
+                title: 'Profile',
+                subtitle: 'View and edit your profile',
+                onTap: () =>
+                    context.push(RouteNames.editProfile, extra: profile),
+              ),
+              MoreMenuItem(
+                icon: Iconsax.lock,
+                title: 'Change Password',
+                subtitle: 'Update your account password',
+                onTap: () => context.push(RouteNames.changePassword),
+              ),
+              MoreMenuItem(
+                icon: Iconsax.home_2,
+                title: 'Default Account',
+                subtitle: 'Choose your default dashboard',
+                onTap: () {
+                  _showDefaultAccountDialog(
+                    context,
+                    ref,
+                    profile.uid,
+                    effectiveRoles,
+                    profile.defaultDashboard,
+                  );
+                },
+              ),
+              if (effectiveRoles.length > 1)
+                MoreMenuItem(
+                  icon: Iconsax.arrange_square,
+                  title: 'Switch Account Console',
+                  subtitle:
+                  'Switch between your Owner, Manager, Staff & Resident views',
+                  onTap: () {
+                    _showSwitchAccountDialog(
+                      context,
+                      ref,
+                      profile.uid,
+                      effectiveRoles,
+                      profile.defaultDashboard,
+                    );
+                  },
+                ),
+              const Divider(height: 32),
+              Text('Activities & Audit', style: theme.textTheme.titleSmall),
+              if (isOwnerOrManager)
+                MoreMenuItem(
+                  icon: Iconsax.document_text,
+                  title: 'Activity & Audit Trail',
+                  subtitle: 'Track manager actions, rent changes & billing logs',
+                  onTap: () => context.push(RouteNames.activityLogs),
+                ),
+              if (effectiveRoles.contains('owner'))
+                MoreMenuItem(
+                  icon: Iconsax.people,
+                  title: 'Team & Work Orders',
+                  subtitle: 'Managers, caretakers, electricians & tasks',
+                  onTap: () => context.push(RouteNames.ownerTeam),
+                ),
+              Consumer(
+                builder: (context, ref, _) {
+                  final count =
+                      ref.watch(pendingWorkInvitationsProvider).value?.length ??
                           0;
-                      return MoreMenuItem(
-                        icon: Iconsax.briefcase,
-                        title: count > 0
-                            ? 'Work Invitations ($count new)'
-                            : 'Work Invitations',
-                        subtitle:
-                            'Manager, caretaker & electrician offers from owners',
-                        onTap: () async {
-                          await context.push(RouteNames.myInvitations);
-                          ref.invalidate(pendingWorkInvitationsProvider);
-                        },
-                      );
+                  return MoreMenuItem(
+                    icon: Iconsax.briefcase,
+                    title: count > 0
+                        ? 'Work Invitations ($count new)'
+                        : 'Work Invitations',
+                    subtitle:
+                    'Manager, caretaker & electrician offers from owners',
+                    onTap: () async {
+                      await context.push(RouteNames.myInvitations);
+                      ref.invalidate(pendingWorkInvitationsProvider);
                     },
-                  ),
-                  MoreMenuItem(
-                    icon: Iconsax.sms,
-                    title: 'Tenancy Invitations',
-                    subtitle: 'View your residential invitations',
-                    onTap: () {
-                      context.push(RouteNames.tenantInvitations);
-                    },
-                  ),
-                  const Divider(height: 32),
-                  Text('Preferences', style: theme.textTheme.titleSmall),
-                  MoreMenuItem(
-                    icon: Iconsax.setting_2,
-                    title: 'Settings',
-                    onTap: () {
-                      _showComingSoon(context, 'Settings');
-                    },
-                  ),
-                  MoreMenuItem(
-                    icon: Iconsax.message_question,
-                    title: 'Help & Support',
-                    onTap: () {
-                      _showComingSoon(context, 'Help & Support');
-                    },
-                  ),
-                  const Divider(height: 32),
-                  MoreMenuItem(
-                    icon: Iconsax.logout,
-                    title: 'Logout',
-                    subtitle: 'Sign out of your account',
-                    isDestructive: true,
-                    onTap: () {
-                      _confirmLogout(context, ref);
-                    },
-                  ),
-                ],
-              );
-            },
+                  );
+                },
+              ),
+              MoreMenuItem(
+                icon: Iconsax.sms,
+                title: 'Tenancy Invitations',
+                subtitle: 'View your residential invitations',
+                onTap: () => context.push(RouteNames.tenantInvitations),
+              ),
+              const Divider(height: 32),
+              Text('Preferences', style: theme.textTheme.titleSmall),
+              MoreMenuItem(
+                icon: Iconsax.setting_2,
+                title: 'Settings',
+                onTap: () => _showComingSoon(context, 'Settings'),
+              ),
+              MoreMenuItem(
+                icon: Iconsax.message_question,
+                title: 'Help & Support',
+                onTap: () => _showComingSoon(context, 'Help & Support'),
+              ),
+              const Divider(height: 32),
+              MoreMenuItem(
+                icon: Iconsax.logout,
+                title: 'Logout',
+                subtitle: 'Sign out of your account',
+                isDestructive: true,
+                onTap: () => _confirmLogout(context, ref),
+              ),
+            ],
           );
         },
       ),
@@ -389,12 +390,12 @@ class MoreScreen extends ConsumerWidget {
   }
 
   Future<void> _showDefaultAccountDialog(
-    BuildContext context,
-    WidgetRef ref,
-    String uid,
-    List<String> availableRoles,
-    String? currentRole,
-  ) async {
+      BuildContext context,
+      WidgetRef ref,
+      String uid,
+      List<String> availableRoles,
+      String? currentRole,
+      ) async {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -404,7 +405,6 @@ class MoreScreen extends ConsumerWidget {
             groupValue: currentRole,
             onChanged: (value) {
               Navigator.of(dialogContext).pop();
-
               if (value != null && value != currentRole) {
                 _changeRole(
                   context,
@@ -431,12 +431,12 @@ class MoreScreen extends ConsumerWidget {
   }
 
   Future<void> _showSwitchAccountDialog(
-    BuildContext context,
-    WidgetRef ref,
-    String uid,
-    List<String> availableRoles,
-    String? currentRole,
-  ) async {
+      BuildContext context,
+      WidgetRef ref,
+      String uid,
+      List<String> availableRoles,
+      String? currentRole,
+      ) async {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -454,7 +454,6 @@ class MoreScreen extends ConsumerWidget {
                 title: Text(_roleLabel(role)),
                 onTap: () {
                   Navigator.of(dialogContext).pop();
-
                   if (role != currentRole) {
                     _changeRole(
                       context,
@@ -474,12 +473,12 @@ class MoreScreen extends ConsumerWidget {
   }
 
   Future<void> _changeRole(
-    BuildContext context,
-    WidgetRef ref, {
-    required String uid,
-    required String role,
-    required bool openDashboard,
-  }) async {
+      BuildContext context,
+      WidgetRef ref, {
+        required String uid,
+        required String role,
+        required bool openDashboard,
+      }) async {
     try {
       await ref
           .read(userProfileRepositoryProvider)
@@ -499,12 +498,14 @@ class MoreScreen extends ConsumerWidget {
           'Default account: ${_roleLabel(role)}',
         );
       }
-    } catch (error) {
+    } catch (_) {
       if (openDashboard && context.mounted) {
         context.go(_routeForRole(role));
         return;
       }
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
       GrihoFeedback.showError(context, 'Unable to change account.');
     }
   }
@@ -517,15 +518,11 @@ class MoreScreen extends ConsumerWidget {
         content: const Text('Are you sure you want to sign out of Griho?'),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop(false);
-            },
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop(true);
-            },
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Logout'),
           ),
         ],
@@ -570,7 +567,6 @@ class _ProfileAvatarState extends State<_ProfileAvatar> {
   @override
   void didUpdateWidget(covariant _ProfileAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-
     if (oldWidget.photoUrl != widget.photoUrl) {
       _provider = _buildProvider(widget.photoUrl);
     }
@@ -580,23 +576,19 @@ class _ProfileAvatarState extends State<_ProfileAvatar> {
     if (url == null || url.isEmpty) {
       return null;
     }
-
     if (url.startsWith('data:image')) {
       try {
         final Uint8List bytes = base64Decode(
           url.substring(url.indexOf(',') + 1),
         );
-
         return MemoryImage(bytes);
       } catch (_) {
         return null;
       }
     }
-
     if (url.startsWith('http')) {
       return NetworkImage(url);
     }
-
     return null;
   }
 

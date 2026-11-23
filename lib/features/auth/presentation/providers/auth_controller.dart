@@ -1,5 +1,5 @@
+// noinspection SpellCheckingInspection
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -9,6 +9,7 @@ import '../../data/services/user_registration_service.dart';
 import '../../domain/entities/app_user.dart';
 import '../../domain/entities/auth_result.dart';
 import 'auth_provider.dart';
+import 'phone_lookup_provider.dart';
 
 final firebaseAuthDataSourceProvider = Provider<FirebaseAuthDataSource>((ref) {
   return FirebaseAuthDataSource();
@@ -19,6 +20,7 @@ final userRegistrationServiceProvider = Provider<UserRegistrationService>((
 ) {
   return UserRegistrationService(
     userProfileDataSource: ref.watch(userProfileDataSourceProvider),
+    phoneLookupDataSource: ref.watch(phoneLookupDataSourceProvider),
     tenantInvitationDataSource: TenantInvitationDataSource(),
   );
 });
@@ -155,8 +157,6 @@ class AuthController extends Notifier<AuthControllerState> {
 
       await _firebaseAuth.signOut();
 
-      ref.invalidate(currentUserProfileProvider);
-
       state = state.copyWith(
         isLoading: false,
         linkSent: true,
@@ -165,17 +165,11 @@ class AuthController extends Notifier<AuthControllerState> {
       );
 
       return true;
-    } catch (error, stackTrace) {
-      debugPrint('CREATE ACCOUNT ERROR: $error\n$stackTrace');
-
-      // Delete a newly created Firebase account only if its profile
-      // was not successfully created.
+    } catch (error) {
       if (createdFirebaseUser != null && !profileCreated) {
         try {
           await createdFirebaseUser.delete();
-        } catch (cleanupError) {
-          debugPrint('ACCOUNT CLEANUP ERROR: $cleanupError');
-        }
+        } catch (_) {}
       }
 
       state = state.copyWith(
@@ -212,9 +206,7 @@ class AuthController extends Notifier<AuthControllerState> {
       state = state.copyWith(isLoading: false, clearError: true);
 
       return true;
-    } catch (error, stackTrace) {
-      debugPrint('EMAIL VERIFICATION ERROR: $error\n$stackTrace');
-
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: _friendlyAuthError(error),
@@ -252,7 +244,6 @@ class AuthController extends Notifier<AuthControllerState> {
 
       if (!firebaseUser.emailVerified) {
         await _firebaseAuth.signOut();
-
         throw StateError('Please verify your email address before signing in.');
       }
 
@@ -269,19 +260,13 @@ class AuthController extends Notifier<AuthControllerState> {
           clearError: true,
         );
 
-        ref.invalidate(currentUserProfileProvider);
-
         return const AuthResult.newUser();
       }
 
       state = state.copyWith(isLoading: false, user: profile, clearError: true);
 
-      ref.invalidate(currentUserProfileProvider);
-
       return AuthResult.existingUser(profile);
-    } catch (error, stackTrace) {
-      debugPrint('EMAIL SIGN-IN ERROR: $error\n$stackTrace');
-
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: _friendlyAuthError(error),
@@ -348,26 +333,18 @@ class AuthController extends Notifier<AuthControllerState> {
           clearError: true,
         );
 
-        ref.invalidate(currentUserProfileProvider);
-
         return const AuthResult.newUser();
       }
 
       state = state.copyWith(isLoading: false, user: profile, clearError: true);
 
-      ref.invalidate(currentUserProfileProvider);
-
       return AuthResult.existingUser(profile);
-    } catch (error, stackTrace) {
-      debugPrint('GOOGLE SIGN-IN ERROR: $error\n$stackTrace');
-
+    } catch (error) {
       try {
         if (_firebaseAuth.currentUser != null) {
           await _firebaseAuth.signOut();
         }
-      } catch (signOutError) {
-        debugPrint('GOOGLE SIGN-OUT ERROR: $signOutError');
-      }
+      } catch (_) {}
 
       state = state.copyWith(
         isLoading: false,
@@ -406,9 +383,7 @@ class AuthController extends Notifier<AuthControllerState> {
       ref.invalidate(currentUserProfileProvider);
 
       return profile;
-    } catch (error, stackTrace) {
-      debugPrint('COMPLETE PROFILE ERROR: $error\n$stackTrace');
-
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: _friendlyAuthError(error),
@@ -441,9 +416,7 @@ class AuthController extends Notifier<AuthControllerState> {
       );
 
       return true;
-    } catch (error, stackTrace) {
-      debugPrint('PASSWORD RESET ERROR: $error\n$stackTrace');
-
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: _friendlyAuthError(error),
@@ -453,17 +426,15 @@ class AuthController extends Notifier<AuthControllerState> {
     }
   }
 
-  // ফায়ারবেজে পাসওয়ার্ড আপডেট করার জন্য (পুরাতন পাসওয়ার্ড দিয়ে রি-অথেন্টিケート করে নতুন পাসওয়ার্ড সেট করা)
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _firebaseAuth.currentUser;
     if (user == null || user.email == null) {
       throw StateError('No authenticated user found.');
     }
 
-    // পুরনো পাসওয়ার্ড সঠিক আছে কিনা যাচাই করার জন্য রি-অথেন্টিকেট করা
     final credential = EmailAuthProvider.credential(
       email: user.email!,
       password: currentPassword,
@@ -503,9 +474,7 @@ class AuthController extends Notifier<AuthControllerState> {
       );
 
       return true;
-    } catch (error, stackTrace) {
-      debugPrint('RESEND VERIFICATION ERROR: $error\n$stackTrace');
-
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: _friendlyAuthError(error),
@@ -528,9 +497,7 @@ class AuthController extends Notifier<AuthControllerState> {
       await user.reload();
 
       return _firebaseAuth.currentUser?.emailVerified ?? false;
-    } catch (error, stackTrace) {
-      debugPrint('RELOAD EMAIL VERIFICATION ERROR: $error\n$stackTrace');
-
+    } catch (error) {
       state = state.copyWith(errorMessage: _friendlyAuthError(error));
 
       return false;
@@ -547,12 +514,8 @@ class AuthController extends Notifier<AuthControllerState> {
     try {
       await _authDataSource.signOut();
 
-      ref.invalidate(currentUserProfileProvider);
-
       state = const AuthControllerState();
-    } catch (error, stackTrace) {
-      debugPrint('SIGN-OUT ERROR: $error\n$stackTrace');
-
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: _friendlyAuthError(error),

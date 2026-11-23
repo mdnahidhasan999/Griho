@@ -1,3 +1,4 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:griho/features/auth/domain/repositories/firebase_auth_repository.dart';
 
@@ -23,18 +24,19 @@ final userProfileRepositoryProvider = Provider<UserProfileRepository>((ref) {
 
 final authStateProvider = StreamProvider<AppUser?>((ref) {
   final repository = ref.watch(authRepositoryProvider);
-
   return repository.authStateChanges;
 });
 
 final currentUserProfileProvider = FutureProvider<AppUser?>((ref) async {
-  final authState = await ref.watch(authStateProvider.future);
+  // Re-fetches only when the authenticated UID actually changes or is invalidated.
+  final uid = await ref.watch(
+    authStateProvider.selectAsync((user) => user?.uid),
+  );
 
-  if (authState == null) {
+  if (uid == null || uid.isEmpty) {
     return null;
   }
 
   final repository = ref.watch(userProfileRepositoryProvider);
-
-  return repository.getUserByUid(authState.uid);
+  return repository.getUserByUid(uid);
 });

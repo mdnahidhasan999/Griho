@@ -1,10 +1,13 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../../properties/presentation/providers/property_provider.dart';
 import '../../../units/presentation/providers/unit_provider.dart';
 import '../../domain/entities/rent_rate.dart';
 import '../providers/rent_rate_provider.dart';
+import '../widgets/rent_ui_helpers.dart';
 
 class RentRateHistoryScreen extends ConsumerWidget {
   final String unitId;
@@ -18,23 +21,33 @@ class RentRateHistoryScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Rent Rate History',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Rent Rate History')),
       body: unitAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorView(
-          message: error.toString(),
-          onRetry: () {
-            ref.invalidate(unitByIdProvider(unitId));
-          },
+        loading: () => const GrihoLoadingView(message: 'Loading unit info...'),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load unit',
+              subtitle: error.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(unitByIdProvider(unitId)),
+            ),
+          ),
         ),
         data: (unit) {
           if (unit == null) {
-            return const Center(child: Text('Unit information not found.'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.home_2,
+                  title: 'Unit Not Found',
+                  subtitle: 'Unit information could not be found.',
+                ),
+              ),
+            );
           }
 
           final propertyAsync = ref.watch(
@@ -42,17 +55,32 @@ class RentRateHistoryScreen extends ConsumerWidget {
           );
 
           return propertyAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) => _ErrorView(
-              message: error.toString(),
-              onRetry: () {
-                ref.invalidate(propertyByIdProvider(unit.propertyId));
-              },
+            loading: () =>
+                const GrihoLoadingView(message: 'Loading property info...'),
+            error: (error, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.warning_2,
+                  title: 'Unable to load property',
+                  subtitle: error.toString(),
+                  actionLabel: 'Retry',
+                  onAction: () =>
+                      ref.invalidate(propertyByIdProvider(unit.propertyId)),
+                ),
+              ),
             ),
             data: (property) {
               if (property == null) {
                 return const Center(
-                  child: Text('Property information not found.'),
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: GrihoStatusState(
+                      icon: Iconsax.buildings_2,
+                      title: 'Property Not Found',
+                      subtitle: 'Property information could not be found.',
+                    ),
+                  ),
                 );
               }
 
@@ -64,12 +92,19 @@ class RentRateHistoryScreen extends ConsumerWidget {
               final historyAsync = ref.watch(historyProvider);
 
               return historyAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stackTrace) => _ErrorView(
-                  message: error.toString(),
-                  onRetry: () {
-                    ref.invalidate(historyProvider);
-                  },
+                loading: () =>
+                    const GrihoLoadingView(message: 'Loading rate history...'),
+                error: (error, _) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: GrihoStatusState(
+                      icon: Iconsax.warning_2,
+                      title: 'Unable to load rate history',
+                      subtitle: error.toString(),
+                      actionLabel: 'Retry',
+                      onAction: () => ref.invalidate(historyProvider),
+                    ),
+                  ),
                 ),
                 data: (history) {
                   return _HistoryBody(
@@ -92,10 +127,6 @@ class RentRateHistoryScreen extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// HISTORY BODY
-// ============================================================================
-
 class _HistoryBody extends StatelessWidget {
   final String unitNumber;
   final int floorNumber;
@@ -117,37 +148,11 @@ class _HistoryBody extends StatelessWidget {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.history_toggle_off_rounded,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'No Rent History Recorded',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              Text(
+          child: GrihoStatusState(
+            icon: Iconsax.clock,
+            title: 'No Rent History Recorded',
+            subtitle:
                 'There are no historical rent rate snapshots for Unit $unitNumber yet.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
           ),
         ),
       );
@@ -159,16 +164,13 @@ class _HistoryBody extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
-          // 1. Overview Unit Header Card
           _UnitOverviewCard(
             unitNumber: unitNumber,
             floorNumber: floorNumber,
             propertyName: propertyName,
             recordCount: history.length,
           ),
-
           const SizedBox(height: 20),
-
           Text(
             'Timeline & Rate Revisions',
             style: Theme.of(
@@ -176,10 +178,8 @@ class _HistoryBody extends StatelessWidget {
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
-
-          // 2. Chronological History Cards
           for (var i = 0; i < history.length; i++) ...[
-            _RentRateCard(rate: history[i], isFirst: i == 0),
+            _RentRateCard(rate: history[i]),
             if (i != history.length - 1) const SizedBox(height: 12),
           ],
         ],
@@ -187,10 +187,6 @@ class _HistoryBody extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// UNIT OVERVIEW CARD
-// ============================================================================
 
 class _UnitOverviewCard extends StatelessWidget {
   final String unitNumber;
@@ -226,8 +222,8 @@ class _UnitOverviewCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
-              Icons.domain_rounded,
-              size: 26,
+              Iconsax.buildings_2,
+              size: 24,
               color: theme.colorScheme.onPrimaryContainer,
             ),
           ),
@@ -272,15 +268,10 @@ class _UnitOverviewCard extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// RENT RATE ITEM CARD
-// ============================================================================
-
 class _RentRateCard extends StatelessWidget {
   final RentRate rate;
-  final bool isFirst;
 
-  const _RentRateCard({required this.rate, required this.isFirst});
+  const _RentRateCard({required this.rate});
 
   @override
   Widget build(BuildContext context) {
@@ -308,7 +299,7 @@ class _RentRateCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '৳ ${_formatAmount(rate.amount)}',
+                '৳ ${formatRentAmount(rate.amount)}',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
                   color: isCurrent
@@ -323,7 +314,7 @@ class _RentRateCard extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: isCurrent
-                      ? Colors.green.withValues(alpha: 0.15)
+                      ? GrihoColors.emerald.withValues(alpha: 0.14)
                       : theme.colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -333,7 +324,7 @@ class _RentRateCard extends StatelessWidget {
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: isCurrent
-                        ? Colors.green.shade800
+                        ? GrihoColors.emerald
                         : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -344,16 +335,16 @@ class _RentRateCard extends StatelessWidget {
           const Divider(height: 1),
           const SizedBox(height: 12),
           _DetailRow(
-            icon: Icons.calendar_today_outlined,
+            icon: Iconsax.calendar_1,
             label: 'Effective Range',
             value:
-                '${_formatDate(rate.effectiveFrom)} → ${rate.effectiveTo == null ? 'Ongoing' : _formatDate(rate.effectiveTo!)}',
+                '${formatRentDate(rate.effectiveFrom)} → ${rate.effectiveTo == null ? 'Ongoing' : formatRentDate(rate.effectiveTo!)}',
           ),
           const SizedBox(height: 6),
           _DetailRow(
-            icon: Icons.layers_outlined,
+            icon: Iconsax.layer,
             label: 'Adjustment Scope',
-            value: _sourceLabel(rate.source),
+            value: rentRateSourceLabel(rate.source, detailed: true),
           ),
         ],
       ),
@@ -378,7 +369,7 @@ class _DetailRow extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+        Icon(icon, size: 15, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(width: 8),
         Text(
           label,
@@ -395,77 +386,5 @@ class _DetailRow extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-// ============================================================================
-// ERROR VIEW
-// ============================================================================
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorView({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.redAccent,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-String _formatAmount(num? amount) {
-  if (amount == null) {
-    return '0.00';
-  }
-  if (amount == amount.roundToDouble()) {
-    return amount.toStringAsFixed(0);
-  }
-  return amount.toStringAsFixed(2);
-}
-
-String _formatDate(DateTime dateTime) {
-  final local = dateTime.toLocal();
-  final day = local.day.toString().padLeft(2, '0');
-  final month = local.month.toString().padLeft(2, '0');
-  return '$day/$month/${local.year}';
-}
-
-String _sourceLabel(RentRateSource source) {
-  switch (source) {
-    case RentRateSource.initial:
-      return 'Initial Tenancy Agreement';
-    case RentRateSource.property:
-      return 'Property-Wide Adjustment';
-    case RentRateSource.floor:
-      return 'Floor-Level Adjustment';
-    case RentRateSource.unit:
-      return 'Unit-Specific Adjustment';
   }
 }

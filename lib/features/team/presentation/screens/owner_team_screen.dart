@@ -1,11 +1,14 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
+import '../../../../core/design_system/widgets/griho_picker_field.dart';
 import '../../../../core/services/audit_logger_service.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../providers/team_providers.dart';
@@ -14,39 +17,29 @@ Color _statusColor(String status) {
   switch (status) {
     case 'active':
     case 'resolved':
-      return Colors.green;
+      return GrihoColors.emerald;
     case 'suspended':
     case 'assigned':
-      return Colors.orange;
+      return GrihoColors.warning;
     case 'revoked':
     case 'cancelled':
-      return Colors.red;
+      return GrihoColors.error;
     case 'in_progress':
-      return Colors.blue;
+      return Colors.blueAccent;
     default:
-      return Colors.blueGrey; // pending / open
+      return Colors.blueGrey;
   }
 }
 
 String _statusLabel(String status) {
-  switch (status) {
-    case 'in_progress':
-      return 'In progress';
-    case '':
-      return '';
-    default:
-      return status[0].toUpperCase() + status.substring(1);
+  final clean = status.trim();
+  if (clean.isEmpty) {
+    return '';
   }
-}
-
-void _toast(BuildContext context, String message, {bool error = false}) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(message),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: error ? Theme.of(context).colorScheme.error : null,
-    ),
-  );
+  if (clean == 'in_progress') {
+    return 'In progress';
+  }
+  return clean[0].toUpperCase() + clean.substring(1);
 }
 
 class _StatusChip extends StatelessWidget {
@@ -56,15 +49,19 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final label = _statusLabel(status);
+    if (label.isEmpty) {
+      return const SizedBox.shrink();
+    }
     final color = _statusColor(status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
-        _statusLabel(status),
+        label,
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w800,
@@ -74,10 +71,6 @@ class _StatusChip extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// SCREEN
-// ============================================================================
 
 class OwnerTeamScreen extends ConsumerWidget {
   const OwnerTeamScreen({super.key});
@@ -102,10 +95,6 @@ class OwnerTeamScreen extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// PEOPLE TAB
-// ============================================================================
-
 class _PeopleTab extends ConsumerStatefulWidget {
   const _PeopleTab();
 
@@ -125,24 +114,17 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
       ref.watch(ownerPendingManagerInvitesProvider),
       ref.watch(ownerPendingStaffInvitesProvider),
     ];
-    final all = <TeamMember>[for (final l in lists) ...(l.value ?? const [])];
-    all.sort((a, b) {
-      int rank(TeamMember m) {
-        switch (m.status) {
-          case 'pending':
-            return 0;
-          case 'active':
-            return 1;
-          case 'suspended':
-            return 2;
-          default:
-            return 3;
-        }
-      }
-
-      final r = rank(a).compareTo(rank(b));
-      return r != 0 ? r : a.name.compareTo(b.name);
-    });
+    final all = <TeamMember>[for (final l in lists) ...(l.value ?? const [])]
+      ..sort((a, b) {
+        int rank(TeamMember m) => switch (m.status) {
+          'pending' => 0,
+          'active' => 1,
+          'suspended' => 2,
+          _ => 3,
+        };
+        final r = rank(a).compareTo(rank(b));
+        return r != 0 ? r : a.name.compareTo(b.name);
+      });
     return all;
   }
 
@@ -178,8 +160,10 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
   }
 
   Future<void> _log(TeamMember m, String title, String details) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final uid = ref.read(currentUserProfileProvider).value?.uid;
+    if (uid == null) {
+      return;
+    }
     await AuditLoggerService.log(
       ownerId: uid,
       propertyId: m.propertyId,
@@ -192,7 +176,9 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
   }
 
   Future<void> _changeStatus(TeamMember m, String next) async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
     final suspend = next == 'suspended';
     final ok = await _confirm(
       suspend ? 'Suspend access?' : 'Restore access?',
@@ -201,7 +187,9 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
           : '${m.name} will get full access to ${m.propertyName} again.',
       suspend ? 'Suspend' : 'Restore',
     );
-    if (!ok || !mounted) return;
+    if (!ok || !mounted) {
+      return;
+    }
 
     setState(() => _busy = true);
     try {
@@ -224,17 +212,26 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
         '${m.name} • ${m.propertyName}',
       );
       if (mounted) {
-        _toast(context, suspend ? 'Access suspended.' : 'Access restored.');
+        GrihoFeedback.showSuccess(
+          context,
+          suspend ? 'Access suspended.' : 'Access restored.',
+        );
       }
     } catch (e) {
-      if (mounted) _toast(context, 'Failed: $e', error: true);
+      if (mounted) {
+        GrihoFeedback.showError(context, 'Failed: $e');
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   Future<void> _revoke(TeamMember m) async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
     final ok = await _confirm(
       'Revoke access?',
       'Permanently remove ${m.name} from ${m.propertyName}? '
@@ -242,7 +239,9 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
       'Revoke',
       danger: true,
     );
-    if (!ok || !mounted) return;
+    if (!ok || !mounted) {
+      return;
+    }
 
     setState(() => _busy = true);
     try {
@@ -266,23 +265,33 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
         '${m.roleLabel} access revoked',
         '${m.name} • ${m.propertyName}',
       );
-      if (mounted) _toast(context, 'Access revoked.');
+      if (mounted) {
+        GrihoFeedback.showSuccess(context, 'Access revoked.');
+      }
     } catch (e) {
-      if (mounted) _toast(context, 'Failed: $e', error: true);
+      if (mounted) {
+        GrihoFeedback.showError(context, 'Failed: $e');
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   Future<void> _cancelInvite(TeamMember m) async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
     final ok = await _confirm(
       'Cancel invitation?',
       'The invitation to ${m.name} will be removed.',
       'Cancel invitation',
       danger: true,
     );
-    if (!ok || !mounted) return;
+    if (!ok || !mounted) {
+      return;
+    }
 
     setState(() => _busy = true);
     try {
@@ -291,26 +300,34 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
           .doc(m.id)
           .delete();
       await _log(m, '${m.roleLabel} invitation cancelled', m.name);
-      if (mounted) _toast(context, 'Invitation cancelled.');
+      if (mounted) {
+        GrihoFeedback.showSuccess(context, 'Invitation cancelled.');
+      }
     } catch (e) {
-      if (mounted) _toast(context, 'Failed: $e', error: true);
+      if (mounted) {
+        GrihoFeedback.showError(context, 'Failed: $e');
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
-  // Opens the unified invite screen, pre-selecting the role of the active filter.
   void _openInvite() => context.push(
     RouteNames.inviteMember(_roleFilter == 'all' ? 'manager' : _roleFilter),
   );
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final all = _merge();
     final filtered = all.where((m) {
-      if (!_showRevoked && m.status == 'revoked') return false;
-      if (_roleFilter != 'all' && m.role != _roleFilter) return false;
+      if (!_showRevoked && m.status == 'revoked') {
+        return false;
+      }
+      if (_roleFilter != 'all' && m.role != _roleFilter) {
+        return false;
+      }
       return true;
     }).toList();
 
@@ -357,7 +374,7 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
               ),
               FilledButton.icon(
                 onPressed: _openInvite,
-                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                icon: const Icon(Iconsax.user_add, size: 17),
                 label: const Text('Invite'),
               ),
             ],
@@ -376,31 +393,14 @@ class _PeopleTabState extends ConsumerState<_PeopleTab> {
         if (_busy) const LinearProgressIndicator(minHeight: 2),
         Expanded(
           child: filtered.isEmpty
-              ? Center(
+              ? const Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.groups_2_outlined,
-                          size: 56,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No team members yet',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
+                    padding: EdgeInsets.all(32),
+                    child: GrihoStatusState(
+                      icon: Iconsax.profile_2user,
+                      title: 'No team members yet',
+                      subtitle:
                           'Invite a manager, caretaker or electrician to share the work.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 )
@@ -454,8 +454,8 @@ class _MemberCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: color.withValues(alpha: 0.12),
-            child: Icon(m.roleIcon, color: color, size: 22),
+            backgroundColor: color.withValues(alpha: 0.14),
+            child: Icon(m.roleIcon, color: color, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -546,10 +546,6 @@ class _MemberCard extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// WORK ORDERS TAB
-// ============================================================================
-
 class _WorkOrdersTab extends ConsumerStatefulWidget {
   const _WorkOrdersTab();
 
@@ -558,7 +554,7 @@ class _WorkOrdersTab extends ConsumerStatefulWidget {
 }
 
 class _WorkOrdersTabState extends ConsumerState<_WorkOrdersTab> {
-  String _filter = 'open'; // open | done | all
+  String _filter = 'open';
 
   Future<void> _update(
     WorkOrder w,
@@ -570,9 +566,13 @@ class _WorkOrdersTabState extends ConsumerState<_WorkOrdersTab> {
           .collection('maintenanceRequests')
           .doc(w.id)
           .update({...data, 'updatedAt': FieldValue.serverTimestamp()});
-      if (mounted) _toast(context, ok);
+      if (mounted) {
+        GrihoFeedback.showSuccess(context, ok);
+      }
     } catch (e) {
-      if (mounted) _toast(context, 'Failed: $e', error: true);
+      if (mounted) {
+        GrihoFeedback.showError(context, 'Failed: $e');
+      }
     }
   }
 
@@ -586,7 +586,6 @@ class _WorkOrdersTabState extends ConsumerState<_WorkOrdersTab> {
             .where((m) => m.status == 'active' && m.propertyId == w.propertyId)
             .toList();
 
-    // মিল থাকা রোল আগে দেখাও
     final preferred = w.category == 'electrical' ? 'electrician' : 'caretaker';
     staff.sort((a, b) {
       final ar = a.role == preferred ? 0 : 1;
@@ -632,9 +631,10 @@ class _WorkOrdersTabState extends ConsumerState<_WorkOrdersTab> {
               ),
       ),
     );
-    if (picked == null) return;
+    if (picked == null) {
+      return;
+    }
 
-    // status stays as-is (staff dashboards start work from 'open')
     await _update(w, {
       'assignedToUid': picked.userId,
       'assignedToName': picked.name,
@@ -654,14 +654,17 @@ class _WorkOrdersTabState extends ConsumerState<_WorkOrdersTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // keep these live so the "Assign" sheet always has the roster
     ref.watch(ownerStaffProvider);
     ref.watch(ownerManagersProvider);
     final orders =
         ref.watch(ownerWorkOrdersProvider).value ?? const <WorkOrder>[];
     final shown = orders.where((w) {
-      if (_filter == 'open') return w.isOpenish;
-      if (_filter == 'done') return !w.isOpenish;
+      if (_filter == 'open') {
+        return w.isOpenish;
+      }
+      if (_filter == 'done') {
+        return !w.isOpenish;
+      }
       return true;
     }).toList();
 
@@ -686,7 +689,7 @@ class _WorkOrdersTabState extends ConsumerState<_WorkOrdersTab> {
               const SizedBox(width: 10),
               FilledButton.icon(
                 onPressed: _create,
-                icon: const Icon(Icons.add_task_rounded, size: 18),
+                icon: const Icon(Iconsax.task_square, size: 17),
                 label: const Text('New'),
               ),
             ],
@@ -722,10 +725,10 @@ class _WorkOrdersTabState extends ConsumerState<_WorkOrdersTab> {
                             children: [
                               Icon(
                                 w.category == 'electrical'
-                                    ? Icons.electrical_services_rounded
+                                    ? Iconsax.electricity
                                     : w.category == 'plumbing'
-                                    ? Icons.water_drop_rounded
-                                    : Icons.build_rounded,
+                                    ? Iconsax.drop
+                                    : Iconsax.setting_2,
                                 size: 18,
                                 color: theme.colorScheme.primary,
                               ),
@@ -813,6 +816,27 @@ class _WorkOrderSheetState extends ConsumerState<_WorkOrderSheet> {
   String _category = 'electrical';
   bool _saving = false;
 
+  static const _categories = [
+    (
+      key: 'electrical',
+      label: 'Electrical',
+      icon: Iconsax.electricity,
+      color: GrihoColors.warning,
+    ),
+    (
+      key: 'plumbing',
+      label: 'Plumbing',
+      icon: Iconsax.drop,
+      color: Colors.blueAccent,
+    ),
+    (
+      key: 'general',
+      label: 'General',
+      icon: Iconsax.setting_2,
+      color: GrihoColors.emerald,
+    ),
+  ];
+
   @override
   void dispose() {
     _titleCtrl.dispose();
@@ -821,10 +845,11 @@ class _WorkOrderSheetState extends ConsumerState<_WorkOrderSheet> {
     super.dispose();
   }
 
-  Future<void> _save(List<Property> props) async {
+  Future<void> _save(List<Property> props, String? uid) async {
+    FocusScope.of(context).unfocus();
     final property = _property ?? (props.isNotEmpty ? props.first : null);
     if (property == null || _titleCtrl.text.trim().isEmpty) {
-      _toast(context, 'Choose a building and enter a title.', error: true);
+      GrihoFeedback.showError(context, 'Choose a building and enter a title.');
       return;
     }
     setState(() => _saving = true);
@@ -843,28 +868,36 @@ class _WorkOrderSheetState extends ConsumerState<_WorkOrderSheet> {
         'assignedToUid': '',
         'assignedToName': '',
         'assignedRole': '',
-        'createdBy': FirebaseAuth.instance.currentUser?.uid,
+        'createdBy': uid,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       Navigator.pop(context);
-      _toast(context, 'Work order created.');
+      GrihoFeedback.showSuccess(context, 'Work order created.');
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        _toast(context, '$e', error: true);
+        GrihoFeedback.showError(context, '$e');
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final theme = Theme.of(context);
+    final uid = ref.watch(currentUserProfileProvider).value?.uid;
     final props =
         (ref.watch(currentOwnerPropertiesProvider).value ?? const <Property>[])
             .where((p) => p.ownerId == uid)
             .toList();
+
+    final selectedProperty =
+        _property != null && props.any((p) => p.id == _property!.id)
+        ? _property
+        : (props.isNotEmpty ? props.first : null);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -878,80 +911,222 @@ class _WorkOrderSheetState extends ConsumerState<_WorkOrderSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'New work order',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: GrihoColors.emerald.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Iconsax.task_square,
+                    color: GrihoColors.emerald,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'New Work Order',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        'Create a maintenance task for your building',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Iconsax.close_circle, size: 22),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
             if (props.isEmpty)
-              const Text('Add a building first.')
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: GrihoStatusState(
+                  icon: Iconsax.buildings_2,
+                  title: 'No buildings found',
+                  subtitle: 'Add a building first before creating work orders.',
+                ),
+              )
             else ...[
-              DropdownButtonFormField<Property>(
-                initialValue: _property ?? props.first,
-                decoration: const InputDecoration(
-                  labelText: 'Building',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  for (final p in props)
-                    DropdownMenuItem(value: p, child: Text(p.name)),
-                ],
-                onChanged: (v) => setState(() => _property = v),
+              GrihoPickerField<Property>(
+                label: 'Select Building',
+                hint: 'Choose a building',
+                sheetTitle: 'Select Building',
+                searchHint: 'Search by building name or code...',
+                icon: Iconsax.buildings_2,
+                items: props,
+                value: selectedProperty,
+                enabled: !_saving,
+                itemTitle: (p) => p.name,
+                itemSubtitle: (p) => p.propertyCode.trim().isNotEmpty
+                    ? 'Code: ${p.propertyCode}'
+                    : null,
+                onChanged: (p) => setState(() => _property = p),
               ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _category,
-                decoration: const InputDecoration(
-                  labelText: 'Type of work',
-                  border: OutlineInputBorder(),
+              const SizedBox(height: 18),
+              Text(
+                'Type of Work',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'electrical',
-                    child: Text('Electrical'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'plumbing',
-                    child: Text('Plumbing / Water'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'general',
-                    child: Text('General maintenance'),
-                  ),
-                ],
-                onChanged: (v) => setState(() => _category = v ?? 'general'),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  for (var i = 0; i < _categories.length; i++) ...[
+                    Expanded(
+                      child: _WorkCategoryTile(
+                        label: _categories[i].label,
+                        icon: _categories[i].icon,
+                        accentColor: _categories[i].color,
+                        selected: _category == _categories[i].key,
+                        onTap: () =>
+                            setState(() => _category = _categories[i].key),
+                      ),
+                    ),
+                    if (i != _categories.length - 1) const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 18),
               TextField(
                 controller: _titleCtrl,
+                enabled: !_saving,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
-                  labelText: 'What needs fixing?',
-                  border: OutlineInputBorder(),
+                  labelText: 'What needs fixing? *',
+                  hintText: 'e.g. Corridor light not working',
+                  prefixIcon: Icon(
+                    Iconsax.edit_2,
+                    color: GrihoColors.emerald,
+                    size: 19,
+                  ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               TextField(
                 controller: _unitCtrl,
+                enabled: !_saving,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
-                  labelText: 'Unit / location (optional)',
-                  border: OutlineInputBorder(),
+                  labelText: 'Unit / Location (Optional)',
+                  hintText: 'e.g. Unit 3B, Rooftop, Main Gate',
+                  prefixIcon: Icon(
+                    Iconsax.location,
+                    color: GrihoColors.emerald,
+                    size: 19,
+                  ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               TextField(
                 controller: _descCtrl,
+                enabled: !_saving,
                 maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
-                  labelText: 'Details (optional)',
-                  border: OutlineInputBorder(),
+                  labelText: 'Additional Details (Optional)',
+                  hintText: 'Any notes or instructions for the technician...',
+                  alignLabelWithHint: true,
+                  prefixIcon: Padding(
+                    padding: EdgeInsets.only(bottom: 36),
+                    child: Icon(
+                      Iconsax.document_text,
+                      color: GrihoColors.emerald,
+                      size: 19,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 14),
-              FilledButton(
-                onPressed: _saving ? null : () => _save(props),
-                child: const Text('Create work order'),
+              const SizedBox(height: 20),
+              GrihoPrimaryButton(
+                label: _saving ? 'Creating...' : 'Create Work Order',
+                icon: Iconsax.tick_circle,
+                isLoading: _saving,
+                onPressed: () => _save(props, uid),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkCategoryTile extends StatelessWidget {
+  const _WorkCategoryTile({
+    required this.label,
+    required this.icon,
+    required this.accentColor,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color accentColor;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? accentColor.withValues(alpha: 0.14)
+              : theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? accentColor : theme.colorScheme.outlineVariant,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: selected
+                  ? accentColor
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: selected
+                    ? accentColor
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ),

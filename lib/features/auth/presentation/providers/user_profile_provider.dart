@@ -1,20 +1,20 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/datasources/user_profile_datasource.dart';
-
 import '../../domain/entities/app_user.dart';
+import 'auth_provider.dart';
 
-final userProfileDataSourceProvider = Provider<UserProfileDataSource>((ref) {
-  return UserProfileDataSource();
-});
+export 'auth_provider.dart' show userProfileDataSourceProvider;
 
 final userByPhoneProvider = FutureProvider.family<AppUser?, String>((
   ref,
   phone,
 ) async {
+  final normalizedPhone = phone.trim();
+  if (normalizedPhone.isEmpty) {
+    return null;
+  }
+
   final dataSource = ref.read(userProfileDataSourceProvider);
-
-  final user = await dataSource.getUserByPhone(phone);
-
-  return user;
+  return dataSource.getUserByPhone(normalizedPhone);
 });

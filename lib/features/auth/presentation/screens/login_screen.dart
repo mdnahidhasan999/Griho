@@ -1,10 +1,13 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/auth_destination_mapper.dart';
 import '../../../../app/router/route_names.dart';
-import '../../domain/entities/app_user.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/auth_result.dart';
+import '../controllers/auth_role_resolver.dart';
 import '../providers/auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -18,57 +21,14 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-
-  bool _obscurePassword = true;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
-  }
-
-  void _showMessage(String message, {bool isError = false}) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-        ),
-      );
-  }
-
-  String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-
-    if (email.isEmpty) {
-      return 'Please enter your email address.';
-    }
-
-    final emailPattern = RegExp(
-      r'^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@'
-      r'[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$',
-    );
-
-    if (!emailPattern.hasMatch(email)) {
-      return 'Please enter a valid email address.';
-    }
-
-    return null;
-  }
-
-  String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter your password.';
-    }
-
-    return null;
   }
 
   Future<void> _handleEmailLogin() async {
@@ -89,17 +49,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (result == null) {
       final message = ref.read(authControllerProvider).errorMessage;
-
-      _showMessage(
+      GrihoFeedback.showError(
+        context,
         message?.isNotEmpty == true
             ? message!
             : 'Unable to sign in. Please try again.',
-        isError: true,
       );
       return;
     }
 
-    await _navigateAfterAuthentication(result);
+    _navigateAfterAuthentication(result);
   }
 
   Future<void> _handleGoogleSignIn() async {
@@ -111,20 +70,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (result == null) {
       final message = ref.read(authControllerProvider).errorMessage;
-
-      _showMessage(
+      GrihoFeedback.showError(
+        context,
         message?.isNotEmpty == true
             ? message!
             : 'Google Sign-In failed. Please try again.',
-        isError: true,
       );
       return;
     }
 
-    await _navigateAfterAuthentication(result);
+    _navigateAfterAuthentication(result);
   }
 
-  Future<void> _navigateAfterAuthentication(AuthResult result) async {
+  void _navigateAfterAuthentication(AuthResult result) {
     if (!mounted) return;
 
     if (widget.invitationId != null && widget.invitationId!.trim().isNotEmpty) {
@@ -137,34 +95,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    _navigateToDashboard(result.user!);
-  }
-
-  void _navigateToDashboard(AppUser user) {
-    if (!mounted) return;
-
-    switch (user.defaultDashboard) {
-      case 'owner':
-        context.go(RouteNames.ownerHome);
-        return;
-
-      case 'tenant':
-        context.go(RouteNames.tenantHome);
-        return;
-
-      case 'manager':
-        context.go(RouteNames.managerHome);
-        return;
-
-      case 'caretaker':
-        context.go(RouteNames.caretakerHome);
-        return;
-      case 'electrician':
-        context.go(RouteNames.electricianHome);
-        return;
-      default:
-        context.go(RouteNames.onboarding);
-    }
+    final destination = AuthRoleResolver.resolve(result.user!);
+    context.go(AuthDestinationMapper.routeFor(destination));
   }
 
   @override
@@ -185,149 +117,66 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Align(
+                    const Align(
                       alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Icon(
-                          Icons.apartment_rounded,
-                          size: 36,
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
+                      child: GrihoLogo(size: 64),
                     ),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 24),
                     Text(
                       'Welcome to Griho',
                       style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Text(
                       'Sign in to manage your home and property information.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
-                        height: 1.5,
                       ),
                     ),
-                    const SizedBox(height: 32),
-
-                    Text(
-                      'Email Address',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
+                    const SizedBox(height: 28),
+                    GrihoTextField(
                       controller: _emailController,
+                      label: 'Email Address',
+                      hint: 'name@example.com',
+                      prefixIcon: Iconsax.sms,
                       enabled: !authState.isLoading,
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
                       textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        hintText: 'name@example.com',
-                        prefixIcon: const Icon(Icons.mail_outline_rounded),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      validator: _validateEmail,
+                      validator: GrihoValidators.email,
                     ),
-                    const SizedBox(height: 20),
-
-                    Text(
-                      'Password',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
+                    const SizedBox(height: 16),
+                    GrihoPasswordField(
                       controller: _passwordController,
+                      label: 'Password',
+                      hint: 'Enter your password',
                       enabled: !authState.isLoading,
-                      obscureText: _obscurePassword,
                       autofillHints: const [AutofillHints.password],
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) {
-                        if (!authState.isLoading) {
-                          _handleEmailLogin();
-                        }
+                        if (!authState.isLoading) _handleEmailLogin();
                       },
-                      decoration: InputDecoration(
-                        hintText: 'Enter your password',
-                        prefixIcon: const Icon(Icons.lock_outline_rounded),
-                        suffixIcon: IconButton(
-                          tooltip: _obscurePassword
-                              ? 'Show password'
-                              : 'Hide password',
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      validator: _validatePassword,
+                      validator: GrihoValidators.requiredPassword,
                     ),
-
                     const SizedBox(height: 4),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: authState.isLoading
                             ? null
-                            : () {
-                                context.go(RouteNames.forgotPassword);
-                              },
+                            : () => context.go(RouteNames.forgotPassword),
                         child: const Text('Forgot Password?'),
                       ),
                     ),
                     const SizedBox(height: 12),
-
-                    SizedBox(
-                      height: 52,
-                      child: FilledButton(
-                        onPressed: authState.isLoading
-                            ? null
-                            : _handleEmailLogin,
-                        style: FilledButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: authState.isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                'Sign In',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                      ),
+                    GrihoPrimaryButton(
+                      label: 'Sign In',
+                      icon: Iconsax.login,
+                      isLoading: authState.isLoading,
+                      onPressed: _handleEmailLogin,
                     ),
-
                     const SizedBox(height: 24),
                     Row(
                       children: [
@@ -345,30 +194,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
-
-                    SizedBox(
-                      height: 52,
-                      child: OutlinedButton.icon(
-                        onPressed: authState.isLoading
-                            ? null
-                            : _handleGoogleSignIn,
-                        style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        icon: const Icon(Icons.g_mobiledata_rounded, size: 30),
-                        label: const Text(
-                          'Continue with Google',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                    GrihoSecondaryButton(
+                      label: 'Continue with Google',
+                      icon: Icons.g_mobiledata_rounded,
+                      onPressed: authState.isLoading
+                          ? null
+                          : _handleGoogleSignIn,
                     ),
-
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -381,9 +214,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         TextButton(
                           onPressed: authState.isLoading
                               ? null
-                              : () {
-                                  context.go(RouteNames.createAccount);
-                                },
+                              : () => context.go(RouteNames.createAccount),
                           child: const Text(
                             'Create Account',
                             style: TextStyle(fontWeight: FontWeight.bold),

@@ -1,7 +1,9 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/property.dart';
 import '../controllers/property_controller.dart';
 
@@ -54,30 +56,44 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
   }
 
   Future<void> _updateProperty() async {
-    if (!_formKey.currentState!.validate()) {
+    FocusScope.of(context).unfocus();
+    if (ref.read(propertyControllerProvider).isLoading) {
+      return;
+    }
+    if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
     final name = _nameController.text.trim();
+    final address = _addressController.text.trim();
+    final description = _descriptionController.text.trim();
     final numberOfFloors =
         int.tryParse(_numberOfFloorsController.text.trim()) ??
-        widget.property.numberOfFloors;
+            widget.property.numberOfFloors;
 
-    final updatedProperty = Property(
-      id: widget.property.id,
-      propertyCode: widget.property.propertyCode,
-      ownerId: widget.property.ownerId,
+    // Skip Firestore write if nothing changed.
+    final unchanged =
+        name == widget.property.name.trim() &&
+            address == (widget.property.address?.trim() ?? '') &&
+            description == (widget.property.description?.trim() ?? '') &&
+            numberOfFloors == widget.property.numberOfFloors &&
+            _selectedType == widget.property.type &&
+            _selectedStatus == widget.property.status;
+
+    if (unchanged) {
+      GrihoFeedback.showInfo(context, 'No changes to save.');
+      Navigator.of(context).pop();
+      return;
+    }
+
+    // Use copyWith so tenantUserIds and other internal fields are preserved.
+    final updatedProperty = widget.property.copyWith(
       name: name,
-      address: _addressController.text.trim().isEmpty
-          ? null
-          : _addressController.text.trim(),
-      description: _descriptionController.text.trim().isEmpty
-          ? null
-          : _descriptionController.text.trim(),
+      address: address.isEmpty ? null : address,
+      description: description.isEmpty ? null : description,
       type: _selectedType,
       status: _selectedStatus,
       numberOfFloors: numberOfFloors,
-      createdAt: widget.property.createdAt,
       updatedAt: DateTime.now(),
     );
 
@@ -89,69 +105,45 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
     }
 
     if (result != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Property updated successfully.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      GrihoFeedback.showSuccess(context, 'Property updated successfully.');
       Navigator.of(context).pop(result);
     } else {
       final state = ref.read(propertyControllerProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.errorMessage ?? 'Unable to update property.'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+      GrihoFeedback.showError(
+        context,
+        state.errorMessage ?? 'Unable to update property.',
       );
     }
   }
 
-  String _propertyTypeLabel(PropertyType type) {
-    switch (type) {
-      case PropertyType.residential:
-        return 'Residential';
-      case PropertyType.commercial:
-        return 'Commercial';
-      case PropertyType.mixedUse:
-        return 'Mixed Use';
-    }
-  }
+  String _propertyTypeLabel(PropertyType type) => switch (type) {
+    PropertyType.residential => 'Residential',
+    PropertyType.commercial => 'Commercial',
+    PropertyType.mixedUse => 'Mixed Use',
+  };
 
-  IconData _propertyTypeIcon(PropertyType type) {
-    switch (type) {
-      case PropertyType.residential:
-        return Icons.home_outlined;
-      case PropertyType.commercial:
-        return Icons.storefront_outlined;
-      case PropertyType.mixedUse:
-        return Icons.domain_outlined;
-    }
-  }
+  IconData _propertyTypeIcon(PropertyType type) => switch (type) {
+    PropertyType.residential => Iconsax.home_2,
+    PropertyType.commercial => Iconsax.shop,
+    PropertyType.mixedUse => Iconsax.buildings_2,
+  };
 
-  String _propertyStatusLabel(PropertyStatus status) {
-    switch (status) {
-      case PropertyStatus.active:
-        return 'Active';
-      case PropertyStatus.inactive:
-        return 'Inactive';
-    }
-  }
+  String _propertyStatusLabel(PropertyStatus status) => switch (status) {
+    PropertyStatus.active => 'Active',
+    PropertyStatus.inactive => 'Inactive',
+  };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final state = ref.watch(propertyControllerProvider);
+    final isLoading = ref.watch(
+      propertyControllerProvider.select((s) => s.isLoading),
+    );
+    final isActive = _selectedStatus == PropertyStatus.active;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Edit Property',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Edit Property')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
@@ -160,43 +152,110 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(theme),
-
-                const SizedBox(height: 24),
-
-                // সেকশন ১: মৌলিক তথ্য ও স্ট্যাটাস
-                _buildSectionCard(
-                  context,
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: theme.colorScheme.outlineVariant,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          Iconsax.edit_2,
+                          size: 24,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.property.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'ID: ${widget.property.propertyCode}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                          (isActive
+                              ? GrihoColors.emerald
+                              : GrihoColors.warning)
+                              .withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          isActive ? 'Active' : 'Inactive',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isActive
+                                ? GrihoColors.emerald
+                                : GrihoColors.warning,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                GrihoSectionCard(
                   title: '1. Identity & Status',
                   subtitle: 'Update property name, category, and availability',
-                  icon: Icons.apartment_rounded,
+                  icon: Iconsax.buildings_2,
                   children: [
                     InputDecorator(
                       decoration: InputDecoration(
                         labelText: 'Property Code',
-                        prefixIcon: const Icon(Icons.qr_code_rounded),
+                        prefixIcon: const Icon(
+                          Iconsax.code,
+                          color: GrihoColors.emerald,
+                          size: 20,
+                        ),
                         suffixIcon: IconButton(
                           tooltip: 'Copy Code',
-                          icon: const Icon(Icons.copy_rounded, size: 20),
+                          icon: const Icon(Iconsax.copy, size: 19),
                           onPressed: () {
                             Clipboard.setData(
                               ClipboardData(text: widget.property.propertyCode),
                             );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Property code copied to clipboard.',
-                                ),
-                                duration: Duration(seconds: 2),
-                                behavior: SnackBarBehavior.floating,
-                              ),
+                            GrihoFeedback.showSuccess(
+                              context,
+                              'Property code copied to clipboard.',
                             );
                           },
                         ),
-                        border: const OutlineInputBorder(),
                         filled: true,
                         fillColor: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.5),
+                            .withValues(alpha: 0.45),
                       ),
                       child: Text(
                         widget.property.propertyCode,
@@ -207,17 +266,14 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    GrihoTextField(
                       controller: _nameController,
+                      label: 'Property Name',
+                      hint: 'e.g. Mowlovi Manzil',
+                      prefixIcon: Iconsax.building,
                       textCapitalization: TextCapitalization.words,
-                      enabled: !state.isLoading,
+                      enabled: !isLoading,
                       textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Property Name',
-                        hintText: 'e.g. Mowlovi Manzil',
-                        prefixIcon: Icon(Icons.title_rounded),
-                        border: OutlineInputBorder(),
-                      ),
                       validator: (value) {
                         final name = value?.trim() ?? '';
                         if (name.isEmpty) {
@@ -229,98 +285,110 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<PropertyType>(
-                      initialValue: _selectedType,
-                      decoration: const InputDecoration(
-                        labelText: 'Property Category',
-                        prefixIcon: Icon(Icons.category_outlined),
-                        border: OutlineInputBorder(),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Property Category',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
-                      items: PropertyType.values.map((type) {
-                        return DropdownMenuItem<PropertyType>(
-                          value: type,
-                          child: Row(
-                            children: [
-                              Icon(_propertyTypeIcon(type), size: 18),
-                              const SizedBox(width: 8),
-                              Text(_propertyTypeLabel(type)),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: state.isLoading
-                          ? null
-                          : (type) {
-                              if (type == null) {
-                                return;
-                              }
-                              setState(() {
-                                _selectedType = type;
-                              });
-                            },
                     ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<PropertyStatus>(
-                      initialValue: _selectedStatus,
-                      decoration: const InputDecoration(
-                        labelText: 'Operational Status',
-                        prefixIcon: Icon(Icons.toggle_on_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: PropertyStatus.values.map((status) {
-                        final isActive = status == PropertyStatus.active;
-                        return DropdownMenuItem<PropertyStatus>(
-                          value: status,
-                          child: Row(
-                            children: [
-                              Icon(
-                                isActive
-                                    ? Icons.check_circle_outline
-                                    : Icons.pause_circle_outline,
-                                size: 18,
-                                color: isActive ? Colors.green : Colors.orange,
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        for (
+                        var i = 0;
+                        i < PropertyType.values.length;
+                        i++
+                        ) ...[
+                          Expanded(
+                            child: _OptionTile(
+                              label: _propertyTypeLabel(PropertyType.values[i]),
+                              icon: _propertyTypeIcon(PropertyType.values[i]),
+                              accentColor: GrihoColors.emerald,
+                              selected: _selectedType == PropertyType.values[i],
+                              enabled: !isLoading,
+                              onTap: () => setState(
+                                    () => _selectedType = PropertyType.values[i],
                               ),
-                              const SizedBox(width: 8),
-                              Text(_propertyStatusLabel(status)),
-                            ],
+                            ),
                           ),
-                        );
-                      }).toList(),
-                      onChanged: state.isLoading
-                          ? null
-                          : (status) {
-                              if (status == null) {
-                                return;
-                              }
-                              setState(() {
-                                _selectedStatus = status;
-                              });
-                            },
+                          if (i != PropertyType.values.length - 1)
+                            const SizedBox(width: 10),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Operational Status',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        for (
+                        var i = 0;
+                        i < PropertyStatus.values.length;
+                        i++
+                        ) ...[
+                          Expanded(
+                            child: _OptionTile(
+                              label: _propertyStatusLabel(
+                                PropertyStatus.values[i],
+                              ),
+                              icon:
+                              PropertyStatus.values[i] ==
+                                  PropertyStatus.active
+                                  ? Iconsax.tick_circle
+                                  : Iconsax.pause_circle,
+                              accentColor:
+                              PropertyStatus.values[i] ==
+                                  PropertyStatus.active
+                                  ? GrihoColors.emerald
+                                  : GrihoColors.warning,
+                              selected:
+                              _selectedStatus == PropertyStatus.values[i],
+                              enabled: !isLoading,
+                              horizontal: true,
+                              onTap: () => setState(
+                                    () =>
+                                _selectedStatus = PropertyStatus.values[i],
+                              ),
+                            ),
+                          ),
+                          if (i != PropertyStatus.values.length - 1)
+                            const SizedBox(width: 10),
+                        ],
+                      ],
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 16),
-
-                // সেকশন ২: গঠন ও অবস্থান
-                _buildSectionCard(
-                  context,
+                GrihoSectionCard(
                   title: '2. Structure & Location',
                   subtitle: 'Floors configuration and property address',
-                  icon: Icons.layers_outlined,
+                  icon: Iconsax.layer,
                   children: [
                     TextFormField(
                       controller: _numberOfFloorsController,
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.next,
-                      enabled: !state.isLoading,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      enabled: !isLoading,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
                       decoration: const InputDecoration(
                         labelText: 'Total Number of Floors',
                         hintText: 'e.g. 5',
-                        prefixIcon: Icon(Icons.stairs_outlined),
-                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(
+                          Iconsax.layer,
+                          color: GrihoColors.emerald,
+                          size: 20,
+                        ),
                       ),
                       validator: (value) {
                         final floors = int.tryParse(value?.trim() ?? '');
@@ -330,76 +398,48 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                         if (floors < 1) {
                           return 'Floors must be at least 1.';
                         }
+                        if (floors > 200) {
+                          return 'Floors cannot exceed 200.';
+                        }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    GrihoTextField(
                       controller: _addressController,
+                      label: 'Physical Address',
+                      hint: 'Enter complete property address',
+                      prefixIcon: Iconsax.location,
                       textCapitalization: TextCapitalization.sentences,
-                      enabled: !state.isLoading,
+                      enabled: !isLoading,
                       maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Physical Address',
-                        hintText: 'Enter complete property address',
-                        prefixIcon: Icon(Icons.location_on_outlined),
-                        border: OutlineInputBorder(),
-                      ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 16),
-
-                // সেকশন ৩: অতিরিক্ত বিবরণ
-                _buildSectionCard(
-                  context,
+                GrihoSectionCard(
                   title: '3. Additional Notes (Optional)',
                   subtitle: 'Landmarks, instructions or property guidelines',
-                  icon: Icons.notes_rounded,
+                  icon: Iconsax.document_text,
                   children: [
-                    TextFormField(
+                    GrihoTextField(
                       controller: _descriptionController,
+                      label: 'Description / Guidelines',
+                      hint:
+                      'e.g. Generator available, gates locked after midnight',
+                      prefixIcon: Iconsax.note_2,
                       textCapitalization: TextCapitalization.sentences,
-                      enabled: !state.isLoading,
+                      enabled: !isLoading,
                       maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Description / Guidelines',
-                        hintText:
-                            'e.g. Generator available, gates locked after midnight',
-                        prefixIcon: Icon(Icons.description_outlined),
-                        border: OutlineInputBorder(),
-                      ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 32),
-
-                // সেভ বাটন
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton.icon(
-                    onPressed: state.isLoading ? null : _updateProperty,
-                    icon: state.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.save_outlined),
-                    label: Text(
-                      state.isLoading ? 'Saving Changes...' : 'Save Changes',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                const SizedBox(height: 28),
+                GrihoPrimaryButton(
+                  label: isLoading ? 'Saving Changes...' : 'Save Changes',
+                  icon: Iconsax.tick_circle,
+                  isLoading: isLoading,
+                  onPressed: _updateProperty,
                 ),
               ],
             ),
@@ -408,109 +448,90 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
       ),
     );
   }
+}
 
-  Widget _buildHeader(ThemeData theme) {
-    final isActive = _selectedStatus == PropertyStatus.active;
+class _OptionTile extends StatelessWidget {
+  const _OptionTile({
+    required this.label,
+    required this.icon,
+    required this.accentColor,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+    this.horizontal = false,
+  });
 
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Icon(
-            Icons.edit_location_alt_rounded,
-            size: 28,
-            color: theme.colorScheme.onPrimaryContainer,
+  final String label;
+  final IconData icon;
+  final Color accentColor;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+  final bool horizontal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fgColor = selected ? accentColor : theme.colorScheme.onSurfaceVariant;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: EdgeInsets.symmetric(
+          vertical: 12,
+          horizontal: horizontal ? 12 : 8,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? accentColor.withValues(alpha: 0.14)
+              : theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? accentColor : theme.colorScheme.outlineVariant,
+            width: selected ? 1.5 : 1,
           ),
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.property.name,
+        child: horizontal
+            ? Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 19, color: fgColor),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected
+                      ? FontWeight.w800
+                      : FontWeight.w600,
+                  color: fgColor,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                'ID: ${widget.property.propertyCode}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: isActive
-                ? Colors.green.withValues(alpha: 0.15)
-                : Colors.orange.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            isActive ? 'Active' : 'Inactive',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: isActive ? Colors.green.shade700 : Colors.orange.shade800,
             ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+          ],
+        )
+            : Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 21, color: fgColor),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: fgColor,
               ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-          const SizedBox(height: 16),
-          ...children,
-        ],
+          ],
+        ),
       ),
     );
   }

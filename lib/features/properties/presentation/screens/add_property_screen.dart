@@ -1,7 +1,9 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/create_property_request.dart';
 import '../../domain/entities/property.dart';
 import '../controllers/property_controller.dart';
@@ -33,7 +35,11 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
   }
 
   Future<void> _createProperty() async {
-    if (!_formKey.currentState!.validate()) {
+    FocusScope.of(context).unfocus();
+    if (ref.read(propertyControllerProvider).isLoading) {
+      return;
+    }
+    if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
@@ -62,62 +68,39 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
 
     if (property == null) {
       final state = ref.read(propertyControllerProvider);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.errorMessage ?? 'Unable to create property.'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+      GrihoFeedback.showError(
+        context,
+        state.errorMessage ?? 'Unable to create property.',
       );
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Property added successfully!'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
+    GrihoFeedback.showSuccess(context, 'Property added successfully!');
     Navigator.of(context).pop(property);
   }
 
-  String _propertyTypeLabel(PropertyType type) {
-    switch (type) {
-      case PropertyType.residential:
-        return 'Residential';
-      case PropertyType.commercial:
-        return 'Commercial';
-      case PropertyType.mixedUse:
-        return 'Mixed Use';
-    }
-  }
+  String _propertyTypeLabel(PropertyType type) => switch (type) {
+    PropertyType.residential => 'Residential',
+    PropertyType.commercial => 'Commercial',
+    PropertyType.mixedUse => 'Mixed Use',
+  };
 
-  IconData _propertyTypeIcon(PropertyType type) {
-    switch (type) {
-      case PropertyType.residential:
-        return Icons.home_outlined;
-      case PropertyType.commercial:
-        return Icons.storefront_outlined;
-      case PropertyType.mixedUse:
-        return Icons.domain_outlined;
-    }
-  }
+  IconData _propertyTypeIcon(PropertyType type) => switch (type) {
+    PropertyType.residential => Iconsax.home_2,
+    PropertyType.commercial => Iconsax.shop,
+    PropertyType.mixedUse => Iconsax.buildings_2,
+  };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final state = ref.watch(propertyControllerProvider);
+    final isLoading = ref.watch(
+      propertyControllerProvider.select((s) => s.isLoading),
+    );
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Add Property',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Add Property')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
@@ -126,69 +109,68 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ============================================================
-                // হেডার
-                // ============================================================
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        Icons.add_home_work_rounded,
-                        size: 28,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: theme.colorScheme.outlineVariant,
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'New Building or House',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Enter property specifications to set up units and tenants.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          Iconsax.building_4,
+                          size: 24,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'New Building or House',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Enter property specifications to set up units and tenants.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-
-                const SizedBox(height: 24),
-
-                // ============================================================
-                // সেকশন ১: প্রোপার্টি আইডেন্টিটি
-                // ============================================================
-                _buildSectionCard(
-                  context,
+                const SizedBox(height: 18),
+                GrihoSectionCard(
                   title: '1. Identity & Classification',
                   subtitle: 'Name and usage type of your building',
-                  icon: Icons.apartment_rounded,
+                  icon: Iconsax.buildings_2,
                   children: [
-                    TextFormField(
+                    GrihoTextField(
                       controller: _nameController,
+                      label: 'Property Name',
+                      hint: 'e.g. Mowlovi Manzil or Green View',
+                      prefixIcon: Iconsax.building,
                       textCapitalization: TextCapitalization.words,
-                      enabled: !state.isLoading,
+                      enabled: !isLoading,
                       textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Property Name',
-                        hintText: 'e.g. Mowlovi Manzil or Green View',
-                        prefixIcon: Icon(Icons.title_rounded),
-                        border: OutlineInputBorder(),
-                      ),
                       validator: (value) {
                         final name = value?.trim() ?? '';
                         if (name.isEmpty) {
@@ -200,62 +182,63 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<PropertyType>(
-                      initialValue: _selectedType,
-                      decoration: const InputDecoration(
-                        labelText: 'Property Category',
-                        prefixIcon: Icon(Icons.category_outlined),
-                        border: OutlineInputBorder(),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Property Category',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
-                      items: PropertyType.values.map((type) {
-                        return DropdownMenuItem<PropertyType>(
-                          value: type,
-                          child: Row(
-                            children: [
-                              Icon(_propertyTypeIcon(type), size: 18),
-                              const SizedBox(width: 8),
-                              Text(_propertyTypeLabel(type)),
-                            ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        for (
+                        var i = 0;
+                        i < PropertyType.values.length;
+                        i++
+                        ) ...[
+                          Expanded(
+                            child: _PropertyCategoryTile(
+                              label: _propertyTypeLabel(PropertyType.values[i]),
+                              icon: _propertyTypeIcon(PropertyType.values[i]),
+                              selected: _selectedType == PropertyType.values[i],
+                              enabled: !isLoading,
+                              onTap: () => setState(
+                                    () => _selectedType = PropertyType.values[i],
+                              ),
+                            ),
                           ),
-                        );
-                      }).toList(),
-                      onChanged: state.isLoading
-                          ? null
-                          : (value) {
-                              if (value == null) {
-                                return;
-                              }
-                              setState(() {
-                                _selectedType = value;
-                              });
-                            },
+                          if (i != PropertyType.values.length - 1)
+                            const SizedBox(width: 10),
+                        ],
+                      ],
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 16),
-
-                // ============================================================
-                // সেকশন ২: গঠন ও ঠিকানা
-                // ============================================================
-                _buildSectionCard(
-                  context,
+                GrihoSectionCard(
                   title: '2. Structure & Location',
                   subtitle: 'Floor details and physical address',
-                  icon: Icons.layers_outlined,
+                  icon: Iconsax.layer,
                   children: [
                     TextFormField(
                       controller: _numberOfFloorsController,
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.next,
-                      enabled: !state.isLoading,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      enabled: !isLoading,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
                       decoration: const InputDecoration(
                         labelText: 'Total Number of Floors',
                         hintText: 'e.g. 5',
-                        prefixIcon: Icon(Icons.stairs_outlined),
-                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(
+                          Iconsax.layer,
+                          color: GrihoColors.emerald,
+                          size: 20,
+                        ),
                         helperText: 'You can add units under each floor later.',
                       ),
                       validator: (value) {
@@ -266,82 +249,50 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
                         if (floors < 1) {
                           return 'Floors must be at least 1.';
                         }
+                        if (floors > 200) {
+                          return 'Floors cannot exceed 200.';
+                        }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    GrihoTextField(
                       controller: _addressController,
+                      label: 'Physical Address',
+                      hint: 'e.g. House 12, Road 4, Sector 7, Uttara',
+                      prefixIcon: Iconsax.location,
                       textCapitalization: TextCapitalization.sentences,
-                      enabled: !state.isLoading,
+                      enabled: !isLoading,
                       maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Physical Address',
-                        hintText: 'e.g. House 12, Road 4, Sector 7, Uttara',
-                        prefixIcon: Icon(Icons.location_on_outlined),
-                        border: OutlineInputBorder(),
-                      ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 16),
-
-                // ============================================================
-                // সেকশন ৩: অতিরিক্ত তথ্য (ঐচ্ছিক)
-                // ============================================================
-                _buildSectionCard(
-                  context,
+                GrihoSectionCard(
                   title: '3. Additional Notes (Optional)',
                   subtitle: 'Landmarks, amenities or specific instructions',
-                  icon: Icons.notes_rounded,
+                  icon: Iconsax.document_text,
                   children: [
-                    TextFormField(
+                    GrihoTextField(
                       controller: _descriptionController,
+                      label: 'Description / Rules',
+                      hint:
+                      'e.g. Generator available, main gate closes at 11 PM',
+                      prefixIcon: Iconsax.note_2,
                       textCapitalization: TextCapitalization.sentences,
-                      enabled: !state.isLoading,
+                      enabled: !isLoading,
                       maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Description / Rules',
-                        hintText:
-                            'e.g. Generator available, main gate closes at 11 PM',
-                        prefixIcon: Icon(Icons.description_outlined),
-                        border: OutlineInputBorder(),
-                      ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 32),
-
-                // ============================================================
-                // ক্রিয়েট বাটন
-                // ============================================================
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton.icon(
-                    onPressed: state.isLoading ? null : _createProperty,
-                    icon: state.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.check_circle_outline_rounded),
-                    label: Text(
-                      state.isLoading
-                          ? 'Creating Property...'
-                          : 'Save & Create Property',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                const SizedBox(height: 28),
+                GrihoPrimaryButton(
+                  label: isLoading
+                      ? 'Creating Property...'
+                      : 'Save & Create Property',
+                  icon: Iconsax.tick_circle,
+                  isLoading: isLoading,
+                  onPressed: _createProperty,
                 ),
               ],
             ),
@@ -350,48 +301,70 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
       ),
     );
   }
+}
 
-  Widget _buildSectionCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
+class _PropertyCategoryTile extends StatelessWidget {
+  const _PropertyCategoryTile({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? GrihoColors.emerald.withValues(alpha: 0.14)
+              : theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? GrihoColors.emerald
+                : theme.colorScheme.outlineVariant,
+            width: selected ? 1.5 : 1,
           ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 21,
+              color: selected
+                  ? GrihoColors.emerald
+                  : theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-          const SizedBox(height: 16),
-          ...children,
-        ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: selected
+                    ? GrihoColors.emerald
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

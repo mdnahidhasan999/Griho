@@ -1,13 +1,13 @@
 // noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/services/audit_logger_service.dart';
+import '../../../../core/services/pdf_receipt_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
@@ -23,6 +23,7 @@ import '../controllers/generate_monthly_charges_controller.dart';
 import '../providers/billing_rule_provider.dart';
 import '../providers/monthly_bill_provider.dart';
 import '../providers/tenancy_billing_target_provider.dart';
+import '../widgets/billing_ui_helpers.dart';
 
 class OwnerBillingRulesScreen extends ConsumerStatefulWidget {
   const OwnerBillingRulesScreen({super.key});
@@ -59,16 +60,16 @@ class _OwnerBillingRulesScreenState
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text(
-          'Billing Management',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: const Text('Billing Management'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(icon: Icon(Icons.rule_folder_outlined), text: 'Billing Rules'),
             Tab(
-              icon: Icon(Icons.receipt_long_outlined),
+              icon: Icon(Iconsax.document_text, size: 19),
+              text: 'Billing Rules',
+            ),
+            Tab(
+              icon: Icon(Iconsax.receipt_item, size: 19),
               text: 'Generated Invoices',
             ),
           ],
@@ -77,16 +78,18 @@ class _OwnerBillingRulesScreenState
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final result = await context.push(RouteNames.ownerBillingSetup);
-
-          if (!context.mounted || result == null) return;
+          if (!context.mounted || result == null) {
+            return;
+          }
 
           final properties =
               ref.read(currentOwnerPropertiesProvider).value ?? [];
           final selectedProperty = properties
               .where((p) => p.id == _selectedPropertyId)
               .firstOrNull;
-
-          if (selectedProperty == null) return;
+          if (selectedProperty == null) {
+            return;
+          }
 
           await AuditLoggerService.log(
             ownerId: selectedProperty.ownerId,
@@ -103,45 +106,70 @@ class _OwnerBillingRulesScreenState
             propertyId: selectedProperty.id,
           );
         },
-        icon: const Icon(Icons.add_rounded),
+        icon: const Icon(Iconsax.add),
         label: const Text(
           'Add Rule',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorView(
-          message: 'Unable to load your profile.',
-          onRetry: () {
-            ref.invalidate(currentUserProfileProvider);
-          },
+        loading: () => const GrihoLoadingView(message: 'Loading profile...'),
+        error: (_, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load profile',
+              subtitle: 'Please check your connection and try again.',
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentUserProfileProvider),
+            ),
+          ),
         ),
         data: (profile) {
           if (profile == null) {
-            return _ErrorView(
-              message: 'User profile not found.',
-              onRetry: () {
-                ref.invalidate(currentUserProfileProvider);
-              },
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.user_remove,
+                  title: 'Profile not found',
+                  subtitle: 'User profile could not be loaded.',
+                  actionLabel: 'Retry',
+                  onAction: () => ref.invalidate(currentUserProfileProvider),
+                ),
+              ),
             );
           }
 
           return propertiesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) => _ErrorView(
-              message: 'Unable to load properties.',
-              onRetry: () {
-                ref.invalidate(currentOwnerPropertiesProvider);
-              },
+            loading: () =>
+                const GrihoLoadingView(message: 'Loading properties...'),
+            error: (_, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.warning_2,
+                  title: 'Unable to load properties',
+                  subtitle: 'Please check your connection and try again.',
+                  actionLabel: 'Retry',
+                  onAction: () =>
+                      ref.invalidate(currentOwnerPropertiesProvider),
+                ),
+              ),
             ),
             data: (properties) {
               if (properties.isEmpty) {
-                return const _EmptyState(
-                  icon: Icons.apartment_rounded,
-                  title: 'No properties available',
-                  message:
-                      'Add or get assigned to a property before managing billing rules.',
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: GrihoStatusState(
+                      icon: Iconsax.buildings_2,
+                      title: 'No properties available',
+                      subtitle:
+                          'Add or get assigned to a property before managing billing rules.',
+                    ),
+                  ),
                 );
               }
 
@@ -152,15 +180,14 @@ class _OwnerBillingRulesScreenState
                   properties.first;
 
               final selectedPropertyId = selectedProperty.id;
-              // গুরুত্বপূর্ণ ফিক্স: ম্যানেজার ঢুকলেও যেন বিল্ডিংয়ের আসল মালিকের ownerId ব্যবহৃত হয়
               final effectiveOwnerId = selectedProperty.ownerId.trim();
 
               if (_selectedPropertyId != selectedPropertyId) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  setState(() {
-                    _selectedPropertyId = selectedPropertyId;
-                  });
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() => _selectedPropertyId = selectedPropertyId);
                 });
               }
 
@@ -176,9 +203,7 @@ class _OwnerBillingRulesScreenState
                       if (value == null || value.isEmpty) {
                         return;
                       }
-                      setState(() {
-                        _selectedPropertyId = value;
-                      });
+                      setState(() => _selectedPropertyId = value);
                     },
                     onGenerateBills: () {
                       _generateMonthlyChargesManually(
@@ -197,9 +222,7 @@ class _OwnerBillingRulesScreenState
                       if (value == null || value.isEmpty) {
                         return;
                       }
-                      setState(() {
-                        _selectedPropertyId = value;
-                      });
+                      setState(() => _selectedPropertyId = value);
                     },
                   ),
                 ],
@@ -225,10 +248,6 @@ class _OwnerBillingRulesScreenState
       )),
     );
   }
-
-  // ==========================================================================
-  // MANUAL BILL GENERATION (WITH MANAGER TENANT FALLBACK & AUDIT LOG)
-  // ==========================================================================
 
   Future<void> _generateMonthlyChargesManually({
     required String ownerId,
@@ -281,20 +300,26 @@ class _OwnerBillingRulesScreenState
     }
 
     try {
-      _showMessage('Calculating charges and resolving tenancies...');
+      GrihoFeedback.showInfo(
+        context,
+        'Calculating charges and resolving tenancies...',
+      );
 
-      final units = await ref.read(propertyUnitsProvider(propertyId).future);
-      var tenants = await ref.read(propertyTenantsProvider(propertyId).future);
+      final results = await Future.wait<dynamic>([
+        ref.read(propertyUnitsProvider(propertyId).future),
+        ref.read(propertyTenantsProvider(propertyId).future),
+      ]);
 
-      // ম্যানেজার ফলব্যাক: যদি propertyTenantsProvider শুধু currentUser.uid খোঁজে
+      final units = results[0] as List<Unit>;
+      var tenants = results[1] as List<Tenant>;
+
       if (tenants.isEmpty) {
         final snap = await FirebaseFirestore.instance
             .collection('tenants')
             .where('propertyId', isEqualTo: propertyId)
+            .limit(200)
             .get();
-        tenants = snap.docs
-            .map((doc) => TenantModel.fromFirestore(doc))
-            .toList();
+        tenants = snap.docs.map(TenantModel.fromFirestore).toList();
       }
 
       final tenancyResolver = ref.read(tenancyBillingTargetResolverProvider);
@@ -315,8 +340,9 @@ class _OwnerBillingRulesScreenState
       }
 
       if (tenancyTargets.isEmpty) {
-        _showMessage(
-          'No active tenancy found for ${_formatMonth(billingPeriodStart)}.',
+        GrihoFeedback.showWarning(
+          context,
+          'No active tenancy found for ${formatBillingMonthYear(billingPeriodStart)}.',
         );
         return;
       }
@@ -340,11 +366,11 @@ class _OwnerBillingRulesScreenState
 
       _invalidatePropertyBillingData(ownerId: ownerId, propertyId: propertyId);
 
-      final billCount = result.generatedBills.length;
-
-      if (billCount == 0) {
-        _showMessage(
-          'Variable invoices are already up to date for ${_formatMonth(billingPeriodStart)}.',
+      final totalCreated = result.totalGenerated;
+      if (totalCreated == 0) {
+        GrihoFeedback.showInfo(
+          context,
+          'Invoices are already up to date for ${formatBillingMonthYear(billingPeriodStart)}.',
         );
         return;
       }
@@ -356,59 +382,23 @@ class _OwnerBillingRulesScreenState
         category: 'billing',
         actionTitle: 'Monthly Utility Bills Generated',
         details:
-            '$billCount bill(s) generated/overridden for ${_formatMonth(billingPeriodStart)}.',
+            '$totalCreated charge(s) generated/updated for ${formatBillingMonthYear(billingPeriodStart)}.',
       );
 
-      _showMessage(
-        '$billCount variable bill(s) generated/updated successfully.',
-      );
-    } catch (error, stackTrace) {
-      debugPrint('BILLING GENERATION ERROR: $error\n$stackTrace');
       if (!mounted) {
         return;
       }
-      _showMessage(_cleanErrorMessage(error));
-    }
-  }
 
-  String _formatMonth(DateTime date) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${months[date.month - 1]} ${date.year}';
-  }
-
-  String _cleanErrorMessage(Object error) {
-    final message = error.toString();
-    if (message.startsWith('Exception: ')) {
-      return message.substring(11);
-    }
-    if (message.startsWith('Invalid argument(s): ')) {
-      return message.substring(21);
-    }
-    return message;
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      GrihoFeedback.showSuccess(
+        context,
+        '$totalCreated bill(s) generated/updated successfully.',
       );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, cleanBillingError(error));
+    }
   }
 }
 
@@ -547,14 +537,14 @@ class _RulesTab extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  Icons.info_outline_rounded,
+                  Iconsax.info_circle,
                   color: theme.colorScheme.primary,
-                  size: 22,
+                  size: 20,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Rent and Fixed bills are generated automatically by the monthly billing service. Variable bills (including Variable overrides on existing Fixed bills) are generated manually using the button below.',
+                    'Rent and Fixed bills are generated automatically by the monthly billing service. Variable bills (including overrides on Fixed bills) are generated manually below.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                       height: 1.4,
@@ -564,10 +554,7 @@ class _RulesTab extends ConsumerWidget {
               ],
             ),
           ),
-
           const SizedBox(height: 14),
-
-          // Property Selector Card
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -588,8 +575,11 @@ class _RulesTab extends ConsumerWidget {
                 DropdownButtonFormField<String>(
                   initialValue: propertyId,
                   decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.apartment_outlined),
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(
+                      Iconsax.buildings_2,
+                      color: GrihoColors.emerald,
+                      size: 19,
+                    ),
                   ),
                   items: [
                     for (final property in properties)
@@ -606,49 +596,36 @@ class _RulesTab extends ConsumerWidget {
               ],
             ),
           ),
-
           const SizedBox(height: 14),
-
-          // Manual Custom Month Invoice Trigger
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: onGenerateBills,
-              icon: const Icon(Icons.calendar_month_outlined, size: 18),
-              label: const Text(
-                'Generate Pending Bills / Override Fixed',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
+          GrihoSecondaryButton(
+            label: 'Generate Pending Bills / Override Fixed',
+            icon: Iconsax.calendar_1,
+            onPressed: onGenerateBills,
           ),
-
           const SizedBox(height: 20),
-
           rulesAsync.when(
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: CircularProgressIndicator(),
-              ),
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator()),
             ),
-            error: (err, _) => _ErrorCard(
-              message: 'Unable to load billing rules for this property.',
-              onRetry: () {
-                ref.invalidate(
-                  propertyBillingRulesProvider((
-                    ownerId: ownerId,
-                    propertyId: propertyId,
-                  )),
-                );
-              },
+            error: (_, _) => GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load rules',
+              subtitle: 'Unable to load billing rules for this property.',
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(
+                propertyBillingRulesProvider((
+                  ownerId: ownerId,
+                  propertyId: propertyId,
+                )),
+              ),
             ),
             data: (rules) {
               if (rules.isEmpty) {
-                return const _EmptyState(
-                  icon: Icons.receipt_long_outlined,
+                return const GrihoStatusState(
+                  icon: Iconsax.receipt_item,
                   title: 'No billing rules configured',
-                  message:
+                  subtitle:
                       'Create Fixed rules for automatic monthly bills, or Variable rules to generate one-month bills manually.',
                 );
               }
@@ -673,7 +650,6 @@ class _RulesTab extends ConsumerWidget {
               }).toList();
 
               final activeTargets = _resolveActiveMonthTargets(
-                ownerId: ownerId,
                 propertyId: propertyId,
                 units: units,
                 tenants: tenants,
@@ -693,14 +669,20 @@ class _RulesTab extends ConsumerWidget {
                 );
               }
 
-              final pendingThisMonthRules = rules.where((rule) {
-                return evaluationsByRuleId[rule.id]?.isPendingAction ?? false;
-              }).toList();
+              final pendingThisMonthRules = rules
+                  .where(
+                    (rule) =>
+                        evaluationsByRuleId[rule.id]?.isPendingAction ?? false,
+                  )
+                  .toList();
 
-              final syncedOrOtherRules = rules.where((rule) {
-                return !(evaluationsByRuleId[rule.id]?.isPendingAction ??
-                    false);
-              }).toList();
+              final syncedOrOtherRules = rules
+                  .where(
+                    (rule) =>
+                        !(evaluationsByRuleId[rule.id]?.isPendingAction ??
+                            false),
+                  )
+                  .toList();
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -748,8 +730,8 @@ class _RulesTab extends ConsumerWidget {
                       child: Row(
                         children: [
                           const Icon(
-                            Icons.check_circle_outline_rounded,
-                            color: Colors.green,
+                            Iconsax.tick_circle,
+                            color: GrihoColors.emerald,
                             size: 20,
                           ),
                           const SizedBox(width: 10),
@@ -769,12 +751,10 @@ class _RulesTab extends ConsumerWidget {
                       _BillingRuleCard(
                         rule: rule,
                         ownerId: ownerId,
-                        propertyName: propertyName,
                         evaluation: evaluationsByRuleId[rule.id]!,
                       ),
                       const SizedBox(height: 12),
                     ],
-
                   if (syncedOrOtherRules.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Text(
@@ -788,7 +768,6 @@ class _RulesTab extends ConsumerWidget {
                       _BillingRuleCard(
                         rule: rule,
                         ownerId: ownerId,
-                        propertyName: propertyName,
                         evaluation: evaluationsByRuleId[rule.id]!,
                       ),
                       const SizedBox(height: 12),
@@ -805,7 +784,6 @@ class _RulesTab extends ConsumerWidget {
 
   List<({String unitId, String floorId, String tenantId})>
   _resolveActiveMonthTargets({
-    required String ownerId,
     required String propertyId,
     required List<Unit> units,
     required List<Tenant> tenants,
@@ -817,14 +795,19 @@ class _RulesTab extends ConsumerWidget {
     };
 
     final result = <({String unitId, String floorId, String tenantId})>[];
-
     for (final tenant in tenants) {
-      if (tenant.status != TenantStatus.active) continue;
-      if (tenant.propertyId.trim() != propertyId.trim()) continue;
+      if (tenant.status != TenantStatus.active) {
+        continue;
+      }
+      if (tenant.propertyId.trim() != propertyId.trim()) {
+        continue;
+      }
 
       final unitId = tenant.unitId.trim();
       final floorId = floorByUnitId[unitId];
-      if (unitId.isEmpty || floorId == null || floorId.isEmpty) continue;
+      if (unitId.isEmpty || floorId == null || floorId.isEmpty) {
+        continue;
+      }
 
       final startedAt = tenant.tenancyStartedAt;
       if (startedAt != null && !startedAt.isBefore(billingPeriodEndExclusive)) {
@@ -946,7 +929,6 @@ class _RulesTab extends ConsumerWidget {
           overriddenByOtherCount++;
           continue;
         }
-
         effectiveTargetCount++;
 
         if (existingBill != null && existingBill.sourceRuleId == rule.id) {
@@ -966,13 +948,12 @@ class _RulesTab extends ConsumerWidget {
           if (isProducedOrOverriddenFromThisRule || existingBill != null) {
             generatedCount++;
           }
+        } else if (existingBill != null &&
+            existingBill.sourceRuleId == rule.id) {
+          effectiveTargetCount++;
+          generatedCount++;
         } else {
-          if (existingBill != null && existingBill.sourceRuleId == rule.id) {
-            effectiveTargetCount++;
-            generatedCount++;
-          } else {
-            overriddenByOtherCount++;
-          }
+          overriddenByOtherCount++;
         }
       }
     }
@@ -1004,7 +985,7 @@ class _RulesTab extends ConsumerWidget {
 }
 
 // ============================================================================
-// GENERATED BILLS TAB (WITH SAFE CANCEL FOR UNPAID BILLS)
+// GENERATED BILLS TAB (WITH MONTHLY STATEMENT PDF & SAFE REPOSITORY CANCEL)
 // ============================================================================
 
 class _GeneratedBillsTab extends ConsumerWidget {
@@ -1069,8 +1050,11 @@ class _GeneratedBillsTab extends ConsumerWidget {
                 DropdownButtonFormField<String>(
                   initialValue: selectedPropertyId,
                   decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.apartment_outlined),
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(
+                      Iconsax.buildings_2,
+                      color: GrihoColors.emerald,
+                      size: 19,
+                    ),
                   ),
                   items: [
                     for (final property in properties)
@@ -1087,33 +1071,30 @@ class _GeneratedBillsTab extends ConsumerWidget {
               ],
             ),
           ),
-
           const SizedBox(height: 20),
-
           billsAsync.when(
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: CircularProgressIndicator(),
-              ),
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator()),
             ),
-            error: (error, _) => _ErrorCard(
-              message: 'Unable to load invoice batches for this property.',
-              onRetry: () {
-                ref.invalidate(
-                  propertyMonthlyBillHistoryProvider((
-                    ownerId: ownerId,
-                    propertyId: propertyId,
-                  )),
-                );
-              },
+            error: (_, _) => GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load invoices',
+              subtitle: 'Unable to load invoice batches for this property.',
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(
+                propertyMonthlyBillHistoryProvider((
+                  ownerId: ownerId,
+                  propertyId: propertyId,
+                )),
+              ),
             ),
             data: (bills) {
               if (bills.isEmpty) {
-                return const _EmptyState(
-                  icon: Icons.receipt_long_outlined,
+                return const GrihoStatusState(
+                  icon: Iconsax.receipt_item,
                   title: 'No invoices generated yet',
-                  message:
+                  subtitle:
                       'Rent and Fixed invoices are generated by the monthly billing service. Variable invoices are created manually from the Billing Rules tab.',
                 );
               }
@@ -1121,7 +1102,7 @@ class _GeneratedBillsTab extends ConsumerWidget {
               final units = unitsAsync.value ?? [];
               final tenants = tenantsAsync.value ?? [];
 
-              final Map<String, List<MonthlyBill>> monthlyGroups = {};
+              final monthlyGroups = <String, List<MonthlyBill>>{};
               for (final bill in bills) {
                 final key =
                     '${bill.billingPeriodStart.year}-${bill.billingPeriodStart.month.toString().padLeft(2, '0')}';
@@ -1190,7 +1171,7 @@ class _GeneratedBillsTab extends ConsumerWidget {
 }
 
 // ============================================================================
-// MONTH BATCH CARD
+// MONTH BATCH CARD (WITH STATEMENT PDF EXPORT)
 // ============================================================================
 
 class _MonthBatchCard extends StatelessWidget {
@@ -1214,22 +1195,86 @@ class _MonthBatchCard extends StatelessWidget {
     required this.onBillChanged,
   });
 
-  String _formatMonthYear(DateTime date) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${months[date.month - 1]} ${date.year}';
+  String _unitAndTenantLabel(MonthlyBill bill) {
+    final unit = units.where((u) => u.id == bill.unitId).firstOrNull;
+    final unitText = unit != null ? 'Unit ${unit.unitNumber}' : bill.unitId;
+    final tenant = tenants.where((t) => t.id == bill.tenantId).firstOrNull;
+    return tenant != null ? '$unitText (${tenant.name})' : unitText;
+  }
+
+  Future<void> _exportBatchStatementPdf(
+    BuildContext context, {
+    required bool share,
+  }) async {
+    try {
+      final monthLabel = formatBillingMonthYear(bills.first.billingPeriodStart);
+      final activeBills = bills
+          .where((b) => b.status != MonthlyBillStatus.cancelled)
+          .toList();
+      final totalBilled = activeBills.fold<double>(0, (s, b) => s + b.amount);
+      final totalPaid = activeBills.fold<double>(0, (s, b) => s + b.paidAmount);
+      final totalDue = (totalBilled - totalPaid).clamp(0.0, double.infinity);
+
+      final rows = bills.map((bill) {
+        final label = bill.title?.trim().isNotEmpty == true
+            ? bill.title!.trim()
+            : monthlyBillTypeLabel(bill.type);
+        return [
+          _unitAndTenantLabel(bill),
+          label,
+          'BDT ${formatBillingAmount(bill.amount)}',
+          'BDT ${formatBillingAmount(bill.paidAmount)}',
+          bill.effectiveStatus.name.toUpperCase(),
+        ];
+      }).toList();
+
+      final fileName =
+          'Griho_Billing_${propertyName.replaceAll(' ', '_')}_$periodKey';
+      final summary =
+          'Total Active Billed: BDT ${formatBillingAmount(totalBilled)}   |   '
+          'Collected: BDT ${formatBillingAmount(totalPaid)}   |   '
+          'Remaining Due: BDT ${formatBillingAmount(totalDue)}';
+
+      if (share) {
+        await PdfReceiptService.shareStatementPdf(
+          fileName: fileName,
+          title: 'Monthly Billing Statement',
+          subtitle: '$propertyName • $monthLabel (${bills.length} records)',
+          headers: const [
+            'Unit / Tenant',
+            'Charge',
+            'Amount',
+            'Paid',
+            'Status',
+          ],
+          rows: rows,
+          summaryText: summary,
+        );
+      } else {
+        await PdfReceiptService.previewOrPrintStatement(
+          fileName: fileName,
+          title: 'Monthly Billing Statement',
+          subtitle: '$propertyName • $monthLabel (${bills.length} records)',
+          headers: const [
+            'Unit / Tenant',
+            'Charge',
+            'Amount',
+            'Paid',
+            'Status',
+          ],
+          rows: rows,
+          summaryText: summary,
+        );
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      GrihoFeedback.showError(
+        context,
+        'Unable to generate statement PDF: $error',
+      );
+    }
   }
 
   @override
@@ -1241,7 +1286,7 @@ class _MonthBatchCard extends StatelessWidget {
         .toList();
     final totalAmount = activeBills.fold<double>(
       0.0,
-      (double total, MonthlyBill b) => total + b.amount,
+      (total, b) => total + b.amount,
     );
     final rentCount = bills.where((b) => b.type == MonthlyBillType.rent).length;
     final utilityCount = bills.length - rentCount;
@@ -1254,9 +1299,7 @@ class _MonthBatchCard extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          _showBatchDetails(context);
-        },
+        onTap: () => _showBatchDetails(context),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -1272,7 +1315,7 @@ class _MonthBatchCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      Icons.folder_open_rounded,
+                      Iconsax.folder_open,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
@@ -1282,7 +1325,7 @@ class _MonthBatchCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _formatMonthYear(firstBill.billingPeriodStart),
+                          formatBillingMonthYear(firstBill.billingPeriodStart),
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w800,
                           ),
@@ -1297,7 +1340,7 @@ class _MonthBatchCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                  const Icon(Iconsax.arrow_right_3, size: 16),
                 ],
               ),
               const SizedBox(height: 14),
@@ -1316,7 +1359,7 @@ class _MonthBatchCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '৳${totalAmount.toStringAsFixed(2)}',
+                        '৳${formatBillingAmount(totalAmount)}',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w900,
                           color: theme.colorScheme.primary,
@@ -1324,12 +1367,21 @@ class _MonthBatchCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  TextButton.icon(
-                    onPressed: () {
-                      _showBatchDetails(context);
-                    },
-                    icon: const Icon(Icons.visibility_outlined, size: 16),
-                    label: const Text('Inspect / Cancel'),
+                  Row(
+                    children: [
+                      IconButton.outlined(
+                        tooltip: 'Print / Save Statement PDF',
+                        onPressed: () =>
+                            _exportBatchStatementPdf(context, share: false),
+                        icon: const Icon(Iconsax.document_text, size: 18),
+                      ),
+                      const SizedBox(width: 6),
+                      TextButton.icon(
+                        onPressed: () => _showBatchDetails(context),
+                        icon: const Icon(Iconsax.eye, size: 16),
+                        label: const Text('Inspect'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1368,7 +1420,7 @@ class _MonthBatchCard extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1377,7 +1429,9 @@ class _MonthBatchCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _formatMonthYear(bills.first.billingPeriodStart),
+                              formatBillingMonthYear(
+                                bills.first.billingPeriodStart,
+                              ),
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w800,
                               ),
@@ -1392,10 +1446,20 @@ class _MonthBatchCard extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                        },
-                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Print / Save PDF',
+                        onPressed: () =>
+                            _exportBatchStatementPdf(ctx, share: false),
+                        icon: const Icon(Iconsax.document_text, size: 20),
+                      ),
+                      IconButton(
+                        tooltip: 'Share Statement PDF',
+                        onPressed: () =>
+                            _exportBatchStatementPdf(ctx, share: true),
+                        icon: const Icon(Iconsax.export_3, size: 20),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Iconsax.close_circle),
                       ),
                     ],
                   ),
@@ -1433,10 +1497,10 @@ class _MonthBatchCard extends StatelessWidget {
 }
 
 // ============================================================================
-// DETAILED BILL ITEM (WITH GUARDRAILED CANCEL ACTION FOR UNPAID BILLS)
+// DETAILED BILL ITEM (USES REPOSITORY CANCEL WITH PENDING-PAYMENT GUARDRAIL)
 // ============================================================================
 
-class _DetailedBillItem extends StatefulWidget {
+class _DetailedBillItem extends ConsumerStatefulWidget {
   final String ownerId;
   final String propertyId;
   final String propertyName;
@@ -1456,10 +1520,10 @@ class _DetailedBillItem extends StatefulWidget {
   });
 
   @override
-  State<_DetailedBillItem> createState() => _DetailedBillItemState();
+  ConsumerState<_DetailedBillItem> createState() => _DetailedBillItemState();
 }
 
-class _DetailedBillItemState extends State<_DetailedBillItem> {
+class _DetailedBillItemState extends ConsumerState<_DetailedBillItem> {
   bool _cancelling = false;
 
   String _resolveTargetLabel() {
@@ -1481,21 +1545,23 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
   }
 
   Future<void> _cancelUnpaidBill() async {
-    if (_cancelling) return;
+    if (_cancelling) {
+      return;
+    }
 
     final bill = widget.bill;
     final customTitle = bill.title?.trim();
     final displayTitle = (customTitle != null && customTitle.isNotEmpty)
         ? customTitle
-        : _billTypeLabel(bill.type);
+        : monthlyBillTypeLabel(bill.type);
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel Unpaid Bill?'),
         content: Text(
-          'Cancel "$displayTitle" (৳${bill.amount.toStringAsFixed(0)}) for ${_resolveTargetLabel()}?\n\n'
-          'Note: Only unpaid bills with zero payment can be cancelled.',
+          'Cancel "$displayTitle" (৳${formatBillingAmount(bill.amount)}) for ${_resolveTargetLabel()}?\n\n'
+          'Note: Only unpaid bills with zero payment and no pending verification can be cancelled.',
         ),
         actions: [
           TextButton(
@@ -1513,18 +1579,16 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) {
+      return;
+    }
 
     setState(() => _cancelling = true);
 
     try {
-      await FirebaseFirestore.instance
-          .collection('monthlyBills')
-          .doc(bill.id)
-          .update({
-            'status': 'cancelled',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      await ref
+          .read(monthlyBillRepositoryProvider)
+          .cancelMonthlyBill(billId: bill.id);
 
       await AuditLoggerService.log(
         ownerId: widget.ownerId,
@@ -1533,28 +1597,24 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
         category: 'billing',
         actionTitle: 'Unpaid Bill Cancelled',
         details:
-            '$displayTitle (৳${bill.amount.toStringAsFixed(0)}) cancelled for ${_resolveTargetLabel()}.',
+            '$displayTitle (৳${formatBillingAmount(bill.amount)}) cancelled for ${_resolveTargetLabel()}.',
       );
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unpaid bill cancelled successfully.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+
+      GrihoFeedback.showSuccess(context, 'Unpaid bill cancelled successfully.');
       widget.onCancelled();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Cannot cancel bill: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, cleanBillingError(e));
     } finally {
-      if (mounted) setState(() => _cancelling = false);
+      if (mounted) {
+        setState(() => _cancelling = false);
+      }
     }
   }
 
@@ -1565,7 +1625,7 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
     final customTitle = bill.title?.trim();
     final displayTitle = (customTitle != null && customTitle.isNotEmpty)
         ? customTitle
-        : _billTypeLabel(bill.type);
+        : monthlyBillTypeLabel(bill.type);
 
     final canCancel =
         bill.type != MonthlyBillType.rent &&
@@ -1591,8 +1651,8 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  _billTypeIcon(bill.type),
-                  size: 20,
+                  monthlyBillTypeIcon(bill.type),
+                  size: 19,
                   color: theme.colorScheme.primary,
                 ),
               ),
@@ -1618,7 +1678,7 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
                     if (bill.isOverriddenByVariable) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Variable Override (Replaced Fixed ৳${bill.overriddenFromAmount?.toStringAsFixed(0) ?? ''})',
+                        'Variable Override (Replaced Fixed ৳${formatBillingAmount(bill.overriddenFromAmount)})',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.w700,
@@ -1633,13 +1693,13 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '৳${bill.amount.toStringAsFixed(2)}',
+                    '৳${formatBillingAmount(bill.amount)}',
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  _BillStatusChip(status: bill.effectiveStatus),
+                  BillingStatusChip(status: bill.effectiveStatus),
                 ],
               ),
             ],
@@ -1651,7 +1711,7 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
               child: TextButton.icon(
                 onPressed: _cancelling ? null : _cancelUnpaidBill,
                 icon: Icon(
-                  Icons.cancel_outlined,
+                  Iconsax.close_circle,
                   size: 16,
                   color: theme.colorScheme.error,
                 ),
@@ -1673,44 +1733,6 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
       ),
     );
   }
-
-  static IconData _billTypeIcon(MonthlyBillType type) {
-    switch (type) {
-      case MonthlyBillType.rent:
-        return Icons.house_outlined;
-      case MonthlyBillType.water:
-        return Icons.water_drop_outlined;
-      case MonthlyBillType.gas:
-        return Icons.local_fire_department_outlined;
-      case MonthlyBillType.garbage:
-        return Icons.delete_outline_rounded;
-      case MonthlyBillType.serviceCharge:
-        return Icons.build_outlined;
-      case MonthlyBillType.electricity:
-        return Icons.bolt_rounded;
-      case MonthlyBillType.other:
-        return Icons.receipt_long_outlined;
-    }
-  }
-
-  static String _billTypeLabel(MonthlyBillType type) {
-    switch (type) {
-      case MonthlyBillType.rent:
-        return 'House Rent';
-      case MonthlyBillType.water:
-        return 'Water Bill';
-      case MonthlyBillType.gas:
-        return 'Gas Bill';
-      case MonthlyBillType.garbage:
-        return 'Garbage Fee';
-      case MonthlyBillType.serviceCharge:
-        return 'Service Charge';
-      case MonthlyBillType.electricity:
-        return 'Electricity Bill';
-      case MonthlyBillType.other:
-        return 'Utility Bill';
-    }
-  }
 }
 
 // ============================================================================
@@ -1720,13 +1742,11 @@ class _DetailedBillItemState extends State<_DetailedBillItem> {
 class _BillingRuleCard extends ConsumerWidget {
   final BillingRule rule;
   final String ownerId;
-  final String propertyName;
   final _RuleMonthEvaluation evaluation;
 
   const _BillingRuleCard({
     required this.rule,
     required this.ownerId,
-    required this.propertyName,
     required this.evaluation,
   });
 
@@ -1734,7 +1754,7 @@ class _BillingRuleCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final status = _resolveRuleStatus(rule);
-    final chargeName = _chargeTypeLabel(rule.chargeType);
+    final chargeName = billingChargeTypeLabel(rule.chargeType);
     final isSynced = evaluation.isSyncedOrCovered;
     final isPending = evaluation.isPendingAction;
 
@@ -1747,20 +1767,12 @@ class _BillingRuleCard extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () async {
-          final result = await context.push(
+          final result = await context.push<bool>(
             RouteNames.editBillingRule,
             extra: rule,
           );
+          // EditBillingRuleScreen already logs the audit entry; just invalidate cache here.
           if (result == true) {
-            await AuditLoggerService.log(
-              ownerId: ownerId,
-              propertyId: rule.propertyId,
-              propertyName: propertyName,
-              category: 'billing',
-              actionTitle: 'Billing Rule Updated',
-              details:
-                  '$chargeName rule (৳${rule.amount.toStringAsFixed(0)}) was modified.',
-            );
             ref.invalidate(
               propertyBillingRulesProvider((
                 ownerId: ownerId,
@@ -1785,7 +1797,7 @@ class _BillingRuleCard extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      _chargeTypeIcon(rule.chargeType),
+                      billingChargeTypeIcon(rule.chargeType),
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
@@ -1823,14 +1835,14 @@ class _BillingRuleCard extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: _InfoItem(
-                      icon: Icons.payments_outlined,
+                      icon: Iconsax.wallet_3,
                       label: 'Amount',
-                      value: '৳${rule.amount.toStringAsFixed(2)}',
+                      value: '৳${formatBillingAmount(rule.amount)}',
                     ),
                   ),
                   Expanded(
                     child: _InfoItem(
-                      icon: Icons.repeat_rounded,
+                      icon: Iconsax.repeat,
                       label: 'Recurrence',
                       value: rule.valueType == BillingValueType.fixed
                           ? 'Fixed (Monthly)'
@@ -1844,14 +1856,14 @@ class _BillingRuleCard extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: _InfoItem(
-                      icon: Icons.account_tree_outlined,
+                      icon: Iconsax.hierarchy,
                       label: 'Scope',
                       value: rule.scopeType.name.toUpperCase(),
                     ),
                   ),
                   Expanded(
                     child: _InfoItem(
-                      icon: Icons.calendar_month_outlined,
+                      icon: Iconsax.calendar_1,
                       label: 'Effective From',
                       value:
                           '${rule.effectiveFrom.month}/${rule.effectiveFrom.year}',
@@ -1868,9 +1880,9 @@ class _BillingRuleCard extends ConsumerWidget {
                 ),
                 decoration: BoxDecoration(
                   color: isSynced
-                      ? Colors.green.withValues(alpha: 0.1)
+                      ? GrihoColors.emerald.withValues(alpha: 0.12)
                       : isPending
-                      ? Colors.orange.withValues(alpha: 0.12)
+                      ? GrihoColors.warning.withValues(alpha: 0.14)
                       : theme.colorScheme.surfaceContainerHighest.withValues(
                           alpha: 0.5,
                         ),
@@ -1880,15 +1892,15 @@ class _BillingRuleCard extends ConsumerWidget {
                   children: [
                     Icon(
                       isSynced
-                          ? Icons.verified_rounded
+                          ? Iconsax.verify
                           : isPending
-                          ? Icons.pending_actions_rounded
-                          : Icons.info_outline_rounded,
+                          ? Iconsax.clock
+                          : Iconsax.info_circle,
                       size: 16,
                       color: isSynced
-                          ? Colors.green.shade700
+                          ? GrihoColors.emerald
                           : isPending
-                          ? Colors.orange.shade800
+                          ? GrihoColors.warning
                           : theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 8),
@@ -1898,16 +1910,16 @@ class _BillingRuleCard extends ConsumerWidget {
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: isSynced
-                              ? Colors.green.shade800
+                              ? GrihoColors.emerald
                               : isPending
-                              ? Colors.orange.shade900
+                              ? GrihoColors.warning
                               : theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
                     Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
+                      Iconsax.arrow_right_3,
+                      size: 15,
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ],
@@ -1940,40 +1952,6 @@ class _BillingRuleCard extends ConsumerWidget {
     }
     return _RuleStatus.active;
   }
-
-  static String _chargeTypeLabel(BillingChargeType type) {
-    switch (type) {
-      case BillingChargeType.water:
-        return 'Water Bill';
-      case BillingChargeType.gas:
-        return 'Gas Bill';
-      case BillingChargeType.garbage:
-        return 'Garbage Collection';
-      case BillingChargeType.serviceCharge:
-        return 'Service Charge';
-      case BillingChargeType.electricity:
-        return 'Electricity Bill';
-      case BillingChargeType.other:
-        return 'Other Utility';
-    }
-  }
-
-  static IconData _chargeTypeIcon(BillingChargeType type) {
-    switch (type) {
-      case BillingChargeType.water:
-        return Icons.water_drop_outlined;
-      case BillingChargeType.gas:
-        return Icons.local_fire_department_outlined;
-      case BillingChargeType.garbage:
-        return Icons.delete_outline_rounded;
-      case BillingChargeType.serviceCharge:
-        return Icons.cleaning_services_outlined;
-      case BillingChargeType.electricity:
-        return Icons.bolt_rounded;
-      case BillingChargeType.other:
-        return Icons.receipt_long_outlined;
-    }
-  }
 }
 
 enum _RuleStatus { active, scheduled, historical, inactive }
@@ -1986,27 +1964,12 @@ class _RuleStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final String label;
-    final IconData icon;
-
-    switch (status) {
-      case _RuleStatus.active:
-        label = 'Active';
-        icon = Icons.check_circle_outline_rounded;
-        break;
-      case _RuleStatus.scheduled:
-        label = 'Scheduled';
-        icon = Icons.schedule_rounded;
-        break;
-      case _RuleStatus.historical:
-        label = 'Expired';
-        icon = Icons.history_rounded;
-        break;
-      case _RuleStatus.inactive:
-        label = 'Inactive';
-        icon = Icons.block_rounded;
-        break;
-    }
+    final (label, icon) = switch (status) {
+      _RuleStatus.active => ('Active', Iconsax.tick_circle),
+      _RuleStatus.scheduled => ('Scheduled', Iconsax.clock),
+      _RuleStatus.historical => ('Expired', Iconsax.timer_1),
+      _RuleStatus.inactive => ('Inactive', Iconsax.close_circle),
+    };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -2017,7 +1980,7 @@ class _RuleStatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14),
+          Icon(icon, size: 13),
           const SizedBox(width: 4),
           Text(
             label,
@@ -2026,58 +1989,6 @@ class _RuleStatusChip extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _BillStatusChip extends StatelessWidget {
-  final MonthlyBillStatus status;
-
-  const _BillStatusChip({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final Color bg;
-    final Color fg;
-
-    switch (status) {
-      case MonthlyBillStatus.paid:
-        bg = Colors.green.withValues(alpha: 0.15);
-        fg = Colors.green.shade800;
-        break;
-      case MonthlyBillStatus.partiallyPaid:
-        bg = Colors.amber.withValues(alpha: 0.2);
-        fg = Colors.amber.shade900;
-        break;
-      case MonthlyBillStatus.overdue:
-        bg = theme.colorScheme.errorContainer;
-        fg = theme.colorScheme.onErrorContainer;
-        break;
-      case MonthlyBillStatus.cancelled:
-        bg = theme.colorScheme.surfaceContainerHighest;
-        fg = theme.colorScheme.onSurfaceVariant;
-        break;
-      case MonthlyBillStatus.unpaid:
-        bg = Colors.orange.withValues(alpha: 0.15);
-        fg = Colors.orange.shade900;
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        status.name.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: fg,
-          fontWeight: FontWeight.w800,
-          fontSize: 10,
-        ),
       ),
     );
   }
@@ -2099,7 +2010,7 @@ class _InfoItem extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2120,126 +2031,6 @@ class _InfoItem extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              size: 48,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback? onRetry;
-
-  const _ErrorView({required this.message, this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.redAccent,
-            ),
-            const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
-            if (onRetry != null) ...[
-              const SizedBox(height: 16),
-              FilledButton(onPressed: onRetry, child: const Text('Retry')),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorCard({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            size: 40,
-            color: Colors.redAccent,
-          ),
-          const SizedBox(height: 12),
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
-          ),
-        ],
-      ),
     );
   }
 }

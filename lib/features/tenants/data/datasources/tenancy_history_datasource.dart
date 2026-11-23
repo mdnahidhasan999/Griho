@@ -1,6 +1,9 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/tenancy_history_model.dart';
+
+typedef HistoryJsonMap = Map<String, dynamic>;
 
 class TenancyHistoryDataSource {
   final FirebaseFirestore _firestore;
@@ -10,7 +13,7 @@ class TenancyHistoryDataSource {
 
   static const String _collectionName = 'tenancyHistories';
 
-  CollectionReference<Map<String, dynamic>> get _collection =>
+  CollectionReference<HistoryJsonMap> get _collection =>
       _firestore.collection(_collectionName);
 
   // ========================================================================
@@ -36,6 +39,7 @@ class TenancyHistoryDataSource {
         .where('ownerId', isEqualTo: normalizedOwnerId)
         .where('tenantId', isEqualTo: normalizedTenantId)
         .orderBy('endedAt', descending: true)
+        .limit(50)
         .get();
 
     return snapshot.docs.map(TenancyHistoryModel.fromFirestore).toList();
@@ -64,6 +68,7 @@ class TenancyHistoryDataSource {
         .where('ownerId', isEqualTo: normalizedOwnerId)
         .where('unitId', isEqualTo: normalizedUnitId)
         .orderBy('endedAt', descending: true)
+        .limit(50)
         .get();
 
     return snapshot.docs.map(TenancyHistoryModel.fromFirestore).toList();
@@ -85,6 +90,7 @@ class TenancyHistoryDataSource {
     final snapshot = await _collection
         .where('tenantUserId', isEqualTo: normalizedTenantUserId)
         .orderBy('endedAt', descending: true)
+        .limit(50)
         .get();
 
     return snapshot.docs.map(TenancyHistoryModel.fromFirestore).toList();

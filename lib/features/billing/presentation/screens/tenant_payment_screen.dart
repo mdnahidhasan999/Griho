@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/services/firebase_storage_service.dart';
 import '../../../../core/services/pdf_receipt_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -15,9 +17,12 @@ import '../../data/datasources/payment_workflow_datasource.dart';
 import '../../domain/entities/monthly_bill.dart';
 import '../providers/monthly_bill_provider.dart';
 import '../providers/payment_workflow_provider.dart';
+import '../widgets/billing_ui_helpers.dart';
 
-typedef JsonMap = Map<String, dynamic>;
-typedef _DocList = List<QueryDocumentSnapshot>;
+typedef _JsonMap = Map<String, dynamic>;
+typedef _DocSnapshot = QueryDocumentSnapshot<_JsonMap>;
+typedef _DocList = List<_DocSnapshot>;
+
 typedef _BillList = List<MonthlyBill>;
 
 class TenantPaymentScreen extends ConsumerStatefulWidget {
@@ -34,7 +39,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   final Set<String> _expandedPaymentGroupIds = <String>{};
 
   final Map<String, TextEditingController> _amountControllers =
-      <String, TextEditingController>{};
+  <String, TextEditingController>{};
 
   final _referenceController = TextEditingController();
   final _noteController = TextEditingController();
@@ -49,22 +54,9 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     for (final controller in _amountControllers.values) {
       controller.dispose();
     }
-
     _referenceController.dispose();
     _noteController.dispose();
-
     super.dispose();
-  }
-
-  JsonMap _docData(QueryDocumentSnapshot doc) {
-    final raw = doc.data();
-    if (raw is JsonMap) {
-      return raw;
-    }
-    if (raw is Map) {
-      return JsonMap.from(raw);
-    }
-    return <String, dynamic>{};
   }
 
   double _remaining(MonthlyBill bill) {
@@ -73,46 +65,22 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 
   bool _isPayable(MonthlyBill bill) {
-    if (bill.status == MonthlyBillStatus.paid ||
-        bill.status == MonthlyBillStatus.cancelled ||
-        _remaining(bill) <= 0.001) {
-      return false;
-    }
-
-    return true;
-  }
-
-  String _money(double amount) {
-    return amount.toStringAsFixed(amount == amount.roundToDouble() ? 0 : 2);
+    return bill.status != MonthlyBillStatus.paid &&
+        bill.status != MonthlyBillStatus.cancelled &&
+        _remaining(bill) > 0.001;
   }
 
   String _billTitle(MonthlyBill bill) {
     if (bill.title != null && bill.title!.trim().isNotEmpty) {
       return bill.title!.trim();
     }
-
-    switch (bill.type) {
-      case MonthlyBillType.rent:
-        return 'House Rent';
-      case MonthlyBillType.water:
-        return 'Water Bill';
-      case MonthlyBillType.gas:
-        return 'Gas Bill';
-      case MonthlyBillType.garbage:
-        return 'Garbage Bill';
-      case MonthlyBillType.serviceCharge:
-        return 'Service Charge';
-      case MonthlyBillType.electricity:
-        return 'Electricity Bill';
-      case MonthlyBillType.other:
-        return 'Other Charge';
-    }
+    return monthlyBillTypeLabel(bill.type);
   }
 
   TextEditingController _amountControllerFor(MonthlyBill bill) {
     return _amountControllers.putIfAbsent(
       bill.id,
-      () => TextEditingController(text: _remaining(bill).toStringAsFixed(2)),
+          () => TextEditingController(text: _remaining(bill).toStringAsFixed(2)),
     );
   }
 
@@ -127,7 +95,9 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 
   Future<void> _pickProofImage() async {
-    if (_submitting || kIsWeb) return;
+    if (_submitting || kIsWeb) {
+      return;
+    }
     try {
       final picked = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -136,22 +106,28 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
         imageQuality: 85,
       );
       if (picked != null && mounted) {
-        setState(() {
-          _proofImageFile = File(picked.path);
-        });
+        setState(() => _proofImageFile = File(picked.path));
       }
     } catch (e) {
-      _message('Could not select image: $e');
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Could not select image: $e');
     }
   }
 
   Future<void> _submit(List<MonthlyBill> payableBills, String tenantUid) async {
+    FocusScope.of(context).unfocus();
+
     final selectedBills = payableBills
         .where((bill) => _selectedBillIds.contains(bill.id))
         .toList();
 
     if (selectedBills.isEmpty) {
-      _message('Please select at least one bill to pay.');
+      GrihoFeedback.showWarning(
+        context,
+        'Please select at least one bill to pay.',
+      );
       return;
     }
 
@@ -162,12 +138,16 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       final amount = _enteredAmount(bill);
 
       if (!amount.isFinite || amount <= 0) {
-        _message('Enter a valid payment amount for ${_billTitle(bill)}.');
+        GrihoFeedback.showError(
+          context,
+          'Enter a valid payment amount for ${_billTitle(bill)}.',
+        );
         return;
       }
 
       if (amount > _remaining(bill) + 0.001) {
-        _message(
+        GrihoFeedback.showError(
+          context,
           'Payment cannot exceed the remaining balance for ${_billTitle(bill)}.',
         );
         return;
@@ -178,15 +158,15 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     }
 
     final reference = _referenceController.text.trim();
-
     if (_method != PaymentMethod.cash && reference.isEmpty) {
-      _message('Please enter the transaction/reference ID.');
+      GrihoFeedback.showError(
+        context,
+        'Please enter the transaction/reference ID.',
+      );
       return;
     }
 
-    setState(() {
-      _submitting = true;
-    });
+    setState(() => _submitting = true);
 
     try {
       String? uploadedProofUrl;
@@ -203,63 +183,120 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       final createdPayments = await ref
           .read(paymentWorkflowDataSourceProvider)
           .submitPayments(
-            amountsByBillId: amountsByBillId,
-            collectionsByBillId: collectionsByBillId,
-            method: _method,
-            reference: reference.isEmpty ? null : reference,
-            note: _noteController.text.trim().isEmpty
-                ? null
-                : _noteController.text.trim(),
-            proofUrl: uploadedProofUrl,
-          );
+        amountsByBillId: amountsByBillId,
+        collectionsByBillId: collectionsByBillId,
+        method: _method,
+        reference: reference.isEmpty ? null : reference,
+        note: _noteController.text.trim().isEmpty
+            ? null
+            : _noteController.text.trim(),
+        proofUrl: uploadedProofUrl,
+      );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _selectedBillIds.clear();
         _proofImageFile = null;
-
-        for (final bill in selectedBills) {
-          _amountControllers[bill.id]?.text = _remaining(
-            bill,
-          ).toStringAsFixed(2);
-        }
-
         _referenceController.clear();
         _noteController.clear();
       });
 
-      _message(
-        'Successfully submitted ${createdPayments.length} payment request(s). '
-        'They are pending owner verification.',
+      GrihoFeedback.showSuccess(
+        context,
+        'Submitted ${createdPayments.length} payment request(s). Pending owner verification.',
       );
 
-      ref.invalidate(tenantPaymentTransactionsProvider);
+      // Note: tenantPaymentTransactionsProvider is a live stream and updates automatically.
       ref.invalidate(currentTenantMonthlyBillsProvider);
       if (tenantUid.isNotEmpty) {
         ref.invalidate(tenantMonthlyBillHistoryProvider(tenantUid));
       }
     } catch (error) {
-      if (!mounted) return;
-
-      _message('Unable to submit payment: ${_friendlyError(error)}');
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(
+        context,
+        'Unable to submit payment: ${cleanBillingError(error)}',
+      );
     } finally {
       if (mounted) {
-        setState(() {
-          _submitting = false;
-        });
+        setState(() => _submitting = false);
       }
     }
   }
 
-  String _friendlyError(Object error) {
-    return error.toString().replaceFirst('Bad state: ', '');
-  }
+  // ------------------------------------------------------------
+  // MONTHLY INVOICE PDF GENERATOR (FOR OUTSTANDING MONTH GROUP)
+  // ------------------------------------------------------------
 
-  void _message(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+  Future<void> _exportMonthInvoicePdf(
+      _MonthlyPayableGroup group, {
+        required bool share,
+      }) async {
+    try {
+      final dashboard = ref.read(tenantDashboardProvider).value;
+      final tenant = dashboard?.tenant;
+      final property = dashboard?.currentProperty;
+      final periodLabel = formatBillingMonthYear(group.billingPeriodStart);
+
+      final items = group.bills
+          .map(
+            (bill) => ReceiptLineItem(
+          title: _billTitle(bill),
+          periodLabel: periodLabel,
+          amount: bill.amount,
+        ),
+      )
+          .toList();
+
+      final paidAmount = group.bills.fold<double>(
+        0.0,
+            (sum, bill) => sum + bill.paidAmount,
+      );
+      final totalDue = group.bills.fold<double>(
+        0.0,
+            (sum, bill) => sum + _remaining(bill),
+      );
+      final isOverdue = group.bills.any((b) => b.isOverdue);
+
+      final invoiceNo =
+          'INV-${group.billingPeriodStart.year}${group.billingPeriodStart.month.toString().padLeft(2, '0')}';
+
+      final invoiceData = MonthlyInvoicePdfData(
+        invoiceNumber: invoiceNo,
+        billingPeriodLabel: periodLabel,
+        status: totalDue <= 0.001
+            ? 'paid'
+            : isOverdue
+            ? 'overdue'
+            : paidAmount > 0
+            ? 'partiallyPaid'
+            : 'unpaid',
+        dueDate: group.dueDate,
+        tenantName: dashboard?.displayName ?? tenant?.name ?? 'Resident',
+        tenantPhone: tenant?.phone,
+        propertyName: dashboard?.currentPropertyName ?? 'Property',
+        propertyAddress: property?.address,
+        unitName: dashboard?.currentUnitDisplayName ?? 'Unit',
+        paidAmount: paidAmount,
+        items: items,
+      );
+
+      if (share) {
+        await PdfReceiptService.shareInvoicePdf(invoiceData);
+      } else {
+        await PdfReceiptService.previewOrPrintInvoice(invoiceData);
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Could not generate invoice PDF: $e');
+    }
   }
 
   // ------------------------------------------------------------
@@ -267,26 +304,26 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   // ------------------------------------------------------------
 
   PaymentReceiptData _buildReceiptData(
-    _PaymentGroup group,
-    List<MonthlyBill> allBills,
-  ) {
+      _PaymentGroup group,
+      List<MonthlyBill> allBills,
+      ) {
     final profile = ref.read(currentUserProfileProvider).value;
     final dashboard = ref.read(tenantDashboardProvider).value;
 
-    final firstData = _docData(group.payments.first);
+    final firstData = group.payments.first.data();
     final issuedAt = firstData['createdAt'] is Timestamp
         ? (firstData['createdAt'] as Timestamp).toDate()
         : DateTime.now();
 
     final items = group.payments.map((doc) {
-      final data = _docData(doc);
+      final data = doc.data();
       final amount = (data['amount'] is num)
           ? (data['amount'] as num).toDouble()
           : 0.0;
       final title = _paymentBillTitle(data, allBills);
       final periodRaw = data['billingPeriodStart'];
       final periodLabel = periodRaw is Timestamp
-          ? _formatMonthYear(periodRaw.toDate())
+          ? formatBillingMonthYear(periodRaw.toDate())
           : 'Monthly Charge';
 
       return ReceiptLineItem(
@@ -310,13 +347,13 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
       tenantGrihoId: (firstData['grihoId'] ?? profile?.publicId ?? '')
           .toString(),
       propertyName:
-          (firstData['propertyName'] ??
-                  dashboard?.currentPropertyName ??
-                  'Property')
-              .toString(),
+      (firstData['propertyName'] ??
+          dashboard?.currentPropertyName ??
+          'Property')
+          .toString(),
       unitName:
-          (firstData['unitName'] ?? dashboard?.currentUnitDisplayName ?? 'Unit')
-              .toString(),
+      (firstData['unitName'] ?? dashboard?.currentUnitDisplayName ?? 'Unit')
+          .toString(),
       paymentMethod: group.method,
       referenceNumber: group.reference,
       note: (firstData['note'] ?? '').toString(),
@@ -325,10 +362,10 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 
   Future<void> _openPdfReceipt(
-    _PaymentGroup group,
-    List<MonthlyBill> allBills, {
-    required bool share,
-  }) async {
+      _PaymentGroup group,
+      List<MonthlyBill> allBills, {
+        required bool share,
+      }) async {
     try {
       final receiptData = _buildReceiptData(group, allBills);
       if (share) {
@@ -337,7 +374,10 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
         await PdfReceiptService.previewOrPrintReceipt(receiptData);
       }
     } catch (e) {
-      _message('Could not generate PDF receipt: $e');
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Could not generate PDF receipt: $e');
     }
   }
 
@@ -349,37 +389,35 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     final grouped = <String, _DocList>{};
 
     for (final doc in docs) {
-      final data = _docData(doc);
+      final data = doc.data();
       final batchId = (data['batchId'] ?? '').toString().trim();
       final groupKey = batchId.isNotEmpty ? batchId : 'legacy_${doc.id}';
-
-      grouped.putIfAbsent(groupKey, () => <QueryDocumentSnapshot>[]).add(doc);
+      grouped.putIfAbsent(groupKey, () => []).add(doc);
     }
 
     final result = grouped.entries.map((entry) {
-      final payments = entry.value;
-
-      payments.sort((a, b) {
-        return _createdAtMillis(
-          _docData(b),
-        ).compareTo(_createdAtMillis(_docData(a)));
-      });
+      final payments = entry.value
+        ..sort(
+              (a, b) => _createdAtMillisFromValue(
+            b.data()['createdAt'],
+          ).compareTo(_createdAtMillisFromValue(a.data()['createdAt'])),
+        );
 
       final totalAmount = payments.fold<double>(0.0, (total, doc) {
-        final data = _docData(doc);
-        final amount = data['amount'];
+        final amount = doc.data()['amount'];
         return total + (amount is num ? amount.toDouble() : 0.0);
       });
 
       final statuses = payments
           .map(
-            (doc) =>
-                (_docData(doc)['status'] ?? 'pending').toString().toLowerCase(),
-          )
+            (doc) => (doc.data()['status'] ?? 'pending')
+            .toString()
+            .toLowerCase(),
+      )
           .toSet();
 
       final overallStatus = _resolveGroupStatus(statuses);
-      final firstData = _docData(payments.first);
+      final firstData = payments.first.data();
 
       return _PaymentGroup(
         id: entry.key,
@@ -393,16 +431,12 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     }).toList();
 
     result.sort(
-      (a, b) => _createdAtMillisFromValue(
+          (a, b) => _createdAtMillisFromValue(
         b.createdAt,
       ).compareTo(_createdAtMillisFromValue(a.createdAt)),
     );
 
     return result;
-  }
-
-  int _createdAtMillis(JsonMap data) {
-    return _createdAtMillisFromValue(data['createdAt']);
   }
 
   int _createdAtMillisFromValue(dynamic value) {
@@ -416,22 +450,32 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   }
 
   String _resolveGroupStatus(Set<String> statuses) {
-    if (statuses.isEmpty) return 'pending';
-    if (statuses.length == 1) return statuses.first;
-    if (statuses.every((status) => status == 'confirmed')) return 'confirmed';
-    if (statuses.every((status) => status == 'rejected')) return 'rejected';
-    if (statuses.contains('pending')) return 'pending';
+    if (statuses.isEmpty) {
+      return 'pending';
+    }
+    if (statuses.length == 1) {
+      return statuses.first;
+    }
+    if (statuses.every((s) => s == 'confirmed')) {
+      return 'confirmed';
+    }
+    if (statuses.every((s) => s == 'rejected')) {
+      return 'rejected';
+    }
+    if (statuses.contains('pending')) {
+      return 'pending';
+    }
     return 'partially processed';
   }
 
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'confirmed':
-        return Colors.green;
+        return GrihoColors.emerald;
       case 'rejected':
-        return Colors.red;
+        return GrihoColors.error;
       case 'pending':
-        return Colors.orange;
+        return GrihoColors.warning;
       default:
         return Colors.blueGrey;
     }
@@ -440,17 +484,17 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   IconData _statusIcon(String status) {
     switch (status.toLowerCase()) {
       case 'confirmed':
-        return Icons.check_circle_rounded;
+        return Iconsax.tick_circle;
       case 'rejected':
-        return Icons.cancel_rounded;
+        return Iconsax.close_circle;
       case 'pending':
-        return Icons.hourglass_top_rounded;
+        return Iconsax.clock;
       default:
-        return Icons.info_outline_rounded;
+        return Iconsax.info_circle;
     }
   }
 
-  String _paymentBillTitle(JsonMap data, List<MonthlyBill> bills) {
+  String _paymentBillTitle(Map<String, dynamic> data, List<MonthlyBill> bills) {
     final billId = (data['billId'] ?? '').toString();
     final collection = (data['billCollection'] ?? 'monthlyBills').toString();
 
@@ -463,8 +507,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     if (collection == 'monthlyRents') {
       return 'House Rent';
     }
-
-    return 'Bill';
+    return (data['billTitle'] ?? 'Utility Bill').toString();
   }
 
   // ------------------------------------------------------------
@@ -472,30 +515,27 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   // ------------------------------------------------------------
 
   Widget _buildPaymentHistory(
-    List<MonthlyBill> bills,
-    AsyncValue<QuerySnapshot> paymentHistory,
-  ) {
+      List<MonthlyBill> bills,
+      AsyncValue<PaymentQuerySnapshot> paymentHistory,
+      ) {
     final theme = Theme.of(context);
 
     return paymentHistory.when(
-      loading: () => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: CircularProgressIndicator(),
-        ),
+      loading: () => const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(child: CircularProgressIndicator()),
       ),
       error: (error, _) => Text('Unable to load payment history: $error'),
       data: (snapshot) {
-        final docs = snapshot.docs.toList();
-        final groups = _groupPayments(docs);
+        final groups = _groupPayments(snapshot.docs.toList());
 
         if (groups.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(24),
-            alignment: Alignment.center,
-            child: Text(
-              'No payment submissions yet.',
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: GrihoStatusState(
+              icon: Iconsax.receipt_item,
+              title: 'No Payment Submissions',
+              subtitle: 'Your submitted payments and receipts will appear here.',
             ),
           );
         }
@@ -509,7 +549,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
+                color: theme.colorScheme.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: theme.colorScheme.outlineVariant),
               ),
@@ -535,9 +575,13 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                         children: [
                           CircleAvatar(
                             backgroundColor: statusColor.withValues(
-                              alpha: 0.15,
+                              alpha: 0.14,
                             ),
-                            child: Icon(statusIcon, color: statusColor),
+                            child: Icon(
+                              statusIcon,
+                              color: statusColor,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -548,11 +592,11 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        '৳${_money(group.totalAmount)}',
+                                        '৳${formatBillingAmount(group.totalAmount)}',
                                         style: theme.textTheme.titleMedium
                                             ?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                     _StatusBadge(
@@ -564,8 +608,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 const SizedBox(height: 6),
                                 Text(
                                   '${group.payments.length} bill(s) • '
-                                  'Method: ${group.method.toUpperCase()}'
-                                  '${group.reference.isNotEmpty ? ' • Ref: ${group.reference}' : ''}',
+                                      'Method: ${group.method.toUpperCase()}'
+                                      '${group.reference.isNotEmpty ? ' • Ref: ${group.reference}' : ''}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
@@ -576,8 +620,9 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                           const SizedBox(width: 8),
                           Icon(
                             isExpanded
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
+                                ? Iconsax.arrow_up_2
+                                : Iconsax.arrow_down_1,
+                            size: 18,
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ],
@@ -600,7 +645,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 ),
                               ),
                               Text(
-                                '৳${_money(group.totalAmount)}',
+                                '৳${formatBillingAmount(group.totalAmount)}',
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: theme.colorScheme.primary,
@@ -609,7 +654,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          // PDF Money Receipt Buttons
                           Row(
                             children: [
                               Expanded(
@@ -620,8 +664,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                     share: false,
                                   ),
                                   icon: const Icon(
-                                    Icons.picture_as_pdf_rounded,
-                                    size: 18,
+                                    Iconsax.document_text,
+                                    size: 17,
                                   ),
                                   label: const Text('PDF Receipt'),
                                 ),
@@ -635,8 +679,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                     share: true,
                                   ),
                                   icon: const Icon(
-                                    Icons.share_rounded,
-                                    size: 18,
+                                    Iconsax.export_3,
+                                    size: 17,
                                   ),
                                   label: const Text('Share Receipt'),
                                 ),
@@ -655,7 +699,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                           ),
                           const SizedBox(height: 8),
                           ...group.payments.map((paymentDoc) {
-                            final data = _docData(paymentDoc);
+                            final data = paymentDoc.data();
                             final amount = data['amount'];
                             final paidAmount = amount is num
                                 ? amount.toDouble()
@@ -665,9 +709,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 .toLowerCase();
                             final billStatusColor = _statusColor(billStatus);
                             final billTitle = _paymentBillTitle(data, bills);
-                            final collection =
-                                (data['billCollection'] ?? 'monthlyBills')
-                                    .toString();
                             final reason = (data['rejectionReason'] ?? '')
                                 .toString();
 
@@ -689,40 +730,33 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                           billTitle,
                                           style: theme.textTheme.bodyMedium
                                               ?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                       Text(
-                                        '৳${_money(paidAmount)}',
+                                        '৳${formatBillingAmount(paidAmount)}',
                                         style: theme.textTheme.bodyMedium
                                             ?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'Collection: $collection',
-                                          style: theme.textTheme.bodySmall,
-                                        ),
-                                      ),
-                                      _StatusBadge(
-                                        status: billStatus,
-                                        color: billStatusColor,
-                                      ),
-                                    ],
+                                  const SizedBox(height: 6),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: _StatusBadge(
+                                      status: billStatus,
+                                      color: billStatusColor,
+                                    ),
                                   ),
                                   if (reason.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     Text(
                                       'Rejection Reason: $reason',
                                       style: const TextStyle(
-                                        color: Colors.red,
+                                        color: GrihoColors.error,
                                         fontSize: 12,
                                       ),
                                     ),
@@ -750,7 +784,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     final firebaseUser = ref.watch(currentFirebaseUserProvider);
     final uid = firebaseUser?.uid.trim() ?? '';
 
@@ -766,32 +799,30 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
     if (isInitialLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Property Payments',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
+        appBar: AppBar(title: const Text('Property Payments')),
+        body: const GrihoLoadingView(message: 'Loading your bills...'),
       );
     }
 
     if (currentBillsAsync.hasError && !currentBillsAsync.hasValue) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Property Payments',
-            style: TextStyle(fontWeight: FontWeight.bold),
+        appBar: AppBar(title: const Text('Property Payments')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load bills',
+              subtitle: currentBillsAsync.error.toString(),
+              actionLabel: 'Retry',
+              onAction: () {
+                ref.invalidate(currentTenantMonthlyBillsProvider);
+                if (uid.isNotEmpty) {
+                  ref.invalidate(tenantMonthlyBillHistoryProvider(uid));
+                }
+              },
+            ),
           ),
-        ),
-        body: _ErrorState(
-          message: 'Unable to load your bills: ${currentBillsAsync.error}',
-          onRetry: () {
-            ref.invalidate(currentTenantMonthlyBillsProvider);
-            if (uid.isNotEmpty) {
-              ref.invalidate(tenantMonthlyBillHistoryProvider(uid));
-            }
-          },
         ),
       );
     }
@@ -808,7 +839,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     final payableBills = allBills.where(_isPayable).toList();
 
     _selectedBillIds.removeWhere(
-      (id) => !payableBills.any((bill) => bill.id == id),
+          (id) => !payableBills.any((bill) => bill.id == id),
     );
 
     for (final bill in payableBills) {
@@ -823,359 +854,285 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     }
 
     final monthlyGroups =
-        monthlyGroupsMap.entries.map((entry) {
-          final billsInMonth = entry.value;
+    monthlyGroupsMap.entries.map((entry) {
+      final billsInMonth = entry.value
+        ..sort((a, b) {
+          final isRentA = a.type == MonthlyBillType.rent ? 0 : 1;
+          final isRentB = b.type == MonthlyBillType.rent ? 0 : 1;
+          if (isRentA != isRentB) {
+            return isRentA.compareTo(isRentB);
+          }
+          return a.type.name.compareTo(b.type.name);
+        });
 
-          billsInMonth.sort((a, b) {
-            final isRentA = a.type == MonthlyBillType.rent ? 0 : 1;
-            final isRentB = b.type == MonthlyBillType.rent ? 0 : 1;
-            if (isRentA != isRentB) return isRentA.compareTo(isRentB);
-            return a.type.name.compareTo(b.type.name);
-          });
-
-          return _MonthlyPayableGroup(
-            periodKey: entry.key,
-            billingPeriodStart: billsInMonth.first.billingPeriodStart,
-            dueDate: billsInMonth.first.dueDate,
-            bills: billsInMonth,
-          );
-        }).toList()..sort(
+      return _MonthlyPayableGroup(
+        periodKey: entry.key,
+        billingPeriodStart: billsInMonth.first.billingPeriodStart,
+        dueDate: billsInMonth.first.dueDate,
+        bills: billsInMonth,
+      );
+    }).toList()..sort(
           (a, b) => a.billingPeriodStart.compareTo(b.billingPeriodStart),
-        );
+    );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Property Payments',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(
-                  alpha: 0.4,
+      backgroundColor: theme.colorScheme.surface,
+      appBar: AppBar(title: const Text('Property Payments')),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(currentTenantMonthlyBillsProvider);
+          if (uid.isNotEmpty) {
+            ref.invalidate(tenantMonthlyBillHistoryProvider(uid));
+          }
+          await ref.read(currentTenantMonthlyBillsProvider.future);
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.35,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Iconsax.info_circle,
+                      color: theme.colorScheme.primary,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Smart Bill & Rent Payment',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Select overdue bills, current month charges, or upcoming invoices below. You can pay partial or full amounts and download PDF invoices.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    color: theme.colorScheme.primary,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Smart Bill & Rent Payment',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Select previous overdue bills, current month charges, or upcoming invoices below. You can pay partial or full amounts.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Outstanding Invoices',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (payableBills.isNotEmpty)
+                    TextButton(
+                      onPressed: _submitting
+                          ? null
+                          : () {
+                        setState(() {
+                          if (_selectedBillIds.length ==
+                              payableBills.length) {
+                            _selectedBillIds.clear();
+                          } else {
+                            _selectedBillIds
+                              ..clear()
+                              ..addAll(
+                                payableBills.map((bill) => bill.id),
+                              );
+                            _expandedMonthKeys.addAll(
+                              monthlyGroups.map((g) => g.periodKey),
+                            );
+                          }
+                        });
+                      },
+                      child: Text(
+                        _selectedBillIds.length == payableBills.length
+                            ? 'Deselect All'
+                            : 'Select All',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                 ],
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Outstanding Invoices',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 8),
+              if (payableBills.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: GrihoStatusState(
+                    icon: Iconsax.tick_circle,
+                    title: 'All Caught Up!',
+                    subtitle: 'No outstanding bills or rent found.',
                   ),
-                ),
-                if (payableBills.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: _submitting
-                        ? null
-                        : () {
-                            setState(() {
-                              if (_selectedBillIds.length ==
-                                  payableBills.length) {
-                                _selectedBillIds.clear();
-                              } else {
-                                _selectedBillIds
-                                  ..clear()
-                                  ..addAll(payableBills.map((bill) => bill.id));
-                                _expandedMonthKeys.addAll(
-                                  monthlyGroups.map((g) => g.periodKey),
-                                );
-                              }
-                            });
-                          },
-                    icon: Icon(
-                      _selectedBillIds.length == payableBills.length
-                          ? Icons.deselect_rounded
-                          : Icons.select_all_rounded,
-                      size: 18,
-                    ),
-                    label: Text(
-                      _selectedBillIds.length == payableBills.length
-                          ? 'Deselect All'
-                          : 'Select All',
-                    ),
-                  ),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            if (payableBills.isEmpty)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
-                  child: Column(
+                )
+              else ...[
+                ...monthlyGroups.map(_buildMonthCollapsibleCard),
+                const SizedBox(height: 12),
+                if (_selectedBillIds.isNotEmpty)
+                  GrihoSectionCard(
+                    title: 'Payment Summary & Method',
+                    icon: Iconsax.wallet_3,
                     children: [
-                      Icon(
-                        Icons.check_circle_outline_rounded,
-                        size: 48,
-                        color: Colors.green,
+                      _InfoRow(
+                        label: 'Selected Charges Count',
+                        value: '${_selectedBillIds.length}',
                       ),
-                      SizedBox(height: 12),
-                      Text(
-                        'All caught up! No outstanding bills or rent found.',
-                        style: TextStyle(fontWeight: FontWeight.w500),
+                      const SizedBox(height: 6),
+                      _InfoRow(
+                        label: 'Total Payable Amount',
+                        value:
+                        '৳${formatBillingAmount(_selectedTotal(payableBills))}',
+                        isHighlight: true,
+                      ),
+                      const SizedBox(height: 18),
+                      DropdownButtonFormField<PaymentMethod>(
+                        initialValue: _method,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Method',
+                          prefixIcon: Icon(
+                            Iconsax.wallet_3,
+                            color: GrihoColors.emerald,
+                            size: 19,
+                          ),
+                        ),
+                        items: PaymentMethod.values.map((method) {
+                          return DropdownMenuItem<PaymentMethod>(
+                            value: method,
+                            child: Text(_methodLabel(method)),
+                          );
+                        }).toList(),
+                        onChanged: _submitting
+                            ? null
+                            : (value) {
+                          if (value != null) {
+                            setState(() => _method = value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _referenceController,
+                        enabled: !_submitting,
+                        decoration: InputDecoration(
+                          labelText: _method == PaymentMethod.cash
+                              ? 'Receipt / Reference Number (Optional)'
+                              : 'Transaction ID / TrxID *',
+                          hintText: _method == PaymentMethod.bkash
+                              ? 'e.g. 9H74X... (bKash TrxID)'
+                              : _method == PaymentMethod.nagad
+                              ? 'e.g. NAGAD1234...'
+                              : 'Enter transaction reference',
+                          prefixIcon: const Icon(
+                            Iconsax.receipt_item,
+                            color: GrihoColors.emerald,
+                            size: 19,
+                          ),
+                        ),
+                      ),
+                      if (!kIsWeb) ...[
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _submitting ? null : _pickProofImage,
+                                icon: const Icon(Iconsax.gallery, size: 17),
+                                label: Text(
+                                  _proofImageFile == null
+                                      ? 'Attach Receipt Screenshot (Optional)'
+                                      : 'Screenshot Attached',
+                                ),
+                              ),
+                            ),
+                            if (_proofImageFile != null) ...[
+                              const SizedBox(width: 8),
+                              IconButton(
+                                tooltip: 'Remove screenshot',
+                                onPressed: _submitting
+                                    ? null
+                                    : () =>
+                                    setState(() => _proofImageFile = null),
+                                icon: const Icon(
+                                  Iconsax.close_circle,
+                                  color: GrihoColors.error,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _noteController,
+                        enabled: !_submitting,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Note for Owner (Optional)',
+                          hintText:
+                          'Add any details regarding this payment...',
+                          prefixIcon: Icon(
+                            Iconsax.edit_2,
+                            color: GrihoColors.emerald,
+                            size: 19,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      GrihoPrimaryButton(
+                        label: _submitting
+                            ? 'Submitting Payments...'
+                            : 'Submit All Selected Payments',
+                        icon: Iconsax.wallet_check,
+                        isLoading: _submitting,
+                        onPressed: () => _submit(payableBills, uid),
                       ),
                     ],
                   ),
+              ],
+              const SizedBox(height: 28),
+              Text(
+                'Payment History & Submissions',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
-              )
-            else ...[
-              ...monthlyGroups.map(_buildMonthCollapsibleCard),
-
-              const SizedBox(height: 12),
-
-              if (_selectedBillIds.isNotEmpty)
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: theme.colorScheme.outlineVariant),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Payment Summary & Method',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Divider(height: 20),
-                        _InfoRow(
-                          label: 'Selected Charges Count',
-                          value: '${_selectedBillIds.length}',
-                        ),
-                        const SizedBox(height: 6),
-                        _InfoRow(
-                          label: 'Total Payable Amount',
-                          value: '৳${_money(_selectedTotal(payableBills))}',
-                          isHighlight: true,
-                        ),
-                        const SizedBox(height: 20),
-                        DropdownButtonFormField<PaymentMethod>(
-                          initialValue: _method,
-                          decoration: InputDecoration(
-                            labelText: 'Payment Method',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon: const Icon(
-                              Icons.account_balance_wallet_rounded,
-                            ),
-                            isDense: true,
-                          ),
-                          items: PaymentMethod.values.map((method) {
-                            return DropdownMenuItem<PaymentMethod>(
-                              value: method,
-                              child: Text(_methodLabel(method)),
-                            );
-                          }).toList(),
-                          onChanged: _submitting
-                              ? null
-                              : (value) {
-                                  if (value != null) {
-                                    setState(() {
-                                      _method = value;
-                                    });
-                                  }
-                                },
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _referenceController,
-                          enabled: !_submitting,
-                          decoration: InputDecoration(
-                            labelText: _method == PaymentMethod.cash
-                                ? 'Receipt / Reference Number (Optional)'
-                                : 'Transaction ID / TrxID *',
-                            hintText: _method == PaymentMethod.bkash
-                                ? 'e.g. 9H74X... (bKash TrxID)'
-                                : _method == PaymentMethod.nagad
-                                ? 'e.g. NAGAD1234...'
-                                : 'Enter transaction reference',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon: const Icon(Icons.receipt_long_rounded),
-                            isDense: true,
-                          ),
-                        ),
-                        if (!kIsWeb) ...[
-                          const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _submitting
-                                      ? null
-                                      : _pickProofImage,
-                                  icon: const Icon(
-                                    Icons.attach_file_rounded,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    _proofImageFile == null
-                                        ? 'Attach Receipt Screenshot (Optional)'
-                                        : 'Screenshot Attached',
-                                  ),
-                                ),
-                              ),
-                              if (_proofImageFile != null) ...[
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  tooltip: 'Remove screenshot',
-                                  onPressed: _submitting
-                                      ? null
-                                      : () => setState(
-                                          () => _proofImageFile = null,
-                                        ),
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _noteController,
-                          enabled: !_submitting,
-                          maxLines: 2,
-                          decoration: InputDecoration(
-                            labelText: 'Note for Owner (Optional)',
-                            hintText:
-                                'Add any details regarding this payment...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon: const Icon(Icons.note_alt_rounded),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: FilledButton(
-                            onPressed: _submitting
-                                ? null
-                                : () => _submit(payableBills, uid),
-                            style: FilledButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (_submitting) ...[
-                                  const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                ] else ...[
-                                  const Icon(Icons.send_rounded, size: 18),
-                                  const SizedBox(width: 8),
-                                ],
-                                Text(
-                                  _submitting
-                                      ? 'Submitting Payments...'
-                                      : 'Submit All Selected Payments',
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-
-            const SizedBox(height: 32),
-
-            Text(
-              'Payment History & Submissions',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
               ),
-            ),
-            const SizedBox(height: 12),
-
-            _buildPaymentHistory(allBills, paymentHistory),
-            const SizedBox(height: 36),
-          ],
+              const SizedBox(height: 12),
+              _buildPaymentHistory(allBills, paymentHistory),
+              const SizedBox(height: 36),
+            ],
+          ),
         ),
       ),
     );
   }
 
   // ------------------------------------------------------------
-  // CUSTOM COLLAPSIBLE MONTH CARD
+  // COLLAPSIBLE MONTH CARD (WITH INVOICE PDF EXPORT)
   // ------------------------------------------------------------
 
   Widget _buildMonthCollapsibleCard(_MonthlyPayableGroup group) {
@@ -1193,8 +1150,8 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     final Color badgeColor;
 
     if (monthStart.isBefore(currentMonthStart)) {
-      badgeText = 'OVERDUE / PREVIOUS';
-      badgeColor = Colors.red;
+      badgeText = 'OVERDUE';
+      badgeColor = GrihoColors.error;
     } else if (monthStart.isAtSameMomentAs(currentMonthStart)) {
       final today = DateTime(now.year, now.month, now.day);
       final due = DateTime(
@@ -1205,39 +1162,38 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
 
       if (today.isAfter(due)) {
         badgeText = 'CURRENT (OVERDUE)';
-        badgeColor = Colors.red.shade700;
+        badgeColor = GrihoColors.error;
       } else {
         badgeText = 'CURRENT MONTH';
         badgeColor = theme.colorScheme.primary;
       }
     } else {
-      badgeText = 'UPCOMING / NEXT MONTH';
+      badgeText = 'UPCOMING';
       badgeColor = Colors.purple;
     }
 
     final totalMonthAmount = group.bills.fold<double>(
       0.0,
-      (total, b) => total + b.amount,
+          (total, b) => total + b.amount,
     );
     final totalMonthDue = group.bills.fold<double>(
       0.0,
-      (total, b) => total + _remaining(b),
+          (total, b) => total + _remaining(b),
     );
 
     final allSelectedInMonth = group.bills.every(
-      (b) => _selectedBillIds.contains(b.id),
+          (b) => _selectedBillIds.contains(b.id),
     );
-
     final isExpanded = _expandedMonthKeys.contains(group.periodKey);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: monthStart.isBefore(currentMonthStart)
-              ? Colors.red.withValues(alpha: 0.4)
+              ? GrihoColors.error.withValues(alpha: 0.4)
               : theme.colorScheme.outlineVariant,
         ),
       ),
@@ -1263,16 +1219,17 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: badgeColor.withValues(alpha: 0.12),
+                      color: badgeColor.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       monthStart.isBefore(currentMonthStart)
-                          ? Icons.warning_amber_rounded
+                          ? Iconsax.warning_2
                           : monthStart.isAfter(currentMonthStart)
-                          ? Icons.calendar_month_outlined
-                          : Icons.receipt_long_rounded,
+                          ? Iconsax.calendar_1
+                          : Iconsax.receipt_item,
                       color: badgeColor,
+                      size: 20,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1284,7 +1241,9 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                _formatMonthYear(group.billingPeriodStart),
+                                formatBillingMonthYear(
+                                  group.billingPeriodStart,
+                                ),
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1301,7 +1260,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                'Due: ${_formatDueDate(group.dueDate)} • ${group.bills.length} charge(s)',
+                                'Due: ${formatBillingShortDate(group.dueDate)} • ${group.bills.length} charge(s)',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                   fontWeight: FontWeight.w600,
@@ -1311,12 +1270,12 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              '৳${_money(totalMonthDue)}',
+                              '৳${formatBillingAmount(totalMonthDue)}',
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 color: totalMonthDue > 0
-                                    ? theme.colorScheme.error
-                                    : Colors.green,
+                                    ? GrihoColors.error
+                                    : GrihoColors.emerald,
                               ),
                             ),
                           ],
@@ -1326,16 +1285,14 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                   ),
                   const SizedBox(width: 8),
                   Icon(
-                    isExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
+                    isExpanded ? Iconsax.arrow_up_2 : Iconsax.arrow_down_1,
+                    size: 18,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ],
               ),
             ),
           ),
-
           if (isExpanded)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1348,7 +1305,7 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Total: ৳${_money(totalMonthAmount)} • Remaining: ৳${_money(totalMonthDue)}',
+                          'Total: ৳${formatBillingAmount(totalMonthAmount)} • Due: ৳${formatBillingAmount(totalMonthDue)}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.onSurfaceVariant,
@@ -1357,33 +1314,54 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       TextButton(
                         onPressed: _submitting
                             ? null
                             : () {
-                                setState(() {
-                                  if (allSelectedInMonth) {
-                                    for (final b in group.bills) {
-                                      _selectedBillIds.remove(b.id);
-                                    }
-                                  } else {
-                                    for (final b in group.bills) {
-                                      _selectedBillIds.add(b.id);
-                                    }
-                                  }
-                                });
-                              },
+                          setState(() {
+                            if (allSelectedInMonth) {
+                              for (final b in group.bills) {
+                                _selectedBillIds.remove(b.id);
+                              }
+                            } else {
+                              for (final b in group.bills) {
+                                _selectedBillIds.add(b.id);
+                              }
+                            }
+                          });
+                        },
                         child: Text(
                           allSelectedInMonth
                               ? 'Deselect Month'
-                              : 'Select Whole Month',
+                              : 'Select Month',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              _exportMonthInvoicePdf(group, share: false),
+                          icon: const Icon(Iconsax.document_text, size: 16),
+                          label: const Text('Invoice PDF'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed: () =>
+                              _exportMonthInvoicePdf(group, share: true),
+                          icon: const Icon(Iconsax.export_3, size: 16),
+                          label: const Text('Share Invoice'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   ...group.bills.map((bill) {
                     final selected = _selectedBillIds.contains(bill.id);
                     final controller = _amountControllerFor(bill);
@@ -1392,15 +1370,16 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
                         color: selected
-                            ? theme.colorScheme.surfaceContainerHighest
-                                  .withValues(alpha: 0.5)
-                            : theme.colorScheme.surfaceContainerLow,
+                            ? theme.colorScheme.primaryContainer.withValues(
+                          alpha: 0.25,
+                        )
+                            : theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: selected
                               ? theme.colorScheme.primary
                               : theme.colorScheme.outlineVariant,
-                          width: selected ? 2 : 1,
+                          width: selected ? 1.5 : 1,
                         ),
                       ),
                       child: Padding(
@@ -1418,37 +1397,37 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                   onChanged: _submitting
                                       ? null
                                       : (value) {
-                                          setState(() {
-                                            if (value == true) {
-                                              _selectedBillIds.add(bill.id);
-                                            } else {
-                                              _selectedBillIds.remove(bill.id);
-                                            }
-                                          });
-                                        },
+                                    setState(() {
+                                      if (value == true) {
+                                        _selectedBillIds.add(bill.id);
+                                      } else {
+                                        _selectedBillIds.remove(bill.id);
+                                      }
+                                    });
+                                  },
                                 ),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         _billTitle(bill),
                                         style: theme.textTheme.titleSmall
                                             ?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        'Total: ৳${_money(bill.amount)} • Paid: ৳${_money(bill.paidAmount)}',
+                                        'Total: ৳${formatBillingAmount(bill.amount)} • Paid: ৳${formatBillingAmount(bill.paidAmount)}',
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                              fontSize: 11,
-                                            ),
+                                          color: theme
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          fontSize: 11,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1459,14 +1438,15 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: theme.colorScheme.errorContainer
-                                        .withValues(alpha: 0.4),
+                                    color: GrihoColors.error.withValues(
+                                      alpha: 0.12,
+                                    ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    'Due: ৳${_money(_remaining(bill))}',
-                                    style: TextStyle(
-                                      color: theme.colorScheme.error,
+                                    'Due: ৳${formatBillingAmount(_remaining(bill))}',
+                                    style: const TextStyle(
+                                      color: GrihoColors.error,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12,
                                     ),
@@ -1480,16 +1460,22 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
                                 controller: controller,
                                 enabled: !_submitting,
                                 keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
+                                const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'^\d*\.?\d{0,2}'),
+                                  ),
+                                ],
                                 decoration: InputDecoration(
                                   labelText: 'Enter Payment Amount (৳)',
                                   helperText:
-                                      'Maximum payable: ৳${_money(_remaining(bill))}',
-                                  prefixIcon: const Icon(Icons.payment_rounded),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                  'Maximum payable: ৳${formatBillingAmount(_remaining(bill))}',
+                                  prefixIcon: const Icon(
+                                    Iconsax.money_2,
+                                    color: GrihoColors.emerald,
+                                    size: 19,
                                   ),
                                   isDense: true,
                                 ),
@@ -1509,42 +1495,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     );
   }
 
-  String _formatMonthYear(DateTime date) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${months[date.month - 1]} ${date.year}';
-  }
-
-  String _formatDueDate(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
   String _methodLabel(PaymentMethod method) {
     switch (method) {
       case PaymentMethod.cash:
@@ -1560,10 +1510,6 @@ class _TenantPaymentScreenState extends ConsumerState<TenantPaymentScreen> {
     }
   }
 }
-
-// ------------------------------------------------------------
-// HELPER MODELS & WIDGETS
-// ------------------------------------------------------------
 
 class _MonthlyPayableGroup {
   final String periodKey;
@@ -1608,9 +1554,9 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(7),
       ),
       child: Text(
@@ -1665,34 +1611,6 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

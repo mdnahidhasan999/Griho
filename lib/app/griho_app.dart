@@ -1,7 +1,5 @@
 // noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 

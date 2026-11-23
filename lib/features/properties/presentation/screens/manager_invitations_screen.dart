@@ -1,14 +1,26 @@
 // noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+
+typedef _InviteJson = Map<String, dynamic>;
+typedef _InviteDocList = List<QueryDocumentSnapshot>;
+
+_InviteJson _inviteMap(Object? raw) {
+  if (raw is Map<String, dynamic>) {
+    return raw;
+  }
+  if (raw is Map) {
+    return Map<String, dynamic>.from(raw);
+  }
+  return <String, dynamic>{};
+}
 
 class ManagerInvitationsScreen extends ConsumerStatefulWidget {
   const ManagerInvitationsScreen({super.key});
@@ -22,12 +34,44 @@ class _ManagerInvitationsScreenState
     extends ConsumerState<ManagerInvitationsScreen> {
   bool _processing = false;
 
-  Future<List<QueryDocumentSnapshot>> _fetchManagerInvites(
-    dynamic profile,
-  ) async {
-    final firestore = FirebaseFirestore.instance;
-    final col = firestore.collection('managerInvitations');
-    final Map<String, QueryDocumentSnapshot> results = {};
+  Stream<QuerySnapshot>? _ownerInvitesStream;
+  String? _ownerStreamUid;
+
+  Future<_InviteDocList>? _managerInvitesFuture;
+  String? _managerFutureUid;
+
+  Stream<QuerySnapshot> _getOwnerStream(String uid) {
+    if (_ownerInvitesStream == null || _ownerStreamUid != uid) {
+      _ownerStreamUid = uid;
+      _ownerInvitesStream = FirebaseFirestore.instance
+          .collection('managerInvitations')
+          .where('ownerId', isEqualTo: uid)
+          .limit(50)
+          .snapshots();
+    }
+    return _ownerInvitesStream!;
+  }
+
+  Future<_InviteDocList> _getManagerInvites(dynamic profile) {
+    final uid = profile.uid.toString().trim();
+    if (_managerInvitesFuture == null || _managerFutureUid != uid) {
+      _managerFutureUid = uid;
+      _managerInvitesFuture = _fetchManagerInvites(profile);
+    }
+    return _managerInvitesFuture!;
+  }
+
+  void _refreshManagerInvites(dynamic profile) {
+    setState(() {
+      _managerFutureUid = profile.uid.toString().trim();
+      _managerInvitesFuture = _fetchManagerInvites(profile);
+    });
+  }
+
+  /// Runs targeted queries in parallel with limit(25) to minimize Firestore reads.
+  Future<_InviteDocList> _fetchManagerInvites(dynamic profile) async {
+    final col = FirebaseFirestore.instance.collection('managerInvitations');
+    final results = <String, QueryDocumentSnapshot>{};
 
     final uid = profile.uid.toString().trim();
     final phone = (profile.phoneNumber ?? '').toString().trim();
@@ -35,34 +79,35 @@ class _ManagerInvitationsScreenState
     final email = (profile.email ?? '').toString().trim();
 
     final queries = <Future<QuerySnapshot>>[
-      if (uid.isNotEmpty) col.where('managerUserId', isEqualTo: uid).get(),
-      if (uid.isNotEmpty) col.where('targetUserId', isEqualTo: uid).get(),
-      if (phone.isNotEmpty) col.where('phone', isEqualTo: phone).get(),
-      if (phone.isNotEmpty) col.where('identifier', isEqualTo: phone).get(),
+      if (uid.isNotEmpty)
+        col.where('managerUserId', isEqualTo: uid).limit(25).get(),
+      if (phone.isNotEmpty)
+        col.where('phone', isEqualTo: phone).limit(25).get(),
       if (publicId.isNotEmpty)
-        col.where('targetGrihoId', isEqualTo: publicId).get(),
-      if (publicId.isNotEmpty)
-        col.where('identifier', isEqualTo: publicId).get(),
-      if (email.isNotEmpty) col.where('targetEmail', isEqualTo: email).get(),
+        col.where('targetGrihoId', isEqualTo: publicId).limit(25).get(),
+      if (email.isNotEmpty)
+        col.where('targetEmail', isEqualTo: email).limit(25).get(),
     ];
 
-    for (final future in queries) {
-      try {
-        final snap = await future;
-        for (final doc in snap.docs) {
-          results[doc.id] = doc;
-        }
-      } catch (_) {}
-    }
+    await Future.wait(
+      queries.map((q) async {
+        try {
+          final snap = await q;
+          for (final doc in snap.docs) {
+            results[doc.id] = doc;
+          }
+        } catch (_) {}
+      }),
+    );
 
     final list = results.values.toList();
     list.sort((a, b) {
       final aT =
-          ((a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)
+          (_inviteMap(a.data())['createdAt'] as Timestamp?)
               ?.millisecondsSinceEpoch ??
           0;
       final bT =
-          ((b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?)
+          (_inviteMap(b.data())['createdAt'] as Timestamp?)
               ?.millisecondsSinceEpoch ??
           0;
       return bT.compareTo(aT);
@@ -75,12 +120,14 @@ class _ManagerInvitationsScreenState
     dynamic profile,
     bool accept,
   ) async {
-    if (_processing) return;
+    if (_processing) {
+      return;
+    }
     setState(() => _processing = true);
 
     try {
       final firestore = FirebaseFirestore.instance;
-      final data = doc.data() as Map<String, dynamic>;
+      final data = _inviteMap(doc.data());
       final propertyId = (data['propertyId'] ?? '').toString().trim();
       final ownerId = (data['ownerId'] ?? '').toString().trim();
 
@@ -130,28 +177,23 @@ class _ManagerInvitationsScreenState
       AuthRouteGuard.clearAccessCache();
       ref.invalidate(currentUserProfileProvider);
 
-      if (!mounted) return;
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            accept
-                ? 'Invitation accepted! You now have manager access.'
-                : 'Invitation declined.',
-          ),
-          backgroundColor: accept ? Colors.green : Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      _refreshManagerInvites(profile);
+      if (accept) {
+        GrihoFeedback.showSuccess(
+          context,
+          'Invitation accepted! You now have manager access.',
+        );
+      } else {
+        GrihoFeedback.showWarning(context, 'Invitation declined.');
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update invitation: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Failed to update invitation: $e');
     } finally {
       if (mounted) {
         setState(() => _processing = false);
@@ -166,7 +208,9 @@ class _ManagerInvitationsScreenState
     required String managerName,
     required bool currentlyActive,
   }) async {
-    if (_processing) return;
+    if (_processing) {
+      return;
+    }
 
     final nextStatus = currentlyActive ? 'suspended' : 'active';
     final actionLabel = currentlyActive ? 'Suspend Access' : 'Restore Access';
@@ -187,9 +231,7 @@ class _ManagerInvitationsScreenState
           ),
           FilledButton(
             style: currentlyActive
-                ? FilledButton.styleFrom(
-                    backgroundColor: Colors.orange.shade800,
-                  )
+                ? FilledButton.styleFrom(backgroundColor: GrihoColors.warning)
                 : null,
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(actionLabel),
@@ -198,7 +240,9 @@ class _ManagerInvitationsScreenState
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) {
+      return;
+    }
 
     setState(() => _processing = true);
 
@@ -223,28 +267,24 @@ class _ManagerInvitationsScreenState
 
       await batch.commit();
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            currentlyActive
-                ? '$managerName has been suspended.'
-                : '$managerName access restored.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showSuccess(
+        context,
+        currentlyActive
+            ? '$managerName has been suspended.'
+            : '$managerName access restored.',
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating status: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Error updating status: $e');
     } finally {
-      if (mounted) setState(() => _processing = false);
+      if (mounted) {
+        setState(() => _processing = false);
+      }
     }
   }
 
@@ -254,7 +294,9 @@ class _ManagerInvitationsScreenState
     required String propertyId,
     required String managerName,
   }) async {
-    if (_processing) return;
+    if (_processing) {
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -280,7 +322,9 @@ class _ManagerInvitationsScreenState
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) {
+      return;
+    }
 
     setState(() => _processing = true);
 
@@ -310,24 +354,22 @@ class _ManagerInvitationsScreenState
 
       await batch.commit();
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Access permanently revoked for $managerName.'),
-          behavior: SnackBarBehavior.floating,
-        ),
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showWarning(
+        context,
+        'Access permanently revoked for $managerName.',
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to revoke access: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Failed to revoke access: $e');
     } finally {
-      if (mounted) setState(() => _processing = false);
+      if (mounted) {
+        setState(() => _processing = false);
+      }
     }
   }
 
@@ -336,10 +378,10 @@ class _ManagerInvitationsScreenState
     ThemeData theme,
     dynamic profile,
     bool isOwnerView,
-    List<QueryDocumentSnapshot> docs,
+    _InviteDocList docs,
   ) {
     final visibleDocs = docs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
+      final data = _inviteMap(doc.data());
       return (data['status'] ?? '').toString() != 'revoked';
     }).toList();
 
@@ -347,42 +389,18 @@ class _ManagerInvitationsScreenState
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.admin_panel_settings_outlined,
-                size: 56,
-                color: theme.colorScheme.outlineVariant,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                isOwnerView
-                    ? 'No manager invitations sent yet.'
-                    : 'No invitations found for your account.',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                isOwnerView
-                    ? 'Tap the button below to assign a manager to one of your buildings.'
-                    : 'When a property owner invites you via your Phone (${profile?.phoneNumber}) or Griho ID (${profile?.publicId}), it will appear here.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              if (isOwnerView) ...[
-                const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: () => context.push(RouteNames.addManager),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Invite Manager'),
-                ),
-              ],
-            ],
+          child: GrihoStatusState(
+            icon: Iconsax.user_octagon,
+            title: isOwnerView
+                ? 'No manager invitations sent yet'
+                : 'No invitations found',
+            subtitle: isOwnerView
+                ? 'Assign a manager to help manage one of your buildings.'
+                : 'When a property owner invites you via your Phone (${profile?.phoneNumber}) or Griho ID (${profile?.publicId}), it will appear here.',
+            actionLabel: isOwnerView ? 'Invite Manager' : null,
+            onAction: isOwnerView
+                ? () => context.push(RouteNames.addManager)
+                : null,
           ),
         ),
       );
@@ -393,7 +411,7 @@ class _ManagerInvitationsScreenState
       itemCount: visibleDocs.length,
       itemBuilder: (context, index) {
         final doc = visibleDocs[index];
-        final data = doc.data() as Map<String, dynamic>;
+        final data = _inviteMap(doc.data());
         final name = (data['managerName'] ?? data['name'] ?? 'Manager')
             .toString();
         final identifier = (data['identifier'] ?? '').toString();
@@ -411,12 +429,12 @@ class _ManagerInvitationsScreenState
         final badgeLabel = isSuspended ? 'SUSPENDED' : status.toUpperCase();
 
         final statusColor = isSuspended
-            ? Colors.orange.shade800
+            ? GrihoColors.warning
             : isAccepted
-            ? Colors.green
+            ? GrihoColors.emerald
             : isPending
-            ? Colors.amber.shade900
-            : Colors.red;
+            ? GrihoColors.warning
+            : GrihoColors.error;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -426,7 +444,7 @@ class _ManagerInvitationsScreenState
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: isSuspended
-                  ? Colors.orange.shade700
+                  ? GrihoColors.warning
                   : theme.colorScheme.outlineVariant,
               width: isSuspended ? 1.5 : 1.0,
             ),
@@ -440,12 +458,13 @@ class _ManagerInvitationsScreenState
                     backgroundColor: statusColor.withValues(alpha: 0.14),
                     child: Icon(
                       isSuspended
-                          ? Icons.pause_circle_filled_rounded
+                          ? Iconsax.pause_circle
                           : isAccepted
-                          ? Icons.verified_user_rounded
+                          ? Iconsax.verify
                           : isPending
-                          ? Icons.hourglass_top_rounded
-                          : Icons.cancel_outlined,
+                          ? Iconsax.clock
+                          : Iconsax.close_circle,
+                      size: 20,
                       color: statusColor,
                     ),
                   ),
@@ -484,7 +503,7 @@ class _ManagerInvitationsScreenState
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.12),
+                      color: statusColor.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -538,10 +557,8 @@ class _ManagerInvitationsScreenState
                                 currentlyActive: !isSuspended,
                               ),
                         icon: Icon(
-                          isSuspended
-                              ? Icons.play_arrow_rounded
-                              : Icons.pause_rounded,
-                          size: 18,
+                          isSuspended ? Iconsax.play : Iconsax.pause,
+                          size: 16,
                         ),
                         label: Text(isSuspended ? 'Reactivate' : 'Suspend'),
                       ),
@@ -563,10 +580,7 @@ class _ManagerInvitationsScreenState
                                 propertyId: propertyId,
                                 managerName: name,
                               ),
-                        icon: const Icon(
-                          Icons.person_remove_outlined,
-                          size: 18,
-                        ),
+                        icon: const Icon(Iconsax.user_remove, size: 16),
                         label: const Text('Revoke Access'),
                       ),
                     ),
@@ -582,15 +596,22 @@ class _ManagerInvitationsScreenState
                         ? null
                         : () async {
                             await doc.reference.delete();
+                            if (!context.mounted) {
+                              return;
+                            }
+                            GrihoFeedback.showInfo(
+                              context,
+                              'Invitation cancelled.',
+                            );
                           },
                     icon: const Icon(
-                      Icons.delete_outline,
+                      Iconsax.trash,
                       size: 16,
-                      color: Colors.red,
+                      color: GrihoColors.error,
                     ),
                     label: const Text(
                       'Cancel Invite',
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(color: GrihoColors.error),
                     ),
                   ),
                 ),
@@ -606,15 +627,39 @@ class _ManagerInvitationsScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profileAsync = ref.watch(currentUserProfileProvider);
-    final firestore = FirebaseFirestore.instance;
 
     return profileAsync.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (err, _) => Scaffold(body: Center(child: Text('Error: $err'))),
+      loading: () => const Scaffold(
+        body: GrihoLoadingView(message: 'Loading invitations...'),
+      ),
+      error: (err, _) => Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load profile',
+              subtitle: err.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentUserProfileProvider),
+            ),
+          ),
+        ),
+      ),
       data: (profile) {
         if (profile == null) {
-          return const Scaffold(body: Center(child: Text('Profile not found')));
+          return const Scaffold(
+            body: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.user_remove,
+                  title: 'Profile not found',
+                  subtitle: 'Please sign in again.',
+                ),
+              ),
+            ),
+          );
         }
         final isOwnerView = profile.defaultDashboard == 'owner';
 
@@ -624,23 +669,26 @@ class _ManagerInvitationsScreenState
               isOwnerView
                   ? 'Property Managers & Invites'
                   : 'My Manager Invitations',
-              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
           body: isOwnerView
               ? StreamBuilder<QuerySnapshot>(
-                  stream: firestore
-                      .collection('managerInvitations')
-                      .where('ownerId', isEqualTo: profile.uid)
-                      .snapshots(),
+                  stream: _getOwnerStream(profile.uid),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const GrihoLoadingView(
+                        message: 'Loading invitations...',
+                      );
                     }
                     if (snapshot.hasError) {
                       return Center(
-                        child: Text(
-                          'Error loading invitations: ${snapshot.error}',
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: GrihoStatusState(
+                            icon: Iconsax.warning_2,
+                            title: 'Error loading invitations',
+                            subtitle: '${snapshot.error}',
+                          ),
                         ),
                       );
                     }
@@ -649,36 +697,48 @@ class _ManagerInvitationsScreenState
                       theme,
                       profile,
                       true,
-                      snapshot.data?.docs ?? [],
+                      snapshot.data?.docs ?? const [],
                     );
                   },
                 )
-              : FutureBuilder<List<QueryDocumentSnapshot>>(
-                  future: _fetchManagerInvites(profile),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Text(
-                          'Error loading invitations: ${snapshot.error}',
-                        ),
+              : RefreshIndicator(
+                  onRefresh: () async => _refreshManagerInvites(profile),
+                  child: FutureBuilder<_InviteDocList>(
+                    future: _getManagerInvites(profile),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const GrihoLoadingView(
+                          message: 'Loading invitations...',
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: GrihoStatusState(
+                              icon: Iconsax.warning_2,
+                              title: 'Error loading invitations',
+                              subtitle: '${snapshot.error}',
+                              actionLabel: 'Retry',
+                              onAction: () => _refreshManagerInvites(profile),
+                            ),
+                          ),
+                        );
+                      }
+                      return _buildInviteList(
+                        context,
+                        theme,
+                        profile,
+                        false,
+                        snapshot.data ?? const [],
                       );
-                    }
-                    return _buildInviteList(
-                      context,
-                      theme,
-                      profile,
-                      false,
-                      snapshot.data ?? [],
-                    );
-                  },
+                    },
+                  ),
                 ),
           floatingActionButton: isOwnerView
               ? FloatingActionButton.extended(
                   onPressed: () => context.push(RouteNames.addManager),
-                  icon: const Icon(Icons.person_add_rounded),
+                  icon: const Icon(Iconsax.user_add),
                   label: const Text('Invite Manager'),
                 )
               : null,

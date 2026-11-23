@@ -1,20 +1,18 @@
 // noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../../../core/services/fcm_notification_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../widgets/griho_home_chrome.dart';
-
-typedef JsonMap = Map<String, dynamic>;
-typedef _DocList = List<QueryDocumentSnapshot>;
+import '../widgets/griho_home_components.dart';
 
 class CaretakerHomeScreen extends ConsumerStatefulWidget {
   const CaretakerHomeScreen({super.key});
@@ -28,24 +26,66 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
   bool _busy = false;
   String? _selectedPropertyId;
 
-  Future<_DocList>? _invitesFuture;
+  Future<HomeDocList>? _invitesFuture;
   String? _cachedForUid;
+
+  Stream<QuerySnapshot>? _accessStream;
+  String? _accessStreamUid;
+
+  String? _activeStreamsPropId;
+  Stream<QuerySnapshot> _issuesStream = const Stream<QuerySnapshot>.empty();
+  Stream<QuerySnapshot> _visitorsStream = const Stream<QuerySnapshot>.empty();
 
   @override
   void initState() {
     super.initState();
     FcmNotificationService.instance.initialize(
       onNavigate: (route) {
-        if (mounted) context.push(route);
+        if (mounted) {
+          context.push(route);
+        }
       },
     );
   }
 
-  Future<_DocList> _getOrFetchInvites(dynamic profile) {
+  Stream<QuerySnapshot> _getAccessStream(String uid) {
+    if (_accessStream == null || _accessStreamUid != uid) {
+      _accessStreamUid = uid;
+      _accessStream = FirebaseFirestore.instance
+          .collection('staffAccess')
+          .where('userId', isEqualTo: uid)
+          .where('staffRole', isEqualTo: 'caretaker')
+          .snapshots();
+    }
+    return _accessStream!;
+  }
+
+  void _ensurePropertyStreams(String propertyId) {
+    if (_activeStreamsPropId == propertyId) {
+      return;
+    }
+    _activeStreamsPropId = propertyId;
+    final db = FirebaseFirestore.instance;
+    _issuesStream = db
+        .collection('maintenanceRequests')
+        .where('propertyId', isEqualTo: propertyId)
+        .limit(50)
+        .snapshots();
+    _visitorsStream = db
+        .collection('visitorLogs')
+        .where('propertyId', isEqualTo: propertyId)
+        .limit(50)
+        .snapshots();
+  }
+
+  Future<HomeDocList> _getOrFetchInvites(dynamic profile) {
     final uid = profile.uid.toString().trim();
     if (_invitesFuture == null || _cachedForUid != uid) {
       _cachedForUid = uid;
-      _invitesFuture = _fetchCaretakerInvites(profile);
+      _invitesFuture = GrihoStaffInviteService.fetchPendingStaffInvites(
+        profile: profile,
+        staffRole: 'caretaker',
+      );
     }
     return _invitesFuture!;
   }
@@ -53,44 +93,11 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
   void _refreshInvites(dynamic profile) {
     setState(() {
       _cachedForUid = profile.uid.toString().trim();
-      _invitesFuture = _fetchCaretakerInvites(profile);
+      _invitesFuture = GrihoStaffInviteService.fetchPendingStaffInvites(
+        profile: profile,
+        staffRole: 'caretaker',
+      );
     });
-  }
-
-  Future<_DocList> _fetchCaretakerInvites(dynamic profile) async {
-    final firestore = FirebaseFirestore.instance;
-    final col = firestore.collection('staffInvitations');
-    final results = <String, QueryDocumentSnapshot>{};
-
-    final uid = profile.uid.toString().trim();
-    final phone = (profile.phoneNumber ?? '').toString().trim();
-    final publicId = profile.publicId.toString().trim();
-    final email = (profile.email ?? '').toString().trim();
-
-    final queries = <Future<QuerySnapshot>>[
-      if (uid.isNotEmpty) col.where('staffUserId', isEqualTo: uid).get(),
-      if (phone.isNotEmpty) col.where('phone', isEqualTo: phone).get(),
-      if (phone.isNotEmpty) col.where('identifier', isEqualTo: phone).get(),
-      if (publicId.isNotEmpty)
-        col.where('targetGrihoId', isEqualTo: publicId).get(),
-      if (publicId.isNotEmpty)
-        col.where('identifier', isEqualTo: publicId).get(),
-      if (email.isNotEmpty) col.where('targetEmail', isEqualTo: email).get(),
-    ];
-
-    for (final future in queries) {
-      try {
-        final snap = await future;
-        for (final doc in snap.docs) {
-          final data = doc.data() as JsonMap? ?? <String, dynamic>{};
-          if ((data['staffRole'] ?? 'caretaker') == 'caretaker') {
-            results[doc.id] = doc;
-          }
-        }
-      } catch (_) {}
-    }
-
-    return results.values.toList();
   }
 
   Future<void> _respondToInvite(
@@ -98,94 +105,42 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
     dynamic profile,
     bool accept,
   ) async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
     setState(() => _busy = true);
 
     try {
-      final authUser = FirebaseAuth.instance.currentUser;
-      await authUser?.reload();
-      if (!(FirebaseAuth.instance.currentUser?.emailVerified ?? false)) {
-        throw StateError(
-          'Please verify your email address before responding to an invitation.',
-        );
-      }
-
-      final firestore = FirebaseFirestore.instance;
-      final data = doc.data() as JsonMap? ?? <String, dynamic>{};
-      final propertyId = (data['propertyId'] ?? '').toString().trim();
-      final ownerId = (data['ownerId'] ?? '').toString().trim();
-
-      final batch = firestore.batch();
-
-      batch.update(doc.reference, {
-        'status': accept ? 'accepted' : 'rejected',
-        'accessStatus': accept ? 'active' : 'rejected',
-        'staffUserId': profile.uid,
-        'staffName': profile.name,
-        'staffGrihoId': profile.publicId,
-        'staffPhone': profile.phoneNumber,
-        'respondedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (accept && propertyId.isNotEmpty) {
-        final accessRef = firestore
-            .collection('staffAccess')
-            .doc('${profile.uid}_${propertyId}_caretaker');
-        batch.set(accessRef, {
-          'userId': profile.uid,
-          'staffName': profile.name,
-          'staffGrihoId': profile.publicId,
-          'staffPhone': profile.phoneNumber,
-          'staffRole': 'caretaker',
-          'ownerId': ownerId,
-          'propertyId': propertyId,
-          'propertyName': data['propertyName'] ?? 'Assigned Building',
-          'propertyCode': data['propertyCode'] ?? '',
-          'invitationId': doc.id,
-          'status': 'active',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        final currentRoles = List<String>.from(profile.availableRoles ?? []);
-        if (!currentRoles.contains('caretaker')) {
-          batch.update(firestore.collection('users').doc(profile.uid), {
-            'availableRoles': FieldValue.arrayUnion(['caretaker']),
-            'defaultDashboard': 'caretaker',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-      }
-
-      await batch.commit();
+      await GrihoStaffInviteService.respondToStaffInvite(
+        doc: doc,
+        profile: profile,
+        staffRole: 'caretaker',
+        accept: accept,
+      );
       AuthRouteGuard.clearAccessCache();
       ref.invalidate(currentUserProfileProvider);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       _refreshInvites(profile);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            accept ? 'Caretaker assignment accepted!' : 'Invitation declined.',
-          ),
-          backgroundColor: accept ? Colors.green : Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (accept) {
+        GrihoFeedback.showSuccess(context, 'Caretaker assignment accepted!');
+      } else {
+        GrihoFeedback.showWarning(context, 'Invitation declined.');
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error processing invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
-          ),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(
+        context,
+        'Error processing invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
       );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -194,40 +149,37 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
     required String nextStatus,
     required String actorName,
   }) async {
-    final data = doc.data() as JsonMap? ?? <String, dynamic>{};
+    final data = homeAsMap(doc.data());
     String note = '';
 
     if (nextStatus == 'resolved') {
+      final noteCtrl = TextEditingController();
       final confirmedNote = await showDialog<String>(
         context: context,
-        builder: (ctx) {
-          var draft = '';
-          return AlertDialog(
-            title: const Text('Mark Issue Resolved'),
-            content: TextField(
-              autofocus: true,
-              maxLines: 2,
-              onChanged: (v) => draft = v,
-              decoration: const InputDecoration(
-                labelText: 'Resolution Note (Optional)',
-                hintText: 'e.g. Pipe leak repaired and tested',
-                border: OutlineInputBorder(),
-              ),
+        builder: (ctx) => AlertDialog(
+          title: const Text('Mark Issue Resolved'),
+          content: GrihoTextField(
+            controller: noteCtrl,
+            label: 'Resolution Note (Optional)',
+            hint: 'e.g. Pipe leak repaired and tested',
+            maxLines: 2,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, draft.trim()),
-                child: const Text('Complete'),
-              ),
-            ],
-          );
-        },
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, noteCtrl.text.trim()),
+              child: const Text('Complete'),
+            ),
+          ],
+        ),
       );
-      if (confirmedNote == null) return;
+      noteCtrl.dispose();
+      if (confirmedNote == null) {
+        return;
+      }
       note = confirmedNote;
     }
 
@@ -250,16 +202,24 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
         details:
             'Ticket "${data['title'] ?? 'Issue'}" (${data['unitName'] ?? 'Building'}) marked $nextStatus by Caretaker $actorName.',
       );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
+
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showSuccess(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to update ticket: $e')));
+        'Ticket updated to ${nextStatus.replaceAll('_', ' ')}.',
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Unable to update ticket: $e');
     }
   }
 
   Future<void> _showAddVisitorDialog({
-    required JsonMap activeAssignment,
+    required HomeJsonMap activeAssignment,
     required dynamic profile,
   }) async {
     final nameCtrl = TextEditingController();
@@ -267,77 +227,68 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
     final unitCtrl = TextEditingController();
     final purposeCtrl = TextEditingController();
 
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Log New Visitor / Delivery'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Visitor Name *',
-                  prefixIcon: Icon(Icons.person_outline),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Visitor Phone',
-                  prefixIcon: Icon(Icons.phone_outlined),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: unitCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Target Unit / Floor *',
-                  hintText: 'e.g. Unit 3B',
-                  prefixIcon: Icon(Icons.door_front_door_outlined),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: purposeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Purpose / Delivery Details',
-                  hintText: 'e.g. Guest / Parcel Delivery',
-                  prefixIcon: Icon(Icons.assignment_outlined),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (nameCtrl.text.trim().isEmpty ||
-                  unitCtrl.text.trim().isEmpty) {
-                return;
-              }
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Check In'),
-          ),
-        ],
-      ),
-    );
-
-    if (saved != true || !mounted) return;
-
     try {
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Log New Visitor / Delivery'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GrihoTextField(
+                  controller: nameCtrl,
+                  label: 'Visitor Name *',
+                  prefixIcon: Iconsax.user,
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 12),
+                GrihoTextField(
+                  controller: phoneCtrl,
+                  label: 'Visitor Phone',
+                  prefixIcon: Iconsax.call,
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+                GrihoTextField(
+                  controller: unitCtrl,
+                  label: 'Target Unit / Floor *',
+                  hint: 'e.g. Unit 3B',
+                  prefixIcon: Iconsax.home_2,
+                ),
+                const SizedBox(height: 12),
+                GrihoTextField(
+                  controller: purposeCtrl,
+                  label: 'Purpose / Delivery Details',
+                  hint: 'e.g. Guest / Parcel Delivery',
+                  prefixIcon: Iconsax.clipboard_text,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (nameCtrl.text.trim().isEmpty ||
+                    unitCtrl.text.trim().isEmpty) {
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Check In'),
+            ),
+          ],
+        ),
+      );
+
+      if (saved != true || !mounted) {
+        return;
+      }
+
       await FirebaseFirestore.instance.collection('visitorLogs').add({
         'ownerId': activeAssignment['ownerId'],
         'propertyId': activeAssignment['propertyId'],
@@ -355,104 +306,104 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
         'checkOutAt': null,
       });
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Visitor checked in successfully.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showSuccess(context, 'Visitor checked in successfully.');
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to log visitor: $e')));
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Failed to log visitor: $e');
+    } finally {
+      nameCtrl.dispose();
+      phoneCtrl.dispose();
+      unitCtrl.dispose();
+      purposeCtrl.dispose();
     }
   }
 
   Future<void> _showPostNoticeDialog({
-    required JsonMap activeAssignment,
+    required HomeJsonMap activeAssignment,
     required dynamic profile,
   }) async {
     final titleCtrl = TextEditingController();
     final messageCtrl = TextEditingController();
     String priority = 'normal';
 
-    final posted = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Post Building Notice'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Notice Title *',
-                    hintText: 'e.g. Water Tank Cleaning Tomorrow',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: messageCtrl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Details / Schedule *',
-                    hintText: 'Water supply will be paused from 10 AM to 1 PM.',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: priority,
-                  decoration: const InputDecoration(
-                    labelText: 'Urgency Level',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'normal', child: Text('Normal')),
-                    DropdownMenuItem(
-                      value: 'important',
-                      child: Text('Important'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'urgent',
-                      child: Text('Urgent Alert'),
-                    ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setDialogState(() => priority = v);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (titleCtrl.text.trim().isEmpty ||
-                    messageCtrl.text.trim().isEmpty) {
-                  return;
-                }
-                Navigator.pop(ctx, true);
-              },
-              child: const Text('Publish Notice'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (posted != true || !mounted) return;
-
     try {
+      final posted = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Post Building Notice'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GrihoTextField(
+                    controller: titleCtrl,
+                    label: 'Notice Title *',
+                    hint: 'e.g. Water Tank Cleaning Tomorrow',
+                    prefixIcon: Iconsax.notification_bing,
+                  ),
+                  const SizedBox(height: 12),
+                  GrihoTextField(
+                    controller: messageCtrl,
+                    label: 'Details / Schedule *',
+                    hint: 'Water supply will be paused from 10 AM to 1 PM.',
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: priority,
+                    decoration: const InputDecoration(
+                      labelText: 'Urgency Level',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'normal', child: Text('Normal')),
+                      DropdownMenuItem(
+                        value: 'important',
+                        child: Text('Important'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'urgent',
+                        child: Text('Urgent Alert'),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setDialogState(() => priority = v);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (titleCtrl.text.trim().isEmpty ||
+                      messageCtrl.text.trim().isEmpty) {
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('Publish Notice'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (posted != true || !mounted) {
+        return;
+      }
+
       await FirebaseFirestore.instance.collection('buildingNotices').add({
         'ownerId': activeAssignment['ownerId'],
         'propertyId': activeAssignment['propertyId'],
@@ -466,18 +417,18 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Building notice published.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showSuccess(context, 'Building notice published.');
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to publish notice: $e')));
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Failed to publish notice: $e');
+    } finally {
+      titleCtrl.dispose();
+      messageCtrl.dispose();
     }
   }
 
@@ -504,7 +455,7 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
 
   void _openVisitorSheet(
     String propertyId,
-    JsonMap activeAssignment,
+    HomeJsonMap activeAssignment,
     dynamic profile,
   ) {
     showModalBottomSheet<void>(
@@ -530,39 +481,52 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profileAsync = ref.watch(currentUserProfileProvider);
-    final firestore = FirebaseFirestore.instance;
 
     return Scaffold(
       extendBody: true,
       backgroundColor: theme.colorScheme.surface,
       appBar: const GrihoHomeAppBar(consoleLabel: 'Caretaker Console'),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        loading: () => const GrihoLoadingView(message: 'Loading console...'),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load profile',
+              subtitle: e.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentUserProfileProvider),
+            ),
+          ),
+        ),
         data: (profile) {
           if (profile == null) {
-            return const Center(child: Text('Profile not found.'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.user_remove,
+                  title: 'Profile not found',
+                  subtitle: 'Please sign in again.',
+                ),
+              ),
+            );
           }
 
           return StreamBuilder<QuerySnapshot>(
-            stream: firestore
-                .collection('staffAccess')
-                .where('userId', isEqualTo: profile.uid)
-                .where('staffRole', isEqualTo: 'caretaker')
-                .snapshots(),
+            stream: _getAccessStream(profile.uid),
             builder: (context, accessSnap) {
-              return FutureBuilder<_DocList>(
+              return FutureBuilder<HomeDocList>(
                 future: _getOrFetchInvites(profile),
                 builder: (context, inviteSnap) {
-                  final invites = inviteSnap.data ?? [];
-                  final pendingInvites = invites.where((d) {
-                    final map = d.data() as JsonMap? ?? <String, dynamic>{};
-                    return (map['status'] ?? 'pending') == 'pending';
-                  }).toList();
+                  final pendingInvites =
+                      inviteSnap.data ?? const <QueryDocumentSnapshot>[];
+                  final accessDocs =
+                      accessSnap.data?.docs ?? const <QueryDocumentSnapshot>[];
 
-                  final accessDocs = accessSnap.data?.docs ?? [];
                   final activeAccessList = accessDocs
-                      .map((d) => d.data() as JsonMap? ?? <String, dynamic>{})
+                      .map((d) => homeAsMap(d.data()))
                       .where((m) => (m['status'] ?? 'active') == 'active')
                       .toList();
 
@@ -579,57 +543,28 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
                           ),
                           const SizedBox(height: 16),
                           for (final inv in pendingInvites)
-                            _PendingStaffInviteCard(
-                              doc: inv,
-                              roleTitle: 'Building Caretaker',
-                              busy: _busy,
-                              onAccept: () =>
-                                  _respondToInvite(inv, profile, true),
-                              onDecline: () =>
-                                  _respondToInvite(inv, profile, false),
+                            Builder(
+                              builder: (context) {
+                                final d = homeAsMap(inv.data());
+                                return GrihoPendingInviteBanner(
+                                  title:
+                                      'New Caretaker Assignment: ${d['propertyName'] ?? 'Building'}',
+                                  subtitle:
+                                      'Invited by ${d['ownerName'] ?? 'Property Owner'}',
+                                  acceptLabel: 'Accept Assignment',
+                                  busy: _busy,
+                                  onAccept: () =>
+                                      _respondToInvite(inv, profile, true),
+                                  onDecline: () =>
+                                      _respondToInvite(inv, profile, false),
+                                );
+                              },
                             ),
-                          Container(
-                            padding: const EdgeInsets.all(22),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceContainerLow,
-                              borderRadius: BorderRadius.circular(22),
-                              border: Border.all(
-                                color: theme.colorScheme.outlineVariant,
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primaryContainer
-                                        .withValues(alpha: 0.45),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.handyman_outlined,
-                                    size: 40,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No Active Building Assignment',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Share your Griho ID (${profile.publicId}) or Phone (${profile.phoneNumber}) with the property owner to receive a Caretaker assignment.',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                    height: 1.45,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          GrihoStatusState(
+                            icon: Iconsax.setting_2,
+                            title: 'No Active Building Assignment',
+                            subtitle:
+                                'Share your Griho ID (${profile.publicId}) or Phone (${profile.phoneNumber}) with the property owner to receive a Caretaker assignment.',
                           ),
                         ],
                       ),
@@ -646,39 +581,31 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
                       (currentAssignment['propertyName'] ?? 'Assigned Building')
                           .toString();
 
+                  _ensurePropertyStreams(activePropertyId);
+
                   return StreamBuilder<QuerySnapshot>(
-                    stream: firestore
-                        .collection('maintenanceRequests')
-                        .where('propertyId', isEqualTo: activePropertyId)
-                        .snapshots(),
+                    stream: _issuesStream,
                     builder: (context, issuesSnap) {
                       return StreamBuilder<QuerySnapshot>(
-                        stream: firestore
-                            .collection('visitorLogs')
-                            .where('propertyId', isEqualTo: activePropertyId)
-                            .snapshots(),
+                        stream: _visitorsStream,
                         builder: (context, visitorsSnap) {
                           final generalDocs = (issuesSnap.data?.docs ?? [])
                               .where((doc) {
-                                final d =
-                                    doc.data() as JsonMap? ??
-                                    <String, dynamic>{};
+                                final d = homeAsMap(doc.data());
                                 return (d['category'] ?? 'general') !=
                                     'electrical';
                               })
                               .toList();
 
                           final openTasks = generalDocs.where((doc) {
-                            final d =
-                                doc.data() as JsonMap? ?? <String, dynamic>{};
+                            final d = homeAsMap(doc.data());
                             final s = (d['status'] ?? 'open').toString();
                             return s == 'open' || s == 'in_progress';
                           }).toList();
 
                           final visitorDocs = visitorsSnap.data?.docs ?? [];
                           final insideVisitorsCount = visitorDocs.where((doc) {
-                            final d =
-                                doc.data() as JsonMap? ?? <String, dynamic>{};
+                            final d = homeAsMap(doc.data());
                             return (d['status'] ?? 'checked_in') ==
                                 'checked_in';
                           }).length;
@@ -687,33 +614,51 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
                             onRefresh: () async => _refreshInvites(profile),
                             child: ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                4,
+                                16,
+                                105,
+                              ),
                               children: [
                                 GrihoHomeTopHeader(
                                   name: profile.name,
                                   publicId: profile.publicId,
                                 ),
                                 const SizedBox(height: 16),
-
-                                if (pendingInvites.isNotEmpty)
-                                  for (final inv in pendingInvites)
-                                    _PendingStaffInviteCard(
-                                      doc: inv,
-                                      roleTitle: 'Building Caretaker',
-                                      busy: _busy,
-                                      onAccept: () =>
-                                          _respondToInvite(inv, profile, true),
-                                      onDecline: () =>
-                                          _respondToInvite(inv, profile, false),
-                                    ),
-
+                                for (final inv in pendingInvites)
+                                  Builder(
+                                    builder: (context) {
+                                      final d = homeAsMap(inv.data());
+                                      return GrihoPendingInviteBanner(
+                                        title:
+                                            'New Caretaker Assignment: ${d['propertyName'] ?? 'Building'}',
+                                        subtitle:
+                                            'Invited by ${d['ownerName'] ?? 'Property Owner'}',
+                                        acceptLabel: 'Accept Assignment',
+                                        busy: _busy,
+                                        onAccept: () => _respondToInvite(
+                                          inv,
+                                          profile,
+                                          true,
+                                        ),
+                                        onDecline: () => _respondToInvite(
+                                          inv,
+                                          profile,
+                                          false,
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 if (activeAccessList.length > 1) ...[
                                   DropdownButtonFormField<String>(
                                     initialValue: activePropertyId,
                                     decoration: const InputDecoration(
                                       labelText: 'Assigned Building',
-                                      prefixIcon: Icon(Icons.apartment_rounded),
-                                      border: OutlineInputBorder(),
+                                      prefixIcon: Icon(
+                                        Iconsax.buildings_2,
+                                        color: GrihoColors.emerald,
+                                      ),
                                       isDense: true,
                                     ),
                                     items: activeAccessList
@@ -735,79 +680,59 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
                                   ),
                                   const SizedBox(height: 14),
                                 ],
-
-                                // Unified Dark Hero Console Card
-                                _CaretakerSummaryCard(
-                                  propertyName: activePropertyName,
-                                  openTasks: openTasks.length,
-                                  visitorsInside: insideVisitorsCount,
-                                  totalLogs: visitorDocs.length,
+                                GrihoHeroCard(
+                                  eyebrow: 'ASSIGNED BUILDING',
+                                  eyebrowIcon: Iconsax.buildings_2,
+                                  headline: activePropertyName,
+                                  metrics: [
+                                    GrihoHeroMetric(
+                                      label: 'Open tasks',
+                                      value: '${openTasks.length}',
+                                      highlight: openTasks.isNotEmpty,
+                                    ),
+                                    GrihoHeroMetric(
+                                      label: 'Visitors inside',
+                                      value: '$insideVisitorsCount',
+                                    ),
+                                    GrihoHeroMetric(
+                                      label: 'Total logs',
+                                      value: '${visitorDocs.length}',
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 14),
-
-                                // Primary Action Buttons
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: FilledButton.icon(
-                                        style: FilledButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 14,
-                                          ),
-                                        ),
+                                      child: GrihoPrimaryButton(
+                                        label: 'Log visitor',
+                                        icon: Iconsax.user_add,
                                         onPressed: () => _showAddVisitorDialog(
                                           activeAssignment: currentAssignment,
                                           profile: profile,
                                         ),
-                                        icon: const Icon(
-                                          Icons.person_add_alt_1_rounded,
-                                          size: 20,
-                                        ),
-                                        label: const Text('Log visitor'),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
-                                      child: OutlinedButton.icon(
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 14,
-                                          ),
-                                        ),
+                                      child: GrihoSecondaryButton(
+                                        label: 'Post notice',
+                                        icon: Iconsax.notification_bing,
                                         onPressed: () => _showPostNoticeDialog(
                                           activeAssignment: currentAssignment,
                                           profile: profile,
                                         ),
-                                        icon: const Icon(
-                                          Icons.campaign_outlined,
-                                          size: 20,
-                                        ),
-                                        label: const Text('Post notice'),
                                       ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 22),
-
-                                Text(
-                                  'Quick actions',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
+                                const GrihoSectionHeader('Quick actions'),
                                 const SizedBox(height: 10),
-
-                                // Unified 2-Column Quick Actions Grid
-                                GridView.count(
-                                  crossAxisCount: 2,
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  mainAxisSpacing: 10,
-                                  crossAxisSpacing: 10,
-                                  childAspectRatio: 2.3,
-                                  children: [
-                                    _QuickTile(
-                                      icon: Icons.build_circle_outlined,
+                                GrihoQuickActionGrid(
+                                  items: [
+                                    GrihoQuickActionItem(
+                                      icon: Iconsax.setting_2,
                                       title: 'Maintenance',
                                       subtitle: '${openTasks.length} open',
                                       color: Colors.deepOrange,
@@ -816,29 +741,29 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
                                         profile.name,
                                       ),
                                     ),
-                                    _QuickTile(
-                                      icon: Icons.badge_outlined,
+                                    GrihoQuickActionItem(
+                                      icon: Iconsax.personalcard,
                                       title: 'Visitor log',
                                       subtitle: '$insideVisitorsCount inside',
-                                      color: Colors.teal,
+                                      color: GrihoColors.emerald,
                                       onTap: () => _openVisitorSheet(
                                         activePropertyId,
                                         currentAssignment,
                                         profile,
                                       ),
                                     ),
-                                    _QuickTile(
-                                      icon: Icons.campaign_outlined,
+                                    GrihoQuickActionItem(
+                                      icon: Iconsax.notification_bing,
                                       title: 'Post notice',
                                       subtitle: 'Alert residents',
-                                      color: Colors.amber.shade800,
+                                      color: GrihoColors.warning,
                                       onTap: () => _showPostNoticeDialog(
                                         activeAssignment: currentAssignment,
                                         profile: profile,
                                       ),
                                     ),
-                                    _QuickTile(
-                                      icon: Icons.notifications_active_outlined,
+                                    GrihoQuickActionItem(
+                                      icon: Iconsax.document_text,
                                       title: 'Notice board',
                                       subtitle: 'View all notices',
                                       color: Colors.indigo,
@@ -847,28 +772,19 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
                                     ),
                                   ],
                                 ),
-
                                 const SizedBox(height: 22),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Maintenance tasks',
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                    ),
-                                    if (generalDocs.isNotEmpty)
-                                      TextButton(
-                                        onPressed: () => _openMaintenanceSheet(
-                                          activePropertyId,
-                                          profile.name,
-                                        ),
-                                        child: const Text('View all'),
-                                      ),
-                                  ],
+                                GrihoSectionHeader(
+                                  'Maintenance tasks',
+                                  trailing: generalDocs.isNotEmpty
+                                      ? TextButton(
+                                          onPressed: () =>
+                                              _openMaintenanceSheet(
+                                                activePropertyId,
+                                                profile.name,
+                                              ),
+                                          child: const Text('View all'),
+                                        )
+                                      : null,
                                 ),
                                 const SizedBox(height: 6),
                                 _MaintenancePreviewList(
@@ -900,290 +816,23 @@ class _CaretakerHomeScreenState extends ConsumerState<CaretakerHomeScreen> {
   }
 }
 
-class _CaretakerSummaryCard extends StatelessWidget {
-  const _CaretakerSummaryCard({
-    required this.propertyName,
-    required this.openTasks,
-    required this.visitorsInside,
-    required this.totalLogs,
-  });
-
-  final String propertyName;
-  final int openTasks;
-  final int visitorsInside;
-  final int totalLogs;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E222D), Color(0xFF141720)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.apartment_rounded,
-                size: 14,
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'ASSIGNED BUILDING',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.65),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            propertyName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _DarkMetric(
-                label: 'Open tasks',
-                value: '$openTasks',
-                highlight: openTasks > 0,
-              ),
-              _DarkMetric(label: 'Visitors inside', value: '$visitorsInside'),
-              _DarkMetric(label: 'Total logs', value: '$totalLogs'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DarkMetric extends StatelessWidget {
-  const _DarkMetric({
-    required this.label,
-    required this.value,
-    this.highlight = false,
-  });
-
-  final String label;
-  final String value;
-  final bool highlight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: highlight ? Colors.amberAccent : Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickTile extends StatelessWidget {
-  const _QuickTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(icon, size: 20, color: color),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PendingStaffInviteCard extends StatelessWidget {
-  final QueryDocumentSnapshot doc;
-  final String roleTitle;
-  final bool busy;
-  final VoidCallback onAccept;
-  final VoidCallback onDecline;
-
-  const _PendingStaffInviteCard({
-    required this.doc,
-    required this.roleTitle,
-    required this.busy,
-    required this.onAccept,
-    required this.onDecline,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final data = doc.data() as JsonMap? ?? <String, dynamic>{};
-    final propName = (data['propertyName'] ?? 'Building').toString();
-    final ownerName = (data['ownerName'] ?? 'Property Owner').toString();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.amber.shade800, width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'New $roleTitle Assignment: $propName',
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
-          ),
-          const SizedBox(height: 4),
-          Text('Invited by $ownerName'),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: busy ? null : onDecline,
-                  child: const Text('Decline'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: busy ? null : onAccept,
-                  child: const Text('Accept Assignment'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MaintenancePreviewList extends StatelessWidget {
   const _MaintenancePreviewList({
     required this.docs,
     required this.onUpdateStatus,
   });
 
-  final _DocList docs;
+  final HomeDocList docs;
   final void Function(DocumentSnapshot doc, String status) onUpdateStatus;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (docs.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: theme.colorScheme.outlineVariant),
-        ),
-        child: Center(
-          child: Text(
-            'No maintenance or plumbing requests yet.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
+      return const GrihoStatusState(
+        icon: Iconsax.tick_circle,
+        title: 'All caught up',
+        subtitle: 'No maintenance or plumbing requests yet.',
       );
     }
 
@@ -1192,7 +841,7 @@ class _MaintenancePreviewList extends StatelessWidget {
         for (final doc in docs)
           Builder(
             builder: (context) {
-              final d = doc.data() as JsonMap? ?? <String, dynamic>{};
+              final d = homeAsMap(doc.data());
               final title = (d['title'] ?? 'Maintenance Issue').toString();
               final desc = (d['description'] ?? '').toString();
               final unitName = (d['unitName'] ?? 'Common Area').toString();
@@ -1251,7 +900,7 @@ class _MaintenancePreviewList extends StatelessWidget {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          if (status == 'open')
+                          if (status == 'open') ...[
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: () =>
@@ -1259,7 +908,8 @@ class _MaintenancePreviewList extends StatelessWidget {
                                 child: const Text('Start Work'),
                               ),
                             ),
-                          if (status == 'open') const SizedBox(width: 10),
+                            const SizedBox(width: 10),
+                          ],
                           Expanded(
                             child: FilledButton.tonal(
                               onPressed: () => onUpdateStatus(doc, 'resolved'),
@@ -1294,13 +944,14 @@ class _CaretakerMaintenanceList extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('maintenanceRequests')
           .where('propertyId', isEqualTo: propertyId)
+          .limit(50)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const GrihoLoadingView(message: 'Loading tickets...');
         }
         final docs = (snapshot.data?.docs ?? []).where((doc) {
-          final d = doc.data() as JsonMap? ?? <String, dynamic>{};
+          final d = homeAsMap(doc.data());
           return (d['category'] ?? 'general') != 'electrical';
         }).toList();
 
@@ -1336,10 +987,11 @@ class _CaretakerVisitorSheet extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('visitorLogs')
           .where('propertyId', isEqualTo: propertyId)
+          .limit(50)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const GrihoLoadingView(message: 'Loading visitor log...');
         }
         final docs = snapshot.data?.docs ?? [];
 
@@ -1358,7 +1010,7 @@ class _CaretakerVisitorSheet extends StatelessWidget {
                     Navigator.of(context).pop();
                     onAddVisitor();
                   },
-                  icon: const Icon(Icons.add, size: 18),
+                  icon: const Icon(Iconsax.add, size: 18),
                   label: const Text('Check In'),
                 ),
               ],
@@ -1366,13 +1018,17 @@ class _CaretakerVisitorSheet extends StatelessWidget {
             const SizedBox(height: 12),
             if (docs.isEmpty)
               const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: Center(child: Text('No visitor entries logged yet.')),
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: GrihoStatusState(
+                  icon: Iconsax.personalcard,
+                  title: 'No visitor entries yet',
+                  subtitle: 'Check in guests or parcel deliveries here.',
+                ),
               ),
             for (final doc in docs)
               Builder(
                 builder: (context) {
-                  final d = doc.data() as JsonMap? ?? <String, dynamic>{};
+                  final d = homeAsMap(doc.data());
                   final name = (d['visitorName'] ?? 'Visitor').toString();
                   final unit = (d['targetUnit'] ?? '').toString();
                   final purpose = (d['purpose'] ?? '').toString();
@@ -1393,15 +1049,14 @@ class _CaretakerVisitorSheet extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           backgroundColor: isInside
-                              ? Colors.green.withValues(alpha: 0.15)
-                              : Colors.grey.withValues(alpha: 0.15),
+                              ? GrihoColors.emerald.withValues(alpha: 0.16)
+                              : theme.colorScheme.surfaceContainerHighest,
                           child: Icon(
-                            isInside
-                                ? Icons.login_rounded
-                                : Icons.logout_rounded,
+                            isInside ? Iconsax.login : Iconsax.logout,
+                            size: 18,
                             color: isInside
-                                ? Colors.green.shade800
-                                : Colors.grey,
+                                ? GrihoColors.emerald
+                                : theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1430,12 +1085,12 @@ class _CaretakerVisitorSheet extends StatelessWidget {
                             child: const Text('Check Out'),
                           )
                         else
-                          const Text(
+                          Text(
                             'LEFT',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey,
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                       ],

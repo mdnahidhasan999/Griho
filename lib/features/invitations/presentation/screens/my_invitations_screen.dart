@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../tenants/domain/entities/tenant_invitation.dart';
@@ -27,22 +28,11 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
   IconData _icon(String role) {
     switch (role) {
       case 'manager':
-        return Icons.admin_panel_settings_rounded;
+        return Iconsax.user_octagon;
       case 'electrician':
-        return Icons.bolt_rounded;
+        return Iconsax.flash_1;
       default:
-        return Icons.handyman_rounded;
-    }
-  }
-
-  String _route(String role) {
-    switch (role) {
-      case 'manager':
-        return RouteNames.managerHome;
-      case 'electrician':
-        return RouteNames.electricianHome;
-      default:
-        return RouteNames.caretakerHome;
+        return Iconsax.setting_2;
     }
   }
 
@@ -51,7 +41,9 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
     dynamic profile,
     bool accept,
   ) async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
     setState(() => _busy = true);
     try {
       final authUser = FirebaseAuth.instance.currentUser;
@@ -149,38 +141,29 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
       ref.invalidate(currentUserProfileProvider);
       ref.invalidate(pendingWorkInvitationsProvider);
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: accept ? Colors.green : Colors.orange,
-          content: Text(
-            accept
-                ? 'You are now ${WorkInvitation.roleLabel(inv.role)} of ${inv.propertyName}.'
-                : 'Invitation declined.',
-          ),
-          action: accept
-              ? SnackBarAction(
-                  label: 'OPEN',
-                  textColor: Colors.white,
-                  onPressed: () => context.go(_route(inv.role)),
-                )
-              : null,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      if (accept) {
+        GrihoFeedback.showSuccess(
+          context,
+          'You are now ${WorkInvitation.roleLabel(inv.role)} of${inv.propertyName}.',
+        );
+      } else {
+        GrihoFeedback.showWarning(context, 'Invitation declined.');
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not update invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
-          ),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(
+        context,
+        'Could not update invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
       );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -201,21 +184,14 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
     return Scaffold(
       extendBody: true,
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Invitations',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
+      appBar: AppBar(title: const Text('Invitations')),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(pendingWorkInvitationsProvider);
           ref.invalidate(recipientInvitationsProvider);
         },
         child: isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const GrihoLoadingView(message: 'Loading invitations...')
             : ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 105),
@@ -227,30 +203,16 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
                   if (leaseList.isEmpty && workList.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 64),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.mark_email_read_outlined,
-                            size: 52,
-                            color: theme.colorScheme.outline,
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No pending invitations',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: GrihoStatusState(
+                        icon: Iconsax.sms,
+                        title: 'No pending invitations',
+                        subtitle:
+                            'New residency or team invitations will appear here automatically.',
                       ),
                     ),
-
-                  // 1. Tenancy / Lease Offers
                   if (leaseList.isNotEmpty) ...[
                     Text(
                       'Tenancy & Unit Offers (${leaseList.length})',
@@ -262,14 +224,6 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                     for (final lease in leaseList)
                       Card(
                         margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          side: BorderSide(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.35,
-                            ),
-                          ),
-                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(14),
                           child: Column(
@@ -281,7 +235,8 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                                     backgroundColor:
                                         theme.colorScheme.primaryContainer,
                                     child: Icon(
-                                      Icons.home_work_rounded,
+                                      Iconsax.buildings_2,
+                                      size: 20,
                                       color: theme.colorScheme.primary,
                                     ),
                                   ),
@@ -309,19 +264,11 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                child: FilledButton.icon(
-                                  onPressed: () => context.push(
-                                    RouteNames.tenantInvitationPath(
-                                      lease.token,
-                                    ),
-                                  ),
-                                  icon: const Icon(
-                                    Icons.arrow_forward_rounded,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Review & Respond'),
+                              GrihoPrimaryButton(
+                                label: 'Review & Respond',
+                                icon: Iconsax.arrow_right_3,
+                                onPressed: () => context.push(
+                                  RouteNames.tenantInvitationPath(lease.token),
                                 ),
                               ),
                             ],
@@ -330,8 +277,6 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                       ),
                     const SizedBox(height: 10),
                   ],
-
-                  // 2. Team & Work Offers
                   if (workList.isNotEmpty) ...[
                     Text(
                       'Team & Work Offers (${workList.length})',
@@ -343,12 +288,6 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                     for (final inv in workList)
                       Card(
                         margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          side: BorderSide(
-                            color: theme.colorScheme.outlineVariant,
-                          ),
-                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(14),
                           child: Column(
@@ -361,6 +300,7 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
                                         theme.colorScheme.secondaryContainer,
                                     child: Icon(
                                       _icon(inv.role),
+                                      size: 20,
                                       color: theme
                                           .colorScheme
                                           .onSecondaryContainer,

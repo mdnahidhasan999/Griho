@@ -1,4 +1,7 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
+
+import '../../../../core/design_system/design_system.dart';
 
 class MoreMenuItem extends StatelessWidget {
   const MoreMenuItem({
@@ -23,15 +26,22 @@ class MoreMenuItem extends StatelessWidget {
     final foregroundColor = isDestructive
         ? theme.colorScheme.error
         : theme.colorScheme.onSurface;
+    final iconColor = isDestructive
+        ? theme.colorScheme.error
+        : theme.colorScheme.primary;
 
     return ListTile(
-      leading: Icon(icon, color: foregroundColor),
+      leading: Icon(icon, size: 21, color: iconColor),
       title: Text(
         title,
-        style: TextStyle(color: foregroundColor, fontWeight: FontWeight.w500),
+        style: TextStyle(color: foregroundColor, fontWeight: FontWeight.w600),
       ),
       subtitle: subtitle == null ? null : Text(subtitle!),
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: Icon(
+        Iconsax.arrow_right_3,
+        size: 16,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
       onTap: onTap,
     );
   }

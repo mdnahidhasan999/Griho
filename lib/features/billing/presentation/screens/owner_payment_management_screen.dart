@@ -1,17 +1,40 @@
 // noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../../../core/services/pdf_receipt_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../providers/payment_workflow_provider.dart';
+import '../widgets/billing_ui_helpers.dart';
 
-typedef JsonMap = Map<String, dynamic>;
-typedef _DocList = List<QueryDocumentSnapshot>;
+typedef _JsonMap = Map<String, dynamic>;
+typedef _DocSnapshot = QueryDocumentSnapshot<_JsonMap>;
+typedef _DocList = List<_DocSnapshot>;
+
+
+/// Cached stream provider for manager payment views so expanding cards or
+/// switching filters never recreates Firestore snapshot listeners.
+final _managedPropertyPaymentsProvider =
+StreamProvider.family<PaymentQuerySnapshot, String>((ref, propertyIdsKey) {
+  ref.watch(authStateProvider);
+  if (FirebaseAuth.instance.currentUser == null ||
+      propertyIdsKey.trim().isEmpty) {
+    return const Stream.empty();
+  }
+  final ids = propertyIdsKey
+      .split(',')
+      .where((id) => id.trim().isNotEmpty)
+      .toList();
+  return ref
+      .watch(paymentWorkflowDataSourceProvider)
+      .watchManagedPropertyPayments(propertyIds: ids);
+});
 
 class OwnerPaymentManagementScreen extends ConsumerStatefulWidget {
   const OwnerPaymentManagementScreen({super.key});
@@ -33,29 +56,11 @@ class _OwnerPaymentManagementScreenState
   final Map<String, String> _tenantNames = <String, String>{};
   final Set<String> _loadingMetaIds = <String>{};
 
-  JsonMap _docData(QueryDocumentSnapshot doc) {
-    final raw = doc.data();
-    if (raw is JsonMap) {
-      return raw;
-    }
-    if (raw is Map) {
-      return JsonMap.from(raw);
-    }
-    return <String, dynamic>{};
-  }
-
-  String _money(dynamic value) {
-    if (value is! num) return '0';
-    return value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2);
-  }
-
   String _date(dynamic value) {
     if (value is! Timestamp) {
       return 'Date pending';
     }
-
     final date = value.toDate().toLocal();
-
     return '${date.day.toString().padLeft(2, '0')}/'
         '${date.month.toString().padLeft(2, '0')}/'
         '${date.year} '
@@ -63,25 +68,35 @@ class _OwnerPaymentManagementScreenState
         '${date.minute.toString().padLeft(2, '0')}';
   }
 
-  Color _statusColor(BuildContext context, String status) {
+  Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'confirmed':
-        return Colors.green;
+        return GrihoColors.emerald;
       case 'rejected':
-        return Theme.of(context).colorScheme.error;
+        return GrihoColors.error;
       case 'pending':
-        return Colors.amber.shade800;
+        return GrihoColors.warning;
       default:
         return Colors.blueGrey;
     }
   }
 
   String _resolveGroupStatus(Set<String> statuses) {
-    if (statuses.isEmpty) return 'pending';
-    if (statuses.length == 1) return statuses.first;
-    if (statuses.every((status) => status == 'confirmed')) return 'confirmed';
-    if (statuses.every((status) => status == 'rejected')) return 'rejected';
-    if (statuses.contains('pending')) return 'pending';
+    if (statuses.isEmpty) {
+      return 'pending';
+    }
+    if (statuses.length == 1) {
+      return statuses.first;
+    }
+    if (statuses.every((s) => s == 'confirmed')) {
+      return 'confirmed';
+    }
+    if (statuses.every((s) => s == 'rejected')) {
+      return 'rejected';
+    }
+    if (statuses.contains('pending')) {
+      return 'pending';
+    }
     return 'partially processed';
   }
 
@@ -168,8 +183,8 @@ class _OwnerPaymentManagementScreenState
               .get();
 
           if (invQuery.docs.isNotEmpty) {
-            final invData = invQuery.docs.first.data();
-            final targetGrihoId = (invData['targetGrihoId'] ?? '')
+            final targetGrihoId =
+            (invQuery.docs.first.data()['targetGrihoId'] ?? '')
                 .toString()
                 .trim();
             if (targetGrihoId.isNotEmpty) {
@@ -197,13 +212,10 @@ class _OwnerPaymentManagementScreenState
             .collection('properties')
             .doc(propertyId)
             .get();
-        final data = doc.data();
-        if (data != null) {
-          final name = (data['name'] ?? '').toString().trim();
-          if (name.isNotEmpty) {
-            _propertyNames[propertyId] = name;
-            updated = true;
-          }
+        final name = (doc.data()?['name'] ?? '').toString().trim();
+        if (name.isNotEmpty) {
+          _propertyNames[propertyId] = name;
+          updated = true;
         }
       } catch (_) {}
     }
@@ -238,38 +250,37 @@ class _OwnerPaymentManagementScreenState
     final grouped = <String, _DocList>{};
 
     for (final doc in docs) {
-      final data = _docData(doc);
+      final data = doc.data();
       final batchId = (data['batchId'] ?? '').toString().trim();
       final groupKey = batchId.isNotEmpty ? batchId : 'legacy_${doc.id}';
-
-      grouped.putIfAbsent(groupKey, () => <QueryDocumentSnapshot>[]).add(doc);
+      grouped.putIfAbsent(groupKey, () => []).add(doc);
     }
 
     final result = grouped.entries.map((entry) {
-      final payments = entry.value;
+      final payments = entry.value
+        ..sort((a, b) {
+          final aTime = a.data()['createdAt'];
+          final bTime = b.data()['createdAt'];
+          final aMillis = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
+          final bMillis = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
+          return bMillis.compareTo(aMillis);
+        });
 
-      payments.sort((a, b) {
-        final aTime = _docData(a)['createdAt'];
-        final bTime = _docData(b)['createdAt'];
-        final aMillis = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
-        final bMillis = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
-        return bMillis.compareTo(aMillis);
-      });
-
-      final totalAmount = payments.fold<double>(0.0, (double total, doc) {
-        final amount = _docData(doc)['amount'];
+      final totalAmount = payments.fold<double>(0.0, (total, doc) {
+        final amount = doc.data()['amount'];
         return total + (amount is num ? amount.toDouble() : 0.0);
       });
 
       final statuses = payments
           .map(
-            (doc) =>
-                (_docData(doc)['status'] ?? 'pending').toString().toLowerCase(),
-          )
+            (doc) => (doc.data()['status'] ?? 'pending')
+            .toString()
+            .toLowerCase(),
+      )
           .toSet();
 
       final overallStatus = _resolveGroupStatus(statuses);
-      final firstData = _docData(payments.first);
+      final firstData = payments.first.data();
 
       final ownerId = (firstData['ownerId'] ?? '').toString().trim();
       final tenantUserId = (firstData['tenantUserId'] ?? '').toString().trim();
@@ -285,24 +296,19 @@ class _OwnerPaymentManagementScreenState
 
       final userKey = tenantUserId.isNotEmpty ? tenantUserId : tenantId;
 
-      String resolvedGrihoId;
-      if (rawGrihoId.startsWith('GRI-')) {
-        resolvedGrihoId = rawGrihoId;
-      } else if (_tenantGrihoIds.containsKey(userKey)) {
-        resolvedGrihoId = _tenantGrihoIds[userKey]!;
-      } else {
-        resolvedGrihoId = 'GRI-MEMBER';
-      }
+      final resolvedGrihoId = rawGrihoId.startsWith('GRI-')
+          ? rawGrihoId
+          : (_tenantGrihoIds[userKey] ?? 'GRI-MEMBER');
 
       final resolvedTenantName = rawTenantName.isNotEmpty
           ? rawTenantName
           : (_tenantNames[userKey] ??
-                (rawGrihoId.isNotEmpty && !rawGrihoId.startsWith('GRI-')
-                    ? rawGrihoId
-                    : 'Resident'));
+          (rawGrihoId.isNotEmpty && !rawGrihoId.startsWith('GRI-')
+              ? rawGrihoId
+              : 'Resident'));
 
       final resolvedPropName =
-          (rawPropName.isNotEmpty && rawPropName != 'Property')
+      (rawPropName.isNotEmpty && rawPropName != 'Property')
           ? rawPropName
           : (_propertyNames[propertyId] ?? 'Property');
 
@@ -310,11 +316,12 @@ class _OwnerPaymentManagementScreenState
           ? rawUnitName
           : (_unitNames[unitId] ?? 'Unit');
 
-      if (!_tenantGrihoIds.containsKey(userKey) ||
+      if ((!_tenantGrihoIds.containsKey(userKey) &&
+          !rawGrihoId.startsWith('GRI-')) ||
           resolvedPropName == 'Property' ||
           resolvedUnitName == 'Unit') {
         Future.microtask(
-          () => _ensureMetadataLoaded(
+              () => _ensureMetadataLoaded(
             tenantUserId: tenantUserId,
             tenantId: tenantId,
             propertyId: propertyId,
@@ -357,28 +364,13 @@ class _OwnerPaymentManagementScreenState
 
   String _formatBillingMonth(String billId) {
     try {
-      final parts = billId.split('_');
-      for (final part in parts) {
+      for (final part in billId.split('_')) {
         if (part.contains('-') && part.length == 7) {
           final dateParts = part.split('-');
           final year = int.tryParse(dateParts[0]);
           final month = int.tryParse(dateParts[1]);
-          const months = [
-            'January',
-            'February',
-            'March',
-            'April',
-            'May',
-            'June',
-            'July',
-            'August',
-            'September',
-            'October',
-            'November',
-            'December',
-          ];
           if (year != null && month != null && month >= 1 && month <= 12) {
-            return '${months[month - 1]} $year';
+            return formatBillingMonthYear(DateTime(year, month, 1));
           }
         }
       }
@@ -388,28 +380,44 @@ class _OwnerPaymentManagementScreenState
 
   IconData _chargeIcon(String billId, String collection) {
     if (collection == 'monthlyRents') {
-      return Icons.home_rounded;
+      return Iconsax.home_2;
     }
     final lower = billId.toLowerCase();
-    if (lower.contains('_water_')) return Icons.water_drop_rounded;
-    if (lower.contains('_gas_')) return Icons.local_fire_department_rounded;
-    if (lower.contains('_electricity_')) return Icons.bolt_rounded;
-    if (lower.contains('_garbage_')) return Icons.delete_outline_rounded;
-    if (lower.contains('_servicecharge_')) {
-      return Icons.room_service_outlined;
+    if (lower.contains('_water_')) {
+      return Iconsax.drop;
     }
-    return Icons.receipt_long_rounded;
+    if (lower.contains('_gas_')) {
+      return Iconsax.flash_1;
+    }
+    if (lower.contains('_electricity_')) {
+      return Iconsax.electricity;
+    }
+    if (lower.contains('_garbage_')) {
+      return Iconsax.trash;
+    }
+    if (lower.contains('_servicecharge_')) {
+      return Iconsax.broom;
+    }
+    return Iconsax.receipt_item;
   }
 
   Color _chargeColor(String billId, String collection) {
     if (collection == 'monthlyRents') {
-      return Colors.indigo;
+      return GrihoColors.emerald;
     }
     final lower = billId.toLowerCase();
-    if (lower.contains('_water_')) return Colors.blue;
-    if (lower.contains('_gas_')) return Colors.deepOrange;
-    if (lower.contains('_electricity_')) return Colors.amber.shade700;
-    if (lower.contains('_garbage_')) return Colors.teal;
+    if (lower.contains('_water_')) {
+      return Colors.blueAccent;
+    }
+    if (lower.contains('_gas_')) {
+      return Colors.deepOrange;
+    }
+    if (lower.contains('_electricity_')) {
+      return GrihoColors.warning;
+    }
+    if (lower.contains('_garbage_')) {
+      return Colors.teal;
+    }
     if (lower.contains('_servicecharge_')) {
       return Colors.purple;
     }
@@ -421,10 +429,18 @@ class _OwnerPaymentManagementScreenState
       return 'House Rent';
     }
     final lower = billId.toLowerCase();
-    if (lower.contains('_water_')) return 'Water Bill';
-    if (lower.contains('_gas_')) return 'Gas Bill';
-    if (lower.contains('_electricity_')) return 'Electricity Bill';
-    if (lower.contains('_garbage_')) return 'Garbage Bill';
+    if (lower.contains('_water_')) {
+      return 'Water Bill';
+    }
+    if (lower.contains('_gas_')) {
+      return 'Gas Bill';
+    }
+    if (lower.contains('_electricity_')) {
+      return 'Electricity Bill';
+    }
+    if (lower.contains('_garbage_')) {
+      return 'Garbage Bill';
+    }
     if (lower.contains('_servicecharge_')) {
       return 'Service Charge';
     }
@@ -432,16 +448,16 @@ class _OwnerPaymentManagementScreenState
   }
 
   Future<void> _openPdfReceipt(
-    _PaymentGroup group, {
-    required bool share,
-  }) async {
+      _PaymentGroup group, {
+        required bool share,
+      }) async {
     try {
       final issuedAt = group.createdAt is Timestamp
           ? (group.createdAt as Timestamp).toDate()
           : DateTime.now();
 
       final items = group.payments.map((doc) {
-        final data = _docData(doc);
+        final data = doc.data();
         final amount = (data['amount'] is num)
             ? (data['amount'] as num).toDouble()
             : 0.0;
@@ -481,10 +497,10 @@ class _OwnerPaymentManagementScreenState
         await PdfReceiptService.previewOrPrintReceipt(receiptData);
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not generate PDF receipt: $e')),
-      );
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, 'Could not generate PDF receipt: $e');
     }
   }
 
@@ -502,7 +518,7 @@ class _OwnerPaymentManagementScreenState
               automaticallyImplyLeading: false,
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Iconsax.close_circle),
                   onPressed: () => Navigator.of(ctx).pop(),
                 ),
               ],
@@ -512,7 +528,9 @@ class _OwnerPaymentManagementScreenState
                 imageUrl,
                 fit: BoxFit.contain,
                 loadingBuilder: (_, child, progress) {
-                  if (progress == null) return child;
+                  if (progress == null) {
+                    return child;
+                  }
                   return const Padding(
                     padding: EdgeInsets.all(40),
                     child: CircularProgressIndicator(),
@@ -531,13 +549,13 @@ class _OwnerPaymentManagementScreenState
   }
 
   Future<void> _reviewGroupPayment(_PaymentGroup group, bool confirm) async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
 
     String? reason;
-
     if (!confirm) {
       var draftReason = '';
-
       reason = await showDialog<String>(
         context: context,
         barrierDismissible: false,
@@ -548,7 +566,7 @@ class _OwnerPaymentManagementScreenState
             ),
             title: const Row(
               children: [
-                Icon(Icons.cancel_outlined, color: Colors.red),
+                Icon(Iconsax.close_circle, color: GrihoColors.error),
                 SizedBox(width: 8),
                 Text('Reject Payment Group'),
               ],
@@ -556,15 +574,10 @@ class _OwnerPaymentManagementScreenState
             content: TextField(
               autofocus: true,
               maxLines: 3,
-              onChanged: (value) {
-                draftReason = value;
-              },
+              onChanged: (value) => draftReason = value,
               decoration: const InputDecoration(
                 labelText: 'Reason for rejection *',
                 hintText: 'e.g. Transaction ID could not be verified',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12)),
-                ),
               ),
             ),
             actions: [
@@ -577,10 +590,7 @@ class _OwnerPaymentManagementScreenState
               ),
               FilledButton(
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  backgroundColor: GrihoColors.error,
                 ),
                 onPressed: () {
                   final text = draftReason.trim();
@@ -596,7 +606,9 @@ class _OwnerPaymentManagementScreenState
         },
       );
 
-      if (reason == null || reason.isEmpty) return;
+      if (reason == null || reason.isEmpty) {
+        return;
+      }
     } else {
       final approved = await showDialog<bool>(
         context: context,
@@ -608,32 +620,25 @@ class _OwnerPaymentManagementScreenState
             ),
             title: const Row(
               children: [
-                Icon(Icons.check_circle_outline, color: Colors.green),
+                Icon(Iconsax.tick_circle, color: GrihoColors.emerald),
                 SizedBox(width: 8),
-                Text('Confirm Payment Group?'),
+                Text('Confirm Payment?'),
               ],
             ),
             content: Text(
-              'Confirm total ৳${_money(group.totalAmount)} received from ${group.tenantName} (${group.grihoId})?\n\n'
-              'Only confirm after verifying the money has reached the account.',
+              'Confirm total ৳${formatBillingAmount(group.totalAmount)} received from ${group.tenantName} (${group.grihoId})?\n\n'
+                  'Only confirm after verifying the money has reached the account.',
             ),
             actions: [
               TextButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop(false);
-                },
+                onPressed: () => Navigator.of(dialogContext).pop(false),
                 child: const Text('Cancel'),
               ),
               FilledButton(
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  backgroundColor: GrihoColors.emerald,
                 ),
-                onPressed: () {
-                  Navigator.of(dialogContext).pop(true);
-                },
+                onPressed: () => Navigator.of(dialogContext).pop(true),
                 child: const Text('Confirm Received'),
               ),
             ],
@@ -641,22 +646,24 @@ class _OwnerPaymentManagementScreenState
         },
       );
 
-      if (approved != true) return;
+      if (approved != true) {
+        return;
+      }
     }
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
-    setState(() {
-      _busy = true;
-    });
+    setState(() => _busy = true);
 
     try {
       final source = ref.read(paymentWorkflowDataSourceProvider);
 
       for (final doc in group.payments) {
-        final data = _docData(doc);
-        if (data['status'] != 'pending') continue;
-
+        if (doc.data()['status'] != 'pending') {
+          continue;
+        }
         if (confirm) {
           await source.confirmPayment(paymentId: doc.id);
         } else {
@@ -670,39 +677,33 @@ class _OwnerPaymentManagementScreenState
         propertyName: group.propertyName,
         category: 'payment',
         actionTitle: confirm
-            ? 'Payment Confirmed (৳${_money(group.totalAmount)})'
-            : 'Payment Rejected (৳${_money(group.totalAmount)})',
+            ? 'Payment Confirmed (৳${formatBillingAmount(group.totalAmount)})'
+            : 'Payment Rejected (৳${formatBillingAmount(group.totalAmount)})',
         details: confirm
             ? 'Confirmed ${group.payments.length} charge(s) from ${group.tenantName} (${group.unitName}) via ${group.method.toUpperCase()}.'
             : 'Rejected payment from ${group.tenantName} (${group.unitName}). Reason: $reason',
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            confirm
-                ? 'Payment group confirmed successfully.'
-                : 'Payment group rejected.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (confirm) {
+        GrihoFeedback.showSuccess(
+          context,
+          'Payment group confirmed successfully.',
+        );
+      } else {
+        GrihoFeedback.showWarning(context, 'Payment group rejected.');
+      }
     } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(context, cleanBillingError(error));
     } finally {
       if (mounted) {
-        setState(() {
-          _busy = false;
-        });
+        setState(() => _busy = false);
       }
     }
   }
@@ -715,44 +716,81 @@ class _OwnerPaymentManagementScreenState
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Payment Management',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
+      appBar: AppBar(title: const Text('Payment Management')),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text('Unable to load user profile: $error')),
+        loading: () => const GrihoLoadingView(message: 'Loading profile...'),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load profile',
+              subtitle: error.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentUserProfileProvider),
+            ),
+          ),
+        ),
         data: (profile) {
           if (profile == null || profile.uid.trim().isEmpty) {
-            return const Center(child: Text('User profile not found.'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.user_remove,
+                  title: 'User profile not found',
+                  subtitle: 'Please sign in again.',
+                ),
+              ),
+            );
           }
 
           return propertiesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, _) =>
-                Center(child: Text('Unable to load properties: $err')),
+            loading: () =>
+            const GrihoLoadingView(message: 'Loading properties...'),
+            error: (err, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.warning_2,
+                  title: 'Unable to load properties',
+                  subtitle: err.toString(),
+                  actionLabel: 'Retry',
+                  onAction: () =>
+                      ref.invalidate(currentOwnerPropertiesProvider),
+                ),
+              ),
+            ),
             data: (properties) {
-              final propIds = properties.map((p) => p.id).take(10).toList();
               final isOwnerDashboard = profile.defaultDashboard == 'owner';
+              final sortedPropIds =
+              properties.map((p) => p.id.trim()).where((id) => id.isNotEmpty).take(10).toList()
+                ..sort();
+              final propIdsKey = sortedPropIds.join(',');
 
-              final Stream<QuerySnapshot> paymentsStream;
+              final AsyncValue<PaymentQuerySnapshot> paymentsAsync;
               if (isOwnerDashboard) {
-                paymentsStream = FirebaseFirestore.instance
-                    .collection('paymentTransactions')
-                    .where('ownerId', isEqualTo: profile.uid)
-                    .snapshots();
-              } else if (propIds.isNotEmpty) {
-                paymentsStream = FirebaseFirestore.instance
-                    .collection('paymentTransactions')
-                    .where('propertyId', whereIn: propIds)
-                    .snapshots();
+                paymentsAsync = ref.watch(
+                  ownerPaymentTransactionsProvider((
+                  ownerId: profile.uid,
+                  pendingOnly: false,
+                  )),
+                );
+              } else if (propIdsKey.isNotEmpty) {
+                paymentsAsync = ref.watch(
+                  _managedPropertyPaymentsProvider(propIdsKey),
+                );
               } else {
-                paymentsStream = const Stream<QuerySnapshot>.empty();
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: GrihoStatusState(
+                      icon: Iconsax.buildings_2,
+                      title: 'No properties assigned',
+                      subtitle: 'You have no managed properties to review.',
+                    ),
+                  ),
+                );
               }
 
               return Column(
@@ -773,37 +811,26 @@ class _OwnerPaymentManagementScreenState
                         ),
                       ],
                       selected: {_filter},
-                      onSelectionChanged: (selection) {
-                        setState(() {
-                          _filter = selection.first;
-                        });
-                      },
+                      onSelectionChanged: (selection) =>
+                          setState(() => _filter = selection.first),
                     ),
                   ),
                   Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: paymentsStream,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Text(
-                                'Unable to load payments: ${snapshot.error}',
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          );
-                        }
-
-                        final allDocs = snapshot.data?.docs.toList() ?? [];
+                    child: paymentsAsync.when(
+                      loading: () =>
+                      const GrihoLoadingView(message: 'Loading payments...'),
+                      error: (error, _) => Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: GrihoStatusState(
+                            icon: Iconsax.warning_2,
+                            title: 'Unable to load payments',
+                            subtitle: error.toString(),
+                          ),
+                        ),
+                      ),
+                      data: (snapshot) {
+                        final allDocs = snapshot.docs.toList();
                         final allGroups = _groupPayments(allDocs);
 
                         final pendingCount = allGroups
@@ -811,18 +838,18 @@ class _OwnerPaymentManagementScreenState
                             .length;
 
                         final confirmedTotal = allDocs
-                            .where(
-                              (doc) => _docData(doc)['status'] == 'confirmed',
-                            )
-                            .fold<double>(0.0, (double total, doc) {
-                              final amount = _docData(doc)['amount'];
-                              return total +
-                                  (amount is num ? amount.toDouble() : 0.0);
-                            });
+                            .where((doc) => doc.data()['status'] == 'confirmed')
+                            .fold<double>(0.0, (total, doc) {
+                          final amount = doc.data()['amount'];
+                          return total +
+                              (amount is num ? amount.toDouble() : 0.0);
+                        });
 
-                        final filteredGroups = allGroups.where((g) {
-                          return _filter == 'all' || g.status == _filter;
-                        }).toList();
+                        final filteredGroups = allGroups
+                            .where(
+                              (g) => _filter == 'all' || g.status == _filter,
+                        )
+                            .toList();
 
                         return ListView(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
@@ -833,42 +860,30 @@ class _OwnerPaymentManagementScreenState
                                   child: _MetricCard(
                                     label: 'Pending Batches',
                                     value: '$pendingCount',
-                                    icon: Icons.hourglass_top_rounded,
-                                    iconColor: Colors.amber.shade800,
+                                    icon: Iconsax.clock,
+                                    iconColor: GrihoColors.warning,
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _MetricCard(
                                     label: 'Confirmed Total',
-                                    value: '৳${_money(confirmedTotal)}',
-                                    icon: Icons.verified_rounded,
-                                    iconColor: Colors.green,
+                                    value:
+                                    '৳${formatBillingAmount(confirmedTotal)}',
+                                    icon: Iconsax.verify,
+                                    iconColor: GrihoColors.emerald,
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 16),
                             if (filteredGroups.isEmpty)
-                              Container(
-                                padding: const EdgeInsets.all(40),
-                                alignment: Alignment.center,
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      Icons.receipt_long_outlined,
-                                      size: 48,
-                                      color: theme.colorScheme.outlineVariant,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'No payments in this category.',
-                                      style: TextStyle(
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 32),
+                                child: GrihoStatusState(
+                                  icon: Iconsax.receipt_item,
+                                  title: 'No payments found',
+                                  subtitle: 'No payments in this category.',
                                 ),
                               )
                             else
@@ -876,37 +891,20 @@ class _OwnerPaymentManagementScreenState
                                 final isExpanded = _expandedGroupIds.contains(
                                   group.id,
                                 );
-                                final statusColor = _statusColor(
-                                  context,
-                                  group.status,
-                                );
+                                final statusColor = _statusColor(group.status);
 
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 14),
                                   decoration: BoxDecoration(
-                                    color: isExpanded
-                                        ? theme
-                                              .colorScheme
-                                              .surfaceContainerLowest
-                                        : theme.colorScheme.surface,
+                                    color: theme.colorScheme.surfaceContainerLow,
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
                                       color: isExpanded
                                           ? theme.colorScheme.primary
-                                                .withValues(alpha: 0.35)
-                                          : theme.colorScheme.outlineVariant
-                                                .withValues(alpha: 0.6),
+                                          .withValues(alpha: 0.45)
+                                          : theme.colorScheme.outlineVariant,
                                       width: isExpanded ? 1.5 : 1,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(
-                                          alpha: isExpanded ? 0.05 : 0.02,
-                                        ),
-                                        blurRadius: isExpanded ? 16 : 6,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
                                   ),
                                   child: Column(
                                     children: [
@@ -927,39 +925,39 @@ class _OwnerPaymentManagementScreenState
                                           padding: const EdgeInsets.all(16),
                                           child: Column(
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                            CrossAxisAlignment.start,
                                             children: [
                                               Row(
                                                 crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
+                                                CrossAxisAlignment.start,
                                                 children: [
                                                   Expanded(
                                                     child: Column(
                                                       crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
+                                                      CrossAxisAlignment
+                                                          .start,
                                                       children: [
                                                         Row(
                                                           children: [
                                                             Text(
-                                                              '৳${_money(group.totalAmount)}',
+                                                              '৳${formatBillingAmount(group.totalAmount)}',
                                                               style: theme
                                                                   .textTheme
                                                                   .headlineSmall
                                                                   ?.copyWith(
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w900,
-                                                                  ),
+                                                                fontWeight:
+                                                                FontWeight
+                                                                    .w900,
+                                                              ),
                                                             ),
                                                             const SizedBox(
                                                               width: 10,
                                                             ),
                                                             _StatusBadge(
                                                               status:
-                                                                  group.status,
+                                                              group.status,
                                                               color:
-                                                                  statusColor,
+                                                              statusColor,
                                                             ),
                                                           ],
                                                         ),
@@ -969,8 +967,8 @@ class _OwnerPaymentManagementScreenState
                                                         Row(
                                                           children: [
                                                             Icon(
-                                                              Icons
-                                                                  .badge_outlined,
+                                                              Iconsax
+                                                                  .personalcard,
                                                               size: 14,
                                                               color: theme
                                                                   .colorScheme
@@ -984,10 +982,10 @@ class _OwnerPaymentManagementScreenState
                                                               style: TextStyle(
                                                                 fontSize: 12,
                                                                 fontWeight:
-                                                                    FontWeight
-                                                                        .w900,
+                                                                FontWeight
+                                                                    .w900,
                                                                 letterSpacing:
-                                                                    0.5,
+                                                                0.5,
                                                                 color: theme
                                                                     .colorScheme
                                                                     .primary,
@@ -996,16 +994,21 @@ class _OwnerPaymentManagementScreenState
                                                             const SizedBox(
                                                               width: 8,
                                                             ),
-                                                            Text(
-                                                              '•  ${group.tenantName}',
-                                                              style: TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                                color: theme
-                                                                    .colorScheme
-                                                                    .onSurfaceVariant,
+                                                            Flexible(
+                                                              child: Text(
+                                                                '•  ${group.tenantName}',
+                                                                overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                                style: TextStyle(
+                                                                  fontSize: 12,
+                                                                  fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                                  color: theme
+                                                                      .colorScheme
+                                                                      .onSurfaceVariant,
+                                                                ),
                                                               ),
                                                             ),
                                                           ],
@@ -1013,51 +1016,37 @@ class _OwnerPaymentManagementScreenState
                                                       ],
                                                     ),
                                                   ),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.all(6),
-                                                    decoration: BoxDecoration(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .surfaceContainerHighest
-                                                          .withValues(
-                                                            alpha: 0.4,
-                                                          ),
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: Icon(
-                                                      isExpanded
-                                                          ? Icons
-                                                                .keyboard_arrow_up_rounded
-                                                          : Icons
-                                                                .keyboard_arrow_down_rounded,
-                                                      size: 20,
-                                                      color: theme
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
+                                                  Icon(
+                                                    isExpanded
+                                                        ? Iconsax.arrow_up_2
+                                                        : Iconsax.arrow_down_1,
+                                                    size: 18,
+                                                    color: theme
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
                                                   ),
                                                 ],
                                               ),
                                               const SizedBox(height: 10),
                                               Container(
                                                 padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6,
-                                                    ),
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 6,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: theme
                                                       .colorScheme
-                                                      .surfaceContainerLow,
+                                                      .surfaceContainerHighest
+                                                      .withValues(alpha: 0.45),
                                                   borderRadius:
-                                                      BorderRadius.circular(10),
+                                                  BorderRadius.circular(10),
                                                 ),
                                                 child: Row(
                                                   children: [
                                                     Icon(
-                                                      Icons.apartment_rounded,
-                                                      size: 14,
+                                                      Iconsax.buildings_2,
+                                                      size: 13,
                                                       color: theme
                                                           .colorScheme
                                                           .onSurfaceVariant,
@@ -1070,10 +1059,10 @@ class _OwnerPaymentManagementScreenState
                                                             .textTheme
                                                             .bodySmall
                                                             ?.copyWith(
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w600,
-                                                            ),
+                                                          fontWeight:
+                                                          FontWeight
+                                                              .w600,
+                                                        ),
                                                         overflow: TextOverflow
                                                             .ellipsis,
                                                       ),
@@ -1084,12 +1073,12 @@ class _OwnerPaymentManagementScreenState
                                                           .textTheme
                                                           .labelSmall
                                                           ?.copyWith(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .onSurfaceVariant,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                          ),
+                                                        color: theme
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                        fontWeight:
+                                                        FontWeight.bold,
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
@@ -1099,7 +1088,7 @@ class _OwnerPaymentManagementScreenState
                                         ),
                                       ),
                                       if (isExpanded)
-                                        Container(
+                                        Padding(
                                           padding: const EdgeInsets.fromLTRB(
                                             16,
                                             0,
@@ -1108,7 +1097,7 @@ class _OwnerPaymentManagementScreenState
                                           ),
                                           child: Column(
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                            CrossAxisAlignment.start,
                                             children: [
                                               const Divider(height: 20),
                                               _DetailLine(
@@ -1121,19 +1110,9 @@ class _OwnerPaymentManagementScreenState
                                                       text: group.grihoId,
                                                     ),
                                                   );
-                                                  ScaffoldMessenger.of(
+                                                  GrihoFeedback.showSuccess(
                                                     context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Griho ID copied.',
-                                                      ),
-                                                      duration: Duration(
-                                                        seconds: 1,
-                                                      ),
-                                                      behavior: SnackBarBehavior
-                                                          .floating,
-                                                    ),
+                                                    'Griho ID copied.',
                                                   );
                                                 },
                                               ),
@@ -1144,7 +1123,7 @@ class _OwnerPaymentManagementScreenState
                                               _DetailLine(
                                                 label: 'Property & Unit',
                                                 value:
-                                                    '${group.propertyName} (${group.unitName})',
+                                                '${group.propertyName} (${group.unitName})',
                                               ),
                                               _DetailLine(
                                                 label: 'Transaction ID',
@@ -1171,8 +1150,8 @@ class _OwnerPaymentManagementScreenState
                                                         group.proofUrl,
                                                       ),
                                                   icon: const Icon(
-                                                    Icons.image_outlined,
-                                                    size: 18,
+                                                    Iconsax.gallery,
+                                                    size: 17,
                                                   ),
                                                   label: const Text(
                                                     'View Payment Screenshot',
@@ -1190,9 +1169,8 @@ class _OwnerPaymentManagementScreenState
                                                             share: false,
                                                           ),
                                                       icon: const Icon(
-                                                        Icons
-                                                            .picture_as_pdf_rounded,
-                                                        size: 18,
+                                                        Iconsax.document_text,
+                                                        size: 17,
                                                       ),
                                                       label: const Text(
                                                         'PDF Receipt',
@@ -1202,20 +1180,20 @@ class _OwnerPaymentManagementScreenState
                                                   const SizedBox(width: 10),
                                                   Expanded(
                                                     child:
-                                                        FilledButton.tonalIcon(
-                                                          onPressed: () =>
-                                                              _openPdfReceipt(
-                                                                group,
-                                                                share: true,
-                                                              ),
-                                                          icon: const Icon(
-                                                            Icons.share_rounded,
-                                                            size: 18,
+                                                    FilledButton.tonalIcon(
+                                                      onPressed: () =>
+                                                          _openPdfReceipt(
+                                                            group,
+                                                            share: true,
                                                           ),
-                                                          label: const Text(
-                                                            'Share Receipt',
-                                                          ),
-                                                        ),
+                                                      icon: const Icon(
+                                                        Iconsax.export_3,
+                                                        size: 17,
+                                                      ),
+                                                      label: const Text(
+                                                        'Share Receipt',
+                                                      ),
+                                                    ),
                                                   ),
                                                 ],
                                               ),
@@ -1226,28 +1204,28 @@ class _OwnerPaymentManagementScreenState
                                                     .textTheme
                                                     .titleSmall
                                                     ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                    ),
+                                                  fontWeight:
+                                                  FontWeight.w800,
+                                                ),
                                               ),
                                               const SizedBox(height: 8),
                                               ...group.payments.map((doc) {
-                                                final data = _docData(doc);
+                                                final data = doc.data();
                                                 final amount = data['amount'];
                                                 final billId =
-                                                    (data['billId'] ?? '')
-                                                        .toString();
+                                                (data['billId'] ?? '')
+                                                    .toString();
                                                 final monthTitle =
-                                                    _formatBillingMonth(billId);
+                                                _formatBillingMonth(billId);
                                                 final collection =
-                                                    (data['billCollection'] ??
-                                                            'monthlyBills')
-                                                        .toString();
+                                                (data['billCollection'] ??
+                                                    'monthlyBills')
+                                                    .toString();
                                                 final chargeType =
-                                                    _formatChargeType(
-                                                      billId,
-                                                      collection,
-                                                    );
+                                                _formatChargeType(
+                                                  billId,
+                                                  collection,
+                                                );
                                                 final icon = _chargeIcon(
                                                   billId,
                                                   collection,
@@ -1257,9 +1235,9 @@ class _OwnerPaymentManagementScreenState
                                                   collection,
                                                 );
                                                 final reason =
-                                                    (data['rejectionReason'] ??
-                                                            '')
-                                                        .toString();
+                                                (data['rejectionReason'] ??
+                                                    '')
+                                                    .toString();
 
                                                 return Container(
                                                   margin: const EdgeInsets.only(
@@ -1272,45 +1250,47 @@ class _OwnerPaymentManagementScreenState
                                                     color: theme
                                                         .colorScheme
                                                         .surfaceContainerHighest
-                                                        .withValues(alpha: 0.3),
+                                                        .withValues(
+                                                      alpha: 0.35,
+                                                    ),
                                                     borderRadius:
-                                                        BorderRadius.circular(
-                                                          14,
-                                                        ),
+                                                    BorderRadius.circular(
+                                                      14,
+                                                    ),
                                                     border: Border.all(
                                                       color: theme
                                                           .colorScheme
                                                           .outlineVariant
                                                           .withValues(
-                                                            alpha: 0.5,
-                                                          ),
+                                                        alpha: 0.5,
+                                                      ),
                                                     ),
                                                   ),
                                                   child: Column(
                                                     crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
+                                                    CrossAxisAlignment
+                                                        .start,
                                                     children: [
                                                       Row(
                                                         children: [
                                                           Container(
                                                             padding:
-                                                                const EdgeInsets.all(
-                                                                  8,
-                                                                ),
+                                                            const EdgeInsets.all(
+                                                              8,
+                                                            ),
                                                             decoration: BoxDecoration(
                                                               color: color
                                                                   .withValues(
-                                                                    alpha: 0.12,
-                                                                  ),
+                                                                alpha: 0.14,
+                                                              ),
                                                               borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    10,
-                                                                  ),
+                                                              BorderRadius.circular(
+                                                                10,
+                                                              ),
                                                             ),
                                                             child: Icon(
                                                               icon,
-                                                              size: 18,
+                                                              size: 17,
                                                               color: color,
                                                             ),
                                                           ),
@@ -1320,17 +1300,17 @@ class _OwnerPaymentManagementScreenState
                                                           Expanded(
                                                             child: Column(
                                                               crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
+                                                              CrossAxisAlignment
+                                                                  .start,
                                                               children: [
                                                                 Text(
                                                                   chargeType,
                                                                   style: const TextStyle(
                                                                     fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
+                                                                    FontWeight
+                                                                        .bold,
                                                                     fontSize:
-                                                                        14,
+                                                                    14,
                                                                   ),
                                                                 ),
                                                                 Text(
@@ -1339,23 +1319,23 @@ class _OwnerPaymentManagementScreenState
                                                                       .textTheme
                                                                       .bodySmall
                                                                       ?.copyWith(
-                                                                        color: theme
-                                                                            .colorScheme
-                                                                            .onSurfaceVariant,
-                                                                      ),
+                                                                    color: theme
+                                                                        .colorScheme
+                                                                        .onSurfaceVariant,
+                                                                  ),
                                                                 ),
                                                               ],
                                                             ),
                                                           ),
                                                           Text(
-                                                            '৳${_money(amount)}',
+                                                            '৳${formatBillingAmount(amount is num ? amount : 0)}',
                                                             style:
-                                                                const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w900,
-                                                                  fontSize: 15,
-                                                                ),
+                                                            const TextStyle(
+                                                              fontWeight:
+                                                              FontWeight
+                                                                  .w900,
+                                                              fontSize: 15,
+                                                            ),
                                                           ),
                                                         ],
                                                       ),
@@ -1366,9 +1346,8 @@ class _OwnerPaymentManagementScreenState
                                                         ),
                                                         Text(
                                                           'Rejection reason: $reason',
-                                                          style: TextStyle(
-                                                            color: theme
-                                                                .colorScheme
+                                                          style: const TextStyle(
+                                                            color: GrihoColors
                                                                 .error,
                                                             fontSize: 12,
                                                           ),
@@ -1388,39 +1367,31 @@ class _OwnerPaymentManagementScreenState
                                                         onPressed: _busy
                                                             ? null
                                                             : () =>
-                                                                  _reviewGroupPayment(
-                                                                    group,
-                                                                    false,
-                                                                  ),
+                                                            _reviewGroupPayment(
+                                                              group,
+                                                              false,
+                                                            ),
                                                         icon: const Icon(
-                                                          Icons.close_rounded,
-                                                          size: 18,
+                                                          Iconsax.close_circle,
+                                                          size: 17,
                                                         ),
                                                         label: const Text(
                                                           'Reject',
                                                         ),
                                                         style: OutlinedButton.styleFrom(
-                                                          foregroundColor: theme
-                                                              .colorScheme
-                                                              .error,
+                                                          foregroundColor:
+                                                          GrihoColors.error,
                                                           side: BorderSide(
-                                                            color: theme
-                                                                .colorScheme
+                                                            color: GrihoColors
                                                                 .error
                                                                 .withValues(
-                                                                  alpha: 0.5,
-                                                                ),
-                                                          ),
-                                                          shape: RoundedRectangleBorder(
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  12,
-                                                                ),
+                                                              alpha: 0.6,
+                                                            ),
                                                           ),
                                                           padding:
-                                                              const EdgeInsets.symmetric(
-                                                                vertical: 12,
-                                                              ),
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 12,
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
@@ -1430,31 +1401,25 @@ class _OwnerPaymentManagementScreenState
                                                         onPressed: _busy
                                                             ? null
                                                             : () =>
-                                                                  _reviewGroupPayment(
-                                                                    group,
-                                                                    true,
-                                                                  ),
+                                                            _reviewGroupPayment(
+                                                              group,
+                                                              true,
+                                                            ),
                                                         icon: const Icon(
-                                                          Icons
-                                                              .check_circle_rounded,
-                                                          size: 18,
+                                                          Iconsax.tick_circle,
+                                                          size: 17,
                                                         ),
                                                         label: const Text(
                                                           'Confirm',
                                                         ),
                                                         style: FilledButton.styleFrom(
                                                           backgroundColor:
-                                                              Colors.green,
-                                                          shape: RoundedRectangleBorder(
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  12,
-                                                                ),
-                                                          ),
+                                                          GrihoColors
+                                                              .emerald,
                                                           padding:
-                                                              const EdgeInsets.symmetric(
-                                                                vertical: 12,
-                                                              ),
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 12,
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
@@ -1530,7 +1495,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
@@ -1569,19 +1534,17 @@ class _MetricCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.12),
+              color: iconColor.withValues(alpha: 0.14),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: iconColor, size: 20),
+            child: Icon(icon, color: iconColor, size: 19),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1662,7 +1625,7 @@ class _DetailLine extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(4),
                 child: Icon(
-                  Icons.copy_rounded,
+                  Iconsax.copy,
                   size: 15,
                   color: theme.colorScheme.primary,
                 ),

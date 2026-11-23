@@ -1,23 +1,30 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
+
+typedef WorkJsonMap = Map<String, dynamic>;
+typedef WorkDocSnapshot = DocumentSnapshot<WorkJsonMap>;
 
 /// A pending "work" invitation (manager / caretaker / electrician) addressed to
 /// the signed-in user — independent of which console (role) they are in now.
 class WorkInvitation {
   const WorkInvitation({required this.doc, required this.role});
 
-  final DocumentSnapshot<Map<String, dynamic>> doc;
+  final WorkDocSnapshot doc;
 
   /// manager | caretaker | electrician
   final String role;
 
-  Map<String, dynamic> get data => doc.data() ?? const {};
+  WorkJsonMap get data => doc.data() ?? const {};
+
   bool get isManager => role == 'manager';
+
   String get propertyName => (data['propertyName'] ?? 'Property').toString();
+
   String get ownerName => (data['ownerName'] ?? 'Owner').toString();
+
   String get collection =>
       isManager ? 'managerInvitations' : 'staffInvitations';
 
@@ -47,16 +54,22 @@ Future<List<WorkInvitation>> fetchPendingWorkInvitations(
   final found = <String, WorkInvitation>{};
 
   Future<void> run(String collection, String field, String value) async {
-    if (value.isEmpty) return;
+    if (value.isEmpty) {
+      return;
+    }
     try {
       final snap = await db
           .collection(collection)
           .where(field, isEqualTo: value)
+          .where('status', isEqualTo: 'pending')
+          .limit(20)
           .get();
+
       for (final d in snap.docs) {
         final data = d.data();
-        if ((data['status'] ?? '') != 'pending') continue;
-        if ((data['accessStatus'] ?? 'active') == 'revoked') continue;
+        if ((data['accessStatus'] ?? 'active') == 'revoked') {
+          continue;
+        }
         final role = collection == 'managerInvitations'
             ? 'manager'
             : (data['staffRole'] ?? data['role'] ?? 'caretaker').toString();
@@ -65,9 +78,7 @@ Future<List<WorkInvitation>> fetchPendingWorkInvitations(
         }
         found['$collection/${d.id}'] = WorkInvitation(doc: d, role: role);
       }
-    } catch (e) {
-      debugPrint('Invitation lookup failed ($collection.$field): $e');
-    }
+    } catch (_) {}
   }
 
   final jobs = <Future<void>>[];
@@ -75,11 +86,8 @@ Future<List<WorkInvitation>> fetchPendingWorkInvitations(
     jobs.add(
       run(c, c == 'managerInvitations' ? 'managerUserId' : 'staffUserId', uid),
     );
-    jobs.add(run(c, 'targetUserId', uid));
     jobs.add(run(c, 'phone', phone));
-    jobs.add(run(c, 'identifier', phone));
     jobs.add(run(c, 'targetGrihoId', publicId));
-    jobs.add(run(c, 'identifier', publicId));
     jobs.add(run(c, 'targetEmail', email));
   }
   await Future.wait(jobs);
@@ -94,9 +102,13 @@ Future<List<WorkInvitation>> fetchPendingWorkInvitations(
   return list;
 }
 
-final pendingWorkInvitationsProvider =
-    FutureProvider.autoDispose<List<WorkInvitation>>((ref) async {
-      final profile = await ref.watch(currentUserProfileProvider.future);
-      if (profile == null) return const [];
-      return fetchPendingWorkInvitations(profile);
-    });
+/// Cached per authenticated profile; refreshed only when explicitly invalidated.
+final pendingWorkInvitationsProvider = FutureProvider<List<WorkInvitation>>((
+  ref,
+) async {
+  final profile = await ref.watch(currentUserProfileProvider.future);
+  if (profile == null) {
+    return const [];
+  }
+  return fetchPendingWorkInvitations(profile);
+});

@@ -1,5 +1,5 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../domain/entities/create_rent_rate_request.dart';
 import '../../domain/entities/rent_adjustment.dart';
@@ -8,26 +8,22 @@ import '../../domain/usecases/change_floor_rent.dart';
 import '../../domain/usecases/change_property_rent.dart';
 import '../../domain/usecases/change_unit_rent.dart';
 import '../../domain/usecases/create_initial_rent_rate.dart';
+import '../providers/rent_rate_provider.dart';
 
-class RentRateController extends StateNotifier<AsyncValue<void>> {
-  final CreateInitialRentRate _createInitialRentRate;
+class RentRateController extends Notifier<AsyncValue<void>> {
+  late final CreateInitialRentRate _createInitialRentRate;
+  late final ChangeUnitRent _changeUnitRent;
+  late final ChangeFloorRent _changeFloorRent;
+  late final ChangePropertyRent _changePropertyRent;
 
-  final ChangeUnitRent _changeUnitRent;
-
-  final ChangeFloorRent _changeFloorRent;
-
-  final ChangePropertyRent _changePropertyRent;
-
-  RentRateController({
-    required this._createInitialRentRate,
-    required this._changeUnitRent,
-    required this._changeFloorRent,
-    required this._changePropertyRent,
-  }) : super(const AsyncData(null));
-
-  // ============================================================
-  // CREATE INITIAL RENT RATE
-  // ============================================================
+  @override
+  AsyncValue<void> build() {
+    _createInitialRentRate = ref.read(createInitialRentRateProvider);
+    _changeUnitRent = ref.read(changeUnitRentProvider);
+    _changeFloorRent = ref.read(changeFloorRentProvider);
+    _changePropertyRent = ref.read(changePropertyRentProvider);
+    return const AsyncData(null);
+  }
 
   Future<RentRate?> createInitialRentRate({
     required CreateRentRateRequest request,
@@ -36,20 +32,13 @@ class RentRateController extends StateNotifier<AsyncValue<void>> {
 
     try {
       final rentRate = await _createInitialRentRate(request);
-
       state = const AsyncData(null);
-
       return rentRate;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
-
-  // ============================================================
-  // CHANGE UNIT RENT
-  // ============================================================
 
   Future<RentRate?> changeUnitRent({
     required String unitId,
@@ -66,30 +55,13 @@ class RentRateController extends StateNotifier<AsyncValue<void>> {
         amount: amount,
         effectiveFrom: effectiveFrom,
       );
-
       state = const AsyncData(null);
-
       return rentRate;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
-
-  // ============================================================
-  // CHANGE FLOOR RENT
-  // ============================================================
-  //
-  // amount = adjustment amount
-  //
-  // increase:
-  // current rent + amount
-  //
-  // decrease:
-  // current rent - amount
-  //
-  // ============================================================
 
   Future<List<RentRate>?> changeFloorRent({
     required String propertyId,
@@ -110,30 +82,13 @@ class RentRateController extends StateNotifier<AsyncValue<void>> {
         adjustmentType: adjustmentType,
         effectiveFrom: effectiveFrom,
       );
-
       state = const AsyncData(null);
-
       return rentRates;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
-
-  // ============================================================
-  // CHANGE PROPERTY RENT
-  // ============================================================
-  //
-  // amount = adjustment amount
-  //
-  // increase:
-  // current rent + amount
-  //
-  // decrease:
-  // current rent - amount
-  //
-  // ============================================================
 
   Future<List<RentRate>?> changePropertyRent({
     required String propertyId,
@@ -152,20 +107,13 @@ class RentRateController extends StateNotifier<AsyncValue<void>> {
         adjustmentType: adjustmentType,
         effectiveFrom: effectiveFrom,
       );
-
       state = const AsyncData(null);
-
       return rentRates;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
-
-  // ============================================================
-  // RESET
-  // ============================================================
 
   void reset() {
     state = const AsyncData(null);

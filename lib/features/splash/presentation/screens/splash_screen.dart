@@ -30,7 +30,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 800),
     );
 
     _fadeAnimation = CurvedAnimation(
@@ -63,11 +63,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _isChecking = true;
 
     try {
-      debugPrint('SPLASH: Checking authentication status...');
-
       final results = await Future.wait([
         _resolveUserDestination(),
-        Future<void>.delayed(const Duration(milliseconds: 800)),
+        Future<void>.delayed(const Duration(milliseconds: 350)),
       ]);
 
       final targetRoute = results.first as String;
@@ -76,12 +74,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         return;
       }
 
-      debugPrint('SPLASH: Navigating to $targetRoute');
       context.go(targetRoute);
-    } catch (error, stackTrace) {
-      debugPrint('SPLASH ERROR: $error');
-      debugPrint('SPLASH STACK: $stackTrace');
-
+    } catch (_) {
       if (!mounted) {
         return;
       }
@@ -97,26 +91,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final firebaseUser = repository.currentUser;
 
     if (firebaseUser == null) {
-      debugPrint('SPLASH: No authenticated Firebase session found.');
       return RouteNames.login;
     }
-
-    debugPrint('SPLASH: Firebase user verified: ${firebaseUser.uid}');
 
     final profile = await ref
         .read(userProfileRepositoryProvider)
         .getUserByUid(firebaseUser.uid);
 
     if (profile == null) {
-      debugPrint(
-        'SPLASH: User profile not created yet. Redirecting to onboarding.',
-      );
       return RouteNames.onboarding;
     }
-
-    debugPrint(
-      'SPLASH: Profile identified: ${profile.publicId} (Default View: ${profile.defaultDashboard})',
-    );
 
     final destination = AuthRoleResolver.resolve(profile);
     return AuthDestinationMapper.routeFor(destination);
@@ -140,13 +124,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Spacer(),
-
-                  // Custom Brand Logo Mark
                   const GrihoLogo(size: 96),
-
                   const SizedBox(height: 24),
-
-                  // App Title
                   Text(
                     'Griho',
                     style: theme.textTheme.headlineLarge?.copyWith(
@@ -155,10 +134,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       color: theme.colorScheme.onSurface,
                     ),
                   ),
-
                   const SizedBox(height: 6),
-
-                  // Tagline
                   Text(
                     'Manage Every Home with Confidence',
                     textAlign: TextAlign.center,
@@ -167,10 +143,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-
                   const Spacer(),
-
-                  // Loading Indicator
                   SizedBox(
                     width: 24,
                     height: 24,
@@ -179,10 +152,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       color: theme.colorScheme.primary,
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  // Footer Security Badge
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -202,7 +172,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 12),
                 ],
               ),

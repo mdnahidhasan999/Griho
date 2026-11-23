@@ -6,10 +6,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/router/auth_destination_mapper.dart';
 import '../../app/router/route_names.dart';
+import '../../core/design_system/design_system.dart';
 import '../../features/auth/presentation/controllers/auth_role_resolver.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/invitations/presentation/providers/work_invitations_providers.dart';
-import '../../features/tenants/domain/entities/tenant_invitation.dart';
 import '../../features/tenants/presentation/providers/recipient_invitations_provider.dart';
 
 enum GrihoNavigationDestination { home, notices, invites, more }
@@ -32,17 +32,21 @@ class AppBottomNavigation extends ConsumerWidget {
 
   String _resolveHomeRoute(WidgetRef ref) {
     final profile = ref.read(currentUserProfileProvider).value;
-    if (profile == null) return RouteNames.splash;
+    if (profile == null) {
+      return RouteNames.splash;
+    }
     final destination = AuthRoleResolver.resolve(profile);
     return AuthDestinationMapper.routeFor(destination);
   }
 
   void _handleTap(
-    BuildContext context,
-    WidgetRef ref,
-    GrihoNavigationDestination destination,
-  ) {
-    if (destination == selectedDestination) return;
+      BuildContext context,
+      WidgetRef ref,
+      GrihoNavigationDestination destination,
+      ) {
+    if (destination == selectedDestination) {
+      return;
+    }
     HapticFeedback.selectionClick();
 
     switch (destination) {
@@ -75,22 +79,15 @@ class AppBottomNavigation extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final leaseInvites =
-        ref.watch(recipientPendingInvitationsProvider).value ??
-        const <TenantInvitation>[];
-    final workInvites =
-        ref.watch(pendingWorkInvitationsProvider).value ??
-        const <WorkInvitation>[];
-    final pendingCount = leaseInvites.length + workInvites.length;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     final pillBg = isDark ? const Color(0xFF1E222D) : Colors.white;
-    final activeCapsuleBg = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : const Color(0xFFF1F2F4);
-    final activeFg = isDark ? Colors.white : const Color(0xFF111318);
-    final inactiveFg = isDark ? Colors.white60 : const Color(0xFF7A818E);
+    final activeCapsuleBg = GrihoColors.emerald.withValues(
+      alpha: isDark ? 0.18 : 0.12,
+    );
+    final activeFg = isDark ? const Color(0xFF34D399) : GrihoColors.emerald;
+    final inactiveFg = isDark ? Colors.white60 : const Color(0xFF64748B);
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.08)
         : Colors.black.withValues(alpha: 0.06);
@@ -126,10 +123,9 @@ class AppBottomNavigation extends ConsumerWidget {
                 children: [
                   _FloatingNavItem(
                     label: 'Home',
-                    outlinedIcon: Icons.home_outlined,
-                    filledIcon: Icons.home_rounded,
+                    icon: Iconsax.home_2,
                     isSelected:
-                        selectedDestination == GrihoNavigationDestination.home,
+                    selectedDestination == GrihoNavigationDestination.home,
                     activeCapsuleBg: activeCapsuleBg,
                     activeFg: activeFg,
                     inactiveFg: inactiveFg,
@@ -141,10 +137,9 @@ class AppBottomNavigation extends ConsumerWidget {
                   ),
                   _FloatingNavItem(
                     label: 'Notices',
-                    outlinedIcon: Icons.campaign_outlined,
-                    filledIcon: Icons.campaign_rounded,
+                    icon: Iconsax.notification,
                     isSelected:
-                        selectedDestination ==
+                    selectedDestination ==
                         GrihoNavigationDestination.notices,
                     activeCapsuleBg: activeCapsuleBg,
                     activeFg: activeFg,
@@ -155,29 +150,42 @@ class AppBottomNavigation extends ConsumerWidget {
                       GrihoNavigationDestination.notices,
                     ),
                   ),
-                  _FloatingNavItem(
-                    label: 'Invites',
-                    outlinedIcon: Icons.mail_outline_rounded,
-                    filledIcon: Icons.mail_rounded,
-                    badgeCount: pendingCount,
-                    isSelected:
+                  // Only this item listens to invite count changes.
+                  Consumer(
+                    builder: (context, badgeRef, _) {
+                      final leaseCount = badgeRef.watch(
+                        recipientPendingInvitationsProvider.select(
+                              (async) => async.value?.length ?? 0,
+                        ),
+                      );
+                      final workCount = badgeRef.watch(
+                        pendingWorkInvitationsProvider.select(
+                              (async) => async.value?.length ?? 0,
+                        ),
+                      );
+                      return _FloatingNavItem(
+                        label: 'Invites',
+                        icon: Iconsax.sms,
+                        badgeCount: leaseCount + workCount,
+                        isSelected:
                         selectedDestination ==
-                        GrihoNavigationDestination.invites,
-                    activeCapsuleBg: activeCapsuleBg,
-                    activeFg: activeFg,
-                    inactiveFg: inactiveFg,
-                    onTap: () => _handleTap(
-                      context,
-                      ref,
-                      GrihoNavigationDestination.invites,
-                    ),
+                            GrihoNavigationDestination.invites,
+                        activeCapsuleBg: activeCapsuleBg,
+                        activeFg: activeFg,
+                        inactiveFg: inactiveFg,
+                        onTap: () => _handleTap(
+                          context,
+                          ref,
+                          GrihoNavigationDestination.invites,
+                        ),
+                      );
+                    },
                   ),
                   _FloatingNavItem(
                     label: 'More',
-                    outlinedIcon: Icons.grid_view_outlined,
-                    filledIcon: Icons.grid_view_rounded,
+                    icon: Iconsax.category,
                     isSelected:
-                        selectedDestination == GrihoNavigationDestination.more,
+                    selectedDestination == GrihoNavigationDestination.more,
                     activeCapsuleBg: activeCapsuleBg,
                     activeFg: activeFg,
                     inactiveFg: inactiveFg,
@@ -200,8 +208,7 @@ class AppBottomNavigation extends ConsumerWidget {
 class _FloatingNavItem extends StatelessWidget {
   const _FloatingNavItem({
     required this.label,
-    required this.outlinedIcon,
-    required this.filledIcon,
+    required this.icon,
     required this.isSelected,
     required this.activeCapsuleBg,
     required this.activeFg,
@@ -211,8 +218,7 @@ class _FloatingNavItem extends StatelessWidget {
   });
 
   final String label;
-  final IconData outlinedIcon;
-  final IconData filledIcon;
+  final IconData icon;
   final bool isSelected;
   final Color activeCapsuleBg;
   final Color activeFg;
@@ -225,50 +231,55 @@ class _FloatingNavItem extends StatelessWidget {
     final fgColor = isSelected ? activeFg : inactiveFg;
 
     return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(32),
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            decoration: BoxDecoration(
-              color: isSelected ? activeCapsuleBg : Colors.transparent,
-              borderRadius: BorderRadius.circular(32),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Badge(
-                  isLabelVisible: badgeCount > 0,
-                  label: Text(
-                    badgeCount > 9 ? '9+' : '$badgeCount',
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: badgeCount > 0 ? '$label, $badgeCount pending' : label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(32),
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              decoration: BoxDecoration(
+                color: isSelected ? activeCapsuleBg : Colors.transparent,
+                borderRadius: BorderRadius.circular(32),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Badge(
+                    isLabelVisible: badgeCount > 0,
+                    backgroundColor: GrihoColors.error,
+                    textColor: Colors.white,
+                    label: Text(
+                      badgeCount > 9 ? '9+' : '$badgeCount',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    child: Icon(icon, size: 21, color: fgColor),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: isSelected
+                          ? FontWeight.w800
+                          : FontWeight.w500,
+                      color: fgColor,
+                      letterSpacing: -0.1,
                     ),
                   ),
-                  child: Icon(
-                    isSelected ? filledIcon : outlinedIcon,
-                    size: 22,
-                    color: fgColor,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                    color: fgColor,
-                    letterSpacing: -0.1,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

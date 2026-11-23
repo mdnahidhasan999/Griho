@@ -1,51 +1,28 @@
+// noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../data/models/tenant_model.dart';
 import '../../domain/entities/tenant.dart';
-import '../controllers/tenant_controller.dart';
 
 final ownerTenantsProvider = FutureProvider<List<Tenant>>((ref) async {
-  // ============================================================
-  // 1. Get current owner's properties
-  // ============================================================
-
-  final properties = await ref.read(currentOwnerPropertiesProvider.future);
-
-  if (properties.isEmpty) {
-    return [];
-  }
-
-  // ============================================================
-  // 2. Get tenant repository
-  // ============================================================
-
-  final repository = ref.read(tenantRepositoryProvider);
-
-  // ============================================================
-  // 3. Get tenants from all owner's properties
-  // ============================================================
-
-  final tenantLists = await Future.wait(
-    properties.map((property) {
-      return repository.getTenantsByPropertyId(property.id);
-    }),
+  final uid = await ref.watch(
+    authStateProvider.selectAsync((user) => user?.uid),
   );
 
-  // ============================================================
-  // 4. Combine all tenants
-  // ============================================================
-
-  final tenants = <Tenant>[];
-
-  for (final tenantList in tenantLists) {
-    tenants.addAll(tenantList);
+  if (uid == null || uid.trim().isEmpty) {
+    return const <Tenant>[];
   }
 
-  // ============================================================
-  // 5. Sort newest first
-  // ============================================================
+  final snapshot = await FirebaseFirestore.instance
+      .collection('tenants')
+      .where('ownerId', isEqualTo: uid.trim())
+      .limit(200)
+      .get();
 
-  tenants.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  final tenants = snapshot.docs.map(TenantModel.fromFirestore).toList()
+    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   return tenants;
 });

@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 
 import '../models/app_user_model.dart';
+
+typedef JsonMap = Map<String, dynamic>;
 
 class UserProfileDataSource {
   final FirebaseFirestore _firestore;
@@ -9,17 +10,22 @@ class UserProfileDataSource {
   UserProfileDataSource({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  CollectionReference<Map<String, dynamic>> get _usersCollection =>
+  CollectionReference<JsonMap> get _usersCollection =>
       _firestore.collection('users');
 
-  CollectionReference<Map<String, dynamic>> get _phoneLookupsCollection =>
+  CollectionReference<JsonMap> get _phoneLookupsCollection =>
       _firestore.collection('phone_lookups');
 
-  CollectionReference<Map<String, dynamic>> get _publicIdsCollection =>
+  CollectionReference<JsonMap> get _publicIdsCollection =>
       _firestore.collection('public_ids');
 
   Future<AppUserModel?> getUserByUid(String uid) async {
-    final document = await _usersCollection.doc(uid).get();
+    final normalizedUid = uid.trim();
+    if (normalizedUid.isEmpty) {
+      return null;
+    }
+
+    final document = await _usersCollection.doc(normalizedUid).get();
 
     if (!document.exists) {
       return null;
@@ -124,7 +130,6 @@ class UserProfileDataSource {
   }) async {
     final userDocument = _usersCollection.doc(uid);
 
-    // Main profile document: only name, email, photoUrl and updatedAt.
     await userDocument.update({
       'name': name,
       'email': email,
@@ -132,13 +137,12 @@ class UserProfileDataSource {
       'nidNumber': nidNumber,
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    // Keep the resident records linked to this account up to date, so the
-    // owner sees the tenant's current email and NID. Best effort only.
+
     try {
       final normalizedEmail = email?.trim();
       final normalizedNid = nidNumber?.trim();
 
-      final contact = <String, dynamic>{
+      final JsonMap contact = {
         if (normalizedEmail != null && normalizedEmail.isNotEmpty)
           'email': normalizedEmail.toLowerCase(),
         if (normalizedNid != null && normalizedNid.isNotEmpty)
@@ -151,17 +155,21 @@ class UserProfileDataSource {
             .where('userId', isEqualTo: uid)
             .get();
 
-        for (final tenantDocument in linkedTenants.docs) {
-          await tenantDocument.reference.update({
-            ...contact,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+        if (linkedTenants.docs.isNotEmpty) {
+          final tenantBatch = _firestore.batch();
+          for (final tenantDocument in linkedTenants.docs) {
+            tenantBatch.update(tenantDocument.reference, {
+              ...contact,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+          await tenantBatch.commit();
         }
       }
-    } catch (error) {
-      debugPrint('Resident contact sync failed: $error');
+    } catch (_) {
+      // Best-effort resident contact sync.
     }
-    // Lookup copies are best effort. A failure must not lose the profile save.
+
     try {
       final batch = _firestore.batch();
       final normalizedPhone = phoneNumber?.trim();
@@ -191,8 +199,8 @@ class UserProfileDataSource {
       }
 
       await batch.commit();
-    } catch (error) {
-      debugPrint('Profile lookup sync failed: $error');
+    } catch (_) {
+      // Best-effort lookup sync.
     }
   }
 
@@ -226,6 +234,11 @@ class UserProfileDataSource {
     final existingRoles = rawRoles is List
         ? rawRoles.whereType<String>().toSet()
         : <String>{};
+
+    if (existingRoles.contains('owner') &&
+        data['defaultDashboard'] == 'owner') {
+      return;
+    }
 
     existingRoles.add('owner');
 
@@ -293,6 +306,10 @@ class UserProfileDataSource {
         throw StateError(
           'Complete your profile before changing the default dashboard.',
         );
+      }
+
+      if (data['defaultDashboard'] == normalizedRole) {
+        return;
       }
 
       transaction.update(userDocument, {
@@ -368,6 +385,12 @@ class UserProfileDataSource {
 
     if (normalizedPublicId.isEmpty) {
       return null;
+    }
+
+    final lookupDoc = await _publicIdsCollection.doc(normalizedPublicId).get();
+    final lookupUid = lookupDoc.data()?['uid'];
+    if (lookupUid is String && lookupUid.trim().isNotEmpty) {
+      return getUserByUid(lookupUid);
     }
 
     final query = await _usersCollection

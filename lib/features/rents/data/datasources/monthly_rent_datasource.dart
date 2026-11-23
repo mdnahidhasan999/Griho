@@ -1,7 +1,10 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../domain/entities/create_monthly_rent_request.dart';
 import '../models/monthly_rent_model.dart';
+
+typedef RentJsonMap = Map<String, dynamic>;
 
 class MonthlyRentDataSource {
   final FirebaseFirestore _firestore;
@@ -11,7 +14,7 @@ class MonthlyRentDataSource {
 
   static const String _collectionName = 'monthlyRents';
 
-  CollectionReference<Map<String, dynamic>> get _collection =>
+  CollectionReference<RentJsonMap> get _collection =>
       _firestore.collection(_collectionName);
 
   // ==========================================================================
@@ -30,63 +33,49 @@ class MonthlyRentDataSource {
     if (ownerId.isEmpty) {
       throw ArgumentError('Owner ID cannot be empty.');
     }
-
     if (propertyId.isEmpty) {
       throw ArgumentError('Property ID cannot be empty.');
     }
-
     if (unitId.isEmpty) {
       throw ArgumentError('Unit ID cannot be empty.');
     }
-
     if (tenantId.isEmpty) {
       throw ArgumentError('Tenant ID cannot be empty.');
     }
-
     if (rentRateId.isEmpty) {
       throw ArgumentError('Rent rate ID cannot be empty.');
     }
-
     if (request.monthlyRate <= 0) {
       throw ArgumentError('Monthly rent rate must be greater than zero.');
     }
-
     if (request.amount <= 0) {
       throw ArgumentError('Rent amount must be greater than zero.');
     }
-
     if (request.chargeableDays <= 0) {
       throw ArgumentError('Chargeable days must be greater than zero.');
     }
-
     if (request.daysInBillingPeriod <= 0) {
       throw ArgumentError('Billing period days must be greater than zero.');
     }
-
     if (request.chargeableDays > request.daysInBillingPeriod) {
       throw ArgumentError('Chargeable days cannot exceed billing period days.');
     }
-
     if (!request.billingPeriodEnd.isAfter(request.billingPeriodStart)) {
       throw ArgumentError(
         'Billing period end must be after billing period start.',
       );
     }
-
     if (request.chargePeriodStart.isBefore(request.billingPeriodStart)) {
       throw ArgumentError('Charge period cannot start before billing period.');
     }
-
     if (request.chargePeriodEnd.isAfter(request.billingPeriodEnd)) {
       throw ArgumentError('Charge period cannot end after billing period.');
     }
-
     if (request.chargePeriodEnd.isBefore(request.chargePeriodStart)) {
       throw ArgumentError(
         'Charge period end cannot be before charge period start.',
       );
     }
-
     if (request.dueDate.isBefore(request.billingPeriodStart)) {
       throw ArgumentError(
         'Due date cannot be before the billing period starts.',
@@ -95,24 +84,16 @@ class MonthlyRentDataSource {
 
     final expectedProrationFactor =
         request.chargeableDays / request.daysInBillingPeriod;
-
     final calculatedAmount = request.monthlyRate * expectedProrationFactor;
-
     const double tolerance = 0.01;
 
     if ((request.amount - calculatedAmount).abs() > tolerance) {
       throw ArgumentError(
-        'Rent amount does not match the expected '
-        'prorated rent calculation.',
+        'Rent amount does not match the expected prorated rent calculation.',
       );
     }
 
     final periodKey = _formatPeriodKey(request.billingPeriodStart);
-
-    // Tenant-aware identity.
-    //
-    // This allows different tenants to have rent records
-    // in the same unit and calendar month when tenancy changes.
     final documentId = _buildDocumentId(
       ownerId: ownerId,
       unitId: unitId,
@@ -123,7 +104,6 @@ class MonthlyRentDataSource {
     );
 
     final document = _collection.doc(documentId);
-
     final now = DateTime.now();
 
     final monthlyRent = MonthlyRentModel(
@@ -154,8 +134,7 @@ class MonthlyRentDataSource {
 
       if (existingSnapshot.exists) {
         throw StateError(
-          'Monthly rent already exists for this '
-          'tenant and charge period.',
+          'Monthly rent already exists for this tenant and charge period.',
         );
       }
 
@@ -171,13 +150,11 @@ class MonthlyRentDataSource {
 
   Future<MonthlyRentModel?> getMonthlyRentById(String rentId) async {
     final normalizedRentId = rentId.trim();
-
     if (normalizedRentId.isEmpty) {
       return null;
     }
 
     final document = await _collection.doc(normalizedRentId).get();
-
     if (!document.exists) {
       return null;
     }
@@ -200,7 +177,6 @@ class MonthlyRentDataSource {
     if (normalizedUnitId.isEmpty) {
       throw ArgumentError('Unit ID cannot be empty.');
     }
-
     if (normalizedOwnerId.isEmpty) {
       throw ArgumentError('Owner ID cannot be empty.');
     }
@@ -213,6 +189,7 @@ class MonthlyRentDataSource {
           isEqualTo: Timestamp.fromDate(billingPeriodStart),
         )
         .orderBy('chargePeriodStart', descending: false)
+        .limit(20)
         .get();
 
     return snapshot.docs.map(MonthlyRentModel.fromFirestore).toList();
@@ -232,7 +209,6 @@ class MonthlyRentDataSource {
     if (normalizedUnitId.isEmpty) {
       throw ArgumentError('Unit ID cannot be empty.');
     }
-
     if (normalizedOwnerId.isEmpty) {
       throw ArgumentError('Owner ID cannot be empty.');
     }
@@ -242,6 +218,7 @@ class MonthlyRentDataSource {
         .where('unitId', isEqualTo: normalizedUnitId)
         .orderBy('billingPeriodStart', descending: true)
         .orderBy('chargePeriodStart', descending: true)
+        .limit(60)
         .get();
 
     return snapshot.docs.map(MonthlyRentModel.fromFirestore).toList();
@@ -261,7 +238,6 @@ class MonthlyRentDataSource {
     if (normalizedTenantId.isEmpty) {
       throw ArgumentError('Tenant ID cannot be empty.');
     }
-
     if (normalizedOwnerId.isEmpty) {
       throw ArgumentError('Owner ID cannot be empty.');
     }
@@ -271,6 +247,7 @@ class MonthlyRentDataSource {
         .where('tenantId', isEqualTo: normalizedTenantId)
         .orderBy('billingPeriodStart', descending: true)
         .orderBy('chargePeriodStart', descending: true)
+        .limit(60)
         .get();
 
     return snapshot.docs.map(MonthlyRentModel.fromFirestore).toList();
@@ -290,7 +267,6 @@ class MonthlyRentDataSource {
     if (normalizedOwnerId.isEmpty) {
       throw ArgumentError('Owner ID cannot be empty.');
     }
-
     if (!billingPeriodEnd.isAfter(billingPeriodStart)) {
       throw ArgumentError(
         'Billing period end must be after billing period start.',
@@ -309,13 +285,14 @@ class MonthlyRentDataSource {
         )
         .orderBy('unitId')
         .orderBy('chargePeriodStart')
+        .limit(200)
         .get();
 
     return snapshot.docs.map(MonthlyRentModel.fromFirestore).toList();
   }
 
   // ==========================================================================
-  // DOCUMENT ID
+  // HELPERS
   // ==========================================================================
 
   String _buildDocumentId({
@@ -327,32 +304,20 @@ class MonthlyRentDataSource {
     required DateTime chargePeriodEnd,
   }) {
     final startKey = _formatDateKey(chargePeriodStart);
-
     final endKey = _formatDateKey(chargePeriodEnd);
-
     return '${ownerId}_${unitId}_${tenantId}_${periodKey}_${startKey}_$endKey';
   }
-
-  // ==========================================================================
-  // PERIOD KEY
-  // ==========================================================================
 
   String _formatPeriodKey(DateTime date) {
     final year = date.year.toString().padLeft(4, '0');
     final month = date.month.toString().padLeft(2, '0');
-
     return '$year-$month';
   }
-
-  // ==========================================================================
-  // DATE KEY
-  // ==========================================================================
 
   String _formatDateKey(DateTime date) {
     final year = date.year.toString().padLeft(4, '0');
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
-
     return '$year-$month-$day';
   }
 }

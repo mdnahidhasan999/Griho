@@ -1,35 +1,47 @@
+// noinspection SpellCheckingInspection
 import 'dart:io';
+
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 
 class ImageCompressionHelper {
   ImageCompressionHelper._();
 
-  /// ছবিকে ২০-৫০ KB এর মধ্যে কম্প্রেস করে রিটার্ন করবে।
-  static Future<File?> compressImage(File file) async {
+  static int _counter = 0;
+
+  /// ছবিকে কম্প্রেস করে (ডিফল্ট ৫০ KB-এর মধ্যে) রিটার্ন করবে।
+  static Future<File?> compressImage(
+      File file, {
+        int maxSizeKb = 50,
+        int initialQuality = 70,
+        int minWidth = 600,
+        int minHeight = 600,
+      }) async {
     File? firstPassFile;
     try {
       final dir = await getTemporaryDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final targetPath = '${dir.absolute.path}/temp_$timestamp.jpg';
+      final uniqueKey =
+          '${DateTime.now().microsecondsSinceEpoch}_${++_counter}';
+      final targetPath = '${dir.absolute.path}/temp_$uniqueKey.jpg';
 
-      var result = await FlutterImageCompress.compressAndGetFile(
+      final result = await FlutterImageCompress.compressAndGetFile(
         file.absolute.path,
         targetPath,
-        quality: 70,
-        minWidth: 600,
-        minHeight: 600,
+        quality: initialQuality,
+        minWidth: minWidth,
+        minHeight: minHeight,
         format: CompressFormat.jpeg,
       );
 
-      if (result == null) return null;
+      if (result == null) {
+        return null;
+      }
 
       firstPassFile = File(result.path);
-      final int sizeInBytes = await firstPassFile.length();
-      final double sizeInKb = sizeInBytes / 1024;
+      final sizeInKb = (await firstPassFile.length()) / 1024;
 
-      if (sizeInKb > 50) {
-        final ultimatePath = '${dir.absolute.path}/ultimate_$timestamp.jpg';
+      if (sizeInKb > maxSizeKb) {
+        final ultimatePath = '${dir.absolute.path}/ultimate_$uniqueKey.jpg';
         final secondResult = await FlutterImageCompress.compressAndGetFile(
           firstPassFile.absolute.path,
           ultimatePath,

@@ -2,13 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/invitation_model.dart';
 
+typedef JsonMap = Map<String, dynamic>;
+
 class InvitationDataSource {
   final FirebaseFirestore _firestore;
 
   InvitationDataSource({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  CollectionReference<Map<String, dynamic>> get _invitationsCollection {
+  CollectionReference<JsonMap> get _invitationsCollection {
     return _firestore.collection('invitations');
   }
 
@@ -31,8 +33,13 @@ class InvitationDataSource {
   Future<InvitationModel?> getPendingInvitationByCode(
     String invitationCode,
   ) async {
+    final normalizedCode = invitationCode.trim();
+    if (normalizedCode.isEmpty) {
+      return null;
+    }
+
     final query = await _invitationsCollection
-        .where('invitationCode', isEqualTo: invitationCode)
+        .where('invitationCode', isEqualTo: normalizedCode)
         .where('status', isEqualTo: 'pending')
         .limit(1)
         .get();
@@ -49,24 +56,30 @@ class InvitationDataSource {
     required String phoneNumber,
   }) async {
     final results = <InvitationModel>[];
+    final normalizedUid = userId.trim();
+    final normalizedPhone = phoneNumber.trim();
 
-    final userQuery = await _invitationsCollection
-        .where('targetUserId', isEqualTo: userId)
-        .where('status', isEqualTo: 'pending')
-        .get();
+    if (normalizedUid.isNotEmpty) {
+      final userQuery = await _invitationsCollection
+          .where('targetUserId', isEqualTo: normalizedUid)
+          .where('status', isEqualTo: 'pending')
+          .get();
 
-    results.addAll(userQuery.docs.map(InvitationModel.fromFirestore));
+      results.addAll(userQuery.docs.map(InvitationModel.fromFirestore));
+    }
 
-    final phoneQuery = await _invitationsCollection
-        .where('targetPhoneNumber', isEqualTo: phoneNumber)
-        .where('status', isEqualTo: 'pending')
-        .get();
+    if (normalizedPhone.isNotEmpty) {
+      final phoneQuery = await _invitationsCollection
+          .where('targetPhoneNumber', isEqualTo: normalizedPhone)
+          .where('status', isEqualTo: 'pending')
+          .get();
 
-    final existingIds = results.map((item) => item.id).toSet();
+      final existingIds = results.map((item) => item.id).toSet();
 
-    for (final document in phoneQuery.docs) {
-      if (!existingIds.contains(document.id)) {
-        results.add(InvitationModel.fromFirestore(document));
+      for (final document in phoneQuery.docs) {
+        if (!existingIds.contains(document.id)) {
+          results.add(InvitationModel.fromFirestore(document));
+        }
       }
     }
 

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../../../../core/design_system/design_system.dart';
 import '../../../../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../../../auth/presentation/providers/auth_provider.dart';
 
@@ -13,8 +14,7 @@ class _AccessibleBuilding {
   final String id;
   final String name;
   final String ownerId;
-  final String
-  userRole; // 'owner', 'manager', 'caretaker', 'electrician', 'tenant'
+  final String userRole;
 
   const _AccessibleBuilding({
     required this.id,
@@ -42,6 +42,23 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
   String? _loadedForUid;
   String _selectedBuildingId = 'all';
 
+  Stream<TypedQuerySnapshot>? _noticesStream;
+  String _noticesStreamKey = '';
+
+  Stream<TypedQuerySnapshot> _getNoticesStream(List<String> propertyIds) {
+    final sorted = [...propertyIds]..sort();
+    final key = sorted.join(',');
+    if (_noticesStream == null || _noticesStreamKey != key) {
+      _noticesStreamKey = key;
+      _noticesStream = FirebaseFirestore.instance
+          .collection('buildingNotices')
+          .where('propertyId', whereIn: sorted)
+          .limit(50)
+          .snapshots();
+    }
+    return _noticesStream!;
+  }
+
   Future<List<_AccessibleBuilding>> _getBuildings(String uid) {
     if (_buildingsFuture == null || _loadedForUid != uid) {
       _loadedForUid = uid;
@@ -54,6 +71,8 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
     setState(() {
       _loadedForUid = uid;
       _buildingsFuture = _loadAllUserBuildings(uid);
+      _noticesStream = null;
+      _noticesStreamKey = '';
     });
   }
 
@@ -61,27 +80,32 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
     final db = FirebaseFirestore.instance;
     final byId = <String, _AccessibleBuilding>{};
 
-    // Priority order: owner > manager > caretaker > electrician > tenant
     final results = await Future.wait([
-      db.collection('properties').where('ownerId', isEqualTo: uid).get(),
+      db
+          .collection('properties')
+          .where('ownerId', isEqualTo: uid)
+          .limit(20)
+          .get(),
       db
           .collection('managerAccess')
           .where('userId', isEqualTo: uid)
           .where('status', isEqualTo: 'active')
+          .limit(20)
           .get(),
       db
           .collection('staffAccess')
           .where('userId', isEqualTo: uid)
           .where('status', isEqualTo: 'active')
+          .limit(20)
           .get(),
       db
           .collection('tenants')
           .where('userId', isEqualTo: uid)
           .where('status', isEqualTo: 'active')
+          .limit(20)
           .get(),
     ]);
 
-    // 1. Owned buildings
     for (final doc in results[0].docs) {
       final d = doc.data();
       byId[doc.id] = _AccessibleBuilding(
@@ -92,11 +116,12 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
       );
     }
 
-    // 2. Managed buildings
     for (final doc in results[1].docs) {
       final d = doc.data();
       final pId = (d['propertyId'] ?? '').toString().trim();
-      if (pId.isEmpty || byId.containsKey(pId)) continue;
+      if (pId.isEmpty || byId.containsKey(pId)) {
+        continue;
+      }
       byId[pId] = _AccessibleBuilding(
         id: pId,
         name: (d['propertyName'] ?? 'Managed Building').toString(),
@@ -105,11 +130,12 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
       );
     }
 
-    // 3. Staff buildings (Caretaker / Electrician)
     for (final doc in results[2].docs) {
       final d = doc.data();
       final pId = (d['propertyId'] ?? '').toString().trim();
-      if (pId.isEmpty || byId.containsKey(pId)) continue;
+      if (pId.isEmpty || byId.containsKey(pId)) {
+        continue;
+      }
       final staffRole = (d['staffRole'] ?? 'caretaker').toString().trim();
       byId[pId] = _AccessibleBuilding(
         id: pId,
@@ -119,11 +145,12 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
       );
     }
 
-    // 4. Resident / Tenant buildings
     for (final doc in results[3].docs) {
       final d = doc.data();
       final pId = (d['propertyId'] ?? '').toString().trim();
-      if (pId.isEmpty || byId.containsKey(pId)) continue;
+      if (pId.isEmpty || byId.containsKey(pId)) {
+        continue;
+      }
 
       var propName = (d['propertyName'] ?? '').toString().trim();
       if (propName.isEmpty) {
@@ -164,7 +191,9 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
   }
 
   String _formatDate(dynamic timestamp) {
-    if (timestamp is! Timestamp) return 'Just now';
+    if (timestamp is! Timestamp) {
+      return 'Just now';
+    }
     final dt = timestamp.toDate().toLocal();
     const months = [
       'Jan',
@@ -193,29 +222,43 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
 
     return Scaffold(
       extendBody: true,
-
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Building Notices',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
+      appBar: AppBar(title: const Text('Building Notices')),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Unable to load profile: $e')),
+        loading: () => const GrihoLoadingView(message: 'Loading notices...'),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load profile',
+              subtitle: e.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentUserProfileProvider),
+            ),
+          ),
+        ),
         data: (profile) {
           if (profile == null) {
-            return const Center(child: Text('Profile not found.'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.user_remove,
+                  title: 'Profile not found',
+                  subtitle: 'Please sign in again.',
+                ),
+              ),
+            );
           }
 
           return FutureBuilder<List<_AccessibleBuilding>>(
             future: _getBuildings(profile.uid),
             builder: (context, buildingsSnap) {
               if (buildingsSnap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                return const GrihoLoadingView(
+                  message: 'Loading your buildings...',
+                );
               }
 
               final buildings =
@@ -228,28 +271,13 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(24),
-                    children: [
-                      const SizedBox(height: 80),
-                      Icon(
-                        Icons.campaign_outlined,
-                        size: 56,
-                        color: theme.colorScheme.outline,
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'No Building Notices Yet',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Announcements from buildings you own, manage, work at, or reside in will appear here.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                    children: const [
+                      SizedBox(height: 40),
+                      GrihoStatusState(
+                        icon: Iconsax.notification_bing,
+                        title: 'No Building Notices Yet',
+                        subtitle:
+                            'Announcements from buildings you own, manage, work at, or reside in will appear here.',
                       ),
                     ],
                   ),
@@ -265,11 +293,6 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
               final queryPropertyIds = validSelected == 'all'
                   ? buildings.map((b) => b.id).take(10).toList()
                   : <String>[validSelected];
-
-              final noticesStream = FirebaseFirestore.instance
-                  .collection('buildingNotices')
-                  .where('propertyId', whereIn: queryPropertyIds)
-                  .snapshots();
 
               return RefreshIndicator(
                 onRefresh: () async => _refreshBuildings(profile.uid),
@@ -307,11 +330,11 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                       ),
                     Expanded(
                       child: StreamBuilder<TypedQuerySnapshot>(
-                        stream: noticesStream,
+                        stream: _getNoticesStream(queryPropertyIds),
                         builder: (context, snap) {
                           if (snap.connectionState == ConnectionState.waiting) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
+                            return const GrihoLoadingView(
+                              message: 'Loading announcements...',
                             );
                           }
 
@@ -319,9 +342,13 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                             return Center(
                               child: Padding(
                                 padding: const EdgeInsets.all(24),
-                                child: Text(
-                                  'Unable to load notices: ${snap.error}',
-                                  textAlign: TextAlign.center,
+                                child: GrihoStatusState(
+                                  icon: Iconsax.warning_2,
+                                  title: 'Unable to load notices',
+                                  subtitle: '${snap.error}',
+                                  actionLabel: 'Retry',
+                                  onAction: () =>
+                                      _refreshBuildings(profile.uid),
                                 ),
                               ),
                             );
@@ -343,22 +370,14 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                           if (docs.isEmpty) {
                             return ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(32),
-                              children: [
-                                const SizedBox(height: 60),
-                                Icon(
-                                  Icons.notifications_none_rounded,
-                                  size: 52,
-                                  color: theme.colorScheme.outline,
-                                ),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'No announcements posted yet',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 16,
-                                  ),
+                              padding: const EdgeInsets.all(24),
+                              children: const [
+                                SizedBox(height: 40),
+                                GrihoStatusState(
+                                  icon: Iconsax.notification_bing,
+                                  title: 'No announcements posted yet',
+                                  subtitle:
+                                      'New building notices will appear here.',
                                 ),
                               ],
                             );
@@ -394,9 +413,9 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                               final isImportant = priority == 'important';
 
                               final badgeColor = isUrgent
-                                  ? Colors.red
+                                  ? GrihoColors.error
                                   : isImportant
-                                  ? Colors.orange.shade800
+                                  ? GrihoColors.warning
                                   : theme.colorScheme.primary;
 
                               final canDelete =
@@ -408,7 +427,9 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                                   borderRadius: BorderRadius.circular(18),
                                   side: BorderSide(
                                     color: isUrgent
-                                        ? Colors.red.withValues(alpha: 0.4)
+                                        ? GrihoColors.error.withValues(
+                                            alpha: 0.45,
+                                          )
                                         : theme.colorScheme.outlineVariant,
                                   ),
                                 ),
@@ -427,7 +448,7 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                                             ),
                                             decoration: BoxDecoration(
                                               color: badgeColor.withValues(
-                                                alpha: 0.12,
+                                                alpha: 0.14,
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(8),
@@ -459,12 +480,20 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                                             IconButton(
                                               tooltip: 'Delete notice',
                                               icon: const Icon(
-                                                Icons.delete_outline_rounded,
-                                                size: 20,
-                                                color: Colors.redAccent,
+                                                Iconsax.trash,
+                                                size: 19,
+                                                color: GrihoColors.error,
                                               ),
-                                              onPressed: () =>
-                                                  doc.reference.delete(),
+                                              onPressed: () async {
+                                                await doc.reference.delete();
+                                                if (!context.mounted) {
+                                                  return;
+                                                }
+                                                GrihoFeedback.showInfo(
+                                                  context,
+                                                  'Notice deleted.',
+                                                );
+                                              },
                                             ),
                                         ],
                                       ),
@@ -533,7 +562,9 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                 final postable = (snap.data ?? const <_AccessibleBuilding>[])
                     .where((b) => b.canPost)
                     .toList();
-                if (postable.isEmpty) return const SizedBox.shrink();
+                if (postable.isEmpty) {
+                  return const SizedBox.shrink();
+                }
 
                 return FloatingActionButton.extended(
                   onPressed: () => _openCreateNoticeSheet(
@@ -541,7 +572,7 @@ class _BuildingNoticesScreenState extends ConsumerState<BuildingNoticesScreen> {
                     actorName: profileAsync.value!.name,
                     postableBuildings: postable,
                   ),
-                  icon: const Icon(Icons.campaign_rounded),
+                  icon: const Icon(Iconsax.notification_bing),
                   label: const Text('Post Notice'),
                 );
               },
@@ -592,12 +623,7 @@ class _CreateNoticeModalState extends State<_CreateNoticeModal> {
     final title = _titleCtrl.text.trim();
     final message = _messageCtrl.text.trim();
     if (title.isEmpty || message.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter both title and message.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      GrihoFeedback.showError(context, 'Please enter both title and message.');
       return;
     }
 
@@ -630,25 +656,17 @@ class _CreateNoticeModalState extends State<_CreateNoticeModal> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Notice published!'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      GrihoFeedback.showSuccess(context, 'Notice published!');
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _posting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not publish notice: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      GrihoFeedback.showError(context, 'Could not publish notice: $e');
     }
   }
 
@@ -674,10 +692,7 @@ class _CreateNoticeModalState extends State<_CreateNoticeModal> {
             if (widget.buildings.length > 1) ...[
               DropdownButtonFormField<String>(
                 initialValue: _selectedPropertyId,
-                decoration: const InputDecoration(
-                  labelText: 'Target Building',
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(labelText: 'Target Building'),
                 items: widget.buildings
                     .map(
                       (b) => DropdownMenuItem<String>(
@@ -687,61 +702,49 @@ class _CreateNoticeModalState extends State<_CreateNoticeModal> {
                     )
                     .toList(),
                 onChanged: (v) {
-                  if (v != null) setState(() => _selectedPropertyId = v);
+                  if (v != null) {
+                    setState(() => _selectedPropertyId = v);
+                  }
                 },
               ),
               const SizedBox(height: 12),
             ],
-            TextField(
+            GrihoTextField(
               controller: _titleCtrl,
+              label: 'Notice Title *',
+              hint: 'e.g. Water Tank Cleaning Tomorrow',
+              prefixIcon: Iconsax.notification_bing,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Notice Title *',
-                hintText: 'e.g. Water Tank Cleaning Tomorrow',
-                border: OutlineInputBorder(),
-              ),
             ),
             const SizedBox(height: 12),
-            TextField(
+            GrihoTextField(
               controller: _messageCtrl,
+              label: 'Details *',
+              hint: 'Water supply will be paused from 10 AM to 1 PM.',
               maxLines: 3,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Details *',
-                hintText: 'Water supply will be paused from 10 AM to 1 PM.',
-                border: OutlineInputBorder(),
-              ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _priority,
-              decoration: const InputDecoration(
-                labelText: 'Urgency Level',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Urgency Level'),
               items: const [
                 DropdownMenuItem(value: 'normal', child: Text('Normal')),
                 DropdownMenuItem(value: 'important', child: Text('Important')),
                 DropdownMenuItem(value: 'urgent', child: Text('Urgent')),
               ],
               onChanged: (v) {
-                if (v != null) setState(() => _priority = v);
+                if (v != null) {
+                  setState(() => _priority = v);
+                }
               },
             ),
             const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: _posting ? null : _publish,
-              icon: _posting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.campaign_rounded),
-              label: Text(_posting ? 'Publishing...' : 'Publish Notice'),
+            GrihoPrimaryButton(
+              label: _posting ? 'Publishing...' : 'Publish Notice',
+              icon: Iconsax.send_2,
+              isLoading: _posting,
+              onPressed: _publish,
             ),
           ],
         ),

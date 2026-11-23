@@ -21,9 +21,14 @@ class AuthFlowController {
       return const AuthFlowResult.unauthenticated();
     }
 
-    final profile = await ref
-        .read(userProfileRepositoryProvider)
-        .getUserByUid(firebaseUser.uid);
+    // Reuse cached profile if already loaded for this UID to avoid extra Firestore read.
+    final cachedProfile = ref.read(currentUserProfileProvider).value;
+    final profile =
+        (cachedProfile != null && cachedProfile.uid == firebaseUser.uid)
+        ? cachedProfile
+        : await ref
+              .read(userProfileRepositoryProvider)
+              .getUserByUid(firebaseUser.uid);
 
     if (profile == null) {
       return const AuthFlowResult.newUser();

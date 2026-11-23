@@ -1,12 +1,11 @@
 // noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
+import '../../../../core/design_system/widgets/griho_picker_field.dart';
 import '../../../../core/utils/phone_number_utils.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
@@ -18,6 +17,7 @@ import '../../domain/entities/tenant_search_result.dart';
 import '../controllers/tenant_controller.dart';
 import '../providers/search_registered_tenant_provider.dart';
 import '../providers/tenant_invitation_provider.dart';
+import '../widgets/tenant_ui_helpers.dart';
 
 enum _TenantSearchType { grihoId, phone }
 
@@ -55,9 +55,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   final _emailController = TextEditingController();
   final _nidController = TextEditingController();
 
-  // Preserve the created tenant so retries do not create duplicates.
   Tenant? _createdTenant;
-
   _InviteChoice? _pendingChoice;
 
   bool _isCreatingInvitation = false;
@@ -87,17 +85,16 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
   String? _getValidatedPhone() {
     final cleanPhone = PhoneNumberUtils.clean(_phoneNumber);
-
     if (!PhoneNumberUtils.isValid(cleanPhone)) {
       return null;
     }
-
     return PhoneNumberUtils.normalize(cleanPhone);
   }
 
   void _changeSearchType(_TenantSearchType type) {
-    if (_searchType == type) return;
-
+    if (_searchType == type) {
+      return;
+    }
     setState(() {
       _searchType = type;
       _searchController.clear();
@@ -113,7 +110,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     if (!_hasSearched && _searchResult == null && _searchError == null) {
       return;
     }
-
     setState(() {
       _searchResult = null;
       _searchError = null;
@@ -123,11 +119,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
   void _onSearchPhoneChanged(String value) {
     _searchPhoneNumber = value;
-
     if (!_hasSearched && _searchResult == null && _searchError == null) {
       return;
     }
-
     setState(() {
       _searchResult = null;
       _searchError = null;
@@ -136,11 +130,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   Future<void> _searchRegisteredUser() async {
+    FocusScope.of(context).unfocus();
     String? searchValue;
 
     if (_searchType == _TenantSearchType.grihoId) {
       final value = _searchController.text.trim().toUpperCase();
-
       if (value.isEmpty) {
         setState(() {
           _hasSearched = false;
@@ -149,11 +143,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         });
         return;
       }
-
       searchValue = value;
     } else {
       final cleanPhone = PhoneNumberUtils.clean(_searchPhoneNumber);
-
       if (cleanPhone.isEmpty) {
         setState(() {
           _hasSearched = false;
@@ -162,7 +154,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         });
         return;
       }
-
       if (!PhoneNumberUtils.isValid(cleanPhone)) {
         setState(() {
           _hasSearched = false;
@@ -171,7 +162,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         });
         return;
       }
-
       searchValue = PhoneNumberUtils.normalize(cleanPhone);
     }
 
@@ -184,15 +174,14 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
     try {
       final searchUseCase = ref.read(searchRegisteredTenantProvider);
-      final TenantSearchResult? result;
+      final TenantSearchResult? result =
+          _searchType == _TenantSearchType.grihoId
+          ? await searchUseCase.byPublicId(searchValue)
+          : await searchUseCase.byPhone(searchValue);
 
-      if (_searchType == _TenantSearchType.grihoId) {
-        result = await searchUseCase.byPublicId(searchValue);
-      } else {
-        result = await searchUseCase.byPhone(searchValue);
+      if (!mounted) {
+        return;
       }
-
-      if (!mounted) return;
 
       setState(() {
         _isSearching = false;
@@ -203,8 +192,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         _fillFromSearchResult(result);
       }
     } catch (_) {
-      if (!mounted) return;
-
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _isSearching = false;
         _searchResult = null;
@@ -215,24 +205,19 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
   void _fillFromSearchResult(TenantSearchResult result) {
     final name = result.name.trim();
-
     if (name.isNotEmpty) {
       _nameController.text = name;
     }
 
     final email = result.email?.trim();
-
     if (email != null && email.isNotEmpty) {
       _emailController.text = email;
     }
 
     final cleanPhone = PhoneNumberUtils.clean(result.phone);
-
     if (cleanPhone.isNotEmpty && PhoneNumberUtils.isValid(cleanPhone)) {
       _phoneNumber = PhoneNumberUtils.normalize(cleanPhone);
-
       final digitsOnly = cleanPhone.replaceAll(RegExp(r'\D'), '');
-
       if (digitsOnly.length >= 10) {
         _tenantPhoneController.text = digitsOnly.substring(
           digitsOnly.length - 10,
@@ -259,11 +244,8 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
     if (_searchResult != null) {
       final cleanSearched = PhoneNumberUtils.clean(_searchResult!.phone);
-
       if (cleanSearched != cleanCurrent) {
-        setState(() {
-          _searchResult = null;
-        });
+        setState(() => _searchResult = null);
       }
     }
 
@@ -271,64 +253,53 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
   }
 
   Future<void> _createTenant() async {
-    // If the tenant was already created, retry invitation only.
-    final existingTenant = _createdTenant;
+    FocusScope.of(context).unfocus();
 
+    final existingTenant = _createdTenant;
     if (existingTenant != null) {
       final pendingChoice = _pendingChoice;
-
       if (pendingChoice != null) {
         await _createInvitation(tenant: existingTenant, choice: pendingChoice);
         return;
       }
 
       final choice = await _showInvitationConfirmation(tenant: existingTenant);
-
-      if (!mounted) return;
-
+      if (!mounted) {
+        return;
+      }
       if (choice == null) {
         Navigator.of(context).pop(existingTenant);
         return;
       }
 
       _pendingChoice = choice;
-
       await _createInvitation(tenant: existingTenant, choice: choice);
-
       return;
     }
 
-    if (!_formKey.currentState!.validate()) {
+    if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
     final property = _selectedProperty;
     final unit = _selectedUnit;
-
     if (property == null || unit == null) {
       return;
     }
 
     if (unit.status != UnitStatus.available) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Selected unit is not vacant. Please choose an available unit.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
+      GrihoFeedback.showError(
+        context,
+        'Selected unit is not vacant. Please choose an available unit.',
       );
       return;
     }
 
     final phone = _getValidatedPhone();
-
     if (phone == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid international phone number.'),
-          behavior: SnackBarBehavior.floating,
-        ),
+      GrihoFeedback.showError(
+        context,
+        'Please enter a valid international phone number.',
       );
       return;
     }
@@ -351,30 +322,25 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         .read(tenantControllerProvider.notifier)
         .createTenant(request);
 
-    if (!mounted) return;
-
-    if (tenant == null) {
-      final state = ref.read(tenantControllerProvider);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.error?.toString() ?? 'Unable to create tenant.'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
+    if (!mounted) {
       return;
     }
 
-    // Save the tenant before attempting invitation creation.
-    setState(() {
-      _createdTenant = tenant;
-    });
+    if (tenant == null) {
+      final state = ref.read(tenantControllerProvider);
+      GrihoFeedback.showError(
+        context,
+        state.error?.toString() ?? 'Unable to create tenant.',
+      );
+      return;
+    }
+
+    setState(() => _createdTenant = tenant);
 
     final choice = await _showInvitationConfirmation(tenant: tenant);
-
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     if (choice == null) {
       Navigator.of(context).pop(tenant);
@@ -382,7 +348,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     }
 
     _pendingChoice = choice;
-
     await _createInvitation(tenant: tenant, choice: choice);
   }
 
@@ -390,13 +355,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     return showDialog<_InviteChoice>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) {
-        return _InvitationConfirmationDialog(
-          tenant: tenant,
-          initialEmail: _searchResult?.email,
-          initialGrihoId: _searchResult?.publicId,
-        );
-      },
+      builder: (_) => _InvitationConfirmationDialog(
+        tenant: tenant,
+        initialEmail: _searchResult?.email,
+        initialGrihoId: _searchResult?.publicId,
+      ),
     );
   }
 
@@ -404,7 +367,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     required Tenant tenant,
     required _InviteChoice choice,
   }) async {
-    if (_isCreatingInvitation) return;
+    if (_isCreatingInvitation) {
+      return;
+    }
 
     final rentAmount = choice.rentAmount;
 
@@ -427,7 +392,9 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         rentAmount: rentAmount,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       _pendingChoice = null;
 
@@ -436,31 +403,23 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
         rentAmount: rentAmount,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       Navigator.of(context).pop(tenant);
     } catch (error) {
-      if (!mounted) return;
-
-      // Keep the same tenant and recipient choice for retry.
+      if (!mounted) {
+        return;
+      }
       _pendingChoice = choice;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Tenant was created, but invitation creation failed. '
-            'Tap "Retry Invitation" to try again.\n$error',
-          ),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 6),
-        ),
+      GrihoFeedback.showError(
+        context,
+        'Tenant created, but invitation failed. Tap "Retry Invitation". $error',
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _isCreatingInvitation = false;
-        });
+        setState(() => _isCreatingInvitation = false);
       }
     }
   }
@@ -469,9 +428,8 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     required String invitationToken,
     required double rentAmount,
   }) async {
-    final invitationLink = _buildInvitationLink(
-      invitationToken: invitationToken,
-    );
+    final invitationLink =
+        'https://griho-crafttech.web.app${RouteNames.tenantInvitationPath(invitationToken)}';
 
     await showDialog<void>(
       context: context,
@@ -490,23 +448,22 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.12),
+                      color: GrihoColors.emerald.withValues(alpha: 0.14),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
-                      Icons.check_circle_rounded,
-                      size: 48,
-                      color: Colors.green,
+                      Iconsax.tick_circle,
+                      size: 44,
+                      color: GrihoColors.emerald,
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'The tenancy invitation has been generated successfully. '
-                  'Share this link with the tenant to finalize their onboarding.',
+                  'The tenancy invitation has been generated successfully. Share this link with the tenant to finalize their onboarding.',
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -526,7 +483,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                         ),
                       ),
                       Text(
-                        '৳ ${_formatAmount(rentAmount)}',
+                        '৳ ${formatTenantAmount(rentAmount)}',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w900,
                           color: theme.colorScheme.primary,
@@ -535,7 +492,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
                 Text(
                   'Invitation Link',
                   style: theme.textTheme.titleSmall?.copyWith(
@@ -558,27 +515,22 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await Clipboard.setData(
-                        ClipboardData(text: invitationLink),
-                      );
-
-                      if (!dialogContext.mounted) return;
-
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(
-                          content: Text('Invitation link copied to clipboard.'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.copy_rounded, size: 18),
-                    label: const Text('Copy Invitation Link'),
-                  ),
+                const SizedBox(height: 14),
+                GrihoSecondaryButton(
+                  label: 'Copy Invitation Link',
+                  icon: Iconsax.copy,
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: invitationLink),
+                    );
+                    if (!dialogContext.mounted) {
+                      return;
+                    }
+                    GrihoFeedback.showSuccess(
+                      dialogContext,
+                      'Invitation link copied to clipboard.',
+                    );
+                  },
                 ),
               ],
             ),
@@ -594,14 +546,6 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
     );
   }
 
-  String _buildInvitationLink({required String invitationToken}) {
-    const hostingDomain = 'griho-crafttech.web.app';
-
-    final invitationPath = RouteNames.tenantInvitationPath(invitationToken);
-
-    return 'https://$hostingDomain$invitationPath';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -615,22 +559,36 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Add Tenant',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Add Tenant')),
       body: SafeArea(
         child: propertiesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => _ErrorView(
-            message: 'Unable to load your properties.',
-            onRetry: () => ref.invalidate(currentOwnerPropertiesProvider),
+          loading: () =>
+              const GrihoLoadingView(message: 'Loading buildings...'),
+          error: (_, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: GrihoStatusState(
+                icon: Iconsax.warning_2,
+                title: 'Unable to load properties',
+                subtitle: 'Please check your connection and try again.',
+                actionLabel: 'Retry',
+                onAction: () => ref.invalidate(currentOwnerPropertiesProvider),
+              ),
+            ),
           ),
           data: (properties) {
             if (properties.isEmpty) {
-              return const _NoPropertyView();
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: GrihoStatusState(
+                    icon: Iconsax.buildings_2,
+                    title: 'No Properties Available',
+                    subtitle:
+                        'Register at least one property and configure unit spaces before assigning a tenant.',
+                  ),
+                ),
+              );
             }
 
             return SingleChildScrollView(
@@ -658,8 +616,8 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: Icon(
-                              Icons.person_add_alt_1_rounded,
-                              size: 26,
+                              Iconsax.user_add,
+                              size: 24,
                               color: theme.colorScheme.onPrimaryContainer,
                             ),
                           ),
@@ -676,8 +634,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Assign a tenant to a vacant unit and '
-                                  'dispatch an official tenancy invitation.',
+                                  'Assign a tenant to a vacant unit and dispatch an official tenancy invitation.',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant,
                                     height: 1.35,
@@ -690,80 +647,67 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       ),
                     ),
                     const SizedBox(height: 18),
-
-                    _buildSectionCard(
+                    GrihoSectionCard(
                       title: '1. Allocation & Vacant Unit',
                       subtitle:
                           'Choose target building and available unit space',
-                      icon: Icons.apartment_rounded,
+                      icon: Iconsax.buildings_2,
                       children: [
-                        DropdownButtonFormField<Property>(
-                          initialValue: _selectedProperty,
-                          decoration: const InputDecoration(
-                            labelText: 'Property Building',
-                            prefixIcon: Icon(Icons.domain_rounded),
-                            border: OutlineInputBorder(),
-                          ),
-                          items: properties
-                              .map(
-                                (property) => DropdownMenuItem<Property>(
-                                  value: property,
-                                  child: Text(
-                                    '${property.name} '
-                                    '(${property.propertyCode})',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              .toList(),
+                        GrihoPickerField<Property>(
+                          label: 'Property Building',
+                          hint: 'Choose a building',
+                          sheetTitle: 'Select Property Building',
+                          searchHint: 'Search by building name or code...',
+                          icon: Iconsax.buildings_2,
+                          items: properties,
+                          value: _selectedProperty,
+                          itemTitle: (p) => p.name,
+                          itemSubtitle: (p) => p.propertyCode.trim().isNotEmpty
+                              ? 'Code: ${p.propertyCode}'
+                              : null,
                           onChanged: (property) {
                             setState(() {
                               _selectedProperty = property;
                               _selectedUnit = null;
                             });
                           },
-                          validator: (value) {
-                            if (value == null) {
-                              return 'Please select a property.';
-                            }
-                            return null;
-                          },
+                          validator: (_) => _selectedProperty == null
+                              ? 'Please select a property.'
+                              : null,
                         ),
                         const SizedBox(height: 16),
                         unitsAsync.when(
                           loading: () => const LinearProgressIndicator(),
-                          error: (error, stack) =>
+                          error: (error, _) =>
                               Text('Unable to load units: $error'),
                           data: (units) {
                             if (_selectedProperty == null) {
-                              return const InputDecorator(
-                                decoration: InputDecoration(
-                                  labelText: 'Vacant Unit / Space',
-                                  prefixIcon: Icon(
-                                    Icons.door_front_door_outlined,
-                                  ),
-                                  border: OutlineInputBorder(),
-                                ),
-                                child: Text('Select property first'),
+                              return GrihoPickerField<Unit>(
+                                label: 'Vacant Unit / Space',
+                                hint: 'Select a building first',
+                                icon: Iconsax.home_2,
+                                items: const [],
+                                value: null,
+                                enabled: false,
+                                itemTitle: (u) => 'Unit ${u.unitNumber}',
+                                onChanged: (_) {},
                               );
                             }
 
                             if (units.isEmpty) {
-                              return const InputDecorator(
-                                decoration: InputDecoration(
-                                  labelText: 'Vacant Unit / Space',
-                                  prefixIcon: Icon(
-                                    Icons.door_front_door_outlined,
-                                  ),
-                                  border: OutlineInputBorder(),
-                                ),
-                                child: Text(
-                                  'No units configured in this property yet',
-                                ),
+                              return GrihoPickerField<Unit>(
+                                label: 'Vacant Unit / Space',
+                                hint:
+                                    'No units configured in this property yet',
+                                icon: Iconsax.home_2,
+                                items: const [],
+                                value: null,
+                                enabled: false,
+                                itemTitle: (u) => 'Unit ${u.unitNumber}',
+                                onChanged: (_) {},
                               );
                             }
 
-                            // শুধুমাত্র খালি (available) ইউনিটগুলো ফিল্টার করা
                             final vacantUnits = units
                                 .where((u) => u.status == UnitStatus.available)
                                 .toList();
@@ -775,29 +719,29 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: Colors.amber.withValues(alpha: 0.12),
+                                  color: GrihoColors.warning.withValues(
+                                    alpha: 0.14,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: Colors.amber.shade700.withValues(
+                                    color: GrihoColors.warning.withValues(
                                       alpha: 0.5,
                                     ),
                                   ),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(
-                                      Icons.meeting_room_outlined,
-                                      color: Colors.amber.shade900,
+                                    const Icon(
+                                      Iconsax.home_2,
+                                      color: GrihoColors.warning,
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Text(
-                                        'All ${units.length} unit(s) in this building are currently occupied. No vacant unit is available for assignment.',
+                                        'All ${units.length} unit(s) in this building are currently occupied.',
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                               fontWeight: FontWeight.w600,
-                                              color:
-                                                  theme.colorScheme.onSurface,
                                             ),
                                       ),
                                     ),
@@ -817,54 +761,42 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                DropdownButtonFormField<Unit>(
+                                GrihoPickerField<Unit>(
                                   key: ValueKey(_selectedProperty?.id),
-                                  initialValue: safeSelectedUnit,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Vacant Unit / Space',
-                                    prefixIcon: Icon(
-                                      Icons.door_front_door_outlined,
-                                    ),
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  items: vacantUnits
-                                      .map(
-                                        (unit) => DropdownMenuItem<Unit>(
-                                          value: unit,
-                                          child: Text(
-                                            'Unit ${unit.unitNumber} • '
-                                            'Floor ${unit.floorNumber}'
-                                            '${unit.name?.trim().isNotEmpty == true ? " (${unit.name!.trim()})" : ""} — Vacant',
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
+                                  label: 'Vacant Unit / Space',
+                                  hint: 'Choose a vacant unit',
+                                  sheetTitle: 'Select Vacant Unit',
+                                  searchHint: 'Search by unit or floor...',
+                                  icon: Iconsax.home_2,
+                                  items: vacantUnits,
+                                  value: safeSelectedUnit,
+                                  itemTitle: (u) => 'Unit ${u.unitNumber}',
+                                  itemSubtitle: (u) {
+                                    final custom = u.name?.trim() ?? '';
+                                    return custom.isNotEmpty
+                                        ? 'Floor ${u.floorNumber} • $custom • Vacant'
+                                        : 'Floor ${u.floorNumber} • Vacant';
+                                  },
                                   onChanged: (unit) {
-                                    setState(() {
-                                      _selectedUnit = unit;
-                                    });
+                                    setState(() => _selectedUnit = unit);
                                   },
-                                  validator: (value) {
-                                    if (value == null) {
-                                      return 'Please select a vacant unit.';
-                                    }
-                                    return null;
-                                  },
+                                  validator: (_) => safeSelectedUnit == null
+                                      ? 'Please select a vacant unit.'
+                                      : null,
                                 ),
                                 const SizedBox(height: 8),
                                 Row(
                                   children: [
-                                    Icon(
-                                      Icons.check_circle_outline_rounded,
+                                    const Icon(
+                                      Iconsax.tick_circle,
                                       size: 14,
-                                      color: Colors.green.shade700,
+                                      color: GrihoColors.emerald,
                                     ),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         '${vacantUnits.length} vacant unit(s) available'
-                                        '${occupiedCount > 0 ? " • $occupiedCount occupied unit(s) hidden" : ""}',
+                                        '${occupiedCount > 0 ? " • $occupiedCount occupied hidden" : ""}',
                                         style: theme.textTheme.labelSmall
                                             ?.copyWith(
                                               color: theme
@@ -883,29 +815,27 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       ],
                     ),
                     const SizedBox(height: 18),
-
-                    _buildSectionCard(
+                    GrihoSectionCard(
                       title: '2. Griho Account Lookup',
                       subtitle: 'Find existing members by Griho ID or phone',
-                      icon: Icons.person_search_rounded,
+                      icon: Iconsax.search_normal_1,
                       children: [
                         SegmentedButton<_TenantSearchType>(
                           segments: const [
                             ButtonSegment(
                               value: _TenantSearchType.grihoId,
                               label: Text('Griho ID'),
-                              icon: Icon(Icons.badge_outlined),
+                              icon: Icon(Iconsax.personalcard, size: 17),
                             ),
                             ButtonSegment(
                               value: _TenantSearchType.phone,
                               label: Text('Phone'),
-                              icon: Icon(Icons.phone_outlined),
+                              icon: Icon(Iconsax.call, size: 17),
                             ),
                           ],
                           selected: {_searchType},
-                          onSelectionChanged: (selection) {
-                            _changeSearchType(selection.first);
-                          },
+                          onSelectionChanged: (selection) =>
+                              _changeSearchType(selection.first),
                         ),
                         const SizedBox(height: 14),
                         if (_searchType == _TenantSearchType.grihoId)
@@ -915,8 +845,11 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                             decoration: InputDecoration(
                               labelText: 'Griho Public ID',
                               hintText: 'e.g. GR-98213',
-                              border: const OutlineInputBorder(),
-                              prefixIcon: const Icon(Icons.fingerprint_rounded),
+                              prefixIcon: const Icon(
+                                Iconsax.finger_scan,
+                                color: GrihoColors.emerald,
+                                size: 20,
+                              ),
                               suffixIcon: IconButton(
                                 tooltip: 'Search',
                                 icon: _isSearching
@@ -927,7 +860,10 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                                           strokeWidth: 2,
                                         ),
                                       )
-                                    : const Icon(Icons.search_rounded),
+                                    : const Icon(
+                                        Iconsax.search_normal_1,
+                                        size: 19,
+                                      ),
                                 onPressed: _isSearching
                                     ? null
                                     : _searchRegisteredUser,
@@ -937,16 +873,10 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                             onSubmitted: (_) => _searchRegisteredUser(),
                           ),
                         if (_searchType == _TenantSearchType.phone) ...[
-                          IntlPhoneField(
+                          GrihoPhoneField(
                             controller: _searchPhoneController,
-                            initialCountryCode: 'BD',
-                            decoration: const InputDecoration(
-                              labelText: 'Registered Phone Number',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (phone) {
-                              _onSearchPhoneChanged(phone.completeNumber);
-                            },
+                            label: 'Registered Phone Number',
+                            onCompleteNumberChanged: _onSearchPhoneChanged,
                           ),
                           const SizedBox(height: 8),
                           Align(
@@ -963,7 +893,10 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Icon(Icons.search_rounded, size: 18),
+                                  : const Icon(
+                                      Iconsax.search_normal_1,
+                                      size: 17,
+                                    ),
                               label: const Text('Search Member'),
                             ),
                           ),
@@ -996,124 +929,65 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
                       ],
                     ),
                     const SizedBox(height: 18),
-
-                    _buildSectionCard(
+                    GrihoSectionCard(
                       title: '3. Personal Information',
                       subtitle: 'Contact and identification details',
-                      icon: Icons.contact_page_outlined,
+                      icon: Iconsax.user,
                       children: [
-                        IntlPhoneField(
+                        GrihoPhoneField(
                           controller: _tenantPhoneController,
-                          initialCountryCode: 'BD',
-                          decoration: const InputDecoration(
-                            labelText: 'Tenant Phone Number',
-                            hintText: 'Enter phone number',
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (phone) {
-                            _onPhoneChanged(phone.completeNumber);
-                          },
-                          validator: (phone) {
-                            if (phone == null || phone.number.trim().isEmpty) {
-                              return 'Please enter phone number.';
-                            }
-
-                            if (!PhoneNumberUtils.isValid(
-                              phone.completeNumber,
-                            )) {
-                              return 'Please enter a valid international number.';
-                            }
-
-                            return null;
-                          },
+                          label: 'Tenant Phone Number',
+                          hint: 'Enter phone number',
+                          onCompleteNumberChanged: _onPhoneChanged,
                         ),
-                        const SizedBox(height: 16),
-                        TextFormField(
+                        const SizedBox(height: 12),
+                        GrihoTextField(
                           controller: _nameController,
+                          label: 'Full Legal Name',
+                          hint: 'Enter tenant name',
+                          prefixIcon: Iconsax.user,
                           textCapitalization: TextCapitalization.words,
                           textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(
-                            labelText: 'Full Legal Name',
-                            hintText: 'Enter tenant name',
-                            prefixIcon: Icon(Icons.person_outline_rounded),
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return 'Please enter tenant full name.';
-                            }
-
-                            if (value.trim().length < 2) {
-                              return 'Name must be at least 2 characters.';
-                            }
-
-                            return null;
-                          },
+                          validator: GrihoValidators.name,
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
+                        GrihoTextField(
                           controller: _emailController,
+                          label: 'Email Address (Optional)',
+                          hint: 'e.g. resident@example.com',
+                          prefixIcon: Iconsax.sms,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(
-                            labelText: 'Email Address (Optional)',
-                            hintText: 'e.g. resident@example.com',
-                            prefixIcon: Icon(Icons.mail_outline_rounded),
-                            border: OutlineInputBorder(),
-                          ),
+                          validator: GrihoValidators.optionalEmail,
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
+                        GrihoTextField(
                           controller: _nidController,
+                          label: 'National ID / NID (Optional)',
+                          hint: 'Enter national identity number',
+                          prefixIcon: Iconsax.card,
                           keyboardType: TextInputType.number,
                           textInputAction: TextInputAction.done,
-                          decoration: const InputDecoration(
-                            labelText: 'National ID / NID (Optional)',
-                            hintText: 'Enter national identity number',
-                            prefixIcon: Icon(Icons.badge_outlined),
-                            border: OutlineInputBorder(),
-                          ),
+                          maxLength: 17,
+                          counterText: '',
+                          validator: GrihoValidators.optionalNid,
                         ),
                       ],
                     ),
                     const SizedBox(height: 28),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: FilledButton.icon(
-                        onPressed:
-                            tenantState.isLoading || _isCreatingInvitation
-                            ? null
-                            : _createTenant,
-                        icon: tenantState.isLoading || _isCreatingInvitation
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Icon(
-                                _createdTenant != null
-                                    ? Icons.refresh_rounded
-                                    : Icons.person_add_rounded,
-                              ),
-                        label: Text(
-                          tenantState.isLoading
-                              ? 'Registering Tenant...'
-                              : _isCreatingInvitation
-                              ? 'Creating Invitation...'
-                              : _createdTenant != null
-                              ? 'Retry Invitation'
-                              : 'Add Tenant & Prepare Invitation',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                    GrihoPrimaryButton(
+                      label: tenantState.isLoading
+                          ? 'Registering Tenant...'
+                          : _isCreatingInvitation
+                          ? 'Creating Invitation...'
+                          : _createdTenant != null
+                          ? 'Retry Invitation'
+                          : 'Add Tenant & Prepare Invitation',
+                      icon: _createdTenant != null
+                          ? Iconsax.refresh
+                          : Iconsax.user_add,
+                      isLoading: tenantState.isLoading || _isCreatingInvitation,
+                      onPressed: _createTenant,
                     ),
                   ],
                 ),
@@ -1124,58 +998,7 @@ class _AddTenantScreenState extends ConsumerState<AddTenantScreen> {
       ),
     );
   }
-
-  Widget _buildSectionCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
 }
-
-// ============================================================================
-// INVITATION CONFIRMATION DIALOG
-// ============================================================================
 
 class _InvitationConfirmationDialog extends StatefulWidget {
   final Tenant tenant;
@@ -1206,7 +1029,6 @@ class _InvitationConfirmationDialogState
   @override
   void initState() {
     super.initState();
-
     _emailController.text = widget.initialEmail?.trim() ?? '';
     _grihoIdController.text = widget.initialGrihoId?.trim().toUpperCase() ?? '';
   }
@@ -1219,43 +1041,25 @@ class _InvitationConfirmationDialogState
     super.dispose();
   }
 
-  String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-
-    if (email.isEmpty) {
-      return 'Please enter the recipient email.';
-    }
-
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      return 'Please enter a valid email address.';
-    }
-
-    return null;
-  }
-
   String? _validateGrihoId(String? value) {
     final grihoId = value?.trim() ?? '';
-
     if (grihoId.isEmpty) {
       return 'Please enter the recipient Griho ID.';
     }
-
     if (!RegExp(
       r'^[A-Z0-9][A-Z0-9_-]{2,39}$',
     ).hasMatch(grihoId.toUpperCase())) {
       return 'Please enter a valid Griho ID.';
     }
-
     return null;
   }
 
   void _submit() {
-    if (_isSubmitting || !_formKey.currentState!.validate()) {
+    if (_isSubmitting || !(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
     final rentAmount = double.tryParse(_rentController.text.trim());
-
     if (rentAmount == null || !rentAmount.isFinite || rentAmount <= 0) {
       return;
     }
@@ -1271,10 +1075,7 @@ class _InvitationConfirmationDialogState
           : null,
     );
 
-    setState(() {
-      _isSubmitting = true;
-    });
-
+    setState(() => _isSubmitting = true);
     Navigator.of(context).pop(choice);
   }
 
@@ -1292,8 +1093,7 @@ class _InvitationConfirmationDialogState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Choose how to identify the recipient for '
-                '${widget.tenant.name}.',
+                'Choose how to identify the recipient for ${widget.tenant.name}.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -1304,25 +1104,22 @@ class _InvitationConfirmationDialogState
                   ButtonSegment(
                     value: _InviteMethod.phone,
                     label: Text('Phone'),
-                    icon: Icon(Icons.phone_outlined),
+                    icon: Icon(Iconsax.call, size: 16),
                   ),
                   ButtonSegment(
                     value: _InviteMethod.email,
                     label: Text('Email'),
-                    icon: Icon(Icons.email_outlined),
+                    icon: Icon(Iconsax.sms, size: 16),
                   ),
                   ButtonSegment(
                     value: _InviteMethod.grihoId,
-                    label: Text('Griho ID'),
-                    icon: Icon(Icons.badge_outlined),
+                    label: Text('ID'),
+                    icon: Icon(Iconsax.personalcard, size: 16),
                   ),
                 ],
                 selected: {_selectedMethod},
-                onSelectionChanged: (selection) {
-                  setState(() {
-                    _selectedMethod = selection.first;
-                  });
-                },
+                onSelectionChanged: (selection) =>
+                    setState(() => _selectedMethod = selection.first),
               ),
               const SizedBox(height: 16),
               if (_selectedMethod == _InviteMethod.phone)
@@ -1338,7 +1135,7 @@ class _InvitationConfirmationDialogState
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.phone_outlined, size: 18),
+                      const Icon(Iconsax.call, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -1350,31 +1147,23 @@ class _InvitationConfirmationDialogState
                   ),
                 ),
               if (_selectedMethod == _InviteMethod.email)
-                TextFormField(
+                GrihoTextField(
                   controller: _emailController,
+                  label: 'Recipient Email',
+                  hint: 'tenant@example.com',
+                  prefixIcon: Iconsax.sms,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Recipient Email',
-                    hintText: 'tenant@example.com',
-                    prefixIcon: Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: _validateEmail,
+                  validator: GrihoValidators.email,
                 ),
               if (_selectedMethod == _InviteMethod.grihoId)
-                TextFormField(
+                GrihoTextField(
                   controller: _grihoIdController,
+                  label: 'Recipient Griho ID',
+                  hint: 'e.g. GRI-12345',
+                  prefixIcon: Iconsax.personalcard,
                   textCapitalization: TextCapitalization.characters,
                   textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Recipient Griho ID',
-                    hintText: 'e.g. GRI-12345',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                    border: OutlineInputBorder(),
-                  ),
                   validator: _validateGrihoId,
                 ),
               const SizedBox(height: 16),
@@ -1389,15 +1178,12 @@ class _InvitationConfirmationDialogState
                 decoration: const InputDecoration(
                   labelText: 'Initial Monthly Rent',
                   prefixText: '৳ ',
-                  border: OutlineInputBorder(),
                 ),
                 validator: (value) {
                   final amount = double.tryParse(value?.trim() ?? '');
-
                   if (amount == null || !amount.isFinite || amount <= 0) {
                     return 'Enter a valid rent amount.';
                   }
-
                   return null;
                 },
               ),
@@ -1419,10 +1205,6 @@ class _InvitationConfirmationDialogState
   }
 }
 
-// ============================================================================
-// SEARCH RESULT CARD
-// ============================================================================
-
 class _TenantSearchResultCard extends StatelessWidget {
   final TenantSearchResult result;
   final VoidCallback onUnlink;
@@ -1436,17 +1218,18 @@ class _TenantSearchResultCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.08),
+        color: GrihoColors.emerald.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+        border: Border.all(color: GrihoColors.emerald.withValues(alpha: 0.45)),
       ),
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: Colors.green.shade100,
-            child: Icon(
-              Icons.verified_user_rounded,
-              color: Colors.green.shade800,
+            backgroundColor: GrihoColors.emerald.withValues(alpha: 0.2),
+            child: const Icon(
+              Iconsax.verify,
+              color: GrihoColors.emerald,
+              size: 20,
             ),
           ),
           const SizedBox(width: 12),
@@ -1473,7 +1256,7 @@ class _TenantSearchResultCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.green.shade700,
+                        color: GrihoColors.emerald,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
@@ -1499,7 +1282,7 @@ class _TenantSearchResultCard extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Unlink',
-            icon: const Icon(Icons.close_rounded, size: 18),
+            icon: const Icon(Iconsax.close_circle, size: 19),
             onPressed: onUnlink,
           ),
         ],
@@ -1525,16 +1308,11 @@ class _UserNotFoundView extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.info_outline_rounded,
-            size: 18,
-            color: theme.colorScheme.primary,
-          ),
+          Icon(Iconsax.info_circle, size: 18, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'No registered Griho user was found with these credentials. '
-              'You can enter the tenant details manually below.',
+              'No registered Griho user was found with these credentials. You can enter the tenant details manually below.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 height: 1.35,
@@ -1545,87 +1323,4 @@ class _UserNotFoundView extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NoPropertyView extends StatelessWidget {
-  const _NoPropertyView();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(
-                  alpha: 0.5,
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.apartment_rounded,
-                size: 48,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'No Properties Available',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'You need to register at least one property and configure '
-              'unit spaces before you can assign a tenant.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorView({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            size: 48,
-            color: Colors.redAccent,
-          ),
-          const SizedBox(height: 12),
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: onRetry, child: const Text('Retry')),
-        ],
-      ),
-    );
-  }
-}
-
-String _formatAmount(double amount) {
-  return amount == amount.roundToDouble()
-      ? amount.toStringAsFixed(0)
-      : amount.toStringAsFixed(2);
 }

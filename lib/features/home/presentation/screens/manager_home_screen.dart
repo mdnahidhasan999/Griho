@@ -7,10 +7,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/auth_route_guard.dart';
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/fcm_notification_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../widgets/griho_home_chrome.dart';
+import '../widgets/griho_home_components.dart';
 import '../widgets/manager_portal_sheets.dart';
 import '../widgets/shared_property_sheets.dart';
 
@@ -23,24 +25,81 @@ class ManagerHomeScreen extends ConsumerStatefulWidget {
 
 class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
   bool _busy = false;
-  Future<List<QueryDocumentSnapshot>>? _invitesFuture;
+  Future<HomeDocList>? _invitesFuture;
   String? _cachedForUid;
+
+  Stream<QuerySnapshot>? _accessStream;
+  String? _accessStreamUid;
+
+  String? _propStreamsKey;
+  Stream<QuerySnapshot> _unitsStream = const Stream<QuerySnapshot>.empty();
+  Stream<QuerySnapshot> _tenantsStream = const Stream<QuerySnapshot>.empty();
+  Stream<QuerySnapshot> _billsStream = const Stream<QuerySnapshot>.empty();
+  Stream<QuerySnapshot> _issuesStream = const Stream<QuerySnapshot>.empty();
 
   @override
   void initState() {
     super.initState();
     FcmNotificationService.instance.initialize(
       onNavigate: (route) {
-        if (mounted) context.push(route);
+        if (mounted) {
+          context.push(route);
+        }
       },
     );
   }
 
-  Future<List<QueryDocumentSnapshot>> _getOrFetchInvites(dynamic profile) {
+  Stream<QuerySnapshot> _getAccessStream(String uid) {
+    if (_accessStream == null || _accessStreamUid != uid) {
+      _accessStreamUid = uid;
+      _accessStream = FirebaseFirestore.instance
+          .collection('managerAccess')
+          .where('userId', isEqualTo: uid)
+          .snapshots();
+    }
+    return _accessStream!;
+  }
+
+  void _ensurePropertyStreams(List<String> propIdList) {
+    final sorted = [...propIdList]..sort();
+    final key = sorted.join(',');
+    if (_propStreamsKey == key) {
+      return;
+    }
+    _propStreamsKey = key;
+
+    if (sorted.isEmpty) {
+      _unitsStream = const Stream<QuerySnapshot>.empty();
+      _tenantsStream = const Stream<QuerySnapshot>.empty();
+      _billsStream = const Stream<QuerySnapshot>.empty();
+      _issuesStream = const Stream<QuerySnapshot>.empty();
+      return;
+    }
+
+    final db = FirebaseFirestore.instance;
+    _unitsStream = db
+        .collection('units')
+        .where('propertyId', whereIn: sorted)
+        .snapshots();
+    _tenantsStream = db
+        .collection('tenants')
+        .where('propertyId', whereIn: sorted)
+        .snapshots();
+    _billsStream = db
+        .collection('monthlyBills')
+        .where('propertyId', whereIn: sorted)
+        .snapshots();
+    _issuesStream = db
+        .collection('maintenanceRequests')
+        .where('propertyId', whereIn: sorted)
+        .snapshots();
+  }
+
+  Future<HomeDocList> _getOrFetchInvites(dynamic profile) {
     final uid = profile.uid.toString().trim();
     if (_invitesFuture == null || _cachedForUid != uid) {
       _cachedForUid = uid;
-      _invitesFuture = _fetchScopedManagerInvitations(profile);
+      _invitesFuture = _fetchPendingManagerInvitations(profile);
     }
     return _invitesFuture!;
   }
@@ -48,15 +107,13 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
   void _refreshInvites(dynamic profile) {
     setState(() {
       _cachedForUid = profile.uid.toString().trim();
-      _invitesFuture = _fetchScopedManagerInvitations(profile);
+      _invitesFuture = _fetchPendingManagerInvitations(profile);
     });
   }
 
-  Future<List<QueryDocumentSnapshot>> _fetchScopedManagerInvitations(
-    dynamic profile,
-  ) async {
-    final firestore = FirebaseFirestore.instance;
-    final col = firestore.collection('managerInvitations');
+  /// Queries only pending invitations to minimize Firestore reads.
+  Future<HomeDocList> _fetchPendingManagerInvitations(dynamic profile) async {
+    final col = FirebaseFirestore.instance.collection('managerInvitations');
     final results = <String, QueryDocumentSnapshot>{};
 
     final uid = profile.uid.toString().trim();
@@ -65,38 +122,38 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
     final email = (profile.email ?? '').toString().trim();
 
     final queries = <Future<QuerySnapshot>>[
-      if (uid.isNotEmpty) col.where('managerUserId', isEqualTo: uid).get(),
-      if (uid.isNotEmpty) col.where('targetUserId', isEqualTo: uid).get(),
-      if (phone.isNotEmpty) col.where('phone', isEqualTo: phone).get(),
-      if (phone.isNotEmpty) col.where('identifier', isEqualTo: phone).get(),
+      if (uid.isNotEmpty)
+        col
+            .where('managerUserId', isEqualTo: uid)
+            .where('status', isEqualTo: 'pending')
+            .get(),
+      if (phone.isNotEmpty)
+        col
+            .where('phone', isEqualTo: phone)
+            .where('status', isEqualTo: 'pending')
+            .get(),
       if (publicId.isNotEmpty)
-        col.where('targetGrihoId', isEqualTo: publicId).get(),
-      if (publicId.isNotEmpty)
-        col.where('identifier', isEqualTo: publicId).get(),
-      if (email.isNotEmpty) col.where('targetEmail', isEqualTo: email).get(),
+        col
+            .where('targetGrihoId', isEqualTo: publicId)
+            .where('status', isEqualTo: 'pending')
+            .get(),
+      if (email.isNotEmpty)
+        col
+            .where('targetEmail', isEqualTo: email)
+            .where('status', isEqualTo: 'pending')
+            .get(),
     ];
 
-    final snapshots = await Future.wait(
-      queries.map((q) => q.catchError((_) => throw StateError('skip'))),
-      eagerError: false,
-    ).catchError((_) => const <QuerySnapshot>[]);
-
-    for (final snap in snapshots) {
-      for (final doc in snap.docs) {
-        results[doc.id] = doc;
-      }
-    }
-
-    if (results.isEmpty && queries.isNotEmpty) {
-      for (final future in queries) {
+    await Future.wait(
+      queries.map((q) async {
         try {
-          final snap = await future;
+          final snap = await q;
           for (final doc in snap.docs) {
             results[doc.id] = doc;
           }
         } catch (_) {}
-      }
-    }
+      }),
+    );
 
     return results.values.toList();
   }
@@ -106,7 +163,9 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
     dynamic profile,
     bool accept,
   ) async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
     setState(() => _busy = true);
 
     try {
@@ -119,7 +178,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
       }
 
       final firestore = FirebaseFirestore.instance;
-      final data = asJsonMap(doc.data());
+      final data = homeAsMap(doc.data());
       final propertyId = (data['propertyId'] ?? '').toString().trim();
       final ownerId = (data['ownerId'] ?? '').toString().trim();
 
@@ -169,29 +228,25 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
       AuthRouteGuard.clearAccessCache();
       ref.invalidate(currentUserProfileProvider);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       _refreshInvites(profile);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            accept
-                ? 'Invitation accepted! Building linked to your console.'
-                : 'Invitation declined.',
-          ),
-          backgroundColor: accept ? Colors.green : Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (accept) {
+        GrihoFeedback.showSuccess(
+          context,
+          'Invitation accepted! Building linked to your console.',
+        );
+      } else {
+        GrihoFeedback.showWarning(context, 'Invitation declined.');
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unable to process invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
-          ),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(
+        context,
+        'Unable to process invitation: ${e.toString().replaceFirst('Bad state: ', '')}',
       );
     } finally {
       if (mounted) {
@@ -223,11 +278,11 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
     BuildContext context,
     String uid,
     String userName,
-    List<QueryDocumentSnapshot> activeAccessDocs,
+    HomeDocList activeAccessDocs,
   ) {
     final props = activeAccessDocs
         .map((doc) {
-          final d = asJsonMap(doc.data());
+          final d = homeAsMap(doc.data());
           return NoticePropertyOption(
             id: (d['propertyId'] ?? '').toString(),
             name: (d['propertyName'] ?? 'Building').toString(),
@@ -254,7 +309,6 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profileAsync = ref.watch(currentUserProfileProvider);
-    final firestore = FirebaseFirestore.instance;
 
     return Scaffold(
       extendBody: true,
@@ -264,44 +318,57 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
         extraActions: [
           IconButton(
             tooltip: 'Activity & audit trail',
-            icon: const Icon(Icons.history_rounded),
+            icon: const Icon(Iconsax.document_text),
             onPressed: () => context.push(RouteNames.activityLogs),
           ),
         ],
       ),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text('Error loading profile: $error')),
+        loading: () => const GrihoLoadingView(message: 'Loading console...'),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load profile',
+              subtitle: error.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentUserProfileProvider),
+            ),
+          ),
+        ),
         data: (profile) {
           if (profile == null) {
-            return const Center(child: Text('Manager profile not found.'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.user_remove,
+                  title: 'Manager profile not found',
+                  subtitle: 'Please sign in again.',
+                ),
+              ),
+            );
           }
 
           return StreamBuilder<QuerySnapshot>(
-            stream: firestore
-                .collection('managerAccess')
-                .where('userId', isEqualTo: profile.uid)
-                .snapshots(),
+            stream: _getAccessStream(profile.uid),
             builder: (context, accessSnap) {
-              return FutureBuilder<List<QueryDocumentSnapshot>>(
+              return FutureBuilder<HomeDocList>(
                 future: _getOrFetchInvites(profile),
                 builder: (context, inviteSnapshot) {
-                  final myInvites = inviteSnapshot.data ?? [];
-                  final accessDocs = accessSnap.data?.docs ?? [];
-
-                  final pendingInvites = myInvites.where((doc) {
-                    final data = asJsonMap(doc.data());
-                    return (data['status'] ?? 'pending') == 'pending';
-                  }).toList();
+                  final pendingInvites =
+                      inviteSnapshot.data ?? const <QueryDocumentSnapshot>[];
+                  final accessDocs =
+                      accessSnap.data?.docs ?? const <QueryDocumentSnapshot>[];
 
                   final activeAccessDocs = accessDocs.where((doc) {
-                    final d = asJsonMap(doc.data());
+                    final d = homeAsMap(doc.data());
                     return (d['status'] ?? 'active') == 'active';
                   }).toList();
 
                   final suspendedAccessDocs = accessDocs.where((doc) {
-                    final d = asJsonMap(doc.data());
+                    final d = homeAsMap(doc.data());
                     return (d['status'] ?? '') == 'suspended';
                   }).toList();
 
@@ -309,72 +376,54 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                   final propertyNames = <String, String>{};
 
                   for (final doc in activeAccessDocs) {
-                    final d = asJsonMap(doc.data());
+                    final d = homeAsMap(doc.data());
                     final pId = (d['propertyId'] ?? '').toString().trim();
                     final pName = (d['propertyName'] ?? '').toString().trim();
                     if (pId.isNotEmpty) {
                       managedPropertyIds.add(pId);
-                      if (pName.isNotEmpty) propertyNames[pId] = pName;
+                      if (pName.isNotEmpty) {
+                        propertyNames[pId] = pName;
+                      }
                     }
                   }
 
                   final propIdList = managedPropertyIds.take(10).toList();
-
-                  final unitsStream = propIdList.isEmpty
-                      ? const Stream<QuerySnapshot>.empty()
-                      : firestore
-                            .collection('units')
-                            .where('propertyId', whereIn: propIdList)
-                            .snapshots();
-
-                  final tenantsStream = propIdList.isEmpty
-                      ? const Stream<QuerySnapshot>.empty()
-                      : firestore
-                            .collection('tenants')
-                            .where('propertyId', whereIn: propIdList)
-                            .snapshots();
-
-                  final billsStream = propIdList.isEmpty
-                      ? const Stream<QuerySnapshot>.empty()
-                      : firestore
-                            .collection('monthlyBills')
-                            .where('propertyId', whereIn: propIdList)
-                            .snapshots();
-
-                  final issuesStream = propIdList.isEmpty
-                      ? const Stream<QuerySnapshot>.empty()
-                      : firestore
-                            .collection('maintenanceRequests')
-                            .where('propertyId', whereIn: propIdList)
-                            .snapshots();
+                  _ensurePropertyStreams(propIdList);
 
                   return StreamBuilder<QuerySnapshot>(
-                    stream: unitsStream,
+                    stream: _unitsStream,
                     builder: (context, unitsSnap) {
                       return StreamBuilder<QuerySnapshot>(
-                        stream: tenantsStream,
+                        stream: _tenantsStream,
                         builder: (context, tenantsSnap) {
                           return StreamBuilder<QuerySnapshot>(
-                            stream: billsStream,
+                            stream: _billsStream,
                             builder: (context, billsSnap) {
                               return StreamBuilder<QuerySnapshot>(
-                                stream: issuesStream,
+                                stream: _issuesStream,
                                 builder: (context, issuesSnap) {
-                                  final myUnits = unitsSnap.data?.docs ?? [];
+                                  final myUnits =
+                                      unitsSnap.data?.docs ??
+                                      const <QueryDocumentSnapshot>[];
                                   final myTenants =
-                                      tenantsSnap.data?.docs ?? [];
-                                  final myBills = billsSnap.data?.docs ?? [];
-                                  final myIssues = issuesSnap.data?.docs ?? [];
+                                      tenantsSnap.data?.docs ??
+                                      const <QueryDocumentSnapshot>[];
+                                  final myBills =
+                                      billsSnap.data?.docs ??
+                                      const <QueryDocumentSnapshot>[];
+                                  final myIssues =
+                                      issuesSnap.data?.docs ??
+                                      const <QueryDocumentSnapshot>[];
 
                                   final openIssuesCount = myIssues.where((d) {
-                                    final m = asJsonMap(d.data());
+                                    final m = homeAsMap(d.data());
                                     final s = (m['status'] ?? 'open')
                                         .toString();
                                     return s == 'open' || s == 'in_progress';
                                   }).length;
 
                                   final vacantUnitsCount = myUnits.where((doc) {
-                                    final d = asJsonMap(doc.data());
+                                    final d = homeAsMap(doc.data());
                                     return (d['status'] ?? 'available') ==
                                         'available';
                                   }).length;
@@ -383,7 +432,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                       myUnits.length - vacantUnitsCount;
 
                                   final activeTenants = myTenants.where((doc) {
-                                    final d = asJsonMap(doc.data());
+                                    final d = homeAsMap(doc.data());
                                     return d['status'] == 'active';
                                   }).toList();
 
@@ -391,7 +440,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                   var unpaidInvoicesCount = 0;
 
                                   for (final doc in myBills) {
-                                    final d = asJsonMap(doc.data());
+                                    final d = homeAsMap(doc.data());
                                     final status = (d['status'] ?? 'unpaid')
                                         .toString();
                                     if (status != 'paid' &&
@@ -410,88 +459,11 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                     }
                                   }
 
-                                  final gridItems = [
-                                    _MgrAction(
-                                      Icons.payments_outlined,
-                                      'Payments',
-                                      'Review & confirm',
-                                      Colors.green,
-                                      () => context.push(
-                                        RouteNames.ownerPayments,
-                                      ),
-                                    ),
-                                    _MgrAction(
-                                      Icons.build_circle_outlined,
-                                      'Issues ($openIssuesCount)',
-                                      'Tenant complaints',
-                                      Colors.deepOrange,
-                                      () => _openManagerIssuesSheet(
-                                        context,
-                                        propIdList,
-                                        profile.name,
-                                      ),
-                                    ),
-                                    _MgrAction(
-                                      Icons.campaign_outlined,
-                                      'Notices',
-                                      'Post & manage',
-                                      Colors.amber.shade800,
-                                      () => _openManagerNoticesSheet(
-                                        context,
-                                        profile.uid,
-                                        profile.name,
-                                        activeAccessDocs,
-                                      ),
-                                    ),
-                                    _MgrAction(
-                                      Icons.meeting_room_outlined,
-                                      'Units',
-                                      '$vacantUnitsCount vacant • $occupiedUnitsCount occupied',
-                                      Colors.indigo,
-                                      () => showManagerUnitsSheet(
-                                        context: context,
-                                        unitDocs: myUnits,
-                                        propertyNames: propertyNames,
-                                      ),
-                                    ),
-                                    _MgrAction(
-                                      Icons.groups_rounded,
-                                      'Residents',
-                                      '${activeTenants.length} active leases',
-                                      Colors.teal,
-                                      () => showManagerTenantsSheet(
-                                        context: context,
-                                        tenantDocs: myTenants,
-                                        propertyNames: propertyNames,
-                                      ),
-                                    ),
-                                    _MgrAction(
-                                      Icons.price_change_outlined,
-                                      'Rent control',
-                                      'Change rates',
-                                      Colors.deepPurpleAccent,
-                                      () => context.push(
-                                        RouteNames.centralRentControl,
-                                      ),
-                                    ),
-                                    _MgrAction(
-                                      Icons.receipt_long_rounded,
-                                      'Billing rules',
-                                      'Utilities & charges',
-                                      Colors.brown,
-                                      () => context.push(
-                                        RouteNames.ownerBillingRules,
-                                      ),
-                                    ),
-                                    _MgrAction(
-                                      Icons.history_edu_rounded,
-                                      'Audit trail',
-                                      'Activity logs',
-                                      Colors.blueGrey,
-                                      () =>
-                                          context.push(RouteNames.activityLogs),
-                                    ),
-                                  ];
+                                  final dueText =
+                                      totalUnpaidDue ==
+                                          totalUnpaidDue.roundToDouble()
+                                      ? totalUnpaidDue.toStringAsFixed(0)
+                                      : totalUnpaidDue.toStringAsFixed(2);
 
                                   return RefreshIndicator(
                                     onRefresh: () async {
@@ -512,7 +484,6 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                           publicId: profile.publicId,
                                         ),
                                         const SizedBox(height: 16),
-
                                         OpenIssuesBanner(
                                           filterField: 'propertyId',
                                           filterValues: propIdList,
@@ -523,93 +494,42 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                             profile.name,
                                           ),
                                         ),
-
-                                        if (pendingInvites.isNotEmpty)
-                                          ...pendingInvites.map((inviteDoc) {
-                                            final d = asJsonMap(
-                                              inviteDoc.data(),
-                                            );
-                                            final propName =
-                                                (d['propertyName'] ??
-                                                        'Owner Property')
-                                                    .toString();
-                                            final ownerName =
-                                                (d['ownerName'] ??
-                                                        'Property Owner')
-                                                    .toString();
-
-                                            return Container(
-                                              margin: const EdgeInsets.only(
-                                                bottom: 16,
-                                              ),
-                                              padding: const EdgeInsets.all(18),
-                                              decoration: BoxDecoration(
-                                                color: Colors.amber.shade700
-                                                    .withValues(alpha: 0.12),
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                                border: Border.all(
-                                                  color: Colors.amber.shade800,
-                                                  width: 1.5,
-                                                ),
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
+                                        for (final inviteDoc in pendingInvites)
+                                          Builder(
+                                            builder: (context) {
+                                              final d = homeAsMap(
+                                                inviteDoc.data(),
+                                              );
+                                              final propName =
+                                                  (d['propertyName'] ??
+                                                          'Owner Property')
+                                                      .toString();
+                                              final ownerName =
+                                                  (d['ownerName'] ??
+                                                          'Property Owner')
+                                                      .toString();
+                                              return GrihoPendingInviteBanner(
+                                                title:
                                                     'New Manager Assignment: $propName',
-                                                    style: theme
-                                                        .textTheme
-                                                        .titleMedium
-                                                        ?.copyWith(
-                                                          fontWeight:
-                                                              FontWeight.w900,
-                                                        ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text('Invited by $ownerName'),
-                                                  const SizedBox(height: 12),
-                                                  Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: OutlinedButton(
-                                                          onPressed: _busy
-                                                              ? null
-                                                              : () =>
-                                                                    _handleInvitation(
-                                                                      inviteDoc,
-                                                                      profile,
-                                                                      false,
-                                                                    ),
-                                                          child: const Text(
-                                                            'Decline',
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 12),
-                                                      Expanded(
-                                                        child: FilledButton(
-                                                          onPressed: _busy
-                                                              ? null
-                                                              : () =>
-                                                                    _handleInvitation(
-                                                                      inviteDoc,
-                                                                      profile,
-                                                                      true,
-                                                                    ),
-                                                          child: const Text(
-                                                            'Accept Role',
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          }),
-
+                                                subtitle:
+                                                    'Invited by $ownerName',
+                                                acceptLabel: 'Accept Role',
+                                                busy: _busy,
+                                                onAccept: () =>
+                                                    _handleInvitation(
+                                                      inviteDoc,
+                                                      profile,
+                                                      true,
+                                                    ),
+                                                onDecline: () =>
+                                                    _handleInvitation(
+                                                      inviteDoc,
+                                                      profile,
+                                                      false,
+                                                    ),
+                                              );
+                                            },
+                                          ),
                                         if (suspendedAccessDocs.isNotEmpty)
                                           Container(
                                             margin: const EdgeInsets.only(
@@ -617,21 +537,19 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                             ),
                                             padding: const EdgeInsets.all(14),
                                             decoration: BoxDecoration(
-                                              color: Colors.orange.withValues(
-                                                alpha: 0.14,
-                                              ),
+                                              color: GrihoColors.warning
+                                                  .withValues(alpha: 0.14),
                                               borderRadius:
                                                   BorderRadius.circular(16),
                                               border: Border.all(
-                                                color: Colors.orange.shade800,
+                                                color: GrihoColors.warning,
                                               ),
                                             ),
                                             child: Row(
                                               children: [
-                                                Icon(
-                                                  Icons
-                                                      .pause_circle_filled_rounded,
-                                                  color: Colors.orange.shade900,
+                                                const Icon(
+                                                  Iconsax.pause_circle,
+                                                  color: GrihoColors.warning,
                                                 ),
                                                 const SizedBox(width: 10),
                                                 Expanded(
@@ -643,188 +561,155 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                                         ?.copyWith(
                                                           fontWeight:
                                                               FontWeight.w700,
-                                                          color: Colors
-                                                              .orange
-                                                              .shade900,
                                                         ),
                                                   ),
                                                 ),
                                               ],
                                             ),
                                           ),
-
-                                        ManagerVaultCard(
-                                          unpaidDue: totalUnpaidDue,
-                                          activeTenantsCount:
-                                              activeTenants.length,
-                                          buildingsCount:
-                                              managedPropertyIds.length,
-                                          unpaidInvoicesCount:
-                                              unpaidInvoicesCount,
+                                        GrihoHeroCard(
+                                          eyebrow: 'UNPAID DUES ACROSS UNITS',
+                                          eyebrowIcon: Iconsax.wallet_3,
+                                          headline: '৳ $dueText',
+                                          metrics: [
+                                            GrihoHeroMetric(
+                                              label: 'Buildings',
+                                              value:
+                                                  '${managedPropertyIds.length}',
+                                            ),
+                                            GrihoHeroMetric(
+                                              label: 'Residents',
+                                              value: '${activeTenants.length}',
+                                            ),
+                                            GrihoHeroMetric(
+                                              label: 'Unpaid bills',
+                                              value: '$unpaidInvoicesCount',
+                                              highlight:
+                                                  unpaidInvoicesCount > 0,
+                                            ),
+                                          ],
                                         ),
                                         const SizedBox(height: 14),
-
                                         Row(
                                           children: [
                                             Expanded(
-                                              child: FilledButton.icon(
-                                                style: FilledButton.styleFrom(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 14,
-                                                      ),
-                                                ),
+                                              child: GrihoPrimaryButton(
+                                                label: 'Add resident',
+                                                icon: Iconsax.user_add,
                                                 onPressed: () => context.push(
                                                   RouteNames.addTenant,
-                                                ),
-                                                icon: const Icon(
-                                                  Icons
-                                                      .person_add_alt_1_rounded,
-                                                  size: 20,
-                                                ),
-                                                label: const Text(
-                                                  'Add resident',
                                                 ),
                                               ),
                                             ),
                                             const SizedBox(width: 10),
                                             Expanded(
-                                              child: OutlinedButton.icon(
-                                                style: OutlinedButton.styleFrom(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 14,
-                                                      ),
-                                                ),
+                                              child: GrihoSecondaryButton(
+                                                label: 'Invitations',
+                                                icon: Iconsax.sms,
                                                 onPressed: () => context.push(
                                                   RouteNames.ownerManagers,
-                                                ),
-                                                icon: const Icon(
-                                                  Icons.mail_outline_rounded,
-                                                  size: 20,
-                                                ),
-                                                label: const Text(
-                                                  'Invitations',
                                                 ),
                                               ),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 22),
-
-                                        Text(
+                                        const GrihoSectionHeader(
                                           'Quick actions',
-                                          style: theme.textTheme.titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w900,
-                                              ),
                                         ),
                                         const SizedBox(height: 10),
-
-                                        GridView.count(
-                                          crossAxisCount: 2,
-                                          shrinkWrap: true,
-                                          physics:
-                                              const NeverScrollableScrollPhysics(),
-                                          mainAxisSpacing: 10,
-                                          crossAxisSpacing: 10,
-                                          childAspectRatio: 2.3,
-                                          children: [
-                                            for (final item in gridItems)
-                                              Material(
-                                                color: theme
-                                                    .colorScheme
-                                                    .surfaceContainerLow,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                  side: BorderSide(
-                                                    color: theme
-                                                        .colorScheme
-                                                        .outlineVariant,
-                                                  ),
-                                                ),
-                                                clipBehavior: Clip.antiAlias,
-                                                child: InkWell(
-                                                  onTap: item.onTap,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 12,
-                                                        ),
-                                                    child: Row(
-                                                      children: [
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets.all(
-                                                                9,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: item.color
-                                                                .withValues(
-                                                                  alpha: 0.12,
-                                                                ),
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  11,
-                                                                ),
-                                                          ),
-                                                          child: Icon(
-                                                            item.icon,
-                                                            size: 20,
-                                                            color: item.color,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 10,
-                                                        ),
-                                                        Expanded(
-                                                          child: Column(
-                                                            mainAxisAlignment:
-                                                                MainAxisAlignment
-                                                                    .center,
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                              Text(
-                                                                item.title,
-                                                                maxLines: 1,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                                style: const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w800,
-                                                                  fontSize: 13,
-                                                                ),
-                                                              ),
-                                                              Text(
-                                                                item.subtitle,
-                                                                maxLines: 1,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                                style: theme
-                                                                    .textTheme
-                                                                    .bodySmall
-                                                                    ?.copyWith(
-                                                                      color: theme
-                                                                          .colorScheme
-                                                                          .onSurfaceVariant,
-                                                                      fontSize:
-                                                                          11,
-                                                                    ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
+                                        GrihoQuickActionGrid(
+                                          items: [
+                                            GrihoQuickActionItem(
+                                              icon: Iconsax.wallet_check,
+                                              title: 'Payments',
+                                              subtitle: 'Review & confirm',
+                                              color: GrihoColors.emerald,
+                                              onTap: () => context.push(
+                                                RouteNames.ownerPayments,
                                               ),
+                                            ),
+                                            GrihoQuickActionItem(
+                                              icon: Iconsax.setting_2,
+                                              title:
+                                                  'Issues ($openIssuesCount)',
+                                              subtitle: 'Tenant complaints',
+                                              color: Colors.deepOrange,
+                                              onTap: () =>
+                                                  _openManagerIssuesSheet(
+                                                    context,
+                                                    propIdList,
+                                                    profile.name,
+                                                  ),
+                                            ),
+                                            GrihoQuickActionItem(
+                                              icon: Iconsax.notification_bing,
+                                              title: 'Notices',
+                                              subtitle: 'Post & manage',
+                                              color: GrihoColors.warning,
+                                              onTap: () =>
+                                                  _openManagerNoticesSheet(
+                                                    context,
+                                                    profile.uid,
+                                                    profile.name,
+                                                    activeAccessDocs,
+                                                  ),
+                                            ),
+                                            GrihoQuickActionItem(
+                                              icon: Iconsax.buildings_2,
+                                              title: 'Units',
+                                              subtitle:
+                                                  '$vacantUnitsCount vacant • $occupiedUnitsCount occupied',
+                                              color: Colors.indigo,
+                                              onTap: () =>
+                                                  showManagerUnitsSheet(
+                                                    context: context,
+                                                    unitDocs: myUnits,
+                                                    propertyNames:
+                                                        propertyNames,
+                                                  ),
+                                            ),
+                                            GrihoQuickActionItem(
+                                              icon: Iconsax.people,
+                                              title: 'Residents',
+                                              subtitle:
+                                                  '${activeTenants.length} active leases',
+                                              color: Colors.teal,
+                                              onTap: () =>
+                                                  showManagerTenantsSheet(
+                                                    context: context,
+                                                    tenantDocs: myTenants,
+                                                    propertyNames:
+                                                        propertyNames,
+                                                  ),
+                                            ),
+                                            GrihoQuickActionItem(
+                                              icon: Iconsax.money_change,
+                                              title: 'Rent control',
+                                              subtitle: 'Change rates',
+                                              color: Colors.deepPurpleAccent,
+                                              onTap: () => context.push(
+                                                RouteNames.centralRentControl,
+                                              ),
+                                            ),
+                                            GrihoQuickActionItem(
+                                              icon: Iconsax.receipt_item,
+                                              title: 'Billing rules',
+                                              subtitle: 'Utilities & charges',
+                                              color: Colors.brown,
+                                              onTap: () => context.push(
+                                                RouteNames.ownerBillingRules,
+                                              ),
+                                            ),
+                                            GrihoQuickActionItem(
+                                              icon: Iconsax.document_text,
+                                              title: 'Audit trail',
+                                              subtitle: 'Activity logs',
+                                              color: Colors.blueGrey,
+                                              onTap: () => context.push(
+                                                RouteNames.activityLogs,
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ],
@@ -849,20 +734,4 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
       ),
     );
   }
-}
-
-class _MgrAction {
-  const _MgrAction(
-    this.icon,
-    this.title,
-    this.subtitle,
-    this.color,
-    this.onTap,
-  );
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
 }

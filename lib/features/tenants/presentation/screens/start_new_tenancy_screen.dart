@@ -1,13 +1,18 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
 import '../../domain/entities/tenant.dart';
 import '../controllers/tenant_controller.dart';
+import '../providers/owner_tenants_provider.dart';
+import '../providers/property_tenants_provider.dart';
+import '../widgets/tenant_ui_helpers.dart';
 
 class StartNewTenancyScreen extends ConsumerStatefulWidget {
   final Tenant tenant;
@@ -40,12 +45,18 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     if (tenant.status != TenantStatus.inactive) {
       return Scaffold(
         appBar: AppBar(title: const Text('Start New Tenancy')),
-        body: _buildIneligibleView(
-          context,
-          icon: Icons.cancel_outlined,
-          title: 'Tenant is Already Active',
-          message:
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.close_circle,
+              title: 'Tenant is Already Active',
+              subtitle:
               'This tenant currently has an active tenancy. A new tenancy agreement can only be initiated for inactive or vacated tenants.',
+              actionLabel: 'Go Back',
+              onAction: () => Navigator.of(context).pop(),
+            ),
+          ),
         ),
       );
     }
@@ -53,12 +64,18 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     if (tenant.accountStatus != TenantAccountStatus.registered) {
       return Scaffold(
         appBar: AppBar(title: const Text('Start New Tenancy')),
-        body: _buildIneligibleView(
-          context,
-          icon: Icons.person_outline_rounded,
-          title: 'Account Not Registered',
-          message:
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.user_remove,
+              title: 'Account Not Registered',
+              subtitle:
               'The tenant must register their personal Griho account before an official tenancy agreement can be initiated.',
+              actionLabel: 'Go Back',
+              onAction: () => Navigator.of(context).pop(),
+            ),
+          ),
         ),
       );
     }
@@ -67,19 +84,20 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Start New Tenancy',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Start New Tenancy')),
       body: propertiesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorView(
-          message: error.toString(),
-          onRetry: () {
-            ref.invalidate(currentOwnerPropertiesProvider);
-          },
+        loading: () => const GrihoLoadingView(message: 'Loading properties...'),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load properties',
+              subtitle: error.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentOwnerPropertiesProvider),
+            ),
+          ),
         ),
         data: (properties) {
           final activeProperties = properties
@@ -87,14 +105,11 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               .toList();
 
           if (_selectedPropertyId != null &&
-              !activeProperties.any(
-                (property) => property.id == _selectedPropertyId,
-              )) {
+              !activeProperties.any((p) => p.id == _selectedPropertyId)) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) {
                 return;
               }
-
               setState(() {
                 _selectedPropertyId = null;
                 _selectedUnit = null;
@@ -128,76 +143,49 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Tenant Identity Card
               _buildTenantHeaderCard(tenant),
-
               const SizedBox(height: 18),
-
-              // Section 1: Property Selection
-              _buildSectionCard(
+              GrihoSectionCard(
                 title: '1. Select Property',
                 subtitle: 'Choose an active building for the new lease',
-                icon: Icons.apartment_rounded,
+                icon: Iconsax.buildings_2,
                 children: [
                   if (properties.isEmpty)
-                    const _EmptyState(
-                      icon: Icons.apartment_outlined,
-                      message: 'No active properties are available.',
+                    const GrihoStatusState(
+                      icon: Iconsax.buildings_2,
+                      title: 'No active properties',
+                      subtitle: 'No active properties are available.',
                     )
                   else
                     _buildPropertyDropdown(properties),
                 ],
               ),
-
               const SizedBox(height: 18),
-
-              // Section 2: Unit Selection
               if (selectedProperty != null) ...[
-                _buildSectionCard(
+                GrihoSectionCard(
                   title: '2. Select Available Unit',
                   subtitle: 'Pick a vacant apartment or commercial space',
-                  icon: Icons.door_front_door_outlined,
+                  icon: Iconsax.home_2,
                   children: [_buildUnitSection(selectedProperty)],
                 ),
                 const SizedBox(height: 18),
-
-                // Section 3: Financial Rent Terms
-                _buildSectionCard(
+                GrihoSectionCard(
                   title: '3. Rental Agreement',
                   subtitle: 'Specify recurring monthly rent amount',
-                  icon: Icons.payments_outlined,
+                  icon: Iconsax.wallet_3,
                   children: [_buildRentInput()],
                 ),
               ],
-
-              const SizedBox(height: 32),
-
-              // Submit Button
-              SizedBox(
-                height: 52,
-                child: FilledButton.icon(
-                  onPressed: _canSubmit(selectedProperty: selectedProperty)
-                      ? () =>
-                            _confirmStartNewTenancy(property: selectedProperty!)
-                      : null,
-                  icon: _isSubmitting
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.check_circle_outline_rounded),
-                  label: Text(
-                    _isSubmitting ? 'Starting Tenancy...' : 'Start New Tenancy',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+              const SizedBox(height: 28),
+              GrihoPrimaryButton(
+                label: _isSubmitting
+                    ? 'Starting Tenancy...'
+                    : 'Start New Tenancy',
+                icon: Iconsax.tick_circle,
+                isLoading: _isSubmitting,
+                onPressed: _canSubmit(selectedProperty: selectedProperty)
+                    ? () => _confirmStartNewTenancy(property: selectedProperty!)
+                    : null,
               ),
             ],
           ),
@@ -223,7 +211,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
             radius: 26,
             backgroundColor: theme.colorScheme.primaryContainer,
             child: Text(
-              _initials(tenant.name),
+              tenantInitials(tenant.name),
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -248,8 +236,8 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
                 Row(
                   children: [
                     Icon(
-                      Icons.phone_outlined,
-                      size: 14,
+                      Iconsax.call,
+                      size: 13,
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 6),
@@ -268,8 +256,8 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
                   Row(
                     children: [
                       Icon(
-                        Icons.mail_outline_rounded,
-                        size: 14,
+                        Iconsax.sms,
+                        size: 13,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 6),
@@ -296,47 +284,30 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.12),
+                        color: GrihoColors.emerald.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            Icons.verified_user_rounded,
+                            Iconsax.verify,
                             size: 12,
-                            color: Colors.green.shade800,
+                            color: GrihoColors.emerald,
                           ),
-                          const SizedBox(width: 4),
+                          SizedBox(width: 4),
                           Text(
                             'Registered User',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: Colors.green.shade800,
+                              color: GrihoColors.emerald,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'Inactive / Vacated',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.orange.shade800,
-                        ),
-                      ),
-                    ),
+                    TenantStatusChip(status: tenant.status),
                   ],
                 ),
               ],
@@ -347,61 +318,17 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     );
   }
 
-  Widget _buildSectionCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildPropertyDropdown(List<Property> properties) {
     return DropdownButtonFormField<String>(
       initialValue: _selectedPropertyId,
       isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Target Property',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.domain_rounded),
+        prefixIcon: Icon(
+          Iconsax.buildings_2,
+          color: GrihoColors.emerald,
+          size: 20,
+        ),
       ),
       hint: const Text('Select property building'),
       items: properties.map((property) {
@@ -431,12 +358,12 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
       onChanged: _isSubmitting
           ? null
           : (propertyId) {
-              setState(() {
-                _selectedPropertyId = propertyId;
-                _selectedUnit = null;
-                _rentController.clear();
-              });
-            },
+        setState(() {
+          _selectedPropertyId = propertyId;
+          _selectedUnit = null;
+          _rentController.clear();
+        });
+      },
     );
   }
 
@@ -445,13 +372,11 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     if (selectedPropertyId == null) {
       return null;
     }
-
     for (final property in properties) {
       if (property.id == selectedPropertyId) {
         return property;
       }
     }
-
     return null;
   }
 
@@ -461,14 +386,15 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
 
     return unitsAsync.when(
       loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: LinearProgressIndicator(),
       ),
-      error: (error, stackTrace) => _ErrorView(
-        message: error.toString(),
-        onRetry: () {
-          ref.invalidate(propertyUnitsProvider(propertyId));
-        },
+      error: (error, _) => GrihoStatusState(
+        icon: Iconsax.warning_2,
+        title: 'Unable to load units',
+        subtitle: error.toString(),
+        actionLabel: 'Retry',
+        onAction: () => ref.invalidate(propertyUnitsProvider(propertyId)),
       ),
       data: (units) {
         final availableUnits = units
@@ -476,9 +402,10 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
             .toList();
 
         if (availableUnits.isEmpty) {
-          return const _EmptyState(
-            icon: Icons.meeting_room_outlined,
-            message: 'No available units found in this property.',
+          return const GrihoStatusState(
+            icon: Iconsax.home_2,
+            title: 'No available units',
+            subtitle: 'No vacant units found in this property.',
           );
         }
 
@@ -498,9 +425,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
         }
         final selected = units.where((u) => u.id == unitId).firstOrNull;
         if (selected != null) {
-          setState(() {
-            _selectedUnit = selected;
-          });
+          setState(() => _selectedUnit = selected);
         }
       },
       child: Column(
@@ -513,8 +438,8 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               color: isSelected
                   ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
                   : theme.colorScheme.surfaceContainerHighest.withValues(
-                      alpha: 0.35,
-                    ),
+                alpha: 0.35,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
                 side: BorderSide(
@@ -528,11 +453,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               child: InkWell(
                 onTap: _isSubmitting
                     ? null
-                    : () {
-                        setState(() {
-                          _selectedUnit = unit;
-                        });
-                      },
+                    : () => setState(() => _selectedUnit = unit),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -571,15 +492,15 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.12),
+                          color: Colors.blueAccent.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Text(
+                        child: const Text(
                           'Vacant',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: Colors.blue.shade800,
+                            color: Colors.blueAccent,
                           ),
                         ),
                       ),
@@ -607,9 +528,13 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
         hintText: 'e.g. 15000',
         prefixText: '৳ ',
         suffixText: '/ month',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.currency_exchange_rounded),
+        prefixIcon: Icon(
+          Iconsax.money_2,
+          color: GrihoColors.emerald,
+          size: 20,
+        ),
       ),
+      onChanged: (_) => setState(() {}),
       validator: (val) {
         final amount = double.tryParse(val?.trim() ?? '');
         if (amount == null || amount <= 0) {
@@ -625,12 +550,10 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     if (value.isEmpty) {
       return null;
     }
-
     final amount = double.tryParse(value);
     if (amount == null || amount <= 0) {
       return null;
     }
-
     return amount;
   }
 
@@ -642,6 +565,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
   }
 
   Future<void> _confirmStartNewTenancy({required Property property}) async {
+    FocusScope.of(context).unfocus();
     final unit = _selectedUnit;
     if (unit == null) {
       return;
@@ -649,7 +573,10 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
 
     final amount = _getRentAmount();
     if (amount == null) {
-      _showMessage('Please enter a valid monthly rent amount.');
+      GrihoFeedback.showError(
+        context,
+        'Please enter a valid monthly rent amount.',
+      );
       return;
     }
 
@@ -688,7 +615,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
                       ),
                     ),
                     Text(
-                      _formatRent(amount),
+                      '৳${formatTenantAmount(amount)} / month',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w900,
                         color: theme.colorScheme.primary,
@@ -701,15 +628,11 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Confirm & Start'),
             ),
           ],
@@ -729,204 +652,39 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     required Unit unit,
     required double amount,
   }) async {
-    setState(() {
-      _isSubmitting = true;
-    });
+    setState(() => _isSubmitting = true);
 
     final startedTenant = await ref
         .read(tenantControllerProvider.notifier)
         .startNewTenancy(
-          tenantId: widget.tenant.id,
-          propertyId: property.id,
-          unitId: unit.id,
-          amount: amount,
-        );
+      tenantId: widget.tenant.id,
+      propertyId: property.id,
+      unitId: unit.id,
+      amount: amount,
+    );
 
     if (!mounted) {
       return;
     }
 
-    setState(() {
-      _isSubmitting = false;
-    });
+    setState(() => _isSubmitting = false);
 
     if (startedTenant == null) {
       final state = ref.read(tenantControllerProvider);
-      _showMessage(state.error?.toString() ?? 'Unable to start new tenancy.');
+      GrihoFeedback.showError(
+        context,
+        state.error?.toString().replaceFirst('Bad state: ', '') ??
+            'Unable to start new tenancy.',
+      );
       return;
     }
 
     ref.invalidate(currentOwnerPropertiesProvider);
     ref.invalidate(propertyUnitsProvider(property.id));
+    ref.invalidate(propertyTenantsProvider(property.id));
+    ref.invalidate(ownerTenantsProvider);
 
-    _showMessage('New tenancy started successfully.');
+    GrihoFeedback.showSuccess(context, 'New tenancy started successfully.');
     Navigator.of(context).pop(true);
-  }
-
-  Widget _buildIneligibleView(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String message,
-  }) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.errorContainer.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 48, color: theme.colorScheme.error),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Go Back'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-      );
-  }
-
-  String _formatRent(double rent) {
-    if (rent == rent.roundToDouble()) {
-      return '৳${rent.toStringAsFixed(0)} / month';
-    }
-    return '৳${rent.toStringAsFixed(2)} / month';
-  }
-
-  static String _initials(String name) {
-    final value = name.trim();
-    if (value.isEmpty) {
-      return 'T';
-    }
-
-    final parts = value
-        .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
-        .toList();
-    if (parts.length == 1) {
-      return parts.first
-          .substring(0, parts.first.length >= 2 ? 2 : 1)
-          .toUpperCase();
-    }
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
-}
-
-// ============================================================================
-// EMPTY STATE
-// ============================================================================
-
-class _EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const _EmptyState({required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.35,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 36, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(height: 10),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// ERROR VIEW
-// ============================================================================
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorView({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.redAccent,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
-      ),
-    );
   }
 }

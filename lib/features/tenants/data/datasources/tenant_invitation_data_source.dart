@@ -1,9 +1,9 @@
+// noinspection SpellCheckingInspection
 import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../../../core/utils/phone_number_utils.dart';
 import '../../../rents/data/models/rent_rate_model.dart';
@@ -55,7 +55,9 @@ class TenantInvitationDataSource {
     required String ownerId,
     required String propertyId,
   }) async {
-    if (uid == ownerId) return true;
+    if (uid == ownerId) {
+      return true;
+    }
     final accessDoc = await _managerAccess.doc('${uid}_$propertyId').get();
     return accessDoc.exists && accessDoc.data()?['status'] == 'active';
   }
@@ -144,8 +146,13 @@ class TenantInvitationDataSource {
       );
     }
 
-    final propertyReference = _properties.doc(normalizedPropertyId);
-    final propertySnapshot = await propertyReference.get();
+    final docSnapshots = await Future.wait([
+      _properties.doc(normalizedPropertyId).get(),
+      _units.doc(normalizedUnitId).get(),
+    ]);
+
+    final propertySnapshot = docSnapshots[0];
+    final unitSnapshot = docSnapshots[1];
 
     if (!propertySnapshot.exists || propertySnapshot.data() == null) {
       throw StateError('Property does not exist.');
@@ -164,9 +171,6 @@ class TenantInvitationDataSource {
         propertyStatus.toLowerCase() != 'active') {
       throw StateError('Selected property is not active.');
     }
-
-    final unitReference = _units.doc(normalizedUnitId);
-    final unitSnapshot = await unitReference.get();
 
     if (!unitSnapshot.exists || unitSnapshot.data() == null) {
       throw StateError('Unit does not exist.');
@@ -246,6 +250,7 @@ class TenantInvitationDataSource {
         .where('ownerId', isEqualTo: normalizedOwnerId)
         .where('unitId', isEqualTo: normalizedUnitId)
         .where('status', isEqualTo: TenantInvitationStatus.pending.name)
+        .limit(20)
         .get();
 
     final now = DateTime.now();
@@ -286,23 +291,22 @@ class TenantInvitationDataSource {
 
     await invitationReference.set(invitation.toMap());
 
-    if (kDebugMode) {
-      debugPrint('[TENANT INVITATION] Created invitation ${invitation.id}');
-    }
-
     return invitation;
   }
 
   // ================================================================
-  // REALTIME STREAMS
+  // REALTIME STREAMS (BOUNDED WITH LIMIT)
   // ================================================================
 
   Stream<InvitationList> watchInvitationsByTenantId(String tenantId) {
     final normalizedTenantId = tenantId.trim();
-    if (normalizedTenantId.isEmpty) return const Stream.empty();
+    if (normalizedTenantId.isEmpty) {
+      return const Stream.empty();
+    }
 
     return _invitations
         .where('tenantId', isEqualTo: normalizedTenantId)
+        .limit(30)
         .snapshots()
         .map((snapshot) {
           final invitations = snapshot.docs
@@ -318,6 +322,7 @@ class TenantInvitationDataSource {
 
     return _invitations
         .where('phone', isEqualTo: normalizedPhone)
+        .limit(30)
         .snapshots()
         .map((snapshot) {
           final invitations = snapshot.docs
@@ -333,7 +338,9 @@ class TenantInvitationDataSource {
   ) {
     return watchInvitationsByTenantId(tenantId).map((invitations) {
       for (final invitation in invitations) {
-        if (invitation.isPending) return invitation;
+        if (invitation.isPending) {
+          return invitation;
+        }
       }
       return null;
     });
@@ -350,7 +357,9 @@ class TenantInvitationDataSource {
     }
 
     final snapshot = await _invitations.doc(normalizedId).get();
-    if (!snapshot.exists) return null;
+    if (!snapshot.exists) {
+      return null;
+    }
 
     final invitation = TenantInvitationModel.fromFirestore(snapshot);
     if (invitation.status == TenantInvitationStatus.pending &&
@@ -368,7 +377,9 @@ class TenantInvitationDataSource {
     }
 
     final snapshot = await _invitations.doc(normalizedToken).get();
-    if (!snapshot.exists) return null;
+    if (!snapshot.exists) {
+      return null;
+    }
 
     final invitation = TenantInvitationModel.fromFirestore(snapshot);
     if (invitation.status == TenantInvitationStatus.pending &&
@@ -389,19 +400,18 @@ class TenantInvitationDataSource {
     final p = _normalize(phone);
     if (p != null) {
       queries.add(
-        _invitations.where(
-          'phone',
-          isEqualTo: PhoneNumberUtils.normalizeAndValidate(p),
-        ),
+        _invitations
+            .where('phone', isEqualTo: PhoneNumberUtils.normalizeAndValidate(p))
+            .limit(30),
       );
     }
     final e = _normalizeEmail(email);
     if (e != null) {
-      queries.add(_invitations.where('targetEmail', isEqualTo: e));
+      queries.add(_invitations.where('targetEmail', isEqualTo: e).limit(30));
     }
     final g = _normalizeGrihoId(grihoId);
     if (g != null) {
-      queries.add(_invitations.where('targetGrihoId', isEqualTo: g));
+      queries.add(_invitations.where('targetGrihoId', isEqualTo: g).limit(30));
     }
     if (queries.isEmpty) {
       return Stream.value(const <TenantInvitationModel>[]);
@@ -423,7 +433,9 @@ class TenantInvitationDataSource {
       }
       final merged = byId.values.toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      if (!controller.isClosed) controller.add(merged);
+      if (!controller.isClosed) {
+        controller.add(merged);
+      }
     }
 
     controller = StreamController<InvitationList>(
@@ -464,7 +476,9 @@ class TenantInvitationDataSource {
 
     for (final document in snapshot.docs) {
       final invitation = TenantInvitationModel.fromFirestore(document);
-      if (invitation.isPending) return invitation;
+      if (invitation.isPending) {
+        return invitation;
+      }
     }
 
     return null;
@@ -483,7 +497,9 @@ class TenantInvitationDataSource {
 
     for (final document in snapshot.docs) {
       final invitation = TenantInvitationModel.fromFirestore(document);
-      if (invitation.isPending) return invitation;
+      if (invitation.isPending) {
+        return invitation;
+      }
     }
 
     return null;
@@ -505,7 +521,9 @@ class TenantInvitationDataSource {
 
     for (final document in snapshot.docs) {
       final invitation = TenantInvitationModel.fromFirestore(document);
-      if (invitation.isPending) return invitation;
+      if (invitation.isPending) {
+        return invitation;
+      }
     }
 
     return null;
@@ -527,14 +545,16 @@ class TenantInvitationDataSource {
 
     for (final document in snapshot.docs) {
       final invitation = TenantInvitationModel.fromFirestore(document);
-      if (invitation.isPending) return invitation;
+      if (invitation.isPending) {
+        return invitation;
+      }
     }
 
     return null;
   }
 
   // ================================================================
-  // ACCEPT INVITATION (VERIFIED EMAIL MANDATORY)
+  // ACCEPT INVITATION (VERIFIED EMAIL MANDATORY, SINGLE USER READ)
   // ================================================================
 
   Future<void> acceptInvitation(String invitationId) async {
@@ -600,11 +620,6 @@ class TenantInvitationDataSource {
         throw StateError('This invitation has expired.');
       }
 
-      await _verifyInvitationRecipient(
-        invitation: invitation,
-        user: currentUser,
-      );
-
       final tenantId = _normalize(invitation.tenantId);
       if (tenantId == null) {
         throw StateError(
@@ -630,6 +645,15 @@ class TenantInvitationDataSource {
       final existingRentRateSnap = candidateRentRateRef != null
           ? await transaction.get(candidateRentRateRef)
           : null;
+
+      final accountData = accountSnapshot.data();
+
+      // Verify recipient identity using the already-read accountSnapshot (saves 1 read).
+      _verifyInvitationRecipient(
+        invitation: invitation,
+        user: currentUser,
+        userData: accountData,
+      );
 
       if (!tenantSnapshot.exists) {
         throw StateError('Tenant does not exist.');
@@ -707,7 +731,6 @@ class TenantInvitationDataSource {
           currentRentRate.amount != invitation.rentAmount;
 
       // WRITES START HERE
-      final accountData = accountSnapshot.data();
       final accountEmail = _normalize(
         (accountData?['email'] as String?) ?? currentUser.email,
       )?.toLowerCase();
@@ -790,10 +813,6 @@ class TenantInvitationDataSource {
         'acceptedAt': Timestamp.fromDate(now),
         'updatedAt': Timestamp.fromDate(now),
       });
-
-      if (kDebugMode) {
-        debugPrint('[TENANT INVITATION] Accepted: ${invitation.id}');
-      }
     });
   }
 
@@ -851,7 +870,17 @@ class TenantInvitationDataSource {
         return;
       }
 
-      await _verifyInvitationRecipient(invitation: invitation, user: user);
+      JsonMap? userData;
+      if (_normalizeEmail(invitation.targetEmail) == null) {
+        final userSnap = await transaction.get(_users.doc(user.uid));
+        userData = userSnap.data();
+      }
+
+      _verifyInvitationRecipient(
+        invitation: invitation,
+        user: user,
+        userData: userData,
+      );
 
       transaction.update(reference, {
         'status': TenantInvitationStatus.rejected.name,
@@ -915,13 +944,14 @@ class TenantInvitationDataSource {
   }
 
   // ================================================================
-  // RECIPIENT IDENTITY VERIFICATION (VERIFIED EMAIL MANDATORY FOR ALL)
+  // RECIPIENT IDENTITY VERIFICATION (SYNCHRONOUS — USES TRANSACTION DATA)
   // ================================================================
 
-  Future<void> _verifyInvitationRecipient({
+  void _verifyInvitationRecipient({
     required TenantInvitation invitation,
     required User user,
-  }) async {
+    required JsonMap? userData,
+  }) {
     if (!user.emailVerified) {
       throw StateError(
         'Please verify your email address before responding to an invitation.',
@@ -939,8 +969,6 @@ class TenantInvitationDataSource {
       return;
     }
 
-    final userSnapshot = await _users.doc(user.uid).get();
-    final userData = userSnapshot.data();
     if (userData == null) {
       throw StateError('Your Griho profile could not be found.');
     }
@@ -982,20 +1010,26 @@ class TenantInvitationDataSource {
 
   String? _readOptionalString(JsonMap data, String field) {
     final value = data[field];
-    if (value is! String) return null;
+    if (value is! String) {
+      return null;
+    }
     final normalized = value.trim();
     return normalized.isEmpty ? null : normalized;
   }
 
   String? _normalize(String? value) {
     final normalized = value?.trim();
-    if (normalized == null || normalized.isEmpty) return null;
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
     return normalized;
   }
 
   String? _normalizeEmail(String? value) {
     final normalized = _normalize(value)?.toLowerCase();
-    if (normalized == null) return null;
+    if (normalized == null) {
+      return null;
+    }
 
     final atIndex = normalized.indexOf('@');
     if (atIndex <= 0 ||
@@ -1009,7 +1043,9 @@ class TenantInvitationDataSource {
 
   String? _normalizeGrihoId(String? value) {
     final normalized = _normalize(value);
-    if (normalized == null) return null;
+    if (normalized == null) {
+      return null;
+    }
     return normalized.toUpperCase();
   }
 }

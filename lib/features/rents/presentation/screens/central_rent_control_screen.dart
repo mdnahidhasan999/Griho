@@ -1,19 +1,21 @@
 // noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
+import '../../../../core/design_system/widgets/griho_picker_field.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../../properties/domain/entities/property.dart';
 import '../../../properties/presentation/providers/current_owner_properties_provider.dart';
 import '../../../units/domain/entities/unit.dart';
 import '../../../units/presentation/providers/property_units_provider.dart';
 import '../../domain/entities/rent_adjustment.dart';
+import '../../domain/entities/rent_rate.dart';
 import '../providers/rent_rate_provider.dart';
+import '../widgets/rent_ui_helpers.dart';
 
 enum _RentTargetScope { property, floor, unit }
 
@@ -47,6 +49,9 @@ class _CentralRentControlScreenState
   }
 
   Future<void> _pickDate() async {
+    if (_isSubmitting) {
+      return;
+    }
     final picked = await showDatePicker(
       context: context,
       initialDate: _effectiveDate,
@@ -60,20 +65,44 @@ class _CentralRentControlScreenState
     }
   }
 
-  Future<void> _applyBulkAdjustment() async {
-    if (!_formKey.currentState!.validate()) return;
+  String _floorLabel(int floor) => switch (floor) {
+    1 => '1st Floor',
+    2 => '2nd Floor',
+    3 => '3rd Floor',
+    _ => 'Floor $floor',
+  };
 
-    final property = _selectedProperty;
-    if (property == null) return;
+  String _unitStatusText(Unit unit) => switch (unit.status) {
+    UnitStatus.occupied => 'Occupied',
+    UnitStatus.available => 'Vacant',
+    _ =>
+      unit.status.name.isNotEmpty
+          ? unit.status.name[0].toUpperCase() + unit.status.name.substring(1)
+          : 'Other',
+  };
+
+  Future<void> _applyBulkAdjustment(
+    Property property,
+    int effectiveFloor,
+  ) async {
+    FocusScope.of(context).unfocus();
+    if (_isSubmitting) {
+      return;
+    }
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
 
     final amount = double.tryParse(_amountController.text.trim());
-    if (amount == null || amount <= 0) return;
+    if (amount == null || !amount.isFinite || amount <= 0) {
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
     try {
       final controller = ref.read(rentRateControllerProvider.notifier);
-      List<dynamic>? updatedList;
+      List<RentRate>? updatedList;
 
       if (_scope == _RentTargetScope.property) {
         updatedList = await controller.changePropertyRent(
@@ -83,10 +112,10 @@ class _CentralRentControlScreenState
           adjustmentType: _adjustmentType,
           effectiveFrom: _effectiveDate,
         );
-      } else if (_scope == _RentTargetScope.floor && _selectedFloor != null) {
+      } else if (_scope == _RentTargetScope.floor) {
         updatedList = await controller.changeFloorRent(
           propertyId: property.id,
-          floorNumber: _selectedFloor!,
+          floorNumber: effectiveFloor,
           ownerId: property.ownerId,
           amount: amount,
           adjustmentType: _adjustmentType,
@@ -94,13 +123,27 @@ class _CentralRentControlScreenState
         );
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       if (updatedList == null) {
         final err = ref
             .read(rentRateControllerProvider)
             .whenOrNull(error: (e, _) => e.toString());
         throw StateError(err ?? 'Failed to update rent rates.');
+      }
+
+      for (final rate in updatedList) {
+        ref.invalidate(
+          currentRentRateProvider((unitId: rate.unitId, ownerId: rate.ownerId)),
+        );
+        ref.invalidate(
+          unitRentRateHistoryProvider((
+            unitId: rate.unitId,
+            ownerId: rate.ownerId,
+          )),
+        );
       }
 
       final actionText = _adjustmentType == RentAdjustmentType.increase
@@ -114,32 +157,28 @@ class _CentralRentControlScreenState
         category: 'rent',
         actionTitle: _scope == _RentTargetScope.property
             ? 'Property-Wide Rent Adjusted'
-            : 'Floor $_selectedFloor Rent Adjusted',
+            : 'Floor $effectiveFloor Rent Adjusted',
         details:
-            'Monthly rent $actionText by ৳${amount.toStringAsFixed(0)} across${updatedList.length} occupied unit(s).',
+            'Monthly rent $actionText by ৳${formatRentAmount(amount)} across ${updatedList.length} unit(s).',
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Rent $actionText by ৳${amount.toStringAsFixed(0)} for${updatedList.length} occupied unit(s).',
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
+      GrihoFeedback.showSuccess(
+        context,
+        'Rent $actionText by ৳${formatRentAmount(amount)} for ${updatedList.length} unit(s).',
       );
 
       _amountController.clear();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Bad state: ', '')),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+      if (!mounted) {
+        return;
+      }
+      GrihoFeedback.showError(
+        context,
+        e.toString().replaceFirst('Bad state: ', ''),
       );
     } finally {
       if (mounted) {
@@ -155,37 +194,62 @@ class _CentralRentControlScreenState
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Rent & Tariff Control',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Rent & Tariff Control')),
       body: propertiesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) =>
-            Center(child: Text('Error loading properties: $err')),
+        loading: () => const GrihoLoadingView(message: 'Loading buildings...'),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load properties',
+              subtitle: err.toString(),
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentOwnerPropertiesProvider),
+            ),
+          ),
+        ),
         data: (properties) {
           if (properties.isEmpty) {
             return const Center(
-              child: Text('No properties available to manage rent.'),
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.buildings_2,
+                  title: 'No properties available',
+                  subtitle: 'Add a property first to manage rent tariffs.',
+                ),
+              ),
             );
           }
 
-          if (_selectedProperty == null ||
-              !properties.any((p) => p.id == _selectedProperty!.id)) {
-            _selectedProperty = properties.first;
-          }
-          final property = _selectedProperty!;
-          final unitsAsync = ref.watch(propertyUnitsProvider(property.id));
+          final property =
+              (_selectedProperty != null &&
+                  properties.any((p) => p.id == _selectedProperty!.id))
+              ? _selectedProperty!
+              : properties.first;
 
           final floors = List<int>.generate(
             property.numberOfFloors > 0 ? property.numberOfFloors : 1,
             (i) => i + 1,
           );
-          if (_selectedFloor == null || !floors.contains(_selectedFloor)) {
-            _selectedFloor = floors.first;
-          }
+          final effectiveFloor =
+              (_selectedFloor != null && floors.contains(_selectedFloor))
+              ? _selectedFloor!
+              : floors.first;
+
+          // Watch units only when the user actually selects the Unit scope to avoid extra Firestore reads.
+          final unitsAsync = _scope == _RentTargetScope.unit
+              ? ref.watch(propertyUnitsProvider(property.id))
+              : null;
+
+          final loadedUnits = unitsAsync?.value ?? const <Unit>[];
+          final effectiveUnit = loadedUnits.isEmpty
+              ? null
+              : (_selectedUnit != null &&
+                    loadedUnits.any((u) => u.id == _selectedUnit!.id))
+              ? _selectedUnit!
+              : loadedUnits.first;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
@@ -194,384 +258,262 @@ class _CentralRentControlScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Scope Selector Card
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: theme.colorScheme.outlineVariant,
+                  GrihoSectionCard(
+                    title: '1. Select Operation Scope',
+                    subtitle:
+                        'Choose whether to adjust rent for a whole building, a specific floor, or manage a single unit.',
+                    icon: Iconsax.setting_4,
+                    children: [
+                      SegmentedButton<_RentTargetScope>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _RentTargetScope.property,
+                            label: Text('Property'),
+                            icon: Icon(Iconsax.buildings_2, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: _RentTargetScope.floor,
+                            label: Text('Floor'),
+                            icon: Icon(Iconsax.layer, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: _RentTargetScope.unit,
+                            label: Text('Unit'),
+                            icon: Icon(Iconsax.home_2, size: 16),
+                          ),
+                        ],
+                        selected: {_scope},
+                        onSelectionChanged: _isSubmitting
+                            ? null
+                            : (s) => setState(() => _scope = s.first),
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  GrihoSectionCard(
+                    title: '2. Choose Target Location',
+                    icon: Iconsax.location,
+                    children: [
+                      GrihoPickerField<Property>(
+                        label: 'Select Building',
+                        hint: 'Choose a building',
+                        sheetTitle: 'Select Building',
+                        searchHint: 'Search by building name or code...',
+                        icon: Iconsax.buildings_2,
+                        items: properties,
+                        value: property,
+                        enabled: !_isSubmitting,
+                        itemTitle: (p) => p.name,
+                        itemSubtitle: (p) => p.propertyCode.trim().isNotEmpty
+                            ? 'Code: ${p.propertyCode}'
+                            : null,
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedProperty = val;
+                            _selectedFloor = 1;
+                            _selectedUnit = null;
+                          });
+                        },
+                      ),
+                      if (_scope == _RentTargetScope.floor) ...[
+                        const SizedBox(height: 14),
+                        GrihoPickerField<int>(
+                          key: ValueKey('floor_${property.id}'),
+                          label: 'Select Floor Level',
+                          hint: 'Choose a floor',
+                          sheetTitle: 'Select Floor Level',
+                          searchHint: 'Search floor...',
+                          icon: Iconsax.layer,
+                          items: floors,
+                          value: effectiveFloor,
+                          enabled: !_isSubmitting,
+                          itemTitle: _floorLabel,
+                          onChanged: (val) =>
+                              setState(() => _selectedFloor = val),
+                        ),
+                      ],
+                      if (_scope == _RentTargetScope.unit &&
+                          unitsAsync != null) ...[
+                        const SizedBox(height: 14),
+                        unitsAsync.when(
+                          loading: () => const LinearProgressIndicator(),
+                          error: (e, _) => Text('Error loading units: $e'),
+                          data: (units) {
+                            if (units.isEmpty) {
+                              return const Text(
+                                'No units configured in this building.',
+                              );
+                            }
+
+                            return GrihoPickerField<Unit>(
+                              key: ValueKey('unit_${property.id}'),
+                              label: 'Select Unit Space',
+                              hint: 'Choose a unit',
+                              sheetTitle: 'Select Unit Space',
+                              searchHint: 'Search by unit or floor...',
+                              icon: Iconsax.home_2,
+                              items: units,
+                              value: effectiveUnit,
+                              enabled: !_isSubmitting,
+                              itemTitle: (u) => 'Unit ${u.unitNumber}',
+                              itemSubtitle: (u) {
+                                final custom = u.name?.trim() ?? '';
+                                final base =
+                                    '${_floorLabel(u.floorNumber)} • ${_unitStatusText(u)}';
+                                return custom.isNotEmpty
+                                    ? '$custom • $base'
+                                    : base;
+                              },
+                              onChanged: (val) =>
+                                  setState(() => _selectedUnit = val),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (_scope != _RentTargetScope.unit) ...[
+                    GrihoSectionCard(
+                      title: '3. Bulk Adjustment Parameters',
+                      icon: Iconsax.money_change,
                       children: [
-                        Text(
-                          '1. Select Operation Scope',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
+                        SegmentedButton<RentAdjustmentType>(
+                          segments: const [
+                            ButtonSegment(
+                              value: RentAdjustmentType.increase,
+                              icon: Icon(Iconsax.trend_up, size: 17),
+                              label: Text('Increase Rent'),
+                            ),
+                            ButtonSegment(
+                              value: RentAdjustmentType.decrease,
+                              icon: Icon(Iconsax.trend_down, size: 17),
+                              label: Text('Decrease Rent'),
+                            ),
+                          ],
+                          selected: {_adjustmentType},
+                          onSelectionChanged: _isSubmitting
+                              ? null
+                              : (s) =>
+                                    setState(() => _adjustmentType = s.first),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _amountController,
+                          enabled: !_isSubmitting,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d*\.?\d{0,2}'),
+                            ),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Adjustment Amount (per unit)',
+                            hintText: 'e.g. 500',
+                            prefixText: '৳ ',
+                          ),
+                          validator: (val) {
+                            if (_scope == _RentTargetScope.unit) {
+                              return null;
+                            }
+                            final amt = double.tryParse(val?.trim() ?? '');
+                            if (amt == null || !amt.isFinite || amt <= 0) {
+                              return 'Enter a valid amount greater than 0.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: _isSubmitting ? null : _pickDate,
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Effective From Date',
+                              prefixIcon: Icon(
+                                Iconsax.calendar_1,
+                                color: GrihoColors.emerald,
+                                size: 20,
+                              ),
+                              suffixIcon: Icon(Iconsax.arrow_right_3, size: 16),
+                            ),
+                            child: Text(
+                              formatRentDate(_effectiveDate),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Choose whether to adjust rent for a whole building, a specific floor, or manage a single unit.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    GrihoPrimaryButton(
+                      label: _scope == _RentTargetScope.property
+                          ? 'Apply Property-Wide Rent Adjustment'
+                          : 'Apply Floor-Wide Rent Adjustment',
+                      icon: Iconsax.tick_circle,
+                      isLoading: _isSubmitting,
+                      onPressed: () =>
+                          _applyBulkAdjustment(property, effectiveFloor),
+                    ),
+                  ],
+                  if (_scope == _RentTargetScope.unit &&
+                      effectiveUnit != null) ...[
+                    GrihoSectionCard(
+                      title: '3. Unit ${effectiveUnit.unitNumber} Operations',
+                      subtitle:
+                          'Manage monthly rent invoices, update unit rent rate, or inspect historical rate changes.',
+                      icon: Iconsax.wallet_check,
+                      children: [
+                        GrihoPrimaryButton(
+                          label: 'Monthly Rent Invoices (Generate & View)',
+                          icon: Iconsax.receipt_item,
+                          onPressed: () {
+                            context.push(
+                              RouteNames.unitMonthlyRent.replaceFirst(
+                                ':unitId',
+                                effectiveUnit.id,
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: FilledButton.tonalIcon(
+                            onPressed: () {
+                              context.push(
+                                RouteNames.changeUnitRent.replaceFirst(
+                                  ':unitId',
+                                  effectiveUnit.id,
+                                ),
+                              );
+                            },
+                            icon: const Icon(Iconsax.edit_2, size: 18),
+                            label: const Text(
+                              'Update Unit Monthly Rent Rate',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        SegmentedButton<_RentTargetScope>(
-                          segments: const [
-                            ButtonSegment(
-                              value: _RentTargetScope.property,
-                              label: Text('Property'),
-                              icon: Icon(Icons.apartment_rounded, size: 18),
-                            ),
-                            ButtonSegment(
-                              value: _RentTargetScope.floor,
-                              label: Text('Floor'),
-                              icon: Icon(Icons.layers_outlined, size: 18),
-                            ),
-                            ButtonSegment(
-                              value: _RentTargetScope.unit,
-                              label: Text('Unit'),
-                              icon: Icon(
-                                Icons.door_front_door_outlined,
-                                size: 18,
+                        GrihoSecondaryButton(
+                          label: 'View Rate Adjustment History',
+                          icon: Iconsax.clock,
+                          onPressed: () {
+                            context.push(
+                              RouteNames.unitRentRateHistory.replaceFirst(
+                                ':unitId',
+                                effectiveUnit.id,
                               ),
-                            ),
-                          ],
-                          selected: {_scope},
-                          onSelectionChanged: (s) {
-                            setState(() {
-                              _scope = s.first;
-                            });
+                            );
                           },
                         ),
                       ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // 2. Target Location Card
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: theme.colorScheme.outlineVariant,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '2. Choose Target Location',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        DropdownButtonFormField<Property>(
-                          initialValue: property,
-                          decoration: const InputDecoration(
-                            labelText: 'Select Building',
-                            prefixIcon: Icon(Icons.domain_rounded),
-                            border: OutlineInputBorder(),
-                          ),
-                          items: properties
-                              .map(
-                                (p) => DropdownMenuItem(
-                                  value: p,
-                                  child: Text('${p.name} (${p.propertyCode})'),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _selectedProperty = val;
-                                _selectedFloor = 1;
-                                _selectedUnit = null;
-                              });
-                            }
-                          },
-                        ),
-                        if (_scope == _RentTargetScope.floor) ...[
-                          const SizedBox(height: 14),
-                          DropdownButtonFormField<int>(
-                            initialValue: _selectedFloor,
-                            decoration: const InputDecoration(
-                              labelText: 'Select Floor Level',
-                              prefixIcon: Icon(Icons.layers_outlined),
-                              border: OutlineInputBorder(),
-                            ),
-                            items: floors
-                                .map(
-                                  (f) => DropdownMenuItem(
-                                    value: f,
-                                    child: Text('Floor $f'),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (val) {
-                              setState(() => _selectedFloor = val);
-                            },
-                          ),
-                        ],
-                        if (_scope == _RentTargetScope.unit) ...[
-                          const SizedBox(height: 14),
-                          unitsAsync.when(
-                            loading: () => const LinearProgressIndicator(),
-                            error: (e, _) => Text('Error loading units: $e'),
-                            data: (units) {
-                              if (units.isEmpty) {
-                                return const Text(
-                                  'No units configured in this building.',
-                                );
-                              }
-                              if (_selectedUnit == null ||
-                                  !units.any(
-                                    (u) => u.id == _selectedUnit!.id,
-                                  )) {
-                                _selectedUnit = units.first;
-                              }
-
-                              return DropdownButtonFormField<Unit>(
-                                initialValue: _selectedUnit,
-                                decoration: const InputDecoration(
-                                  labelText: 'Select Unit Space',
-                                  prefixIcon: Icon(Icons.meeting_room_outlined),
-                                  border: OutlineInputBorder(),
-                                ),
-                                items: units
-                                    .map(
-                                      (u) => DropdownMenuItem(
-                                        value: u,
-                                        child: Text(
-                                          'Unit ${u.unitNumber} (Floor ${u.floorNumber}) •${u.status == UnitStatus.occupied ? "Occupied" : "Vacant"}',
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (val) {
-                                  setState(() => _selectedUnit = val);
-                                },
-                              );
-                            },
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // 3A. Bulk Adjustment Form (For Property & Floor)
-                  if (_scope != _RentTargetScope.unit) ...[
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '3. Bulk Adjustment Parameters',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          SegmentedButton<RentAdjustmentType>(
-                            segments: const [
-                              ButtonSegment(
-                                value: RentAdjustmentType.increase,
-                                icon: Icon(Icons.trending_up_rounded),
-                                label: Text('Increase Rent'),
-                              ),
-                              ButtonSegment(
-                                value: RentAdjustmentType.decrease,
-                                icon: Icon(Icons.trending_down_rounded),
-                                label: Text('Decrease Rent'),
-                              ),
-                            ],
-                            selected: {_adjustmentType},
-                            onSelectionChanged: (s) {
-                              setState(() => _adjustmentType = s.first);
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _amountController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                RegExp(r'^\d*\.?\d{0,2}'),
-                              ),
-                            ],
-                            decoration: const InputDecoration(
-                              labelText:
-                                  'Adjustment Amount (per occupied unit)',
-                              hintText: 'e.g. 500',
-                              prefixText: '৳ ',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (val) {
-                              if (_scope == _RentTargetScope.unit) return null;
-                              final amt = double.tryParse(val?.trim() ?? '');
-                              if (amt == null || amt <= 0) {
-                                return 'Enter a valid amount greater than 0.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: _pickDate,
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'Effective From Date',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.calendar_today_outlined),
-                              ),
-                              child: Text(
-                                '${_effectiveDate.day.toString().padLeft(2, '0')}/${_effectiveDate.month.toString().padLeft(2, '0')}/${_effectiveDate.year}',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      height: 52,
-                      child: FilledButton.icon(
-                        onPressed: _isSubmitting ? null : _applyBulkAdjustment,
-                        icon: _isSubmitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.check_circle_outline_rounded),
-                        label: Text(
-                          _scope == _RentTargetScope.property
-                              ? 'Apply Property-Wide Rent Adjustment'
-                              : 'Apply Floor-Wide Rent Adjustment',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-
-                  // 3B. Single Unit Complete Operations Card
-                  if (_scope == _RentTargetScope.unit &&
-                      _selectedUnit != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            '3. Unit ${_selectedUnit!.unitNumber} Rent Operations',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Manage monthly rent invoices, update unit rent rate, or inspect historical rate changes.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          SizedBox(
-                            height: 50,
-                            child: FilledButton.icon(
-                              onPressed: () {
-                                context.push(
-                                  RouteNames.unitMonthlyRent.replaceFirst(
-                                    ':unitId',
-                                    _selectedUnit!.id,
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.receipt_long_rounded),
-                              label: const Text(
-                                'Monthly Rent Invoices (Generate & View)',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          SizedBox(
-                            height: 50,
-                            child: FilledButton.tonalIcon(
-                              onPressed: () {
-                                context.push(
-                                  RouteNames.changeUnitRent.replaceFirst(
-                                    ':unitId',
-                                    _selectedUnit!.id,
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text(
-                                'Update Unit Monthly Rent Rate',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          SizedBox(
-                            height: 50,
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                context.push(
-                                  RouteNames.unitRentRateHistory.replaceFirst(
-                                    ':unitId',
-                                    _selectedUnit!.id,
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.history_rounded),
-                              label: const Text(
-                                'View Rate Adjustment History',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ],

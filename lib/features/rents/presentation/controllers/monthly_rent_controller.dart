@@ -1,19 +1,19 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../domain/entities/create_monthly_rent_request.dart';
 import '../../domain/entities/monthly_rent.dart';
 import '../../domain/usecases/create_monthly_rent.dart';
+import '../providers/monthly_rent_provider.dart';
 
-class MonthlyRentController extends StateNotifier<AsyncValue<void>> {
-  final CreateMonthlyRent _createMonthlyRent;
+class MonthlyRentController extends Notifier<AsyncValue<void>> {
+  late final CreateMonthlyRent _createMonthlyRent;
 
-  MonthlyRentController({required this._createMonthlyRent})
-    : super(const AsyncData(null));
-
-  // ============================================================
-  // CREATE MONTHLY RENT
-  // ============================================================
+  @override
+  AsyncValue<void> build() {
+    _createMonthlyRent = ref.read(createMonthlyRentProvider);
+    return const AsyncData(null);
+  }
 
   Future<MonthlyRent?> createMonthlyRent({
     required CreateMonthlyRentRequest request,
@@ -22,20 +22,13 @@ class MonthlyRentController extends StateNotifier<AsyncValue<void>> {
 
     try {
       final monthlyRent = await _createMonthlyRent(request);
-
       state = const AsyncData(null);
-
       return monthlyRent;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-
       return null;
     }
   }
-
-  // ============================================================
-  // RESET
-  // ============================================================
 
   void reset() {
     state = const AsyncData(null);

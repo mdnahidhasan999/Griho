@@ -1,8 +1,11 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/tenant_invitation.dart';
 import '../providers/recipient_invitations_provider.dart';
+import '../widgets/tenant_ui_helpers.dart';
 import 'tenant_invitation_receive_screen.dart';
 
 class TenantInvitationsScreen extends ConsumerWidget {
@@ -14,20 +17,11 @@ class TenantInvitationsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Tenancy Invitations',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Tenancy Invitations')),
       body: const SafeArea(child: _InvitationList()),
     );
   }
 }
-
-// ============================================================================
-// INVITATION LIST
-// ============================================================================
 
 class _InvitationList extends ConsumerWidget {
   const _InvitationList();
@@ -37,12 +31,18 @@ class _InvitationList extends ConsumerWidget {
     final invitationsAsync = ref.watch(recipientInvitationsProvider);
 
     return invitationsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => _ErrorView(
-        message: 'Unable to load your invitations.',
-        onRetry: () {
-          ref.invalidate(recipientInvitationsProvider);
-        },
+      loading: () => const GrihoLoadingView(message: 'Loading invitations...'),
+      error: (_, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: GrihoStatusState(
+            icon: Iconsax.warning_2,
+            title: 'Unable to load invitations',
+            subtitle: 'Please check your connection and try again.',
+            actionLabel: 'Retry',
+            onAction: () => ref.invalidate(recipientInvitationsProvider),
+          ),
+        ),
       ),
       data: (invitations) {
         if (invitations.isEmpty) {
@@ -53,17 +53,14 @@ class _InvitationList extends ConsumerWidget {
             },
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(24),
               children: const [
-                SizedBox(
-                  height: 400,
-                  child: _EmptyView(
-                    icon: Icons.mail_outline_rounded,
-                    title: 'No Invitations Yet',
-                    message:
-                        'You do not have any tenancy invitations. '
-                        'When a property manager invites you, '
-                        'it will appear here.',
-                  ),
+                SizedBox(height: 60),
+                GrihoStatusState(
+                  icon: Iconsax.sms,
+                  title: 'No Invitations Yet',
+                  subtitle:
+                      'You do not have any tenancy invitations. When a property manager invites you, it will appear here.',
                 ),
               ],
             ),
@@ -73,15 +70,20 @@ class _InvitationList extends ConsumerWidget {
         final sorted = List<TenantInvitation>.from(invitations)
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-        final pendingInvitations = sorted.where((invitation) {
-          return invitation.status == TenantInvitationStatus.pending &&
-              !invitation.isExpired;
-        }).toList();
+        final pendingInvitations = sorted
+            .where(
+              (inv) =>
+                  inv.status == TenantInvitationStatus.pending &&
+                  !inv.isExpired,
+            )
+            .toList();
 
-        final historicalInvitations = sorted.where((invitation) {
-          return invitation.status != TenantInvitationStatus.pending ||
-              invitation.isExpired;
-        }).toList();
+        final historicalInvitations = sorted
+            .where(
+              (inv) =>
+                  inv.status != TenantInvitationStatus.pending || inv.isExpired,
+            )
+            .toList();
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -98,13 +100,12 @@ class _InvitationList extends ConsumerWidget {
                 resolvedCount: historicalInvitations.length,
               ),
               const SizedBox(height: 20),
-
               if (pendingInvitations.isNotEmpty) ...[
-                _SectionTitle(
+                TenantSectionHeader(
                   title: 'Action Required',
                   count: pendingInvitations.length,
-                  icon: Icons.pending_actions_rounded,
-                  color: Colors.amber.shade900,
+                  icon: Iconsax.clock,
+                  color: GrihoColors.warning,
                 ),
                 const SizedBox(height: 10),
                 for (final invitation in pendingInvitations)
@@ -114,12 +115,11 @@ class _InvitationList extends ConsumerWidget {
                   ),
                 const SizedBox(height: 12),
               ],
-
               if (historicalInvitations.isNotEmpty) ...[
-                _SectionTitle(
+                TenantSectionHeader(
                   title: 'Past Invitations',
                   count: historicalInvitations.length,
-                  icon: Icons.history_rounded,
+                  icon: Iconsax.document_text,
                 ),
                 const SizedBox(height: 10),
                 for (final invitation in historicalInvitations)
@@ -135,10 +135,6 @@ class _InvitationList extends ConsumerWidget {
     );
   }
 }
-
-// ============================================================================
-// OVERVIEW CARD
-// ============================================================================
 
 class _InvitationsOverviewCard extends StatelessWidget {
   final int totalCount;
@@ -174,8 +170,8 @@ class _InvitationsOverviewCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  Icons.mark_email_read_outlined,
-                  size: 24,
+                  Iconsax.sms_notification,
+                  size: 22,
                   color: theme.colorScheme.onPrimaryContainer,
                 ),
               ),
@@ -208,28 +204,31 @@ class _InvitationsOverviewCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _MetricBadge(
+                child: TenantMetricBadge(
                   label: 'Total',
                   value: '$totalCount',
-                  icon: Icons.all_inbox_rounded,
+                  icon: Iconsax.sms,
+                  filled: true,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _MetricBadge(
+                child: TenantMetricBadge(
                   label: 'Pending',
                   value: '$pendingCount',
-                  icon: Icons.schedule_rounded,
-                  highlightColor: Colors.amber.shade900,
+                  icon: Iconsax.clock,
+                  highlightColor: GrihoColors.warning,
+                  filled: true,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _MetricBadge(
+                child: TenantMetricBadge(
                   label: 'Resolved',
                   value: '$resolvedCount',
-                  icon: Icons.check_circle_outline_rounded,
-                  highlightColor: Colors.teal,
+                  icon: Iconsax.tick_circle,
+                  highlightColor: GrihoColors.emerald,
+                  filled: true,
                 ),
               ),
             ],
@@ -240,133 +239,23 @@ class _InvitationsOverviewCard extends StatelessWidget {
   }
 }
 
-class _MetricBadge extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color? highlightColor;
-
-  const _MetricBadge({
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.highlightColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: highlightColor ?? theme.colorScheme.primary,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// SECTION TITLE
-// ============================================================================
-
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  final int count;
-  final IconData icon;
-  final Color? color;
-
-  const _SectionTitle({
-    required this.title,
-    required this.count,
-    required this.icon,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: color ?? theme.colorScheme.primary),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            '$count',
-            style: theme.textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: color ?? theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// PENDING INVITATION CARD
-// ============================================================================
-
-class _PendingInvitationCard extends ConsumerWidget {
+class _PendingInvitationCard extends StatelessWidget {
   final TenantInvitation invitation;
 
   const _PendingInvitationCard({required this.invitation});
 
-  Future<void> _openReceiveScreen(BuildContext context, WidgetRef ref) async {
-    await Navigator.of(context).push<void>(
+  void _openReceiveScreen(BuildContext context) {
+    // Live stream provider updates automatically if accepted/declined — no manual invalidation needed.
+    Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) =>
             TenantInvitationReceiveScreen(invitationToken: invitation.token),
       ),
     );
-
-    if (context.mounted) {
-      ref.invalidate(recipientInvitationsProvider);
-    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Material(
@@ -380,7 +269,7 @@ class _PendingInvitationCard extends ConsumerWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _openReceiveScreen(context, ref),
+        onTap: () => _openReceiveScreen(context),
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -396,8 +285,8 @@ class _PendingInvitationCard extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      Icons.home_work_rounded,
-                      size: 22,
+                      Iconsax.buildings_2,
+                      size: 20,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
@@ -414,7 +303,7 @@ class _PendingInvitationCard extends ConsumerWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _formatUnit(invitation),
+                          formatInvitationUnit(invitation),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w600,
@@ -423,7 +312,7 @@ class _PendingInvitationCard extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  _StatusChip(
+                  _InvitationStatusChip(
                     status: invitation.status,
                     isExpired: invitation.isExpired,
                   ),
@@ -451,7 +340,7 @@ class _PendingInvitationCard extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      '৳ ${_formatAmount(invitation.rentAmount)} / mo',
+                      '৳ ${formatTenantAmount(invitation.rentAmount)} / mo',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w900,
                         color: theme.colorScheme.primary,
@@ -464,13 +353,13 @@ class _PendingInvitationCard extends ConsumerWidget {
               Row(
                 children: [
                   Icon(
-                    Icons.schedule_rounded,
+                    Iconsax.clock,
                     size: 14,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Expires: ${_formatDate(invitation.expiresAt)}',
+                    'Expires: ${formatTenantDate(invitation.expiresAt)}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -478,17 +367,10 @@ class _PendingInvitationCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: FilledButton.icon(
-                  onPressed: () => _openReceiveScreen(context, ref),
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                  label: const Text(
-                    'Review & Respond',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
+              GrihoPrimaryButton(
+                label: 'Review & Respond',
+                icon: Iconsax.arrow_right_3,
+                onPressed: () => _openReceiveScreen(context),
               ),
             ],
           ),
@@ -498,17 +380,13 @@ class _PendingInvitationCard extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// HISTORICAL INVITATION CARD
-// ============================================================================
-
-class _HistoricalInvitationCard extends ConsumerWidget {
+class _HistoricalInvitationCard extends StatelessWidget {
   final TenantInvitation invitation;
 
   const _HistoricalInvitationCard({required this.invitation});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Material(
@@ -519,18 +397,14 @@ class _HistoricalInvitationCard extends ConsumerWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () async {
-          await Navigator.of(context).push<void>(
+        onTap: () {
+          Navigator.of(context).push<void>(
             MaterialPageRoute<void>(
               builder: (_) => TenantInvitationReceiveScreen(
                 invitationToken: invitation.token,
               ),
             ),
           );
-
-          if (context.mounted) {
-            ref.invalidate(recipientInvitationsProvider);
-          }
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -552,7 +426,7 @@ class _HistoricalInvitationCard extends ConsumerWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _formatUnit(invitation),
+                          formatInvitationUnit(invitation),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -560,7 +434,7 @@ class _HistoricalInvitationCard extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  _StatusChip(
+                  _InvitationStatusChip(
                     status: invitation.status,
                     isExpired: invitation.isExpired,
                   ),
@@ -573,13 +447,13 @@ class _HistoricalInvitationCard extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '৳ ${_formatAmount(invitation.rentAmount)} / month',
+                    '৳ ${formatTenantAmount(invitation.rentAmount)} / month',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   Text(
-                    'Sent ${_formatDate(invitation.createdAt)}',
+                    'Sent ${formatTenantDate(invitation.createdAt)}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -594,15 +468,11 @@ class _HistoricalInvitationCard extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// STATUS CHIP
-// ============================================================================
-
-class _StatusChip extends StatelessWidget {
+class _InvitationStatusChip extends StatelessWidget {
   final TenantInvitationStatus status;
   final bool isExpired;
 
-  const _StatusChip({required this.status, required this.isExpired});
+  const _InvitationStatusChip({required this.status, required this.isExpired});
 
   @override
   Widget build(BuildContext context) {
@@ -614,35 +484,35 @@ class _StatusChip extends StatelessWidget {
     final (label, icon, color) = switch (effectiveStatus) {
       TenantInvitationStatus.pending => (
         'Pending',
-        Icons.schedule_rounded,
-        Colors.amber.shade900,
+        Iconsax.clock,
+        GrihoColors.warning,
       ),
       TenantInvitationStatus.accepted => (
         'Accepted',
-        Icons.check_circle_rounded,
-        Colors.green.shade800,
+        Iconsax.tick_circle,
+        GrihoColors.emerald,
       ),
       TenantInvitationStatus.cancelled => (
         'Cancelled',
-        Icons.cancel_outlined,
-        Colors.grey.shade700,
+        Iconsax.close_circle,
+        Colors.blueGrey,
       ),
       TenantInvitationStatus.rejected => (
         'Declined',
-        Icons.block_rounded,
-        Colors.red.shade800,
+        Iconsax.close_circle,
+        GrihoColors.error,
       ),
       TenantInvitationStatus.expired => (
         'Expired',
-        Icons.timer_off_outlined,
-        Colors.grey.shade700,
+        Iconsax.timer_1,
+        Colors.blueGrey,
       ),
     };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -662,154 +532,4 @@ class _StatusChip extends StatelessWidget {
       ),
     );
   }
-}
-
-// ============================================================================
-// EMPTY VIEW
-// ============================================================================
-
-class _EmptyView extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-
-  const _EmptyView({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.5,
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                size: 48,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.4,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// ERROR VIEW
-// ============================================================================
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback? onRetry;
-
-  const _ErrorView({required this.message, this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.redAccent,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            if (onRetry != null) ...[
-              const SizedBox(height: 16),
-              FilledButton(onPressed: onRetry, child: const Text('Retry')),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-String _formatUnit(TenantInvitation invitation) {
-  final unitName = invitation.unitName?.trim();
-  final unitNumber = invitation.unitNumber?.trim();
-
-  if (unitName != null &&
-      unitName.isNotEmpty &&
-      unitNumber != null &&
-      unitNumber.isNotEmpty) {
-    return '$unitName (Unit $unitNumber)';
-  }
-
-  if (unitName != null && unitName.isNotEmpty) {
-    return unitName;
-  }
-
-  if (unitNumber != null && unitNumber.isNotEmpty) {
-    return 'Unit $unitNumber';
-  }
-
-  return 'Unit unassigned';
-}
-
-String _formatDate(DateTime dateTime) {
-  final local = dateTime.toLocal();
-  final day = local.day.toString().padLeft(2, '0');
-  final month = local.month.toString().padLeft(2, '0');
-  final year = local.year.toString();
-
-  return '$day/$month/$year';
-}
-
-String _formatAmount(num? amount) {
-  if (amount == null) {
-    return '0';
-  }
-
-  if (amount == amount.roundToDouble()) {
-    return amount.toStringAsFixed(0);
-  }
-
-  return amount.toStringAsFixed(2);
 }

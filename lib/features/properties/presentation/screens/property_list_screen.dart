@@ -1,13 +1,23 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/property.dart';
 import '../providers/current_owner_properties_provider.dart';
 
 class PropertyListScreen extends ConsumerWidget {
   const PropertyListScreen({super.key});
+
+  Future<void> _openAddProperty(BuildContext context, WidgetRef ref) async {
+    final created = await context.push<Property>(RouteNames.addProperty);
+    // Only invalidate if a new property was actually created.
+    if (created != null) {
+      ref.invalidate(currentOwnerPropertiesProvider);
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -20,10 +30,7 @@ class PropertyListScreen extends ConsumerWidget {
         title: propertiesAsync.maybeWhen(
           data: (properties) => Row(
             children: [
-              const Text(
-                'My Properties',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
+              const Text('My Properties'),
               if (properties.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Container(
@@ -46,35 +53,45 @@ class PropertyListScreen extends ConsumerWidget {
               ],
             ],
           ),
-          orElse: () => const Text(
-            'My Properties',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
+          orElse: () => const Text('My Properties'),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await context.push(RouteNames.addProperty);
-          ref.invalidate(currentOwnerPropertiesProvider);
-        },
-        icon: const Icon(Icons.add_rounded),
+        onPressed: () => _openAddProperty(context, ref),
+        icon: const Icon(Iconsax.add),
         label: const Text(
           'Add Property',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: propertiesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorView(
-          onRetry: () => ref.invalidate(currentOwnerPropertiesProvider),
+        loading: () => const GrihoLoadingView(message: 'Loading properties...'),
+        error: (_, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load properties',
+              subtitle: 'Please check your connection and try again.',
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentOwnerPropertiesProvider),
+            ),
+          ),
         ),
         data: (properties) {
           if (properties.isEmpty) {
-            return _EmptyPropertiesView(
-              onAddProperty: () async {
-                await context.push(RouteNames.addProperty);
-                ref.invalidate(currentOwnerPropertiesProvider);
-              },
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.buildings_2,
+                  title: 'No Properties Added Yet',
+                  subtitle:
+                      'Add your first residential or commercial building to manage units, floors, and tenants.',
+                  actionLabel: 'Add Property',
+                  onAction: () => _openAddProperty(context, ref),
+                ),
+              ),
             );
           }
 
@@ -87,7 +104,7 @@ class PropertyListScreen extends ConsumerWidget {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
               itemCount: properties.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 return _PropertyCard(property: properties[index]);
               },
@@ -99,10 +116,6 @@ class PropertyListScreen extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// PROPERTY CARD
-// ============================================================================
-
 class _PropertyCard extends StatelessWidget {
   final Property property;
 
@@ -111,11 +124,11 @@ class _PropertyCard extends StatelessWidget {
   IconData _propertyTypeIcon(PropertyType type) {
     switch (type) {
       case PropertyType.residential:
-        return Icons.home_rounded;
+        return Iconsax.home_2;
       case PropertyType.commercial:
-        return Icons.storefront_rounded;
+        return Iconsax.shop;
       case PropertyType.mixedUse:
-        return Icons.domain_rounded;
+        return Iconsax.buildings_2;
     }
   }
 
@@ -135,14 +148,9 @@ class _PropertyCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isActive = property.status == PropertyStatus.active;
     final address = property.address?.trim();
+    final statusColor = isActive ? GrihoColors.emerald : GrihoColors.warning;
 
     return Card(
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
@@ -168,7 +176,7 @@ class _PropertyCard extends StatelessWidget {
                     ),
                     child: Icon(
                       _propertyTypeIcon(property.type),
-                      size: 24,
+                      size: 22,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
@@ -203,9 +211,7 @@ class _PropertyCard extends StatelessWidget {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: isActive
-                          ? Colors.green.withValues(alpha: 0.12)
-                          : Colors.orange.withValues(alpha: 0.12),
+                      color: statusColor.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -213,9 +219,7 @@ class _PropertyCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: isActive
-                            ? Colors.green.shade700
-                            : Colors.orange.shade800,
+                        color: statusColor,
                       ),
                     ),
                   ),
@@ -226,8 +230,8 @@ class _PropertyCard extends StatelessWidget {
                 Row(
                   children: [
                     Icon(
-                      Icons.location_on_outlined,
-                      size: 16,
+                      Iconsax.location,
+                      size: 15,
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 6),
@@ -253,12 +257,12 @@ class _PropertyCard extends StatelessWidget {
                   Row(
                     children: [
                       _MetaChip(
-                        icon: Icons.category_outlined,
+                        icon: Iconsax.category,
                         label: _propertyTypeLabel(property.type),
                       ),
                       const SizedBox(width: 8),
                       _MetaChip(
-                        icon: Icons.layers_outlined,
+                        icon: Iconsax.layer,
                         label: '${property.numberOfFloors} Floors',
                       ),
                     ],
@@ -272,10 +276,10 @@ class _PropertyCard extends StatelessWidget {
                           color: theme.colorScheme.primary,
                         ),
                       ),
-                      const SizedBox(width: 2),
+                      const SizedBox(width: 4),
                       Icon(
-                        Icons.chevron_right_rounded,
-                        size: 18,
+                        Iconsax.arrow_right_3,
+                        size: 16,
                         color: theme.colorScheme.primary,
                       ),
                     ],
@@ -309,7 +313,7 @@ class _MetaChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+          Icon(icon, size: 13, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 4),
           Text(
             label,
@@ -320,105 +324,6 @@ class _MetaChip extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// EMPTY VIEW
-// ============================================================================
-
-class _EmptyPropertiesView extends StatelessWidget {
-  final VoidCallback onAddProperty;
-
-  const _EmptyPropertiesView({required this.onAddProperty});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(
-                  alpha: 0.5,
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.apartment_rounded,
-                size: 48,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'No Properties Added Yet',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add your first residential or commercial building to manage units, floors, and tenants.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onAddProperty,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Property'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// ERROR VIEW
-// ============================================================================
-
-class _ErrorView extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _ErrorView({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.redAccent,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Unable to load your properties.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/fcm_notification_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -14,6 +15,7 @@ import '../../../team/presentation/providers/team_providers.dart';
 import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/presentation/providers/owner_tenants_provider.dart';
 import '../widgets/griho_home_chrome.dart';
+import '../widgets/griho_home_components.dart';
 import '../widgets/shared_property_sheets.dart';
 
 class OwnerHomeScreen extends ConsumerStatefulWidget {
@@ -94,22 +96,38 @@ class _OwnerHomeScreenState extends ConsumerState<OwnerHomeScreen> {
         extraActions: [
           IconButton(
             tooltip: 'Activity & audit trail',
-            icon: const Icon(Icons.history_rounded),
+            icon: const Icon(Iconsax.document_text),
             onPressed: () => context.push(RouteNames.activityLogs),
           ),
         ],
       ),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorView(
-          message: 'Unable to load owner account information.',
-          onRetry: () => ref.invalidate(currentUserProfileProvider),
+        loading: () => const GrihoLoadingView(message: 'Loading console...'),
+        error: (_, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Unable to load owner account',
+              subtitle: 'Please check your connection and try again.',
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(currentUserProfileProvider),
+            ),
+          ),
         ),
         data: (profile) {
           if (profile == null) {
-            return _ErrorView(
-              message: 'Owner profile not found.',
-              onRetry: () => ref.invalidate(currentUserProfileProvider),
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: GrihoStatusState(
+                  icon: Iconsax.user_remove,
+                  title: 'Owner profile not found',
+                  subtitle: 'Tap retry to reload your profile.',
+                  actionLabel: 'Retry',
+                  onAction: () => ref.invalidate(currentUserProfileProvider),
+                ),
+              ),
             );
           }
 
@@ -133,36 +151,93 @@ class _OwnerHomeScreenState extends ConsumerState<OwnerHomeScreen> {
                   publicId: profile.publicId,
                 ),
                 const SizedBox(height: 16),
-
                 OpenIssuesBanner(
                   filterField: 'ownerId',
                   filterValues: [profile.uid],
                   onTap: () =>
                       _openMaintenanceSheet(context, profile.uid, profile.name),
                 ),
-
-                const _SummaryCard(),
+                _OwnerSummaryCard(ownerUid: profile.uid),
                 const SizedBox(height: 14),
                 const _PrimaryActions(),
                 const SizedBox(height: 22),
-                const _SectionTitle('Your team'),
+                const GrihoSectionHeader('Your team'),
                 const SizedBox(height: 10),
                 const _TeamCard(),
                 const SizedBox(height: 22),
-                const _SectionTitle('Quick actions'),
+                const GrihoSectionHeader('Quick actions'),
                 const SizedBox(height: 10),
-                _ManageGrid(
-                  onOpenIssues: () =>
-                      _openMaintenanceSheet(context, profile.uid, profile.name),
-                  onOpenNotices: () => _openNoticesSheet(
-                    context,
-                    profile.uid,
-                    profile.name,
-                    ownedProps,
-                  ),
+                GrihoQuickActionGrid(
+                  items: [
+                    GrihoQuickActionItem(
+                      icon: Iconsax.people,
+                      title: 'Residents',
+                      subtitle: 'Tenants & leases',
+                      color: GrihoColors.emerald,
+                      onTap: () => context.push(RouteNames.ownerTenants),
+                    ),
+                    GrihoQuickActionItem(
+                      icon: Iconsax.buildings_2,
+                      title: 'Buildings',
+                      subtitle: 'Units & floors',
+                      color: Colors.indigo,
+                      onTap: () => context.push(RouteNames.propertyList),
+                    ),
+                    GrihoQuickActionItem(
+                      icon: Iconsax.wallet_check,
+                      title: 'Payments',
+                      subtitle: 'Review & confirm',
+                      color: Colors.green,
+                      onTap: () => context.push(RouteNames.ownerPayments),
+                    ),
+                    GrihoQuickActionItem(
+                      icon: Iconsax.setting_2,
+                      title: 'Issues',
+                      subtitle: 'Tenant complaints',
+                      color: Colors.deepOrange,
+                      onTap: () => _openMaintenanceSheet(
+                        context,
+                        profile.uid,
+                        profile.name,
+                      ),
+                    ),
+                    GrihoQuickActionItem(
+                      icon: Iconsax.notification_bing,
+                      title: 'Notices',
+                      subtitle: 'Post & manage',
+                      color: GrihoColors.warning,
+                      onTap: () => _openNoticesSheet(
+                        context,
+                        profile.uid,
+                        profile.name,
+                        ownedProps,
+                      ),
+                    ),
+                    GrihoQuickActionItem(
+                      icon: Iconsax.money_change,
+                      title: 'Rent control',
+                      subtitle: 'Change rates',
+                      color: Colors.deepPurpleAccent,
+                      onTap: () => context.push(RouteNames.centralRentControl),
+                    ),
+                    GrihoQuickActionItem(
+                      icon: Iconsax.receipt_item,
+                      title: 'Billing rules',
+                      subtitle: 'Utilities & charges',
+                      color: Colors.brown,
+                      onTap: () => context.push(RouteNames.ownerBillingRules),
+                    ),
+                    GrihoQuickActionItem(
+                      icon: Iconsax.document_text,
+                      title: 'Audit trail',
+                      subtitle: 'Activity logs',
+                      color: Colors.blueGrey,
+                      onTap: () => context.push(RouteNames.activityLogs),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 22),
-                _SectionTitle(
+                GrihoSectionHeader(
                   'Buildings',
                   trailing: TextButton(
                     onPressed: () => context.push(RouteNames.propertyList),
@@ -183,32 +258,51 @@ class _OwnerHomeScreenState extends ConsumerState<OwnerHomeScreen> {
   }
 }
 
-class _SummaryCard extends ConsumerWidget {
-  const _SummaryCard();
+/// Caches Firestore streams per ownerUid to prevent re-subscription reads on rebuilds.
+class _OwnerSummaryCard extends ConsumerStatefulWidget {
+  const _OwnerSummaryCard({required this.ownerUid});
+
+  final String ownerUid;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final uid = ref.watch(currentUserProfileProvider).value?.uid;
+  ConsumerState<_OwnerSummaryCard> createState() => _OwnerSummaryCardState();
+}
+
+class _OwnerSummaryCardState extends ConsumerState<_OwnerSummaryCard> {
+  late Stream<QuerySnapshot> _ratesStream;
+  late Stream<QuerySnapshot> _billsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _initStreams(widget.ownerUid);
+  }
+
+  @override
+  void didUpdateWidget(covariant _OwnerSummaryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.ownerUid != widget.ownerUid) {
+      _initStreams(widget.ownerUid);
+    }
+  }
+
+  void _initStreams(String uid) {
     final db = FirebaseFirestore.instance;
+    _ratesStream = db
+        .collection('rentRates')
+        .where('ownerId', isEqualTo: uid)
+        .snapshots();
+    _billsStream = db
+        .collection('monthlyBills')
+        .where('ownerId', isEqualTo: uid)
+        .snapshots();
+  }
 
-    final rates = uid == null
-        ? const Stream<QuerySnapshot>.empty()
-        : db
-              .collection('rentRates')
-              .where('ownerId', isEqualTo: uid)
-              .snapshots();
-
-    final bills = uid == null
-        ? const Stream<QuerySnapshot>.empty()
-        : db
-              .collection('monthlyBills')
-              .where('ownerId', isEqualTo: uid)
-              .snapshots();
-
+  @override
+  Widget build(BuildContext context) {
     final properties =
         ref.watch(currentOwnerPropertiesProvider).value ?? const <Property>[];
-    final owned = properties.where((p) => p.ownerId == uid).length;
+    final owned = properties.where((p) => p.ownerId == widget.ownerUid).length;
 
     final tenants = ref.watch(ownerTenantsProvider).value ?? const <Tenant>[];
     final activeTenants = tenants
@@ -216,10 +310,10 @@ class _SummaryCard extends ConsumerWidget {
         .length;
 
     return StreamBuilder<QuerySnapshot>(
-      stream: rates,
+      stream: _ratesStream,
       builder: (context, ratesSnap) {
         return StreamBuilder<QuerySnapshot>(
-          stream: bills,
+          stream: _billsStream,
           builder: (context, billsSnap) {
             final now = DateTime.now();
             final latestRateByUnit =
@@ -227,7 +321,7 @@ class _SummaryCard extends ConsumerWidget {
 
             for (final d
                 in ratesSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
-              final m = asJsonMap(d.data());
+              final m = homeAsMap(d.data());
               final amount = m['amount'];
               final fromRaw = m['effectiveFrom'];
               final toRaw = m['effectiveTo'];
@@ -261,7 +355,7 @@ class _SummaryCard extends ConsumerWidget {
             var unsettled = 0;
             for (final d
                 in billsSnap.data?.docs ?? const <QueryDocumentSnapshot>[]) {
-              final m = asJsonMap(d.data());
+              final m = homeAsMap(d.data());
               final s = (m['status'] ?? 'unpaid').toString();
               if (s != 'paid' && s != 'cancelled') {
                 unsettled++;
@@ -272,93 +366,23 @@ class _SummaryCard extends ConsumerWidget {
                 ? rent.toStringAsFixed(0)
                 : rent.toStringAsFixed(2);
 
-            return Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E222D), Color(0xFF141720)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            return GrihoHeroCard(
+              eyebrow: 'EXPECTED RENT THIS MONTH',
+              eyebrowIcon: Iconsax.wallet_3,
+              headline: '৳ $rentText',
+              metrics: [
+                GrihoHeroMetric(label: 'Buildings', value: '$owned'),
+                GrihoHeroMetric(label: 'Residents', value: '$activeTenants'),
+                GrihoHeroMetric(
+                  label: 'Unpaid bills',
+                  value: '$unsettled',
+                  highlight: unsettled > 0,
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Expected rent this month',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.65),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '৳ $rentText',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      _Stat(label: 'Buildings', value: '$owned'),
-                      _Stat(label: 'Residents', value: '$activeTenants'),
-                      _Stat(
-                        label: 'Unpaid bills',
-                        value: '$unsettled',
-                        highlight: unsettled > 0,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              ],
             );
           },
         );
       },
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({
-    required this.label,
-    required this.value,
-    this.highlight = false,
-  });
-
-  final String label;
-  final String value;
-  final bool highlight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: highlight ? Colors.amberAccent : Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -371,28 +395,22 @@ class _PrimaryActions extends ConsumerWidget {
     return Row(
       children: [
         Expanded(
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
+          child: GrihoPrimaryButton(
+            label: 'Add resident',
+            icon: Iconsax.user_add,
             onPressed: () => context.push(RouteNames.addTenant),
-            icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
-            label: const Text('Add resident'),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
+          child: GrihoSecondaryButton(
+            label: 'Add building',
+            icon: Iconsax.building_4,
             onPressed: () async {
               await context.push(RouteNames.addProperty);
               if (!context.mounted) return;
               ref.invalidate(currentOwnerPropertiesProvider);
             },
-            icon: const Icon(Icons.add_home_work_rounded, size: 20),
-            label: const Text('Add building'),
           ),
         ),
       ],
@@ -456,22 +474,22 @@ class _TeamCard extends ConsumerWidget {
               Row(
                 children: [
                   _TeamCount(
-                    icon: Icons.admin_panel_settings_rounded,
+                    icon: Iconsax.user_octagon,
                     label: 'Managers',
                     count: active(managers),
                     color: Colors.indigo,
                   ),
                   _TeamCount(
-                    icon: Icons.handyman_rounded,
+                    icon: Iconsax.setting_2,
                     label: 'Caretakers',
                     count: active(staff, 'caretaker'),
-                    color: Colors.teal,
+                    color: GrihoColors.emerald,
                   ),
                   _TeamCount(
-                    icon: Icons.electrical_services_rounded,
+                    icon: Iconsax.flash_1,
                     label: 'Electricians',
                     count: active(staff, 'electrician'),
-                    color: Colors.amber.shade800,
+                    color: GrihoColors.warning,
                   ),
                 ],
               ),
@@ -493,7 +511,7 @@ class _TeamCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const Icon(Icons.chevron_right_rounded),
+                  const Icon(Iconsax.arrow_right_3, size: 18),
                 ],
               ),
             ],
@@ -527,7 +545,7 @@ class _TeamCount extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
+              color: color.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, size: 18, color: color),
@@ -558,166 +576,11 @@ class _TeamCount extends StatelessWidget {
   }
 }
 
-class _ManageGrid extends StatelessWidget {
-  const _ManageGrid({required this.onOpenIssues, required this.onOpenNotices});
-
-  final VoidCallback onOpenIssues;
-  final VoidCallback onOpenNotices;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = <_GridItem>[
-      _GridItem(
-        Icons.groups_rounded,
-        'Residents',
-        'Tenants & leases',
-        Colors.teal,
-        () => context.push(RouteNames.ownerTenants),
-      ),
-      _GridItem(
-        Icons.domain_rounded,
-        'Buildings',
-        'Units & floors',
-        Colors.indigo,
-        () => context.push(RouteNames.propertyList),
-      ),
-      _GridItem(
-        Icons.payments_outlined,
-        'Payments',
-        'Review & confirm',
-        Colors.green,
-        () => context.push(RouteNames.ownerPayments),
-      ),
-      _GridItem(
-        Icons.build_circle_outlined,
-        'Issues',
-        'Tenant complaints',
-        Colors.deepOrange,
-        onOpenIssues,
-      ),
-      _GridItem(
-        Icons.campaign_outlined,
-        'Notices',
-        'Post & manage',
-        Colors.amber.shade800,
-        onOpenNotices,
-      ),
-      _GridItem(
-        Icons.price_change_outlined,
-        'Rent control',
-        'Change rates',
-        Colors.deepPurpleAccent,
-        () => context.push(RouteNames.centralRentControl),
-      ),
-      _GridItem(
-        Icons.receipt_long_rounded,
-        'Billing rules',
-        'Utilities & charges',
-        Colors.brown,
-        () => context.push(RouteNames.ownerBillingRules),
-      ),
-      _GridItem(
-        Icons.history_edu_rounded,
-        'Audit trail',
-        'Activity logs',
-        Colors.blueGrey,
-        () => context.push(RouteNames.activityLogs),
-      ),
-    ];
-
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 2.3,
-      children: [for (final i in items) _GridTile(item: i)],
-    );
-  }
-}
-
-class _GridItem {
-  const _GridItem(this.icon, this.title, this.subtitle, this.color, this.onTap);
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-}
-
-class _GridTile extends StatelessWidget {
-  const _GridTile({required this.item});
-
-  final _GridItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: item.onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: item.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(item.icon, size: 20, color: item.color),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      item.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BuildingsStrip extends ConsumerWidget {
   const _BuildingsStrip();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final uid = ref.watch(currentUserProfileProvider).value?.uid;
 
     return ref
@@ -731,36 +594,11 @@ class _BuildingsStrip extends ConsumerWidget {
                 : all.where((p) => p.ownerId == uid).toList();
 
             if (owned.isEmpty) {
-              return Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: theme.colorScheme.outlineVariant),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.domain_disabled_rounded,
-                      size: 38,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'No buildings yet',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Add your first building to start managing units and tenants.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+              return const GrihoStatusState(
+                icon: Iconsax.buildings_2,
+                title: 'No buildings yet',
+                subtitle:
+                    'Add your first building to start managing units and tenants.',
               );
             }
 
@@ -809,8 +647,9 @@ class _BuildingCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Icon(
-                    Icons.apartment_rounded,
+                    Iconsax.buildings_2,
                     color: theme.colorScheme.primary,
+                    size: 20,
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -818,9 +657,9 @@ class _BuildingCard extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: (active ? Colors.green : Colors.orange).withValues(
-                        alpha: 0.12,
-                      ),
+                      color:
+                          (active ? GrihoColors.emerald : GrihoColors.warning)
+                              .withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -829,8 +668,8 @@ class _BuildingCard extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         color: active
-                            ? Colors.green.shade800
-                            : Colors.orange.shade800,
+                            ? GrihoColors.emerald
+                            : GrihoColors.warning,
                       ),
                     ),
                   ),
@@ -855,67 +694,6 @@ class _BuildingCard extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.trailing});
-
-  final String title;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-        ),
-        ?trailing,
-      ],
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: Colors.redAccent,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Retry'),
-            ),
-          ],
         ),
       ),
     );

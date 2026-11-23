@@ -1,11 +1,10 @@
 // noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../tenants/domain/entities/tenant_invitation.dart';
 import '../../../tenants/presentation/providers/recipient_invitations_provider.dart';
 import '../providers/auth_provider.dart';
@@ -22,45 +21,36 @@ class RoleSelectionScreen extends ConsumerStatefulWidget {
 
 class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
   _SelectableRole? _selectedRole;
-
   bool _isNavigating = false;
 
   Future<void> _continueWithSelectedRole() async {
     final role = _selectedRole;
+    if (role == null || _isNavigating) return;
 
-    if (role == null || _isNavigating) {
-      return;
-    }
-
-    setState(() {
-      _isNavigating = true;
-    });
+    setState(() => _isNavigating = true);
 
     try {
-      final profile = await ref.read(currentUserProfileProvider.future);
+      final profile =
+          ref.read(currentUserProfileProvider).value ??
+          await ref.read(currentUserProfileProvider.future);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       if (profile == null) {
-        _showMessage(
+        GrihoFeedback.showError(
+          context,
           'Your profile could not be found. Please complete your profile.',
-          isError: true,
         );
-
         context.go(RouteNames.onboarding);
         return;
       }
 
       final phoneNumber = profile.phoneNumber?.trim() ?? '';
-
       if (phoneNumber.isEmpty) {
-        _showMessage(
+        GrihoFeedback.showError(
+          context,
           'Please complete your profile before selecting a role.',
-          isError: true,
         );
-
         context.go(RouteNames.onboarding);
         return;
       }
@@ -69,22 +59,18 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
           .read(userProfileRepositoryProvider)
           .saveInitialRole(profile.uid, role.name);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ref.invalidate(currentUserProfileProvider);
 
       switch (role) {
         case _SelectableRole.owner:
-          _showMessage('Owner role saved successfully.', isError: false);
+          GrihoFeedback.showSuccess(context, 'Owner role saved successfully.');
           context.go(RouteNames.ownerWelcome);
-          break;
 
         case _SelectableRole.tenant:
           var pendingCount = 0;
           try {
-            await ref.read(currentUserProfileProvider.future);
             ref.invalidate(recipientInvitationsProvider);
             final invitations = await ref
                 .read(recipientInvitationsProvider.future)
@@ -104,7 +90,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
             await showDialog<void>(
               context: context,
               builder: (dialogContext) => AlertDialog(
-                icon: const Icon(Icons.mark_email_unread_rounded),
+                icon: const Icon(Iconsax.sms_notification),
                 title: const Text('You have an invitation'),
                 content: Text(
                   pendingCount == 1
@@ -121,75 +107,45 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
             );
             if (!mounted) return;
           } else {
-            _showMessage(
-              'Tenant role saved. Invitations will appear in More > Invitations.',
-              isError: false,
+            GrihoFeedback.showSuccess(
+              context,
+              'Tenant role saved. Invitations will appear in Invites.',
             );
           }
           context.go(RouteNames.tenantInvitations);
-          break;
 
         case _SelectableRole.manager:
-          _showMessage(
+          GrihoFeedback.showSuccess(
+            context,
             'Manager role saved. Property access requires an owner invitation.',
-            isError: false,
           );
           context.go(RouteNames.managerHome);
-          break;
 
         case _SelectableRole.caretaker:
-          _showMessage(
+          GrihoFeedback.showSuccess(
+            context,
             'Caretaker role saved. Property access requires an owner invitation.',
-            isError: false,
           );
           context.go(RouteNames.caretakerHome);
-          break;
 
         case _SelectableRole.electrician:
-          _showMessage(
+          GrihoFeedback.showSuccess(
+            context,
             'Electrician role saved. Property access requires an owner invitation.',
-            isError: false,
           );
           context.go(RouteNames.electricianHome);
-          break;
       }
-    } catch (error, stackTrace) {
-      debugPrint('Role selection failed: $error');
-      debugPrintStack(stackTrace: stackTrace);
-
-      if (!mounted) {
-        return;
-      }
-
-      _showMessage(
+    } catch (_) {
+      if (!mounted) return;
+      GrihoFeedback.showError(
+        context,
         'Unable to save your selected role. Please try again.',
-        isError: true,
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _isNavigating = false;
-        });
+        setState(() => _isNavigating = false);
       }
     }
-  }
-
-  void _showMessage(String message, {required bool isError}) {
-    if (!mounted) {
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.of(context);
-    final colorScheme = Theme.of(context).colorScheme;
-
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? colorScheme.error : null,
-        ),
-      );
   }
 
   @override
@@ -201,27 +157,16 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
       appBar: AppBar(title: const Text('Choose Your Role'), centerTitle: false),
       body: SafeArea(
         child: profileAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const GrihoLoadingView(message: 'Loading profile...'),
           error: (error, stackTrace) => Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline_rounded, size: 48),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Unable to load your profile.',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: () {
-                      ref.invalidate(currentUserProfileProvider);
-                    },
-                    child: const Text('Try Again'),
-                  ),
-                ],
+              child: GrihoStatusState(
+                icon: Iconsax.warning_2,
+                title: 'Unable to load your profile',
+                subtitle: 'Please check your connection and try again.',
+                actionLabel: 'Try Again',
+                onAction: () => ref.invalidate(currentUserProfileProvider),
               ),
             ),
           ),
@@ -230,52 +175,28 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.person_off_outlined, size: 48),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Your profile is not available. '
-                        'Please complete your profile first.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () {
-                          context.go(RouteNames.onboarding);
-                        },
-                        child: const Text('Complete Profile'),
-                      ),
-                    ],
+                  child: GrihoStatusState(
+                    icon: Iconsax.user_remove,
+                    title: 'Profile not available',
+                    subtitle: 'Please complete your profile first to continue.',
+                    actionLabel: 'Complete Profile',
+                    onAction: () => context.go(RouteNames.onboarding),
                   ),
                 ),
               );
             }
 
             final phoneNumber = profile.phoneNumber?.trim() ?? '';
-
             if (phoneNumber.isEmpty) {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.person_outline_rounded, size: 48),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Complete your profile before choosing a role.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () {
-                          context.go(RouteNames.onboarding);
-                        },
-                        child: const Text('Complete Profile'),
-                      ),
-                    ],
+                  child: GrihoStatusState(
+                    icon: Iconsax.user_edit,
+                    title: 'Profile incomplete',
+                    subtitle: 'Complete your profile before choosing a role.',
+                    actionLabel: 'Complete Profile',
+                    onAction: () => context.go(RouteNames.onboarding),
                   ),
                 ),
               );
@@ -308,21 +229,11 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 76,
-                      height: 76,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Icon(
-                        Icons.apartment_rounded,
-                        size: 42,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: GrihoLogo(size: 64),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 22),
                     Text(
                       'Welcome, $name!',
                       style: theme.textTheme.headlineMedium?.copyWith(
@@ -331,9 +242,8 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'How would you like to use Griho? '
-                      'Choose a role to continue.',
-                      style: theme.textTheme.bodyLarge?.copyWith(
+                      'How would you like to use Griho? Choose a role to continue.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,
                       ),
@@ -345,7 +255,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       title: 'Property Owner',
                       subtitle:
                           'Manage your properties, units, tenants and bills.',
-                      icon: Icons.home_work_outlined,
+                      icon: Iconsax.buildings_2,
                     ),
                     const SizedBox(height: 12),
                     _buildRoleCard(
@@ -353,7 +263,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       role: _SelectableRole.tenant,
                       title: 'Tenant',
                       subtitle: 'Access your rented home and monthly bills.',
-                      icon: Icons.key_outlined,
+                      icon: Iconsax.key,
                     ),
                     const SizedBox(height: 12),
                     _buildRoleCard(
@@ -362,7 +272,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       title: 'Property Manager',
                       subtitle:
                           'Manage property operations with owner authorization.',
-                      icon: Icons.manage_accounts_outlined,
+                      icon: Iconsax.user_octagon,
                     ),
                     const SizedBox(height: 12),
                     _buildRoleCard(
@@ -371,7 +281,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       title: 'Caretaker',
                       subtitle:
                           'Handle building maintenance, visitor log & notices.',
-                      icon: Icons.handyman_outlined,
+                      icon: Iconsax.setting_2,
                     ),
                     const SizedBox(height: 12),
                     _buildRoleCard(
@@ -380,12 +290,11 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       title: 'Electrician',
                       subtitle:
                           'Log meter readings and resolve electrical tickets.',
-                      icon: Icons.electrical_services_outlined,
+                      icon: Iconsax.flash_1,
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Selecting a role does not grant access automatically. '
-                      'Staff and Tenant access require an owner invitation.',
+                      'Selecting a role does not grant access automatically. Staff and Tenant access require an owner invitation.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,
@@ -408,21 +317,13 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton(
-                  onPressed: _selectedRole == null || _isNavigating
-                      ? null
-                      : _continueWithSelectedRole,
-                  child: _isNavigating
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Continue'),
-                ),
+              child: GrihoPrimaryButton(
+                label: 'Continue',
+                icon: Iconsax.arrow_right_3,
+                isLoading: _isNavigating,
+                onPressed: _selectedRole == null
+                    ? null
+                    : _continueWithSelectedRole,
               ),
             ),
           ),
@@ -449,11 +350,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
         child: InkWell(
           onTap: _isNavigating
               ? null
-              : () {
-                  setState(() {
-                    _selectedRole = role;
-                  });
-                },
+              : () => setState(() => _selectedRole = role),
           borderRadius: BorderRadius.circular(18),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
@@ -461,7 +358,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
             decoration: BoxDecoration(
               color: isSelected
                   ? theme.colorScheme.primaryContainer.withValues(alpha: 0.55)
-                  : theme.colorScheme.surface,
+                  : theme.colorScheme.surfaceContainerLow,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: isSelected
@@ -484,6 +381,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                   ),
                   child: Icon(
                     icon,
+                    size: 22,
                     color: isSelected
                         ? theme.colorScheme.onPrimary
                         : theme.colorScheme.onSurfaceVariant,

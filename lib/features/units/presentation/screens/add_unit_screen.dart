@@ -1,8 +1,12 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/design_system.dart';
+import '../../../../core/design_system/widgets/griho_picker_field.dart';
 import '../../domain/entities/create_unit_request.dart';
 import '../controllers/unit_controller.dart';
+import '../widgets/unit_ui_helpers.dart';
 
 class AddUnitScreen extends ConsumerStatefulWidget {
   final String propertyId;
@@ -24,16 +28,7 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
   final _unitNumberController = TextEditingController();
   final _nameController = TextEditingController();
 
-  int? _selectedFloor;
-
-  @override
-  void initState() {
-    super.initState();
-    // Default to the first floor if available
-    if (widget.numberOfFloors >= 1) {
-      _selectedFloor = 1;
-    }
-  }
+  int? _selectedFloor = 1;
 
   @override
   void dispose() {
@@ -42,31 +37,18 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
     super.dispose();
   }
 
-  String _floorLabel(int floor) {
-    if (floor == 1) {
-      return '1st Floor';
-    }
-    if (floor == 2) {
-      return '2nd Floor';
-    }
-    if (floor == 3) {
-      return '3rd Floor';
-    }
-    return '$floor-th Floor';
-  }
-
   Future<void> _createUnit() async {
-    if (!_formKey.currentState!.validate()) {
+    FocusScope.of(context).unfocus();
+    if (ref.read(unitControllerProvider).isLoading) {
+      return;
+    }
+    if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
-    if (_selectedFloor == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a valid floor level.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    final floor = _selectedFloor;
+    if (floor == null) {
+      GrihoFeedback.showError(context, 'Please select a valid floor level.');
       return;
     }
 
@@ -75,7 +57,7 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
 
     final request = CreateUnitRequest(
       propertyId: widget.propertyId,
-      floorNumber: _selectedFloor!,
+      floorNumber: floor,
       unitNumber: unitNumber,
       name: name.isEmpty ? null : name,
     );
@@ -90,40 +72,33 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
 
     if (unit == null) {
       final state = ref.read(unitControllerProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.errorMessage ?? 'Unable to create unit.'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+      GrihoFeedback.showError(
+        context,
+        state.errorMessage ?? 'Unable to create unit.',
       );
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Unit created successfully.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
+    GrihoFeedback.showSuccess(context, 'Unit created successfully.');
     Navigator.of(context).pop(unit);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final state = ref.watch(unitControllerProvider);
+    final isLoading = ref.watch(
+      unitControllerProvider.select((s) => s.isLoading),
+    );
     final maxFloors = widget.numberOfFloors < 1 ? 1 : widget.numberOfFloors;
+    final floors = [for (var f = 1; f <= maxFloors; f++) f];
+    final activeFloor =
+        (_selectedFloor != null && floors.contains(_selectedFloor))
+        ? _selectedFloor
+        : floors.first;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Add Unit',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Add Unit')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
@@ -132,12 +107,11 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Overview Card
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(18),
                     border: Border.all(color: theme.colorScheme.outlineVariant),
                   ),
                   child: Row(
@@ -149,8 +123,8 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(
-                          Icons.door_front_door_rounded,
-                          size: 26,
+                          Iconsax.home_2,
+                          size: 24,
                           color: theme.colorScheme.onPrimaryContainer,
                         ),
                       ),
@@ -179,164 +153,69 @@ class _AddUnitScreenState extends ConsumerState<AddUnitScreen> {
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 18),
-
-                // Section: Unit Space Details
-                _buildSectionCard(
+                GrihoSectionCard(
                   title: 'Unit Details',
                   subtitle: 'Specify floor location and space identifiers',
-                  icon: Icons.apartment_rounded,
+                  icon: Iconsax.building,
                   children: [
-                    // Floor Dropdown Selector
-                    DropdownButtonFormField<int>(
-                      initialValue: _selectedFloor,
-                      decoration: const InputDecoration(
-                        labelText: 'Floor Level',
-                        hintText: 'Select floor level',
-                        prefixIcon: Icon(Icons.layers_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        for (int f = 1; f <= maxFloors; f++)
-                          DropdownMenuItem<int>(
-                            value: f,
-                            child: Text(_floorLabel(f)),
-                          ),
-                      ],
-                      onChanged: state.isLoading
-                          ? null
-                          : (val) {
-                              setState(() {
-                                _selectedFloor = val;
-                              });
-                            },
-                      validator: (val) {
-                        if (val == null) {
-                          return 'Please select a floor level.';
-                        }
-                        return null;
-                      },
+                    GrihoPickerField<int>(
+                      label: 'Floor Level',
+                      hint: 'Select floor level',
+                      sheetTitle: 'Select Floor Level',
+                      searchHint: 'Search floor...',
+                      icon: Iconsax.layer,
+                      items: floors,
+                      value: activeFloor,
+                      enabled: !isLoading,
+                      itemTitle: formatUnitFloorLabel,
+                      onChanged: (val) => setState(() => _selectedFloor = val),
+                      validator: (val) =>
+                          val == null ? 'Please select a floor level.' : null,
                     ),
-
                     const SizedBox(height: 16),
-
-                    // Unit Number Input
-                    TextFormField(
+                    GrihoTextField(
                       controller: _unitNumberController,
+                      label: 'Unit / Flat Number',
+                      hint: 'e.g. A-101 or 2B',
+                      prefixIcon: Iconsax.tag,
                       textCapitalization: TextCapitalization.characters,
                       textInputAction: TextInputAction.next,
-                      enabled: !state.isLoading,
-                      decoration: const InputDecoration(
-                        labelText: 'Unit / Flat Number',
-                        hintText: 'e.g. A-101 or 2B',
-                        prefixIcon: Icon(Icons.tag_rounded),
-                        border: OutlineInputBorder(),
-                      ),
+                      enabled: !isLoading,
                       validator: (value) {
-                        final text = value?.trim() ?? '';
-                        if (text.isEmpty) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Please enter unit number.';
                         }
                         return null;
                       },
                     ),
-
                     const SizedBox(height: 16),
-
-                    // Custom Unit Name Input
-                    TextFormField(
+                    GrihoTextField(
                       controller: _nameController,
+                      label: 'Unit Label / Name (Optional)',
+                      hint: 'e.g. Family Suite or Studio',
+                      prefixIcon: Iconsax.edit_2,
                       textCapitalization: TextCapitalization.words,
                       textInputAction: TextInputAction.done,
-                      enabled: !state.isLoading,
-                      decoration: const InputDecoration(
-                        labelText: 'Unit Label / Name (Optional)',
-                        hintText: 'e.g. Family Suite or Studio',
-                        prefixIcon: Icon(Icons.label_outline_rounded),
-                        border: OutlineInputBorder(),
-                      ),
+                      enabled: !isLoading,
+                      onFieldSubmitted: (_) {
+                        if (!isLoading) {
+                          _createUnit();
+                        }
+                      },
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 28),
-
-                // Submit Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton.icon(
-                    onPressed: state.isLoading ? null : _createUnit,
-                    icon: state.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.add_home_work_rounded),
-                    label: Text(
-                      state.isLoading ? 'Creating Unit...' : 'Create Unit',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                GrihoPrimaryButton(
+                  label: isLoading ? 'Creating Unit...' : 'Create Unit',
+                  icon: Iconsax.building_4,
+                  isLoading: isLoading,
+                  onPressed: _createUnit,
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
         ),
       ),
     );

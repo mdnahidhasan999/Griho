@@ -1,8 +1,11 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../domain/entities/create_unit_request.dart';
 import '../../domain/entities/unit.dart';
 import '../models/unit_model.dart';
+
+typedef UnitJsonMap = Map<String, dynamic>;
 
 class UnitDataSource {
   final FirebaseFirestore _firestore;
@@ -12,7 +15,7 @@ class UnitDataSource {
 
   static const String _collectionName = 'units';
 
-  CollectionReference<Map<String, dynamic>> get _units =>
+  CollectionReference<UnitJsonMap> get _units =>
       _firestore.collection(_collectionName);
 
   // ============================================================
@@ -56,17 +59,8 @@ class UnitDataSource {
   }
 
   // ============================================================
-  // GET ALL UNITS BY FLOOR
+  // GET ALL UNITS BY FLOOR (OCCUPIED + VACANT)
   // ============================================================
-  //
-  // Returns both occupied and vacant units.
-  //
-  // This method is intentionally different from
-  // getOccupiedUnitsByFloor().
-  //
-  // Rent belongs to the Unit, so floor-level rent adjustments
-  // must include vacant units as well.
-  //
 
   Future<List<UnitModel>> getUnitsByFloor({
     required String propertyId,
@@ -183,7 +177,7 @@ class UnitDataSource {
   }
 
   // ============================================================
-  // UPDATE UNIT
+  // UPDATE UNIT (NO EXTRA POST-UPDATE READ)
   // ============================================================
 
   Future<UnitModel> updateUnit(UnitModel unit) async {
@@ -207,17 +201,13 @@ class UnitDataSource {
       throw ArgumentError('Unit number cannot be empty.');
     }
 
-    final document = _units.doc(unitId);
+    final updatedModel = UnitModel.fromEntity(
+      unit.copyWith(unitNumber: unitNumber, updatedAt: DateTime.now()),
+    );
 
-    await document.update(unit.toFirestore());
+    await _units.doc(unitId).update(updatedModel.toFirestore());
 
-    final updatedDocument = await document.get();
-
-    if (!updatedDocument.exists) {
-      throw StateError('Unit was updated but could not be retrieved.');
-    }
-
-    return UnitModel.fromFirestore(updatedDocument);
+    return updatedModel;
   }
 
   // ============================================================
@@ -235,7 +225,7 @@ class UnitDataSource {
   }
 
   // ============================================================
-  // ASSIGN TENANT USER
+  // ASSIGN / REMOVE TENANT USER
   // ============================================================
 
   Future<void> assignTenantUser({
@@ -259,10 +249,6 @@ class UnitDataSource {
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
-
-  // ============================================================
-  // REMOVE TENANT USER
-  // ============================================================
 
   Future<void> removeTenantUser({required String unitId}) async {
     final normalizedUnitId = unitId.trim();

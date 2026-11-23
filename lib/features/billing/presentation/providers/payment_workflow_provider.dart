@@ -1,7 +1,12 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/datasources/payment_workflow_datasource.dart';
+
+typedef PaymentQuerySnapshot = QuerySnapshot<JsonMap>;
 
 final paymentWorkflowDataSourceProvider = Provider<PaymentWorkflowDataSource>((
   ref,
@@ -9,16 +14,27 @@ final paymentWorkflowDataSourceProvider = Provider<PaymentWorkflowDataSource>((
   return PaymentWorkflowDataSource();
 });
 
-final tenantPaymentTransactionsProvider =
-    StreamProvider<QuerySnapshot<Map<String, dynamic>>>((ref) {
-      return ref.watch(paymentWorkflowDataSourceProvider).watchTenantPayments();
-    });
+final tenantPaymentTransactionsProvider = StreamProvider<PaymentQuerySnapshot>((
+  ref,
+) {
+  // Rebuild stream automatically when the signed-in account changes.
+  ref.watch(authStateProvider);
+  if (FirebaseAuth.instance.currentUser == null) {
+    return const Stream.empty();
+  }
+  return ref.watch(paymentWorkflowDataSourceProvider).watchTenantPayments();
+});
 
 final ownerPaymentTransactionsProvider =
     StreamProvider.family<
-      QuerySnapshot<Map<String, dynamic>>,
+      PaymentQuerySnapshot,
       ({String ownerId, bool pendingOnly})
     >((ref, params) {
+      ref.watch(authStateProvider);
+      if (FirebaseAuth.instance.currentUser == null ||
+          params.ownerId.trim().isEmpty) {
+        return const Stream.empty();
+      }
       return ref
           .watch(paymentWorkflowDataSourceProvider)
           .watchOwnerPayments(

@@ -1,15 +1,16 @@
 // noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/entities/billing_rule.dart';
 import '../../domain/entities/update_billing_rule_request.dart';
+import '../controllers/generate_monthly_charges_controller.dart';
 import '../providers/billing_rule_provider.dart';
+import '../widgets/billing_ui_helpers.dart';
 
 class EditBillingRuleScreen extends ConsumerStatefulWidget {
   final BillingRule rule;
@@ -29,32 +30,26 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
   late DateTime _effectiveFrom;
   DateTime? _effectiveTo;
-
   late bool _isActive;
 
   bool _isSaving = false;
   bool _isDeactivating = false;
 
   bool get _isBusy => _isSaving || _isDeactivating;
-
   BillingRule get _rule => widget.rule;
-
   bool get _isFixed => _rule.valueType == BillingValueType.fixed;
 
   @override
   void initState() {
     super.initState();
-
     _titleController = TextEditingController(text: _rule.title ?? '');
     _amountController = TextEditingController(
-      text: _formatInitialAmount(_rule.amount),
+      text: formatBillingAmount(_rule.amount),
     );
-
     _effectiveFrom = _normalizeMonth(_rule.effectiveFrom);
     _effectiveTo = _rule.effectiveTo == null
         ? null
         : _normalizeMonth(_rule.effectiveTo!);
-
     _isActive = _rule.isActive;
   }
 
@@ -65,41 +60,25 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     super.dispose();
   }
 
-  String _formatInitialAmount(double amount) {
-    if (amount == amount.roundToDouble()) {
-      return amount.toStringAsFixed(0);
-    }
-    return amount.toStringAsFixed(2);
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Edit Billing Rule',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Edit Billing Rule')),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
             children: [
-              // 1. Hero Rule Overview
               _buildHeader(theme),
-
               const SizedBox(height: 18),
-
-              // 2. Editable Configuration Section
-              _buildSectionCard(
+              GrihoSectionCard(
                 title: '1. Rate & Description',
                 subtitle: 'Modify charge name and monthly cost',
-                icon: Icons.payments_outlined,
+                icon: Iconsax.wallet_3,
                 children: [
                   TextFormField(
                     controller: _titleController,
@@ -109,8 +88,11 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Rule Title / Description',
                       hintText: 'e.g. Monthly Water Charge',
-                      prefixIcon: Icon(Icons.title_rounded),
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(
+                        Iconsax.edit_2,
+                        color: GrihoColors.emerald,
+                        size: 19,
+                      ),
                     ),
                     validator: (value) {
                       if (_rule.chargeType == BillingChargeType.other &&
@@ -137,39 +119,39 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                       labelText: 'Billed Amount',
                       hintText: '0.00',
                       prefixText: '৳ ',
-                      prefixIcon: Icon(Icons.currency_exchange_rounded),
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(
+                        Iconsax.money_2,
+                        color: GrihoColors.emerald,
+                        size: 19,
+                      ),
                     ),
                     validator: _validateAmount,
                   ),
                 ],
               ),
-
               const SizedBox(height: 18),
-
-              // 3. Locked Classification Specs
-              _buildSectionCard(
+              GrihoSectionCard(
                 title: '2. Rule Parameters',
                 subtitle: 'Fixed classification configured upon creation',
-                icon: Icons.lock_outline_rounded,
+                icon: Iconsax.lock,
                 children: [
                   Row(
                     children: [
                       Expanded(
                         child: _ReadOnlyParamTile(
                           label: 'Category',
-                          value: _chargeTypeLabel(_rule.chargeType),
-                          icon: _chargeTypeIcon(_rule.chargeType),
+                          value: billingChargeTypeLabel(_rule.chargeType),
+                          icon: billingChargeTypeIcon(_rule.chargeType),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: _ReadOnlyParamTile(
                           label: 'Frequency',
-                          value: _valueTypeLabel(_rule.valueType),
-                          icon: _isFixed
-                              ? Icons.repeat_rounded
-                              : Icons.edit_calendar_rounded,
+                          value: _isFixed
+                              ? 'Fixed Recurring'
+                              : 'Variable (1 Month)',
+                          icon: _isFixed ? Iconsax.repeat : Iconsax.calendar_1,
                         ),
                       ),
                     ],
@@ -179,7 +161,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
+                          .withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: theme.colorScheme.outlineVariant,
@@ -189,7 +171,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
-                          Icons.info_outline_rounded,
+                          Iconsax.info_circle,
                           size: 18,
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -211,50 +193,36 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 18),
-
-              // 4. Effective Timeline Section
-              _buildSectionCard(
+              GrihoSectionCard(
                 title: '3. Schedule & Validity',
                 subtitle: 'Active timeframe for invoice generation',
-                icon: Icons.calendar_month_outlined,
+                icon: Iconsax.calendar_1,
                 children: [
                   _MonthField(
                     label: 'Effective Start Month',
                     month: _effectiveFrom,
-                    icon: Icons.calendar_today_outlined,
+                    icon: Iconsax.calendar_1,
                     enabled: !_isBusy,
-                    onTap: () {
-                      _selectEffectiveMonth(context);
-                    },
+                    onTap: () => _selectEffectiveMonth(context),
                   ),
                   if (_isFixed) ...[
                     const SizedBox(height: 16),
                     _MonthField(
                       label: 'End Month (Exclusive / Optional)',
                       month: _effectiveTo,
-                      icon: Icons.event_busy_outlined,
+                      icon: Iconsax.calendar_remove,
                       enabled: !_isBusy,
                       emptyText: 'No end date (Continuous)',
-                      onTap: () {
-                        _selectEffectiveTo(context);
-                      },
+                      onTap: () => _selectEffectiveTo(context),
                       onClear: _effectiveTo == null
                           ? null
-                          : () {
-                              setState(() {
-                                _effectiveTo = null;
-                              });
-                            },
+                          : () => setState(() => _effectiveTo = null),
                     ),
                   ],
                 ],
               ),
-
               const SizedBox(height: 18),
-
-              // 5. Activation Toggle Card
               Material(
                 color: theme.colorScheme.surfaceContainerLow,
                 shape: RoundedRectangleBorder(
@@ -270,11 +238,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                   value: _isActive,
                   onChanged: _isBusy
                       ? null
-                      : (value) {
-                          setState(() {
-                            _isActive = value;
-                          });
-                        },
+                      : (value) => setState(() => _isActive = value),
                   title: const Text(
                     'Active Status',
                     style: TextStyle(fontWeight: FontWeight.w700),
@@ -289,34 +253,13 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 28),
-
-              // 6. Action Buttons
-              SizedBox(
-                height: 52,
-                child: FilledButton.icon(
-                  onPressed: _isBusy ? null : _updateBillingRule,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.check_circle_outline_rounded),
-                  label: Text(
-                    _isSaving ? 'Saving Changes...' : 'Save Rule Changes',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+              GrihoPrimaryButton(
+                label: _isSaving ? 'Saving Changes...' : 'Save Rule Changes',
+                icon: Iconsax.tick_circle,
+                isLoading: _isSaving,
+                onPressed: _isBusy ? null : _updateBillingRule,
               ),
-
               if (_rule.isActive) ...[
                 const SizedBox(height: 12),
                 SizedBox(
@@ -329,14 +272,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                     onPressed: _isBusy ? null : _confirmDeactivate,
                     icon: _isDeactivating
                         ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: theme.colorScheme.error,
-                            ),
-                          )
-                        : const Icon(Icons.pause_circle_outline_rounded),
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.colorScheme.error,
+                      ),
+                    )
+                        : const Icon(Iconsax.pause_circle, size: 19),
                     label: Text(
                       _isDeactivating ? 'Deactivating...' : 'Deactivate Rule',
                       style: const TextStyle(fontWeight: FontWeight.bold),
@@ -351,13 +294,9 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     );
   }
 
-  // ========================================================================
-  // HEADER CARD
-  // ========================================================================
-
   Widget _buildHeader(ThemeData theme) {
     final title = _rule.title?.trim();
-    final isActive = _isActive;
+    final statusColor = _isActive ? GrihoColors.emerald : GrihoColors.warning;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -376,8 +315,8 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
-              _chargeTypeIcon(_rule.chargeType),
-              size: 26,
+              billingChargeTypeIcon(_rule.chargeType),
+              size: 24,
               color: theme.colorScheme.onPrimaryContainer,
             ),
           ),
@@ -389,14 +328,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                 Text(
                   title?.isNotEmpty == true
                       ? title!
-                      : _chargeTypeLabel(_rule.chargeType),
+                      : billingChargeTypeLabel(_rule.chargeType),
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${_valueTypeLabel(_rule.valueType)} • ${_chargeTypeLabel(_rule.chargeType)}',
+                  '${_isFixed ? 'Fixed Recurring' : 'Variable'} • ${billingChargeTypeLabel(_rule.chargeType)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -407,19 +346,15 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: isActive
-                  ? Colors.green.withValues(alpha: 0.12)
-                  : Colors.orange.withValues(alpha: 0.12),
+              color: statusColor.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              isActive ? 'Active' : 'Inactive',
+              _isActive ? 'Active' : 'Inactive',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: isActive
-                    ? Colors.green.shade800
-                    : Colors.orange.shade800,
+                color: statusColor,
               ),
             ),
           ),
@@ -428,98 +363,68 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     );
   }
 
-  Widget _buildSectionCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ========================================================================
-  // AMOUNT VALIDATION
-  // ========================================================================
-
   String? _validateAmount(String? value) {
     final text = value?.trim() ?? '';
     if (text.isEmpty) {
       return 'Amount is required.';
     }
-
     final amount = double.tryParse(text);
     if (amount == null || amount.isNaN || amount.isInfinite) {
       return 'Enter a valid numeric amount.';
     }
-
     if (amount < 0) {
       return 'Amount cannot be negative.';
     }
-
     return null;
   }
 
-  // ========================================================================
-  // UPDATE ACTION
-  // ========================================================================
-
   Future<void> _updateBillingRule() async {
-    if (!_formKey.currentState!.validate()) {
+    FocusScope.of(context).unfocus();
+    if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
     if (_effectiveTo != null && !_effectiveTo!.isAfter(_effectiveFrom)) {
-      _showError('End Month must be strictly after the Effective Month.');
+      GrihoFeedback.showError(
+        context,
+        'End Month must be strictly after the Effective Month.',
+      );
       return;
     }
 
     final amount = double.tryParse(_amountController.text.trim());
     if (amount == null || amount.isNaN || amount.isInfinite || amount < 0) {
-      _showError('Please enter a valid amount.');
+      GrihoFeedback.showError(context, 'Please enter a valid amount.');
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
+    final normalizedEffectiveFrom = _normalizeMonth(_effectiveFrom);
+    final normalizedEffectiveTo = _isFixed && _effectiveTo != null
+        ? _normalizeMonth(_effectiveTo!)
+        : null;
+
+    // Skip Firestore write if nothing changed.
+    final unchanged =
+        (amount - _rule.amount).abs() < 0.001 &&
+            (_normalizedTitle ?? '') == (_rule.title?.trim() ?? '') &&
+            normalizedEffectiveFrom.isAtSameMomentAs(
+              _normalizeMonth(_rule.effectiveFrom),
+            ) &&
+            ((normalizedEffectiveTo == null && _rule.effectiveTo == null) ||
+                (normalizedEffectiveTo != null &&
+                    _rule.effectiveTo != null &&
+                    normalizedEffectiveTo.isAtSameMomentAs(
+                      _normalizeMonth(_rule.effectiveTo!),
+                    ))) &&
+            _isActive == _rule.isActive;
+
+    if (unchanged) {
+      GrihoFeedback.showInfo(context, 'No changes to save.');
+      context.pop(false);
+      return;
+    }
+
+    setState(() => _isSaving = true);
 
     try {
       final request = UpdateBillingRuleRequest(
@@ -529,14 +434,19 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
         valueType: _rule.valueType,
         amount: amount,
         title: _normalizedTitle,
-        effectiveFrom: _normalizeMonth(_effectiveFrom),
-        effectiveTo: _isFixed && _effectiveTo != null
-            ? _normalizeMonth(_effectiveTo!)
-            : null,
+        effectiveFrom: normalizedEffectiveFrom,
+        effectiveTo: normalizedEffectiveTo,
         isActive: _isActive,
       );
 
       await ref.read(updateBillingRuleProvider)(request);
+
+      ref
+          .read(generateMonthlyChargesControllerProvider.notifier)
+          .invalidateMonthSyncLock(
+        ownerId: _rule.ownerId,
+        propertyId: _rule.propertyId,
+      );
 
       await AuditLoggerService.log(
         ownerId: _rule.ownerId,
@@ -544,38 +454,26 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
         category: 'billing',
         actionTitle: 'Billing Rule Updated',
         details:
-            '${_chargeTypeLabel(_rule.chargeType)} rate updated to ৳${amount.toStringAsFixed(0)} (${_isActive ? "Active" : "Inactive"}).',
+        '${billingChargeTypeLabel(_rule.chargeType)} rate updated to ৳${formatBillingAmount(amount)} (${_isActive ? "Active" : "Inactive"}).',
       );
 
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Billing rule updated successfully.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
+      GrihoFeedback.showSuccess(context, 'Billing rule updated successfully.');
       context.pop(true);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      _showError(_cleanErrorMessage(error));
+      GrihoFeedback.showError(context, cleanBillingError(error));
     } finally {
       if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
+        setState(() => _isSaving = false);
       }
     }
   }
-
-  // ========================================================================
-  // DEACTIVATE ACTION
-  // ========================================================================
 
   Future<void> _confirmDeactivate() async {
     final confirmed = await showDialog<bool>(
@@ -588,18 +486,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Cancel'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.error,
               ),
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Deactivate'),
             ),
           ],
@@ -615,14 +509,19 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
   }
 
   Future<void> _deactivateBillingRule() async {
-    setState(() {
-      _isDeactivating = true;
-    });
+    setState(() => _isDeactivating = true);
 
     try {
       await ref.read(deactivateBillingRuleProvider)(
         ruleId: _rule.id,
         ownerId: _rule.ownerId,
+      );
+
+      ref
+          .read(generateMonthlyChargesControllerProvider.notifier)
+          .invalidateMonthSyncLock(
+        ownerId: _rule.ownerId,
+        propertyId: _rule.propertyId,
       );
 
       await AuditLoggerService.log(
@@ -631,38 +530,29 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
         category: 'billing',
         actionTitle: 'Billing Rule Deactivated',
         details:
-            '${_chargeTypeLabel(_rule.chargeType)} rule (৳${_rule.amount.toStringAsFixed(0)}) was deactivated.',
+        '${billingChargeTypeLabel(_rule.chargeType)} rule (৳${formatBillingAmount(_rule.amount)}) was deactivated.',
       );
 
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Billing rule deactivated successfully.'),
-          behavior: SnackBarBehavior.floating,
-        ),
+      GrihoFeedback.showSuccess(
+        context,
+        'Billing rule deactivated successfully.',
       );
-
       context.pop(true);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      _showError(_cleanErrorMessage(error));
+      GrihoFeedback.showError(context, cleanBillingError(error));
     } finally {
       if (mounted) {
-        setState(() {
-          _isDeactivating = false;
-        });
+        setState(() => _isDeactivating = false);
       }
     }
   }
-
-  // ========================================================================
-  // MONTH PICKERS
-  // ========================================================================
 
   Future<void> _selectEffectiveMonth(BuildContext context) async {
     final selected = await _showMonthPicker(
@@ -679,13 +569,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
     final normalized = _normalizeMonth(selected);
     if (_effectiveTo != null && !normalized.isBefore(_effectiveTo!)) {
-      _showError('Effective Month must be before the specified End Month.');
+      GrihoFeedback.showError(
+        context,
+        'Effective Month must be before the specified End Month.',
+      );
       return;
     }
 
-    setState(() {
-      _effectiveFrom = normalized;
-    });
+    setState(() => _effectiveFrom = normalized);
   }
 
   Future<void> _selectEffectiveTo(BuildContext context) async {
@@ -703,13 +594,14 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
 
     final normalized = _normalizeMonth(selected);
     if (!normalized.isAfter(_effectiveFrom)) {
-      _showError('End Month must be after the Effective Month.');
+      GrihoFeedback.showError(
+        context,
+        'End Month must be after the Effective Month.',
+      );
       return;
     }
 
-    setState(() {
-      _effectiveTo = normalized;
-    });
+    setState(() => _effectiveTo = normalized);
   }
 
   Future<DateTime?> _showMonthPicker({
@@ -751,15 +643,15 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           onPressed: selectedMonth.year <= firstMonth.year
                               ? null
                               : () {
-                                  setDialogState(() {
-                                    selectedMonth = DateTime(
-                                      selectedMonth.year - 1,
-                                      selectedMonth.month,
-                                      1,
-                                    );
-                                  });
-                                },
-                          icon: const Icon(Icons.chevron_left_rounded),
+                            setDialogState(() {
+                              selectedMonth = DateTime(
+                                selectedMonth.year - 1,
+                                selectedMonth.month,
+                                1,
+                              );
+                            });
+                          },
+                          icon: const Icon(Iconsax.arrow_left_2, size: 19),
                         ),
                         Expanded(
                           child: Center(
@@ -776,15 +668,15 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           onPressed: selectedMonth.year >= lastMonth.year
                               ? null
                               : () {
-                                  setDialogState(() {
-                                    selectedMonth = DateTime(
-                                      selectedMonth.year + 1,
-                                      selectedMonth.month,
-                                      1,
-                                    );
-                                  });
-                                },
-                          icon: const Icon(Icons.chevron_right_rounded),
+                            setDialogState(() {
+                              selectedMonth = DateTime(
+                                selectedMonth.year + 1,
+                                selectedMonth.month,
+                                1,
+                              );
+                            });
+                          },
+                          icon: const Icon(Iconsax.arrow_right_3, size: 19),
                         ),
                       ],
                     ),
@@ -793,12 +685,12 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8,
-                            childAspectRatio: 1.8,
-                          ),
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        childAspectRatio: 1.8,
+                      ),
                       itemCount: 12,
                       itemBuilder: (context, index) {
                         final monthNumber = index + 1;
@@ -807,20 +699,17 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
                           monthNumber,
                           1,
                         );
-
-                        final isBefore = month.isBefore(firstMonth);
-                        final isAfter = month.isAfter(lastMonth);
+                        final enabled =
+                            !month.isBefore(firstMonth) &&
+                                !month.isAfter(lastMonth);
                         final isSelected =
                             month.year == selectedMonth.year &&
-                            month.month == selectedMonth.month;
-                        final enabled = !isBefore && !isAfter;
+                                month.month == selectedMonth.month;
 
                         return OutlinedButton(
                           onPressed: !enabled
                               ? null
-                              : () {
-                                  Navigator.of(dialogContext).pop(month);
-                                },
+                              : () => Navigator.of(dialogContext).pop(month),
                           style: OutlinedButton.styleFrom(
                             backgroundColor: isSelected
                                 ? theme.colorScheme.primaryContainer
@@ -843,9 +732,7 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                  },
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancel'),
                 ),
               ],
@@ -856,81 +743,13 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     );
   }
 
-  DateTime _normalizeMonth(DateTime date) {
-    return DateTime(date.year, date.month, 1);
-  }
+  DateTime _normalizeMonth(DateTime date) => DateTime(date.year, date.month, 1);
 
-  DateTime _nextMonth(DateTime date) {
-    return DateTime(date.year, date.month + 1, 1);
-  }
+  DateTime _nextMonth(DateTime date) => DateTime(date.year, date.month + 1, 1);
 
   String? get _normalizedTitle {
     final value = _titleController.text.trim();
     return value.isEmpty ? null : value;
-  }
-
-  String _cleanErrorMessage(Object error) {
-    final message = error.toString();
-    if (message.startsWith('Exception: ')) {
-      return message.substring(11);
-    }
-    if (message.startsWith('Invalid argument(s): ')) {
-      return message.substring(21);
-    }
-    return message;
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  static String _chargeTypeLabel(BillingChargeType type) {
-    switch (type) {
-      case BillingChargeType.water:
-        return 'Water Bill';
-      case BillingChargeType.gas:
-        return 'Gas Bill';
-      case BillingChargeType.garbage:
-        return 'Garbage Collection';
-      case BillingChargeType.serviceCharge:
-        return 'Service / Maintenance';
-      case BillingChargeType.electricity:
-        return 'Electricity Bill';
-      case BillingChargeType.other:
-        return 'Other Utility';
-    }
-  }
-
-  static IconData _chargeTypeIcon(BillingChargeType type) {
-    switch (type) {
-      case BillingChargeType.water:
-        return Icons.water_drop_outlined;
-      case BillingChargeType.gas:
-        return Icons.local_fire_department_outlined;
-      case BillingChargeType.garbage:
-        return Icons.delete_outline_rounded;
-      case BillingChargeType.serviceCharge:
-        return Icons.cleaning_services_outlined;
-      case BillingChargeType.electricity:
-        return Icons.bolt_rounded;
-      case BillingChargeType.other:
-        return Icons.receipt_long_outlined;
-    }
-  }
-
-  static String _valueTypeLabel(BillingValueType type) {
-    switch (type) {
-      case BillingValueType.fixed:
-        return 'Fixed Recurring';
-      case BillingValueType.variable:
-        return 'Variable (Month Specific)';
-    }
   }
 
   static String _monthShortName(int month) {
@@ -951,10 +770,6 @@ class _EditBillingRuleScreenState extends ConsumerState<EditBillingRuleScreen> {
     return months[month - 1];
   }
 }
-
-// ============================================================================
-// READ ONLY PARAMETER TILE
-// ============================================================================
 
 class _ReadOnlyParamTile extends StatelessWidget {
   final String label;
@@ -983,7 +798,7 @@ class _ReadOnlyParamTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: theme.colorScheme.primary),
+              Icon(icon, size: 15, color: theme.colorScheme.primary),
               const SizedBox(width: 6),
               Text(
                 label,
@@ -1005,10 +820,6 @@ class _ReadOnlyParamTile extends StatelessWidget {
     );
   }
 }
-
-// ============================================================================
-// MONTH FIELD COMPONENT
-// ============================================================================
 
 class _MonthField extends StatelessWidget {
   final String label;
@@ -1039,18 +850,17 @@ class _MonthField extends StatelessWidget {
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: Icon(icon),
+          prefixIcon: Icon(icon, color: GrihoColors.emerald, size: 19),
           suffixIcon: onClear == null
-              ? const Icon(Icons.chevron_right_rounded)
+              ? const Icon(Iconsax.arrow_right_3, size: 16)
               : IconButton(
-                  tooltip: 'Clear End Month',
-                  icon: const Icon(Icons.clear_rounded, size: 20),
-                  onPressed: enabled ? onClear : null,
-                ),
-          border: const OutlineInputBorder(),
+            tooltip: 'Clear End Month',
+            icon: const Icon(Iconsax.close_circle, size: 19),
+            onPressed: enabled ? onClear : null,
+          ),
         ),
         child: Text(
-          month == null ? emptyText : _formatMonth(month!),
+          month == null ? emptyText : formatBillingMonthYear(month!),
           style: theme.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w700,
             color: month == null
@@ -1060,23 +870,5 @@ class _MonthField extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _formatMonth(DateTime date) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${months[date.month - 1]} ${date.year}';
   }
 }

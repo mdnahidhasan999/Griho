@@ -1,8 +1,10 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../providers/auth_controller.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
@@ -25,38 +27,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-
-    if (email.isEmpty) {
-      return 'Please enter your email address.';
-    }
-
-    final emailPattern = RegExp(
-      r'^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@'
-      r'[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$',
-    );
-
-    if (!emailPattern.hasMatch(email)) {
-      return 'Please enter a valid email address.';
-    }
-
-    return null;
-  }
-
-  void _showMessage(String message, {bool isError = false}) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-        ),
-      );
-  }
-
   Future<void> _sendResetEmail() async {
     FocusScope.of(context).unfocus();
 
@@ -71,17 +41,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     if (!mounted) return;
 
     if (success) {
-      setState(() {
-        _emailSent = true;
-      });
+      setState(() => _emailSent = true);
     } else {
       final message = ref.read(authControllerProvider).errorMessage;
-
-      _showMessage(
+      GrihoFeedback.showError(
+        context,
         message?.isNotEmpty == true
             ? message!
             : 'Unable to send the password reset email. Please try again.',
-        isError: true,
       );
     }
   }
@@ -115,38 +82,28 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 76,
-            height: 76,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Icon(
-              Icons.lock_reset_rounded,
-              size: 40,
-              color: theme.colorScheme.onPrimaryContainer,
-            ),
-          ),
-          const SizedBox(height: 28),
+          const GrihoIconBadge(icon: Iconsax.key),
+          const SizedBox(height: 24),
           Text(
             'Forgot Your Password?',
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
-            'Don’t worry. Enter the email address associated with your Griho account and we’ll send you a link to reset your password.',
+            'Enter the email address associated with your Griho account and we’ll send you a link to reset your password.',
             style: theme.textTheme.bodyMedium?.copyWith(
-              height: 1.6,
+              height: 1.55,
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 32),
-          TextFormField(
+          const SizedBox(height: 28),
+          GrihoTextField(
             controller: _emailController,
+            label: 'Email Address',
+            hint: 'name@example.com',
+            prefixIcon: Iconsax.sms,
             enabled: !isLoading,
             keyboardType: TextInputType.emailAddress,
             autofillHints: const [AutofillHints.email],
@@ -154,43 +111,19 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             onFieldSubmitted: (_) {
               if (!isLoading) _sendResetEmail();
             },
-            decoration: InputDecoration(
-              labelText: 'Email Address',
-              hintText: 'name@example.com',
-              prefixIcon: const Icon(Icons.email_outlined),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            validator: _validateEmail,
+            validator: GrihoValidators.email,
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            height: 52,
-            child: FilledButton(
-              onPressed: isLoading ? null : _sendResetEmail,
-              child: isLoading
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'Send Reset Link',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-            ),
+          GrihoPrimaryButton(
+            label: 'Send Reset Link',
+            icon: Iconsax.send_2,
+            isLoading: isLoading,
+            onPressed: _sendResetEmail,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           TextButton.icon(
             onPressed: isLoading ? null : () => context.go(RouteNames.login),
-            icon: const Icon(Icons.arrow_back_rounded),
+            icon: const Icon(Iconsax.arrow_left, size: 18),
             label: const Text('Back to Sign In'),
           ),
         ],
@@ -202,53 +135,31 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: 76,
-          height: 76,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: const Icon(
-            Icons.mark_email_read_outlined,
-            size: 40,
-            color: Colors.green,
-          ),
-        ),
-        const SizedBox(height: 28),
+        const GrihoIconBadge(icon: Iconsax.sms_tracking, isSuccess: true),
+        const SizedBox(height: 24),
         Text(
           'Check Your Email',
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Text(
           'If an account exists for ${_emailController.text.trim()}, a password reset email will be sent. Check your inbox and spam folder.',
           style: theme.textTheme.bodyMedium?.copyWith(
-            height: 1.6,
+            height: 1.55,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 28),
-        SizedBox(
-          height: 52,
-          child: FilledButton(
-            onPressed: () => context.go(RouteNames.login),
-            child: const Text(
-              'Back to Sign In',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ),
+        GrihoPrimaryButton(
+          label: 'Back to Sign In',
+          icon: Iconsax.login,
+          onPressed: () => context.go(RouteNames.login),
         ),
         const SizedBox(height: 12),
         TextButton(
-          onPressed: () {
-            setState(() {
-              _emailSent = false;
-            });
-          },
+          onPressed: () => setState(() => _emailSent = false),
           child: const Text('Try Another Email'),
         ),
       ],

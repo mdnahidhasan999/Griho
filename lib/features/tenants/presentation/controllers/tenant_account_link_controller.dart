@@ -1,11 +1,8 @@
-import 'package:flutter_riverpod/legacy.dart';
+// noinspection SpellCheckingInspection
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/usecases/link_and_accept_tenant_invitation.dart';
 import '../providers/link_and_accept_tenant_invitation_provider.dart';
-
-// ================================================================
-// STATE
-// ================================================================
 
 class TenantAccountLinkState {
   final bool isLoading;
@@ -32,20 +29,16 @@ class TenantAccountLinkState {
   }
 }
 
-// ================================================================
-// CONTROLLER
-// ================================================================
+class TenantAccountLinkController extends Notifier<TenantAccountLinkState> {
+  late final LinkAndAcceptTenantInvitation _linkAndAcceptTenantInvitation;
 
-class TenantAccountLinkController
-    extends StateNotifier<TenantAccountLinkState> {
-  final LinkAndAcceptTenantInvitation _linkAndAcceptTenantInvitation;
-
-  TenantAccountLinkController({required this._linkAndAcceptTenantInvitation})
-    : super(const TenantAccountLinkState());
-
-  // ==============================================================
-  // LINK + ACCEPT
-  // ==============================================================
+  @override
+  TenantAccountLinkState build() {
+    _linkAndAcceptTenantInvitation = ref.read(
+      linkAndAcceptTenantInvitationProvider,
+    );
+    return const TenantAccountLinkState();
+  }
 
   Future<bool> linkAndAccept({required String invitationId}) async {
     if (state.isLoading) {
@@ -75,40 +68,23 @@ class TenantAccountLinkController
     }
   }
 
-  // ==============================================================
-  // CLEAR
-  // ==============================================================
-
   void clear() {
     state = const TenantAccountLinkState();
   }
 
-  // ==============================================================
-  // ERROR
-  // ==============================================================
-
   String _cleanError(Object error) {
     final message = error.toString();
-
     if (message.startsWith('Exception: ')) {
       return message.substring('Exception: '.length);
     }
-
+    if (message.startsWith('Bad state: ')) {
+      return message.substring('Bad state: '.length);
+    }
     return message;
   }
 }
 
-// ================================================================
-// PROVIDER
-// ================================================================
-
 final tenantAccountLinkControllerProvider =
-    StateNotifierProvider<TenantAccountLinkController, TenantAccountLinkState>((
-      ref,
-    ) {
-      return TenantAccountLinkController(
-        linkAndAcceptTenantInvitation: ref.read(
-          linkAndAcceptTenantInvitationProvider,
-        ),
-      );
-    });
+    NotifierProvider<TenantAccountLinkController, TenantAccountLinkState>(
+      TenantAccountLinkController.new,
+    );

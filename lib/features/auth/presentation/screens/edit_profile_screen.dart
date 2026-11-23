@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,9 +10,23 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/design_system/design_system.dart';
+import '../../../../core/design_system/widgets/griho_picker_field.dart';
 import '../../../../core/services/firebase_storage_service.dart';
 import '../../domain/entities/app_user.dart';
 import '../providers/auth_provider.dart';
+
+enum _PhotoTarget { avatar, nidFront, nidBack }
+
+const List<String> _occupations = [
+  'Student',
+  'Service Holder',
+  'Business',
+  'Freelancer',
+  'Housewife',
+  'Retired',
+  'Other',
+];
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   final AppUser user;
@@ -28,13 +43,33 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _storageService = FirebaseStorageService();
 
   late final TextEditingController _nameController;
-  late final TextEditingController _emailController;
   late final TextEditingController _nidController;
 
+  DateTime? _dateOfBirth;
+  String? _occupation;
+  String? _gender;
+  String? _maritalStatus;
+
+  // Avatar state
   String? _photoUrl;
   String? _initialPhotoUrl;
   File? _pendingPhotoFile;
   Uint8List? _photoBytes;
+  bool _photoChanged = false;
+
+  // NID Front state
+  String? _nidFrontUrl;
+  String? _initialNidFrontUrl;
+  File? _pendingNidFrontFile;
+  Uint8List? _nidFrontBytes;
+  bool _nidFrontChanged = false;
+
+  // NID Back state
+  String? _nidBackUrl;
+  String? _initialNidBackUrl;
+  File? _pendingNidBackFile;
+  Uint8List? _nidBackBytes;
+  bool _nidBackChanged = false;
 
   bool _isSaving = false;
   bool _isProcessingPhoto = false;
@@ -43,18 +78,27 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.user.name);
-    _emailController = TextEditingController(text: widget.user.email ?? '');
     _nidController = TextEditingController(text: widget.user.nidNumber ?? '');
+
+    _dateOfBirth = widget.user.dateOfBirth;
+    _occupation = widget.user.occupation;
+    _gender = widget.user.gender;
+    _maritalStatus = widget.user.maritalStatus;
 
     _photoUrl = widget.user.photoUrl;
     _initialPhotoUrl = widget.user.photoUrl;
     _photoBytes = _decodeDataUrl(_photoUrl);
+
+    _nidFrontUrl = widget.user.nidFrontUrl;
+    _initialNidFrontUrl = widget.user.nidFrontUrl;
+
+    _nidBackUrl = widget.user.nidBackUrl;
+    _initialNidBackUrl = widget.user.nidBackUrl;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
     _nidController.dispose();
     super.dispose();
   }
@@ -63,7 +107,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     if (value == null || !value.startsWith('data:image')) {
       return null;
     }
-
     try {
       return base64Decode(value.substring(value.indexOf(',') + 1));
     } catch (_) {
@@ -71,44 +114,123 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
-  ImageProvider? get _photoProvider {
-    if (_pendingPhotoFile != null) {
-      return FileImage(_pendingPhotoFile!);
-    }
-
-    final bytes = _photoBytes;
-    if (bytes != null) {
-      return MemoryImage(bytes);
-    }
-
-    final url = _photoUrl;
-    if (url != null && url.startsWith('http')) {
-      return NetworkImage(url);
-    }
-
+  ImageProvider? _buildImageProvider({
+    File? file,
+    Uint8List? bytes,
+    String? url,
+  }) {
+    if (file != null) return FileImage(file);
+    if (bytes != null) return MemoryImage(bytes);
+    if (url != null && url.startsWith('http')) return NetworkImage(url);
     return null;
   }
 
-  void _showSnack(String message, {bool isError = false}) {
-    if (!mounted) {
-      return;
-    }
+  ImageProvider? _providerForTarget(_PhotoTarget target) => switch (target) {
+    _PhotoTarget.avatar => _buildImageProvider(
+      file: _pendingPhotoFile,
+      bytes: _photoBytes,
+      url: _photoUrl,
+    ),
+    _PhotoTarget.nidFront => _buildImageProvider(
+      file: _pendingNidFrontFile,
+      bytes: _nidFrontBytes,
+      url: _nidFrontUrl,
+    ),
+    _PhotoTarget.nidBack => _buildImageProvider(
+      file: _pendingNidBackFile,
+      bytes: _nidBackBytes,
+      url: _nidBackUrl,
+    ),
+  };
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-        behavior: SnackBarBehavior.floating,
+  String _titleForTarget(_PhotoTarget target) => switch (target) {
+    _PhotoTarget.avatar => 'Profile Photo',
+    _PhotoTarget.nidFront => 'NID Front Side',
+    _PhotoTarget.nidBack => 'NID Back Side',
+  };
+
+  Future<void> _pickDateOfBirth() async {
+    if (_isSaving) return;
+    FocusScope.of(context).unfocus();
+
+    final now = DateTime.now();
+    final initial = _dateOfBirth ?? DateTime(now.year - 25, now.month, now.day);
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isAfter(now) ? now : initial,
+      firstDate: DateTime(1920),
+      lastDate: now,
+      helpText: 'Select Date of Birth',
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _dateOfBirth = DateTime(picked.year, picked.month, picked.day);
+      });
+    }
+  }
+
+  String _formatDob(DateTime date) {
+    final dd = date.day.toString().padLeft(2, '0');
+    final mm = date.month.toString().padLeft(2, '0');
+    return '$dd/$mm/${date.year}';
+  }
+
+  Future<void> _viewFullPhoto(_PhotoTarget target) async {
+    final provider = _providerForTarget(target);
+    if (provider == null) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      _titleForTarget(target),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    icon: const Icon(
+                      Iconsax.close_circle,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: Center(
+                    child: Image(image: provider, fit: BoxFit.contain),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Future<void> _showPhotoOptions() async {
-    if (_isSaving || _isProcessingPhoto) {
-      return;
-    }
+  Future<void> _showPhotoOptions(_PhotoTarget target) async {
+    if (_isSaving || _isProcessingPhoto) return;
 
-    final hasPhoto = _photoProvider != null;
+    final hasPhoto = _providerForTarget(target) != null;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -118,33 +240,58 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (hasPhoto)
+                ListTile(
+                  leading: const Icon(Iconsax.eye),
+                  title: const Text('View full photo'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _viewFullPhoto(target);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from gallery'),
+                leading: const Icon(Iconsax.gallery),
+                title: Text(
+                  hasPhoto ? 'Change from gallery' : 'Choose from gallery',
+                ),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
-                  _pickPhoto(ImageSource.gallery);
+                  _pickPhoto(target, ImageSource.gallery);
                 },
               ),
               if (!kIsWeb)
                 ListTile(
-                  leading: const Icon(Icons.photo_camera_outlined),
+                  leading: const Icon(Iconsax.camera),
                   title: const Text('Take a photo'),
                   onTap: () {
                     Navigator.of(sheetContext).pop();
-                    _pickPhoto(ImageSource.camera);
+                    _pickPhoto(target, ImageSource.camera);
                   },
                 ),
               if (hasPhoto)
                 ListTile(
-                  leading: const Icon(Icons.delete_outline_rounded),
+                  leading: const Icon(Iconsax.trash),
                   title: const Text('Remove photo'),
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     setState(() {
-                      _photoUrl = null;
-                      _photoBytes = null;
-                      _pendingPhotoFile = null;
+                      switch (target) {
+                        case _PhotoTarget.avatar:
+                          _photoUrl = null;
+                          _photoBytes = null;
+                          _pendingPhotoFile = null;
+                          _photoChanged = true;
+                        case _PhotoTarget.nidFront:
+                          _nidFrontUrl = null;
+                          _nidFrontBytes = null;
+                          _pendingNidFrontFile = null;
+                          _nidFrontChanged = true;
+                        case _PhotoTarget.nidBack:
+                          _nidBackUrl = null;
+                          _nidBackBytes = null;
+                          _pendingNidBackFile = null;
+                          _nidBackChanged = true;
+                      }
                     });
                   },
                 ),
@@ -155,80 +302,140 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
-  Future<void> _pickPhoto(ImageSource source) async {
-    if (_isSaving || _isProcessingPhoto) {
-      return;
-    }
+  Future<void> _pickPhoto(_PhotoTarget target, ImageSource source) async {
+    if (_isSaving || _isProcessingPhoto) return;
 
-    setState(() {
-      _isProcessingPhoto = true;
-    });
+    setState(() => _isProcessingPhoto = true);
 
     try {
+      final isAvatar = target == _PhotoTarget.avatar;
+      // Keep NID resolution higher so text and numbers stay crisp and readable.
       final picked = await _picker.pickImage(
         source: source,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
+        maxWidth: isAvatar ? 800 : 1600,
+        maxHeight: isAvatar ? 800 : 1600,
+        imageQuality: isAvatar ? 85 : 90,
       );
 
-      if (picked == null) {
-        return;
-      }
+      if (picked == null) return;
 
       if (kIsWeb) {
         final bytes = await picked.readAsBytes();
         if (!mounted) return;
         setState(() {
-          _photoBytes = bytes;
-          _pendingPhotoFile = null;
+          switch (target) {
+            case _PhotoTarget.avatar:
+              _photoBytes = bytes;
+              _pendingPhotoFile = null;
+              _photoChanged = true;
+            case _PhotoTarget.nidFront:
+              _nidFrontBytes = bytes;
+              _pendingNidFrontFile = null;
+              _nidFrontChanged = true;
+            case _PhotoTarget.nidBack:
+              _nidBackBytes = bytes;
+              _pendingNidBackFile = null;
+              _nidBackChanged = true;
+          }
         });
       } else {
+        final file = File(picked.path);
         if (!mounted) return;
         setState(() {
-          _pendingPhotoFile = File(picked.path);
-          _photoBytes = null;
+          switch (target) {
+            case _PhotoTarget.avatar:
+              _pendingPhotoFile = file;
+              _photoBytes = null;
+              _photoChanged = true;
+            case _PhotoTarget.nidFront:
+              _pendingNidFrontFile = file;
+              _nidFrontBytes = null;
+              _nidFrontChanged = true;
+            case _PhotoTarget.nidBack:
+              _pendingNidBackFile = file;
+              _nidBackBytes = null;
+              _nidBackChanged = true;
+          }
         });
       }
     } catch (error) {
-      _showSnack(_cleanErrorMessage(error), isError: true);
+      if (!mounted) return;
+      GrihoFeedback.showError(context, _cleanErrorMessage(error));
     } finally {
       if (mounted) {
-        setState(() {
-          _isProcessingPhoto = false;
-        });
+        setState(() => _isProcessingPhoto = false);
       }
     }
   }
 
-  Future<void> _saveProfile() async {
-    if (_isSaving || _isProcessingPhoto) {
-      return;
-    }
+  Future<String?> _uploadNidImage({
+    required String side,
+    File? file,
+    Uint8List? bytes,
+    String? currentUrl,
+  }) async {
+    if (file == null && bytes == null) return currentUrl;
 
-    final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) {
-      return;
-    }
+    final fileName = 'nid_${side}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final storageRef = FirebaseStorage.instance.ref().child(
+      'users/${widget.user.uid}/nid/$fileName',
+    );
+    final metadata = SettableMetadata(contentType: 'image/jpeg');
+
+    final TaskSnapshot snap = file != null
+        ? await storageRef.putFile(file, metadata)
+        : await storageRef.putData(bytes!, metadata);
+
+    return snap.ref.getDownloadURL();
+  }
+
+  bool _sameDate(DateTime? a, DateTime? b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  Future<void> _saveProfile() async {
+    if (_isSaving || _isProcessingPhoto) return;
+    FocusScope.of(context).unfocus();
+
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
     final nid = _nidController.text.trim();
 
-    setState(() {
-      _isSaving = true;
-    });
+    // Skip Firestore write if nothing actually changed.
+    final unchanged =
+        !_photoChanged &&
+        !_nidFrontChanged &&
+        !_nidBackChanged &&
+        name == widget.user.name.trim() &&
+        nid == (widget.user.nidNumber?.trim() ?? '') &&
+        _sameDate(_dateOfBirth, widget.user.dateOfBirth) &&
+        _occupation == widget.user.occupation &&
+        _gender == widget.user.gender &&
+        _maritalStatus == widget.user.maritalStatus;
+
+    if (unchanged) {
+      GrihoFeedback.showInfo(context, 'No changes to save.');
+      Navigator.of(context).pop();
+      return;
+    }
+
+    setState(() => _isSaving = true);
 
     try {
       var finalPhotoUrl = _photoUrl;
+      var finalNidFrontUrl = _nidFrontUrl;
+      var finalNidBackUrl = _nidBackUrl;
 
-      // Upload new photo to Firebase Storage
       if (!kIsWeb && _pendingPhotoFile != null) {
         finalPhotoUrl = await _storageService.uploadUserProfilePhoto(
           userId: widget.user.uid,
           imageFile: _pendingPhotoFile!,
         );
       } else if (kIsWeb &&
+          _photoChanged &&
           _photoBytes != null &&
           !(_photoUrl?.startsWith('data:image') ?? false)) {
         final fileName = 'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -242,41 +449,82 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         finalPhotoUrl = await snap.ref.getDownloadURL();
       }
 
+      if (_nidFrontChanged) {
+        finalNidFrontUrl = await _uploadNidImage(
+          side: 'front',
+          file: _pendingNidFrontFile,
+          bytes: _nidFrontBytes,
+          currentUrl: _nidFrontUrl,
+        );
+      }
+
+      if (_nidBackChanged) {
+        finalNidBackUrl = await _uploadNidImage(
+          side: 'back',
+          file: _pendingNidBackFile,
+          bytes: _nidBackBytes,
+          currentUrl: _nidBackUrl,
+        );
+      }
+
       final dataSource = ref.read(userProfileDataSourceProvider);
 
+      // Preserve verified email and phone unchanged.
       await dataSource.updateProfile(
         uid: widget.user.uid,
         publicId: widget.user.publicId,
         phoneNumber: widget.user.phoneNumber,
         name: name,
-        email: email.isEmpty ? null : email,
+        email: widget.user.email,
         photoUrl: finalPhotoUrl,
         nidNumber: nid.isEmpty ? null : nid,
       );
 
-      // Clean up previous Firebase Storage avatar if replaced or removed
+      // Merge extended personal & NID verification fields into the user document.
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user.uid)
+          .set({
+            'dateOfBirth': _dateOfBirth != null
+                ? Timestamp.fromDate(_dateOfBirth!)
+                : null,
+            'occupation': _occupation,
+            'gender': _gender,
+            'maritalStatus': _maritalStatus,
+            'nidFrontUrl': finalNidFrontUrl,
+            'nidBackUrl': finalNidBackUrl,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+      // Clean up replaced storage files.
       if (_initialPhotoUrl != null &&
           _initialPhotoUrl != finalPhotoUrl &&
           _initialPhotoUrl!.contains('firebasestorage')) {
         await _storageService.deleteFileByUrl(_initialPhotoUrl);
       }
+      if (_initialNidFrontUrl != null &&
+          _initialNidFrontUrl != finalNidFrontUrl &&
+          _initialNidFrontUrl!.contains('firebasestorage')) {
+        await _storageService.deleteFileByUrl(_initialNidFrontUrl);
+      }
+      if (_initialNidBackUrl != null &&
+          _initialNidBackUrl != finalNidBackUrl &&
+          _initialNidBackUrl!.contains('firebasestorage')) {
+        await _storageService.deleteFileByUrl(_initialNidBackUrl);
+      }
 
       ref.invalidate(currentUserProfileProvider);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      _showSnack('Profile updated successfully.');
-
+      GrihoFeedback.showSuccess(context, 'Profile updated successfully.');
       Navigator.of(context).pop();
     } catch (error) {
-      _showSnack(_cleanErrorMessage(error), isError: true);
+      if (!mounted) return;
+      GrihoFeedback.showError(context, _cleanErrorMessage(error));
     } finally {
       if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
+        setState(() => _isSaving = false);
       }
     }
   }
@@ -288,62 +536,52 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
-    _showSnack('$label copied to clipboard.');
+    GrihoFeedback.showSuccess(context, '$label copied to clipboard.');
   }
 
-  String _roleName(String? role) {
-    switch (role) {
-      case 'owner':
-        return 'Property Owner';
-      case 'tenant':
-        return 'Tenant';
-      case 'manager':
-        return 'Property Manager';
-      case 'caretaker':
-        return 'Caretaker';
-      case 'electrician':
-        return 'Electrician';
-      default:
-        return 'Griho User';
-    }
-  }
+  String _roleName(String? role) => switch (role) {
+    'owner' => 'Property Owner',
+    'tenant' => 'Tenant',
+    'manager' => 'Property Manager',
+    'caretaker' => 'Caretaker',
+    'electrician' => 'Electrician',
+    _ => 'Griho User',
+  };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final roleName = _roleName(widget.user.defaultDashboard);
-    final photoProvider = _photoProvider;
+    final avatarProvider = _providerForTarget(_PhotoTarget.avatar);
+    final nidFrontProvider = _providerForTarget(_PhotoTarget.nidFront);
+    final nidBackProvider = _providerForTarget(_PhotoTarget.nidBack);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Edit Profile',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Personal Information')),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
             children: [
+              // Profile Avatar Header
               Center(
                 child: Column(
                   children: [
                     Stack(
                       children: [
                         GestureDetector(
-                          onTap: _showPhotoOptions,
+                          onTap: () => _showPhotoOptions(_PhotoTarget.avatar),
                           child: CircleAvatar(
                             radius: 46,
                             backgroundColor: theme.colorScheme.primaryContainer,
-                            backgroundImage: photoProvider,
+                            backgroundImage: avatarProvider,
                             child: _isProcessingPhoto
                                 ? const CircularProgressIndicator(
                                     strokeWidth: 2,
                                   )
-                                : photoProvider == null
+                                : avatarProvider == null
                                 ? Text(
                                     _nameController.text.trim().isNotEmpty
                                         ? _nameController.text
@@ -368,11 +606,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             shape: const CircleBorder(),
                             child: InkWell(
                               customBorder: const CircleBorder(),
-                              onTap: _showPhotoOptions,
+                              onTap: () =>
+                                  _showPhotoOptions(_PhotoTarget.avatar),
                               child: Padding(
                                 padding: const EdgeInsets.all(8),
                                 child: Icon(
-                                  Icons.photo_camera_rounded,
+                                  Iconsax.camera,
                                   size: 18,
                                   color: theme.colorScheme.onPrimary,
                                 ),
@@ -403,109 +642,193 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
-              _buildSectionCard(
-                context,
+              const SizedBox(height: 22),
+
+              // 1. Personal Information
+              GrihoSectionCard(
                 title: 'Personal Information',
-                subtitle: 'Update your display name and contact email',
-                icon: Icons.person_outline_rounded,
+                subtitle: 'Details as per your National ID (NID)',
+                icon: Iconsax.user,
                 children: [
-                  TextFormField(
+                  GrihoTextField(
                     controller: _nameController,
+                    label: 'Name (As per NID)',
+                    hint: 'Enter your full name',
+                    prefixIcon: Iconsax.personalcard,
                     textCapitalization: TextCapitalization.words,
                     enabled: !_isSaving,
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      hintText: 'Enter your full name',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      final name = value?.trim() ?? '';
-                      if (name.isEmpty) {
-                        return 'Please enter your name.';
-                      }
-                      if (name.length < 2) {
-                        return 'Name must be at least 2 characters.';
-                      }
-                      return null;
-                    },
+                    validator: GrihoValidators.name,
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _emailController,
-                    enabled: !_isSaving,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _saveProfile(),
-                    decoration: const InputDecoration(
-                      labelText: 'Email Address',
-                      hintText: 'e.g. name@example.com (Optional)',
-                      prefixIcon: Icon(Icons.mail_outline_rounded),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      final email = value?.trim() ?? '';
-                      if (email.isEmpty) {
-                        return null;
-                      }
-                      final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                      if (!emailRegex.hasMatch(email)) {
-                        return 'Please enter a valid email address.';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
+                  GrihoTextField(
                     controller: _nidController,
+                    label: 'Your NID Number',
+                    hint: '10, 13 or 17 digits (Optional)',
+                    prefixIcon: Iconsax.card,
                     enabled: !_isSaving,
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _saveProfile(),
                     maxLength: 17,
-                    decoration: const InputDecoration(
-                      labelText: 'National ID (NID)',
-                      hintText: 'Optional',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                      border: OutlineInputBorder(),
-                      counterText: '',
+                    counterText: '',
+                    validator: GrihoValidators.optionalNid,
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: _isSaving ? null : _pickDateOfBirth,
+                    child: InputDecorator(
+                      isEmpty: _dateOfBirth == null,
+                      decoration: const InputDecoration(
+                        labelText: 'Date of Birth (DD/MM/YYYY)',
+                        prefixIcon: Icon(
+                          Iconsax.calendar_1,
+                          color: GrihoColors.emerald,
+                          size: 20,
+                        ),
+                        suffixIcon: Icon(Iconsax.calendar, size: 18),
+                      ),
+                      child: _dateOfBirth == null
+                          ? const SizedBox.shrink()
+                          : Text(
+                              _formatDob(_dateOfBirth!),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                     ),
-                    validator: (value) {
-                      final nid = value?.trim() ?? '';
-                      if (nid.isEmpty) return null;
-                      if (!RegExp(
-                        r'^\d{10}$|^\d{13}$|^\d{17}$',
-                      ).hasMatch(nid)) {
-                        return 'NID must be 10, 13 or 17 digits.';
-                      }
-                      return null;
-                    },
+                  ),
+                  const SizedBox(height: 16),
+                  GrihoPickerField<String>(
+                    label: 'Select Occupation',
+                    hint: 'Choose your occupation',
+                    sheetTitle: 'Select Occupation',
+                    searchHint: 'Search occupation...',
+                    icon: Iconsax.briefcase,
+                    items: _occupations,
+                    value: _occupation,
+                    enabled: !_isSaving,
+                    itemTitle: (item) => item,
+                    onChanged: (val) => setState(() => _occupation = val),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Gender',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _RadioOptionCard(
+                          label: 'Male',
+                          selected: _gender == 'Male',
+                          enabled: !_isSaving,
+                          onTap: () => setState(() => _gender = 'Male'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _RadioOptionCard(
+                          label: 'Female',
+                          selected: _gender == 'Female',
+                          enabled: !_isSaving,
+                          onTap: () => setState(() => _gender = 'Female'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Marital Status',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _RadioOptionCard(
+                          label: 'Married',
+                          selected: _maritalStatus == 'Married',
+                          enabled: !_isSaving,
+                          onTap: () =>
+                              setState(() => _maritalStatus = 'Married'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _RadioOptionCard(
+                          label: 'Unmarried',
+                          selected: _maritalStatus == 'Unmarried',
+                          enabled: !_isSaving,
+                          onTap: () =>
+                              setState(() => _maritalStatus = 'Unmarried'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                context,
+              const SizedBox(height: 18),
+
+              // 2. Upload NID Photo
+              GrihoSectionCard(
+                title: 'Upload NID Photo',
+                subtitle: 'Tap a card to view or upload clear NID photos',
+                icon: Iconsax.camera,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _NidPhotoBox(
+                          label: 'Your NID Front Side',
+                          imageProvider: nidFrontProvider,
+                          enabled: !_isSaving && !_isProcessingPhoto,
+                          onTap: () => _showPhotoOptions(_PhotoTarget.nidFront),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _NidPhotoBox(
+                          label: 'Your NID Back Side',
+                          imageProvider: nidBackProvider,
+                          enabled: !_isSaving && !_isProcessingPhoto,
+                          onTap: () => _showPhotoOptions(_PhotoTarget.nidBack),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // 3. Account & Security (All 3 Permanently Locked)
+              GrihoSectionCard(
                 title: 'Account & Security',
-                subtitle: 'Permanently linked credentials for your account',
-                icon: Icons.shield_outlined,
+                subtitle: 'Verified credentials cannot be modified',
+                icon: Iconsax.shield_tick,
                 children: [
                   InputDecorator(
                     decoration: InputDecoration(
                       labelText: 'Griho Public ID',
-                      prefixIcon: const Icon(Icons.fingerprint_rounded),
+                      prefixIcon: const Icon(
+                        Iconsax.finger_scan,
+                        color: GrihoColors.emerald,
+                        size: 20,
+                      ),
                       suffixIcon: IconButton(
                         tooltip: 'Copy ID',
-                        icon: const Icon(Icons.copy_rounded, size: 20),
+                        icon: const Icon(Iconsax.copy, size: 19),
                         onPressed: () =>
                             _copyToClipboard(widget.user.publicId, 'Griho ID'),
                       ),
-                      border: const OutlineInputBorder(),
                       filled: true,
                       fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
+                          .withValues(alpha: 0.45),
                     ),
                     child: Text(
                       widget.user.publicId,
@@ -518,19 +841,45 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   const SizedBox(height: 16),
                   InputDecorator(
                     decoration: InputDecoration(
-                      labelText: 'Phone Number',
-                      prefixIcon: const Icon(Icons.phone_outlined),
-                      suffixIcon: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [Icon(Icons.lock_outline, size: 18)],
-                        ),
+                      labelText: 'Email Address (Verified)',
+                      prefixIcon: const Icon(
+                        Iconsax.sms,
+                        color: GrihoColors.emerald,
+                        size: 20,
                       ),
-                      border: const OutlineInputBorder(),
+                      suffixIcon: Icon(
+                        Iconsax.lock,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                       filled: true,
                       fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
+                          .withValues(alpha: 0.45),
+                    ),
+                    child: Text(
+                      widget.user.email?.trim().isNotEmpty == true
+                          ? widget.user.email!
+                          : 'No email linked',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Phone Number',
+                      prefixIcon: const Icon(
+                        Iconsax.call,
+                        color: GrihoColors.emerald,
+                        size: 20,
+                      ),
+                      suffixIcon: Icon(
+                        Iconsax.lock,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.45),
                     ),
                     child: Text(
                       widget.user.phoneNumber ?? 'No phone linked',
@@ -539,31 +888,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
-              SizedBox(
-                height: 52,
-                child: FilledButton.icon(
-                  onPressed: _isSaving || _isProcessingPhoto
-                      ? null
-                      : _saveProfile,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(
-                    _isSaving ? 'Saving Changes...' : 'Save Changes',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+              const SizedBox(height: 28),
+              GrihoPrimaryButton(
+                label: _isSaving ? 'Saving Changes...' : 'Save Changes',
+                icon: Iconsax.tick_circle,
+                isLoading: _isSaving || _isProcessingPhoto,
+                onPressed: _saveProfile,
               ),
             ],
           ),
@@ -571,49 +901,164 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       ),
     );
   }
+}
 
-  Widget _buildSectionCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
+class _RadioOptionCard extends StatelessWidget {
+  const _RadioOptionCard({
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected
+              ? GrihoColors.emerald.withValues(alpha: 0.1)
+              : theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected
+                ? GrihoColors.emerald
+                : theme.colorScheme.outlineVariant,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected
+                      ? GrihoColors.emerald
+                      : theme.colorScheme.onSurface,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-          const SizedBox(height: 16),
-          ...children,
-        ],
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected
+                      ? GrihoColors.emerald
+                      : theme.colorScheme.outline,
+                  width: selected ? 5.5 : 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _NidPhotoBox extends StatelessWidget {
+  const _NidPhotoBox({
+    required this.label,
+    required this.imageProvider,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final ImageProvider? imageProvider;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasImage = imageProvider != null;
+
+    return Column(
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: enabled ? onTap : null,
+          child: Container(
+            height: 130,
+            width: double.infinity,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.45,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: hasImage
+                    ? GrihoColors.emerald
+                    : theme.colorScheme.outlineVariant,
+                width: hasImage ? 1.5 : 1,
+              ),
+            ),
+            child: hasImage
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Image(
+                          image: imageProvider!,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      Positioned(
+                        right: 6,
+                        bottom: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Iconsax.eye,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Center(
+                    child: Icon(
+                      Iconsax.camera,
+                      size: 28,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

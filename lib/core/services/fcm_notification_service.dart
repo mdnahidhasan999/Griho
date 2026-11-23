@@ -1,3 +1,4 @@
+// noinspection SpellCheckingInspection
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -23,12 +24,15 @@ class FcmNotificationService {
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPlugin();
 
   StreamSubscription<String>? _tokenRefreshSub;
   StreamSubscription<RemoteMessage>? _foregroundSub;
   StreamSubscription<RemoteMessage>? _openedAppSub;
   bool _initialized = false;
+
+  String? _lastSyncedUid;
+  String? _lastSyncedToken;
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'griho_high_importance',
@@ -46,7 +50,6 @@ class FcmNotificationService {
 
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    // 1. Request permission (Android 13+, iOS, Web)
     await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -54,7 +57,6 @@ class FcmNotificationService {
       provisional: false,
     );
 
-    // 2. Setup local notifications for foreground display (non-web)
     if (!kIsWeb) {
       const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
       const darwinInit = DarwinInitializationSettings();
@@ -76,8 +78,8 @@ class FcmNotificationService {
 
       await _localNotifications
           .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
+          AndroidFlutterLocalNotificationsPlugin
+      >()
           ?.createNotificationChannel(_channel);
 
       await _messaging.setForegroundNotificationPresentationOptions(
@@ -87,12 +89,8 @@ class FcmNotificationService {
       );
     }
 
-    // 3. Foreground message listener
-    _foregroundSub = FirebaseMessaging.onMessage.listen((message) {
-      _showForegroundBanner(message);
-    });
+    _foregroundSub = FirebaseMessaging.onMessage.listen(_showForegroundBanner);
 
-    // 4. Background -> Opened app tap listener
     _openedAppSub = FirebaseMessaging.onMessageOpenedApp.listen((message) {
       final route = (message.data['route'] ?? '').toString().trim();
       if (route.isNotEmpty && onNavigate != null) {
@@ -100,7 +98,6 @@ class FcmNotificationService {
       }
     });
 
-    // 5. Terminated state -> Opened via notification
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
       final route = (initialMessage.data['route'] ?? '').toString().trim();
@@ -109,11 +106,8 @@ class FcmNotificationService {
       }
     }
 
-    // 6. Save token & listen for token rotation
     await syncTokenForCurrentUser();
-    _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) {
-      _saveTokenToFirestore(newToken);
-    });
+    _tokenRefreshSub = _messaging.onTokenRefresh.listen(_saveTokenToFirestore);
 
     _initialized = true;
   }
@@ -122,11 +116,13 @@ class FcmNotificationService {
   Future<void> syncTokenForCurrentUser() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        return;
+      }
 
-      final token = await _messaging.getToken();
-      if (token != null && token.trim().isNotEmpty) {
-        await _saveTokenToFirestore(token.trim());
+      final token = (await _messaging.getToken())?.trim();
+      if (token != null && token.isNotEmpty) {
+        await _saveTokenToFirestore(token);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -139,51 +135,71 @@ class FcmNotificationService {
   Future<void> removeTokenOnLogout() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      final token = await _messaging.getToken();
-      if (user != null && token != null && token.trim().isNotEmpty) {
+      final token = (await _messaging.getToken())?.trim();
+      if (user != null && token != null && token.isNotEmpty) {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
             .update({
-              'fcmTokens': FieldValue.arrayRemove([token.trim()]),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
+          'fcmTokens': FieldValue.arrayRemove([token]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _lastSyncedUid = null;
+      _lastSyncedToken = null;
+    }
   }
 
   Future<void> _saveTokenToFirestore(String token) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    final normalizedToken = token.trim();
+    if (user == null || normalizedToken.isEmpty) {
+      return;
+    }
+
+    // Avoid redundant Firestore reads if this user + token was already synced this session.
+    if (_lastSyncedUid == user.uid && _lastSyncedToken == normalizedToken) {
+      return;
+    }
 
     final userRef = FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid);
     final snap = await userRef.get();
-    if (!snap.exists) return;
+    if (!snap.exists) {
+      return;
+    }
 
     final existing = List<String>.from(snap.data()?['fcmTokens'] ?? const []);
-    if (existing.contains(token)) return;
-
-    // Keep max 10 tokens per user (aligned with firestore.rules)
-    if (existing.length >= 10) {
-      final trimmed = [...existing.skip(existing.length - 9), token];
-      await userRef.update({
-        'fcmTokens': trimmed,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } else {
-      await userRef.update({
-        'fcmTokens': FieldValue.arrayUnion([token]),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    if (!existing.contains(normalizedToken)) {
+      if (existing.length >= 10) {
+        final trimmed = [...existing.skip(existing.length - 9), normalizedToken];
+        await userRef.update({
+          'fcmTokens': trimmed,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        await userRef.update({
+          'fcmTokens': FieldValue.arrayUnion([normalizedToken]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
     }
+
+    _lastSyncedUid = user.uid;
+    _lastSyncedToken = normalizedToken;
   }
 
   Future<void> _showForegroundBanner(RemoteMessage message) async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      return;
+    }
     final notification = message.notification;
-    if (notification == null) return;
+    if (notification == null) {
+      return;
+    }
 
     final route = (message.data['route'] ?? '').toString();
 
@@ -214,5 +230,6 @@ class FcmNotificationService {
     await _tokenRefreshSub?.cancel();
     await _foregroundSub?.cancel();
     await _openedAppSub?.cancel();
+    _initialized = false;
   }
 }

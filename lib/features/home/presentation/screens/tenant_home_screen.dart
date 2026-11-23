@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/route_names.dart';
+import '../../../../core/design_system/design_system.dart';
 import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/fcm_notification_service.dart';
 import '../../../billing/presentation/widgets/tenant_current_bills_card.dart';
@@ -17,9 +18,9 @@ import '../../../tenants/domain/entities/tenant.dart';
 import '../../../tenants/domain/entities/tenant_invitation.dart';
 import '../../../tenants/presentation/providers/tenant_dashboard_provider.dart';
 import '../widgets/griho_home_chrome.dart';
+import '../widgets/griho_home_components.dart';
 
-typedef JsonMap = Map<String, dynamic>;
-typedef TypedQuerySnapshot = QuerySnapshot<JsonMap>;
+typedef TypedQuerySnapshot = QuerySnapshot<HomeJsonMap>;
 
 class TenantHomeScreen extends ConsumerStatefulWidget {
   const TenantHomeScreen({super.key});
@@ -34,7 +35,9 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
     super.initState();
     FcmNotificationService.instance.initialize(
       onNavigate: (route) {
-        if (mounted) context.push(route);
+        if (mounted) {
+          context.push(route);
+        }
       },
     );
   }
@@ -74,7 +77,9 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
 
   void _openNotices(TenantDashboardData d) {
     final propertyId = d.tenant?.propertyId.trim() ?? '';
-    if (propertyId.isEmpty) return;
+    if (propertyId.isEmpty) {
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -84,15 +89,11 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
   }
 
   void _copyId(String publicId) {
-    if (publicId.isEmpty) return;
+    if (publicId.isEmpty) {
+      return;
+    }
     Clipboard.setData(ClipboardData(text: publicId));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Griho ID copied.'),
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    GrihoFeedback.showSuccess(context, 'Griho ID copied to clipboard.');
   }
 
   @override
@@ -105,9 +106,19 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
       backgroundColor: theme.colorScheme.surface,
       appBar: const GrihoHomeAppBar(consoleLabel: 'Resident Portal'),
       body: dashboardAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) =>
-            _DashboardErrorView(error: error, onRetry: _refresh),
+        loading: () => const GrihoLoadingView(message: 'Loading portal...'),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: GrihoStatusState(
+              icon: Iconsax.warning_2,
+              title: 'Could not load resident portal',
+              subtitle: error.toString(),
+              actionLabel: 'Try Again',
+              onAction: _refresh,
+            ),
+          ),
+        ),
         data: (dashboard) {
           final publicId = dashboard.appUser?.publicId ?? '';
           final active = dashboard.hasActiveTenancy;
@@ -123,7 +134,6 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                   publicId: publicId,
                 ),
                 const SizedBox(height: 16),
-
                 if (dashboard.hasPendingInvitation) ...[
                   _PendingInvitationCard(
                     invitation: dashboard.pendingInvitation!,
@@ -132,7 +142,6 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-
                 Consumer(
                   builder: (context, ref, _) {
                     final n =
@@ -141,15 +150,17 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                             .value
                             ?.length ??
                         0;
-                    if (n == 0) return const SizedBox.shrink();
+                    if (n == 0) {
+                      return const SizedBox.shrink();
+                    }
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 16),
                       child: Material(
-                        color: theme.colorScheme.tertiaryContainer,
+                        color: theme.colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(16),
                         clipBehavior: Clip.antiAlias,
                         child: ListTile(
-                          leading: const Icon(Icons.work_outline_rounded),
+                          leading: const Icon(Iconsax.briefcase),
                           title: Text(
                             n == 1
                                 ? '1 work invitation'
@@ -159,7 +170,7 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                           subtitle: const Text(
                             'Manager / caretaker / electrician offer',
                           ),
-                          trailing: const Icon(Icons.chevron_right_rounded),
+                          trailing: const Icon(Iconsax.arrow_right_3, size: 18),
                           onTap: () async {
                             await context.push(RouteNames.myInvitations);
                             ref.invalidate(pendingWorkInvitationsProvider);
@@ -169,20 +180,18 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                     );
                   },
                 ),
-
                 if (active)
                   _DigitalResidencyPass(dashboard: dashboard)
                 else
                   _NoActiveTenancyPassport(
                     userPublicId: publicId,
                     hasPendingInvitation: dashboard.hasPendingInvitation,
-                    onOpenInvitations: _openInvitations,
+                    onCopyId: () => _copyId(publicId),
                   ),
-
                 if (active) ...[
                   const SizedBox(height: 22),
-                  _SectionHeader(
-                    title: 'Bills & dues',
+                  GrihoSectionHeader(
+                    'Bills & dues',
                     trailing: TextButton(
                       onPressed: _openPayments,
                       child: const Text('Payments'),
@@ -191,77 +200,74 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                   const SizedBox(height: 6),
                   const TenantCurrentBillsCard(),
                 ],
-
                 const SizedBox(height: 22),
-                const _SectionHeader(title: 'Quick actions'),
+                const GrihoSectionHeader('Quick actions'),
                 const SizedBox(height: 10),
-                _ActionGrid(
+                GrihoQuickActionGrid(
                   items: [
                     if (active)
-                      _ActionItem(
-                        Icons.payments_outlined,
-                        'Payments',
-                        'Pay & receipts',
-                        Colors.green,
-                        _openPayments,
+                      GrihoQuickActionItem(
+                        icon: Iconsax.wallet_check,
+                        title: 'Payments',
+                        subtitle: 'Pay & receipts',
+                        color: GrihoColors.emerald,
+                        onTap: _openPayments,
                       ),
                     if (active)
-                      _ActionItem(
-                        Icons.report_problem_outlined,
-                        'Report issue',
-                        'Plumbing, electric…',
-                        Colors.deepOrange,
-                        () => _reportIssue(dashboard),
+                      GrihoQuickActionItem(
+                        icon: Iconsax.warning_2,
+                        title: 'Report issue',
+                        subtitle: 'Plumbing, electric…',
+                        color: Colors.deepOrange,
+                        onTap: () => _reportIssue(dashboard),
                       ),
                     if (active)
-                      _ActionItem(
-                        Icons.build_circle_outlined,
-                        'My requests',
-                        'Track repairs',
-                        Colors.indigo,
-                        _openMyRequests,
+                      GrihoQuickActionItem(
+                        icon: Iconsax.setting_2,
+                        title: 'My requests',
+                        subtitle: 'Track repairs',
+                        color: Colors.indigo,
+                        onTap: _openMyRequests,
                       ),
                     if (active)
-                      _ActionItem(
-                        Icons.campaign_outlined,
-                        'Notices',
-                        'From your building',
-                        Colors.amber.shade800,
-                        () => _openNotices(dashboard),
+                      GrihoQuickActionItem(
+                        icon: Iconsax.notification_bing,
+                        title: 'Notices',
+                        subtitle: 'From your building',
+                        color: GrihoColors.warning,
+                        onTap: () => _openNotices(dashboard),
                       ),
-                    _ActionItem(
-                      Icons.mark_email_read_outlined,
-                      'Invitations',
-                      'Lease offers',
-                      Colors.blueAccent,
-                      _openInvitations,
+                    GrihoQuickActionItem(
+                      icon: Iconsax.sms,
+                      title: 'Invitations',
+                      subtitle: 'Lease offers',
+                      color: Colors.blueAccent,
+                      onTap: _openInvitations,
                     ),
-                    _ActionItem(
-                      Icons.history_rounded,
-                      'History',
-                      'Past stays',
-                      Colors.teal,
-                      _openTenancyHistory,
+                    GrihoQuickActionItem(
+                      icon: Iconsax.clock,
+                      title: 'History',
+                      subtitle: 'Past stays',
+                      color: Colors.teal,
+                      onTap: _openTenancyHistory,
                     ),
-                    _ActionItem(
-                      Icons.share_rounded,
-                      'Share ID',
-                      'Copy your Griho ID',
-                      Colors.deepPurpleAccent,
-                      () => _copyId(publicId),
+                    GrihoQuickActionItem(
+                      icon: Iconsax.share,
+                      title: 'Share ID',
+                      subtitle: 'Copy your Griho ID',
+                      color: Colors.deepPurpleAccent,
+                      onTap: () => _copyId(publicId),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 22),
-                const _SectionHeader(title: 'Recent activity'),
+                const GrihoSectionHeader('Recent activity'),
                 const SizedBox(height: 10),
                 _RecentActivityCard(dashboard: dashboard),
-
                 if (dashboard.hasTenancyHistory) ...[
                   const SizedBox(height: 22),
-                  _SectionHeader(
-                    title: 'Past residences',
+                  GrihoSectionHeader(
+                    'Past residences',
                     trailing: TextButton(
                       onPressed: _openTenancyHistory,
                       child: const Text('View all'),
@@ -281,101 +287,6 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
       bottomNavigationBar: const AppBottomNavigation(
         selectedDestination: GrihoNavigationDestination.home,
       ),
-    );
-  }
-}
-
-// ============================================================================
-// ACTION GRID
-// ============================================================================
-
-class _ActionItem {
-  const _ActionItem(
-    this.icon,
-    this.title,
-    this.subtitle,
-    this.color,
-    this.onTap,
-  );
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-}
-
-class _ActionGrid extends StatelessWidget {
-  const _ActionGrid({required this.items});
-
-  final List<_ActionItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 2.3,
-      children: [
-        for (final i in items)
-          Material(
-            color: theme.colorScheme.surfaceContainerLow,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: theme.colorScheme.outlineVariant),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: i.onTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(9),
-                      decoration: BoxDecoration(
-                        color: i.color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: Icon(i.icon, size: 20, color: i.color),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            i.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            i.subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }
@@ -412,14 +323,11 @@ class _ReportIssueSheetState extends State<_ReportIssueSheet> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final title = _titleCtrl.text.trim();
 
-    if (tenant == null || uid == null) return;
+    if (tenant == null || uid == null) {
+      return;
+    }
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please describe the problem.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      GrihoFeedback.showError(context, 'Please describe the problem.');
       return;
     }
 
@@ -443,24 +351,17 @@ class _ReportIssueSheetState extends State<_ReportIssueSheet> {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Request sent to your building team.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      GrihoFeedback.showSuccess(context, 'Request sent to your building team.');
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not send request: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      GrihoFeedback.showError(context, 'Could not send request: $e');
     }
   }
 
@@ -496,51 +397,41 @@ class _ReportIssueSheetState extends State<_ReportIssueSheet> {
                 ButtonSegment(
                   value: 'plumbing',
                   label: Text('Plumbing'),
-                  icon: Icon(Icons.water_drop_outlined, size: 18),
+                  icon: Icon(Iconsax.drop, size: 17),
                 ),
                 ButtonSegment(
                   value: 'electrical',
                   label: Text('Electric'),
-                  icon: Icon(Icons.bolt_rounded, size: 18),
+                  icon: Icon(Iconsax.flash_1, size: 17),
                 ),
                 ButtonSegment(
                   value: 'general',
                   label: Text('Other'),
-                  icon: Icon(Icons.build_outlined, size: 18),
+                  icon: Icon(Iconsax.setting_2, size: 17),
                 ),
               ],
               selected: {_category},
               onSelectionChanged: (v) => setState(() => _category = v.first),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _titleCtrl,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'What is the problem? *',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _descCtrl,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Details (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
             const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: _saving ? null : _submit,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send_rounded, size: 18),
-              label: const Text('Send request'),
+            GrihoTextField(
+              controller: _titleCtrl,
+              label: 'What is the problem? *',
+              textCapitalization: TextCapitalization.sentences,
+              prefixIcon: Iconsax.edit_2,
+            ),
+            const SizedBox(height: 12),
+            GrihoTextField(
+              controller: _descCtrl,
+              label: 'Details (optional)',
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            GrihoPrimaryButton(
+              label: 'Send request',
+              icon: Iconsax.send_2,
+              isLoading: _saving,
+              onPressed: _submit,
             ),
           ],
         ),
@@ -550,7 +441,7 @@ class _ReportIssueSheetState extends State<_ReportIssueSheet> {
 }
 
 // ============================================================================
-// MY REQUESTS
+// MY REQUESTS (ONE-TIME BOUNDED READ)
 // ============================================================================
 
 class _MyRequestsSheet extends StatelessWidget {
@@ -559,11 +450,11 @@ class _MyRequestsSheet extends StatelessWidget {
   Color _color(String s) {
     switch (s) {
       case 'resolved':
-        return Colors.green;
+        return GrihoColors.emerald;
       case 'in_progress':
         return Colors.blue;
       case 'cancelled':
-        return Colors.red;
+        return GrihoColors.error;
       default:
         return Colors.blueGrey;
     }
@@ -576,24 +467,26 @@ class _MyRequestsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    final theme = Theme.of(context);
 
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.6,
         child: uid == null
             ? const Center(child: Text('Please sign in again.'))
-            : StreamBuilder<TypedQuerySnapshot>(
-                stream: FirebaseFirestore.instance
+            : FutureBuilder<TypedQuerySnapshot>(
+                future: FirebaseFirestore.instance
                     .collection('maintenanceRequests')
                     .where('tenantUserId', isEqualTo: uid)
-                    .snapshots(),
+                    .limit(40)
+                    .get(),
                 builder: (context, snap) {
                   if (snap.hasError) {
                     return Center(child: Text('Unable to load: ${snap.error}'));
                   }
                   if (!snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const GrihoLoadingView(
+                      message: 'Loading requests...',
+                    );
                   }
                   final docs = [...snap.data!.docs];
                   docs.sort((a, b) {
@@ -614,18 +507,13 @@ class _MyRequestsSheet extends StatelessWidget {
                           fontSize: 18,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       if (docs.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 32),
-                          child: Center(
-                            child: Text(
-                              'No requests yet.',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
+                        const GrihoStatusState(
+                          icon: Iconsax.setting_2,
+                          title: 'No requests yet',
+                          subtitle:
+                              'Maintenance issues you report will appear here.',
                         ),
                       for (final doc in docs)
                         Builder(
@@ -651,10 +539,10 @@ class _MyRequestsSheet extends StatelessWidget {
                                 trailing: Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
-                                    vertical: 2,
+                                    vertical: 3,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: color.withValues(alpha: 0.12),
+                                    color: color.withValues(alpha: 0.14),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
@@ -680,7 +568,7 @@ class _MyRequestsSheet extends StatelessWidget {
 }
 
 // ============================================================================
-// BUILDING NOTICES
+// BUILDING NOTICES (ONE-TIME BOUNDED READ)
 // ============================================================================
 
 class _NoticesSheet extends StatelessWidget {
@@ -695,17 +583,18 @@ class _NoticesSheet extends StatelessWidget {
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.6,
-        child: StreamBuilder<TypedQuerySnapshot>(
-          stream: FirebaseFirestore.instance
+        child: FutureBuilder<TypedQuerySnapshot>(
+          future: FirebaseFirestore.instance
               .collection('buildingNotices')
               .where('propertyId', isEqualTo: propertyId)
-              .snapshots(),
+              .limit(40)
+              .get(),
           builder: (context, snap) {
             if (snap.hasError) {
               return Center(child: Text('Unable to load: ${snap.error}'));
             }
             if (!snap.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const GrihoLoadingView(message: 'Loading notices...');
             }
             final docs = [...snap.data!.docs];
             docs.sort((a, b) {
@@ -723,35 +612,28 @@ class _NoticesSheet extends StatelessWidget {
                   'Building notices',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 if (docs.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 32),
-                    child: Center(
-                      child: Text(
-                        'No notices right now.',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
+                  const GrihoStatusState(
+                    icon: Iconsax.notification_bing,
+                    title: 'No notices right now',
+                    subtitle: 'Announcements from your building appear here.',
                   ),
                 for (final doc in docs)
                   Builder(
                     builder: (context) {
                       final d = doc.data();
-                      final urgent =
-                          (d['priority'] ?? '').toString() == 'high' ||
-                          (d['priority'] ?? '').toString() == 'urgent';
+                      final p = (d['priority'] ?? '').toString();
+                      final urgent = p == 'high' || p == 'urgent';
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
                         child: ListTile(
                           leading: Icon(
                             urgent
-                                ? Icons.priority_high_rounded
-                                : Icons.campaign_outlined,
+                                ? Iconsax.warning_2
+                                : Iconsax.notification_bing,
                             color: urgent
-                                ? Colors.red
+                                ? GrihoColors.error
                                 : theme.colorScheme.primary,
                           ),
                           title: Text(
@@ -773,7 +655,7 @@ class _NoticesSheet extends StatelessWidget {
 }
 
 // ============================================================================
-// 2. HERO DIGITAL RESIDENCY PASS (KEYCARD)
+// HERO DIGITAL RESIDENCY PASS (BRAND DEEP TEAL & EMERALD)
 // ============================================================================
 
 class _DigitalResidencyPass extends ConsumerWidget {
@@ -797,13 +679,13 @@ class _DigitalResidencyPass extends ConsumerWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
-          colors: [Color(0xFF1B2232), Color(0xFF131722)],
+          colors: [GrihoColors.deepTeal, Color(0xFF064C50)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
+            color: GrihoColors.deepTeal.withValues(alpha: 0.28),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -819,11 +701,10 @@ class _DigitalResidencyPass extends ConsumerWidget {
               height: 140,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                color: GrihoColors.emerald.withValues(alpha: 0.25),
               ),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(22),
             child: Column(
@@ -837,22 +718,22 @@ class _DigitalResidencyPass extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.all(7),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
+                            color: Colors.white.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Icon(
-                            Icons.key_rounded,
+                            Iconsax.key,
                             size: 16,
-                            color: Colors.white70,
+                            color: GrihoColors.softMint,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
+                        const Text(
                           'DIGITAL RESIDENCY PASS',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.75),
+                            color: GrihoColors.softMint,
                             fontWeight: FontWeight.w800,
-                            letterSpacing: 1.0,
+                            letterSpacing: 0.9,
                             fontSize: 11,
                           ),
                         ),
@@ -864,10 +745,10 @@ class _DigitalResidencyPass extends ConsumerWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.2),
+                        color: GrihoColors.emerald.withValues(alpha: 0.28),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.green.withValues(alpha: 0.5),
+                          color: GrihoColors.softMint.withValues(alpha: 0.5),
                         ),
                       ),
                       child: const Row(
@@ -875,13 +756,13 @@ class _DigitalResidencyPass extends ConsumerWidget {
                         children: [
                           CircleAvatar(
                             radius: 3.5,
-                            backgroundColor: Colors.greenAccent,
+                            backgroundColor: GrihoColors.softMint,
                           ),
                           SizedBox(width: 6),
                           Text(
                             'Active Stay',
                             style: TextStyle(
-                              color: Colors.greenAccent,
+                              color: GrihoColors.mintWhisper,
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
                             ),
@@ -891,9 +772,7 @@ class _DigitalResidencyPass extends ConsumerWidget {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 18),
-
                 Text(
                   propertyName,
                   style: theme.textTheme.headlineSmall?.copyWith(
@@ -906,26 +785,24 @@ class _DigitalResidencyPass extends ConsumerWidget {
                 Row(
                   children: [
                     const Icon(
-                      Icons.door_front_door_outlined,
+                      Iconsax.home_2,
                       size: 16,
-                      color: Colors.white60,
+                      color: GrihoColors.softMint,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       unitDisplayName,
                       style: const TextStyle(
-                        color: Colors.white70,
+                        color: GrihoColors.mintWhisper,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 18),
-                Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
+                Divider(color: Colors.white.withValues(alpha: 0.14), height: 1),
                 const SizedBox(height: 14),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -935,7 +812,7 @@ class _DigitalResidencyPass extends ConsumerWidget {
                         Text(
                           'Agreed Monthly Rent',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
+                            color: Colors.white.withValues(alpha: 0.65),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -975,7 +852,7 @@ class _DigitalResidencyPass extends ConsumerWidget {
                     Container(
                       width: 1,
                       height: 28,
-                      color: Colors.white.withValues(alpha: 0.12),
+                      color: Colors.white.withValues(alpha: 0.14),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -983,7 +860,7 @@ class _DigitalResidencyPass extends ConsumerWidget {
                         Text(
                           'Moved In',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
+                            color: Colors.white.withValues(alpha: 0.65),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1013,7 +890,7 @@ class _DigitalResidencyPass extends ConsumerWidget {
 }
 
 // ============================================================================
-// 3. PENDING INVITATION BANNER
+// PENDING INVITATION BANNER
 // ============================================================================
 
 class _PendingInvitationCard extends StatelessWidget {
@@ -1033,19 +910,12 @@ class _PendingInvitationCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.tertiaryContainer,
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: theme.colorScheme.tertiary.withValues(alpha: 0.4),
+          color: theme.colorScheme.primary.withValues(alpha: 0.45),
           width: 1.5,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.tertiary.withValues(alpha: 0.15),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -1056,13 +926,13 @@ class _PendingInvitationCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.onTertiaryContainer,
+                  color: theme.colorScheme.primary,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  Icons.mail_rounded,
+                  Iconsax.sms_notification,
                   size: 18,
-                  color: theme.colorScheme.tertiaryContainer,
+                  color: theme.colorScheme.onPrimary,
                 ),
               ),
               const SizedBox(width: 10),
@@ -1071,24 +941,6 @@ class _PendingInvitationCard extends StatelessWidget {
                   'New Tenancy Invitation Received',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w900,
-                    color: theme.colorScheme.onTertiaryContainer,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.onTertiaryContainer.withValues(
-                    alpha: 0.12,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  'Action Required',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: theme.colorScheme.onTertiaryContainer,
                   ),
                 ),
               ),
@@ -1097,27 +949,13 @@ class _PendingInvitationCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             'You are invited to finalize lease terms for "$propertyName" ($unitName) with agreed monthly rent of ৳ ${_formatAmount(invitation.rentAmount)}.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onTertiaryContainer,
-              height: 1.4,
-            ),
+            style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
           ),
           const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: theme.colorScheme.onTertiaryContainer,
-                foregroundColor: theme.colorScheme.tertiaryContainer,
-              ),
-              onPressed: onReview,
-              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: const Text(
-                'Review & Accept Invitation',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
+          GrihoPrimaryButton(
+            label: 'Review & Accept Invitation',
+            icon: Iconsax.arrow_right_3,
+            onPressed: onReview,
           ),
         ],
       ),
@@ -1126,138 +964,122 @@ class _PendingInvitationCard extends StatelessWidget {
 }
 
 // ============================================================================
-// 4. DIGITAL TENANT PASSPORT (EMPTY RESIDENCY STATE)
+// DIGITAL TENANT PASSPORT (EMPTY RESIDENCY STATE)
 // ============================================================================
 
 class _NoActiveTenancyPassport extends StatelessWidget {
   final String userPublicId;
   final bool hasPendingInvitation;
-  final VoidCallback onOpenInvitations;
+  final VoidCallback onCopyId;
 
   const _NoActiveTenancyPassport({
     required this.userPublicId,
     required this.hasPendingInvitation,
-    required this.onOpenInvitations,
+    required this.onCopyId,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          children: [
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              hasPendingInvitation
+                  ? Iconsax.sms_notification
+                  : Iconsax.buildings_2,
+              size: 38,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            hasPendingInvitation
+                ? 'Awaiting Tenancy Acceptance'
+                : 'Ready to Move In?',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasPendingInvitation
+                ? 'You have received a new tenancy offer. Review the details above to activate your tenancy.'
+                : 'Share your Griho Public ID with your property manager or landlord to receive your unit onboarding invitation.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              height: 1.45,
+            ),
+          ),
+          if (userPublicId.isNotEmpty && !hasPendingInvitation) ...[
+            const SizedBox(height: 18),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
                   alpha: 0.45,
                 ),
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
               ),
-              child: Icon(
-                hasPendingInvitation
-                    ? Icons.mark_email_unread_rounded
-                    : Icons.home_work_outlined,
-                size: 40,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              hasPendingInvitation
-                  ? 'Awaiting Tenancy Acceptance'
-                  : 'Ready to Move In?',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              hasPendingInvitation
-                  ? 'You have received a new tenancy offer. Review the details above to activate your tenancy.'
-                  : 'Share your Griho Public ID with your property manager or landlord to receive your unit onboarding invitation.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.45,
-              ),
-            ),
-            if (userPublicId.isNotEmpty && !hasPendingInvitation) ...[
-              const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.45,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'YOUR GRIHO ID',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        userPublicId,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
                   ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: theme.colorScheme.outlineVariant),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'YOUR GRIHO ID',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          userPublicId,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ],
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: userPublicId));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Griho ID copied to clipboard.'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.copy_rounded, size: 16),
-                      label: const Text('Copy ID'),
-                    ),
-                  ],
-                ),
+                  FilledButton.tonalIcon(
+                    onPressed: onCopyId,
+                    icon: const Icon(Iconsax.copy, size: 16),
+                    label: const Text('Copy ID'),
+                  ),
+                ],
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
 // ============================================================================
-// 6. RECENT ACTIVITY TIMELINE
+// RECENT ACTIVITY TIMELINE
 // ============================================================================
 
 class _RecentActivityCard extends StatelessWidget {
@@ -1270,23 +1092,20 @@ class _RecentActivityCard extends StatelessWidget {
     final theme = Theme.of(context);
     final activities = _buildActivities(dashboard);
 
-    return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            for (var index = 0; index < activities.length; index++) ...[
-              _ActivityItem(activity: activities[index]),
-              if (index != activities.length - 1) const Divider(height: 20),
-            ],
+      child: Column(
+        children: [
+          for (var index = 0; index < activities.length; index++) ...[
+            _ActivityItem(activity: activities[index]),
+            if (index != activities.length - 1) const Divider(height: 20),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -1297,7 +1116,7 @@ class _RecentActivityCard extends StatelessWidget {
     if (invitation != null && invitation.isPending && !invitation.isExpired) {
       activities.add(
         _ActivityData(
-          icon: Icons.mail_outline_rounded,
+          icon: Iconsax.sms,
           title: 'Invitation Received',
           subtitle: invitation.propertyName ?? 'New unit tenancy offered',
           date: invitation.createdAt,
@@ -1311,7 +1130,7 @@ class _RecentActivityCard extends StatelessWidget {
         tenant.tenancyStartedAt != null) {
       activities.add(
         _ActivityData(
-          icon: Icons.key_rounded,
+          icon: Iconsax.key,
           title: 'Moved in to New Space',
           subtitle: dashboard.currentPropertyName ?? 'Tenancy active',
           date: tenant.tenancyStartedAt!,
@@ -1322,7 +1141,7 @@ class _RecentActivityCard extends StatelessWidget {
     for (final history in dashboard.tenancyHistory.take(2)) {
       activities.add(
         _ActivityData(
-          icon: Icons.history_rounded,
+          icon: Iconsax.clock,
           title: 'Tenancy Concluded',
           subtitle: history.propertyName,
           date: history.endedAt,
@@ -1335,7 +1154,7 @@ class _RecentActivityCard extends StatelessWidget {
     if (activities.isEmpty) {
       return [
         _ActivityData(
-          icon: Icons.check_circle_outline_rounded,
+          icon: Iconsax.tick_circle,
           title: 'Griho Account Active',
           subtitle: 'Welcome to your verified resident portal',
           date: dashboard.appUser?.createdAt ?? DateTime.now(),
@@ -1423,7 +1242,7 @@ class _ActivityItem extends StatelessWidget {
 }
 
 // ============================================================================
-// 7. PREVIOUS RESIDENCES PREVIEW
+// PREVIOUS RESIDENCES PREVIEW
 // ============================================================================
 
 class _TenancyHistoryPreview extends StatelessWidget {
@@ -1443,61 +1262,64 @@ class _TenancyHistoryPreview extends StatelessWidget {
     return Column(
       children: [
         for (final item in preview)
-          Material(
-            color: theme.colorScheme.surfaceContainerLow,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: theme.colorScheme.outlineVariant),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onViewItem,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(10),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Material(
+              color: theme.colorScheme.surfaceContainerLow,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: theme.colorScheme.outlineVariant),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onViewItem,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Iconsax.buildings_2,
+                          size: 20,
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.apartment_rounded,
-                        size: 20,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.propertyName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.propertyName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Unit ${item.unitNumber} • ৳ ${_formatAmount(item.monthlyRent)} / mo',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                            const SizedBox(height: 2),
+                            Text(
+                              'Unit ${item.unitNumber} • ৳ ${_formatAmount(item.monthlyRent)} / mo',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
-                      _formatDate(item.endedAt),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 11,
+                      Text(
+                        _formatDate(item.endedAt),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1508,91 +1330,7 @@ class _TenancyHistoryPreview extends StatelessWidget {
 }
 
 // ============================================================================
-// SECTION HEADER
-// ============================================================================
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final Widget? trailing;
-
-  const _SectionHeader({required this.title, this.trailing});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-        ),
-        ?trailing,
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// DASHBOARD ERROR VIEW
-// ============================================================================
-
-class _DashboardErrorView extends StatelessWidget {
-  final Object error;
-  final VoidCallback onRetry;
-
-  const _DashboardErrorView({required this.error, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              size: 56,
-              color: theme.colorScheme.error,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Could not load resident portal',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Try Again'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// HELPERS (NULL-SAFE)
+// HELPERS
 // ============================================================================
 
 String _formatDate(DateTime date) {

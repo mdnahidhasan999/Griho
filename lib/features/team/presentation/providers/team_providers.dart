@@ -1,7 +1,14 @@
+// noinspection SpellCheckingInspection
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/design_system/design_system.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+
+typedef TeamJsonMap = Map<String, dynamic>;
+typedef TeamDocSnapshot = QueryDocumentSnapshot<TeamJsonMap>;
 
 String _s(Object? v) => (v ?? '').toString().trim();
 
@@ -43,36 +50,21 @@ class TeamMember {
   String get invitationCollection =>
       isManager ? 'managerInvitations' : 'staffInvitations';
 
-  String get roleLabel {
-    switch (role) {
-      case 'manager':
-        return 'Manager';
-      case 'caretaker':
-        return 'Caretaker';
-      case 'electrician':
-        return 'Electrician';
-      default:
-        return role;
-    }
-  }
+  String get roleLabel => switch (role) {
+    'manager' => 'Manager',
+    'caretaker' => 'Caretaker',
+    'electrician' => 'Electrician',
+    _ => role,
+  };
 
-  IconData get roleIcon {
-    switch (role) {
-      case 'manager':
-        return Icons.admin_panel_settings_rounded;
-      case 'caretaker':
-        return Icons.handyman_rounded;
-      case 'electrician':
-        return Icons.electrical_services_rounded;
-      default:
-        return Icons.person_rounded;
-    }
-  }
+  IconData get roleIcon => switch (role) {
+    'manager' => Iconsax.shield_tick,
+    'caretaker' => Iconsax.broom,
+    'electrician' => Iconsax.electricity,
+    _ => Iconsax.user,
+  };
 
-  factory TeamMember.fromAccess(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-    String? fixedRole,
-  ) {
+  factory TeamMember.fromAccess(TeamDocSnapshot doc, String? fixedRole) {
     final d = doc.data();
     final name = _s(d['managerName'] ?? d['staffName'] ?? d['name']);
     final contact = _s(
@@ -97,10 +89,7 @@ class TeamMember {
     );
   }
 
-  factory TeamMember.fromInvite(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-    String? fixedRole,
-  ) {
+  factory TeamMember.fromInvite(TeamDocSnapshot doc, String? fixedRole) {
     final d = doc.data();
     final name = _s(d['name'] ?? d['managerName'] ?? d['staffName']);
     final identifier = _s(d['identifier']);
@@ -148,7 +137,7 @@ class WorkOrder {
   /// 'electrical' | 'plumbing' | 'general'
   final String category;
 
-  /// 'open' | 'assigned' | 'in_progress' | 'resolved' | 'cancelled'  (staff screens use open / in_progress / resolved)
+  /// 'open' | 'assigned' | 'in_progress' | 'resolved' | 'cancelled'
   final String status;
   final String propertyId;
   final String propertyName;
@@ -160,7 +149,7 @@ class WorkOrder {
   bool get isOpenish =>
       status == 'open' || status == 'assigned' || status == 'in_progress';
 
-  factory WorkOrder.fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+  factory WorkOrder.fromDoc(TeamDocSnapshot doc) {
     final d = doc.data();
     final ts = d['createdAt'];
     return WorkOrder(
@@ -180,67 +169,85 @@ class WorkOrder {
   }
 }
 
-String? _uid() => FirebaseAuth.instance.currentUser?.uid;
-
-Stream<List<TeamMember>> _accessStream(String collection, String? fixedRole) {
-  final uid = _uid();
-  if (uid == null) return Stream.value(const <TeamMember>[]);
+Stream<List<TeamMember>> _accessStream(
+    Ref ref,
+    String collection,
+    String? fixedRole,
+    ) {
+  ref.watch(authStateProvider);
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) {
+    return Stream.value(const <TeamMember>[]);
+  }
   return FirebaseFirestore.instance
       .collection(collection)
       .where('ownerId', isEqualTo: uid)
+      .limit(100)
       .snapshots()
       .map(
         (s) => s.docs.map((d) => TeamMember.fromAccess(d, fixedRole)).toList(),
-      );
+  );
 }
 
-Stream<List<TeamMember>> _pendingStream(String collection, String? fixedRole) {
-  final uid = _uid();
-  if (uid == null) return Stream.value(const <TeamMember>[]);
+Stream<List<TeamMember>> _pendingStream(
+    Ref ref,
+    String collection,
+    String? fixedRole,
+    ) {
+  ref.watch(authStateProvider);
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) {
+    return Stream.value(const <TeamMember>[]);
+  }
   return FirebaseFirestore.instance
       .collection(collection)
       .where('ownerId', isEqualTo: uid)
       .where('status', isEqualTo: 'pending')
+      .limit(100)
       .snapshots()
       .map(
         (s) => s.docs.map((d) => TeamMember.fromInvite(d, fixedRole)).toList(),
-      );
+  );
 }
 
 final ownerManagersProvider = StreamProvider.autoDispose<List<TeamMember>>(
-  (ref) => _accessStream('managerAccess', 'manager'),
+      (ref) => _accessStream(ref, 'managerAccess', 'manager'),
 );
 
 final ownerStaffProvider = StreamProvider.autoDispose<List<TeamMember>>(
-  (ref) => _accessStream('staffAccess', null),
+      (ref) => _accessStream(ref, 'staffAccess', null),
 );
 
 final ownerPendingManagerInvitesProvider =
-    StreamProvider.autoDispose<List<TeamMember>>(
-      (ref) => _pendingStream('managerInvitations', 'manager'),
-    );
+StreamProvider.autoDispose<List<TeamMember>>(
+      (ref) => _pendingStream(ref, 'managerInvitations', 'manager'),
+);
 
 final ownerPendingStaffInvitesProvider =
-    StreamProvider.autoDispose<List<TeamMember>>(
-      (ref) => _pendingStream('staffInvitations', null),
-    );
+StreamProvider.autoDispose<List<TeamMember>>(
+      (ref) => _pendingStream(ref, 'staffInvitations', null),
+);
 
 final ownerWorkOrdersProvider = StreamProvider.autoDispose<List<WorkOrder>>((
-  ref,
-) {
-  final uid = _uid();
-  if (uid == null) return Stream.value(const <WorkOrder>[]);
+    ref,
+    ) {
+  ref.watch(authStateProvider);
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) {
+    return Stream.value(const <WorkOrder>[]);
+  }
   return FirebaseFirestore.instance
       .collection('maintenanceRequests')
       .where('ownerId', isEqualTo: uid)
+      .limit(150)
       .snapshots()
       .map((s) {
-        final list = s.docs.map(WorkOrder.fromDoc).toList();
-        list.sort(
-          (a, b) => (b.createdAt?.millisecondsSinceEpoch ?? 0).compareTo(
-            a.createdAt?.millisecondsSinceEpoch ?? 0,
-          ),
-        );
-        return list;
-      });
+    final list = s.docs.map(WorkOrder.fromDoc).toList()
+      ..sort(
+            (a, b) => (b.createdAt?.millisecondsSinceEpoch ?? 0).compareTo(
+          a.createdAt?.millisecondsSinceEpoch ?? 0,
+        ),
+      );
+    return list;
+  });
 });

@@ -1,3 +1,4 @@
+// noinspection SpellCheckingInspection
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/create_unit_request.dart';
@@ -73,7 +74,6 @@ class UnitController extends Notifier<UnitControllerState> {
 
     try {
       final units = await _getUnitsByPropertyId(propertyId);
-
       state = state.copyWith(isLoading: false, units: units);
     } catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
@@ -112,7 +112,6 @@ class UnitController extends Notifier<UnitControllerState> {
       return createdUnit;
     } catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
-
       return null;
     }
   }
@@ -127,7 +126,6 @@ class UnitController extends Notifier<UnitControllerState> {
         if (item.id == updatedUnit.id) {
           return updatedUnit;
         }
-
         return item;
       }).toList();
 
@@ -140,7 +138,6 @@ class UnitController extends Notifier<UnitControllerState> {
       return updatedUnit;
     } catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
-
       return null;
     }
   }
@@ -155,18 +152,15 @@ class UnitController extends Notifier<UnitControllerState> {
           .where((unit) => unit.id != unitId)
           .toList();
 
-      final selectedUnit = state.selectedUnit;
-
       state = state.copyWith(
         isLoading: false,
         units: remainingUnits,
-        clearSelectedUnit: selectedUnit?.id == unitId,
+        clearSelectedUnit: state.selectedUnit?.id == unitId,
       );
 
       return true;
     } catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
-
       return false;
     }
   }
@@ -180,14 +174,37 @@ class UnitController extends Notifier<UnitControllerState> {
     try {
       await _assignTenantUser(unitId: unitId, tenantUserId: tenantUserId);
 
-      state = state.copyWith(isLoading: false);
+      // Update local state directly instead of doing an extra Firestore read.
+      final now = DateTime.now();
+      final updatedUnits = state.units.map((u) {
+        if (u.id == unitId) {
+          return u.copyWith(
+            tenantUserId: tenantUserId,
+            status: UnitStatus.occupied,
+            updatedAt: now,
+          );
+        }
+        return u;
+      }).toList();
 
-      await loadUnit(unitId: unitId);
+      final current = state.selectedUnit;
+      final updatedSelected = (current != null && current.id == unitId)
+          ? current.copyWith(
+              tenantUserId: tenantUserId,
+              status: UnitStatus.occupied,
+              updatedAt: now,
+            )
+          : current;
+
+      state = state.copyWith(
+        isLoading: false,
+        units: updatedUnits,
+        selectedUnit: updatedSelected,
+      );
 
       return true;
     } catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
-
       return false;
     }
   }
@@ -198,14 +215,37 @@ class UnitController extends Notifier<UnitControllerState> {
     try {
       await _removeTenantUser(unitId: unitId);
 
-      state = state.copyWith(isLoading: false);
+      // Update local state directly instead of doing an extra Firestore read.
+      final now = DateTime.now();
+      final updatedUnits = state.units.map((u) {
+        if (u.id == unitId) {
+          return u.copyWith(
+            tenantUserId: null,
+            status: UnitStatus.available,
+            updatedAt: now,
+          );
+        }
+        return u;
+      }).toList();
 
-      await loadUnit(unitId: unitId);
+      final current = state.selectedUnit;
+      final updatedSelected = (current != null && current.id == unitId)
+          ? current.copyWith(
+              tenantUserId: null,
+              status: UnitStatus.available,
+              updatedAt: now,
+            )
+          : current;
+
+      state = state.copyWith(
+        isLoading: false,
+        units: updatedUnits,
+        selectedUnit: updatedSelected,
+      );
 
       return true;
     } catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
-
       return false;
     }
   }
