@@ -11,88 +11,87 @@ import 'monthly_bill_provider.dart';
 /// Reuses currentTenantMonthlyBillsProvider directly (which already includes monthlyRents)
 /// to avoid redundant 60-month rent history Firestore reads.
 final currentTenantPayableBillsProvider =
-FutureProvider<List<TenantPayableBill>>((ref) async {
-  final tenant = await ref.watch(currentTenantProvider.future);
-  if (tenant == null || tenant.status != TenantStatus.active) {
-    return const [];
-  }
+    FutureProvider<List<TenantPayableBill>>((ref) async {
+      final tenant = await ref.watch(currentTenantProvider.future);
+      if (tenant == null || tenant.status != TenantStatus.active) {
+        return const [];
+      }
 
-  final firebaseUser = ref.watch(currentFirebaseUserProvider);
-  final uid = firebaseUser?.uid.trim() ?? '';
-  if (uid.isEmpty) {
-    return const [];
-  }
+      final firebaseUser = ref.watch(currentFirebaseUserProvider);
+      final uid = firebaseUser?.uid.trim() ?? '';
+      if (uid.isEmpty) {
+        return const [];
+      }
 
-  final monthlyBills = await ref.watch(
-    currentTenantMonthlyBillsProvider.future,
-  );
+      final monthlyBills = await ref.watch(
+        currentTenantMonthlyBillsProvider.future,
+      );
 
-  final payableByKey = <String, TenantPayableBill>{};
-  for (final bill in monthlyBills) {
-    if (bill.tenantUserId != uid) {
-      continue;
-    }
-    final payable = TenantPayableBill.fromMonthlyBill(bill);
-    if (payable.isPayable) {
-      payableByKey[payable.uniqueKey] = payable;
-    }
-  }
+      final payableByKey = <String, TenantPayableBill>{};
+      for (final bill in monthlyBills) {
+        if (bill.tenantUserId != uid) {
+          continue;
+        }
+        final payable = TenantPayableBill.fromMonthlyBill(bill);
+        if (payable.isPayable) {
+          payableByKey[payable.uniqueKey] = payable;
+        }
+      }
 
-  return payableByKey.values.toList()..sort(_comparePayableBills);
-});
+      return payableByKey.values.toList()..sort(_comparePayableBills);
+    });
 
 /// All monthly invoices (Rent + Utility Bills) grouped by month for the current tenant.
 /// Reuses tenantMonthlyBillHistoryProvider (which already fetches both monthlyBills
 /// and monthlyRents in parallel) to avoid duplicate Firestore queries.
 final currentTenantMonthlyInvoiceGroupsProvider =
-FutureProvider<List<TenantMonthlyInvoiceGroup>>((ref) async {
-  final tenant = await ref.watch(currentTenantProvider.future);
-  if (tenant == null) {
-    return const [];
-  }
+    FutureProvider<List<TenantMonthlyInvoiceGroup>>((ref) async {
+      final tenant = await ref.watch(currentTenantProvider.future);
+      if (tenant == null) {
+        return const [];
+      }
 
-  final firebaseUser = ref.watch(currentFirebaseUserProvider);
-  final uid = firebaseUser?.uid.trim() ?? '';
-  if (uid.isEmpty) {
-    return const [];
-  }
+      final firebaseUser = ref.watch(currentFirebaseUserProvider);
+      final uid = firebaseUser?.uid.trim() ?? '';
+      if (uid.isEmpty) {
+        return const [];
+      }
 
-  final historyBills = await ref.watch(
-    tenantMonthlyBillHistoryProvider(uid).future,
-  );
+      final historyBills = await ref.watch(
+        tenantMonthlyBillHistoryProvider(uid).future,
+      );
 
-  final allByKey = <String, TenantPayableBill>{};
-  for (final bill in historyBills) {
-    if (bill.tenantUserId != uid) {
-      continue;
-    }
-    if (bill.status == MonthlyBillStatus.cancelled) {
-      continue;
-    }
-    final item = TenantPayableBill.fromMonthlyBill(bill);
-    allByKey[item.uniqueKey] = item;
-  }
+      final allByKey = <String, TenantPayableBill>{};
+      for (final bill in historyBills) {
+        if (bill.tenantUserId != uid) {
+          continue;
+        }
+        if (bill.status == MonthlyBillStatus.cancelled) {
+          continue;
+        }
+        final item = TenantPayableBill.fromMonthlyBill(bill);
+        allByKey[item.uniqueKey] = item;
+      }
 
-  final groupedByMonth = <DateTime, List<TenantPayableBill>>{};
-  for (final item in allByKey.values) {
-    final monthKey = DateTime(
-      item.billingPeriodStart.year,
-      item.billingPeriodStart.month,
-      1,
-    );
-    groupedByMonth.putIfAbsent(monthKey, () => []).add(item);
-  }
+      final groupedByMonth = <DateTime, List<TenantPayableBill>>{};
+      for (final item in allByKey.values) {
+        final monthKey = DateTime(
+          item.billingPeriodStart.year,
+          item.billingPeriodStart.month,
+          1,
+        );
+        groupedByMonth.putIfAbsent(monthKey, () => []).add(item);
+      }
 
-  return groupedByMonth.entries.map((entry) {
-    final sortedItems = entry.value..sort(_comparePayableBills);
-    return TenantMonthlyInvoiceGroup(
-      billingPeriodStart: entry.key,
-      items: sortedItems,
-    );
-  }).toList()..sort(
-        (a, b) => b.billingPeriodStart.compareTo(a.billingPeriodStart),
-  );
-});
+      return groupedByMonth.entries.map((entry) {
+          final sortedItems = entry.value..sort(_comparePayableBills);
+          return TenantMonthlyInvoiceGroup(
+            billingPeriodStart: entry.key,
+            items: sortedItems,
+          );
+        }).toList()
+        ..sort((a, b) => b.billingPeriodStart.compareTo(a.billingPeriodStart));
+    });
 
 int _comparePayableBills(TenantPayableBill a, TenantPayableBill b) {
   final isRentA = a.collection == PayableBillCollection.monthlyRents ? 0 : 1;

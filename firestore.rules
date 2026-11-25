@@ -72,8 +72,44 @@ service cloud.firestore {
                             'email',
                             'photoUrl',
                             'nidNumber',
+                            'dateOfBirth',
+                            'occupation',
+                            'gender',
+                            'maritalStatus',
+                            'nidFrontUrl',
+                            'nidBackUrl',
                             'updatedAt'
                           ])
+                        && (
+                          !request.resource.data.keys().hasAny(['dateOfBirth'])
+                          || request.resource.data.dateOfBirth == null
+                          || request.resource.data.dateOfBirth is timestamp
+                        )
+                        && (
+                          !request.resource.data.keys().hasAny(['occupation'])
+                          || request.resource.data.occupation == null
+                          || (request.resource.data.occupation is string && request.resource.data.occupation.size() <= 80)
+                        )
+                        && (
+                          !request.resource.data.keys().hasAny(['gender'])
+                          || request.resource.data.gender == null
+                          || request.resource.data.gender in ['Male', 'Female']
+                        )
+                        && (
+                          !request.resource.data.keys().hasAny(['maritalStatus'])
+                          || request.resource.data.maritalStatus == null
+                          || request.resource.data.maritalStatus in ['Married', 'Unmarried']
+                        )
+                        && (
+                          !request.resource.data.keys().hasAny(['nidFrontUrl'])
+                          || request.resource.data.nidFrontUrl == null
+                          || (request.resource.data.nidFrontUrl is string && request.resource.data.nidFrontUrl.size() <= 2048)
+                        )
+                        && (
+                          !request.resource.data.keys().hasAny(['nidBackUrl'])
+                          || request.resource.data.nidBackUrl == null
+                          || (request.resource.data.nidBackUrl is string && request.resource.data.nidBackUrl.size() <= 2048)
+                        )
                       )
                       ||
                       // 2. Push Notification (FCM) device token updates
@@ -188,6 +224,26 @@ service cloud.firestore {
 
       allow delete: if false;
     }
+
+    // ============================================================
+    // HOUSE RULES (OWNER MANAGES, ACTIVE TENANTS READ)
+    // ============================================================
+
+       match /house_rules/{ownerId} {
+         allow get: if isAuthenticated();
+
+         allow list: if false;
+
+         allow create, update: if isAuthenticated()
+                               && request.auth.uid == ownerId
+                               && request.resource.data.ownerId == request.auth.uid
+                               && request.resource.data.rules is list
+                               && request.resource.data.rules.size() <= 50
+                               && request.resource.data.updatedAt is timestamp;
+
+         allow delete: if false;
+       }
+
 
     // ============================================================
     // PHONE LOOKUPS & PUBLIC IDS (NO LISTING ALLOWED)

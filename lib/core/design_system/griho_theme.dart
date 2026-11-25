@@ -1,5 +1,6 @@
 // noinspection SpellCheckingInspection
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'griho_colors.dart';
@@ -11,21 +12,21 @@ abstract final class GrihoTheme {
 
     return jakarta
         .apply(
-          bodyColor: textColor,
-          displayColor: textColor,
-          fontFamilyFallback: [?banglaFallback],
-        )
+      bodyColor: textColor,
+      displayColor: textColor,
+      fontFamilyFallback: [?banglaFallback],
+    )
         .copyWith(
-          headlineSmall: jakarta.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-          ),
-          titleLarge: jakarta.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-          titleMedium: jakarta.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-          bodyMedium: jakarta.bodyMedium?.copyWith(height: 1.4),
-        );
+      headlineSmall: jakarta.headlineSmall?.copyWith(
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.5,
+      ),
+      titleLarge: jakarta.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+      titleMedium: jakarta.titleMedium?.copyWith(
+        fontWeight: FontWeight.w700,
+      ),
+      bodyMedium: jakarta.bodyMedium?.copyWith(height: 1.4),
+    );
   }
 
   // ==========================================================================
@@ -45,47 +46,65 @@ abstract final class GrihoTheme {
       secondaryContainer: GrihoColors.mintWhisper,
       onSecondaryContainer: GrihoColors.deepTeal,
       tertiary: GrihoColors.emerald,
-      surface: GrihoColors.background,
+      surface: GrihoColors.mintWhisper,
       onSurface: GrihoColors.textPrimary,
       onSurfaceVariant: GrihoColors.textSecondary,
       surfaceContainerLow: GrihoColors.surfaceCard,
       surfaceContainerHighest: GrihoColors.mintWhisper,
-      outlineVariant: GrihoColors.borderLight,
+      outlineVariant: GrihoColors.softMint,
       error: GrihoColors.error,
     );
 
     return base.copyWith(
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: GrihoColors.background,
+      scaffoldBackgroundColor: GrihoColors.mintWhisper,
       textTheme: _buildTextTheme(base.textTheme, GrihoColors.textPrimary),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
-        foregroundColor: GrihoColors.deepTeal,
+        backgroundColor: GrihoColors.deepTeal,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 19,
+          fontWeight: FontWeight.w800,
+        ),
+        iconTheme: IconThemeData(color: Colors.white),
+      ),
+      dividerTheme: DividerThemeData(
+        color: GrihoColors.softMint.withValues(alpha: 0.75),
+        thickness: 1,
       ),
       cardTheme: CardThemeData(
         color: GrihoColors.surfaceCard,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: GrihoColors.borderLight),
+          side: const BorderSide(color: GrihoColors.softMint),
         ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: GrihoColors.surfaceCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: GrihoColors.softMint),
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: GrihoColors.surfaceCard,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: GrihoColors.deepTeal,
+          backgroundColor: GrihoColors.emerald,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
@@ -97,7 +116,8 @@ abstract final class GrihoTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: GrihoColors.deepTeal,
-          side: const BorderSide(color: GrihoColors.deepTeal, width: 1.2),
+          backgroundColor: GrihoColors.mintWhisper.withValues(alpha: 0.5),
+          side: const BorderSide(color: GrihoColors.emerald, width: 1.3),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -105,20 +125,41 @@ abstract final class GrihoTheme {
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
         ),
       ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+              ? Colors.white
+              : GrihoColors.textSecondary,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+              ? GrihoColors.emerald
+              : GrihoColors.softMint.withValues(alpha: 0.5),
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+              ? GrihoColors.emerald
+              : Colors.transparent,
+        ),
+        side: const BorderSide(color: GrihoColors.emerald, width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: GrihoColors.mintWhisper.withValues(alpha: 0.45),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 15,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: GrihoColors.borderLight),
+          borderSide: const BorderSide(color: GrihoColors.softMint),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: GrihoColors.borderLight),
+          borderSide: const BorderSide(color: GrihoColors.softMint),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -162,14 +203,23 @@ abstract final class GrihoTheme {
       scaffoldBackgroundColor: GrihoColors.darkSurface,
       textTheme: _buildTextTheme(base.textTheme, Colors.white),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
+        backgroundColor: GrihoColors.darkCard,
         foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 19,
+          fontWeight: FontWeight.w800,
+        ),
       ),
+      dividerTheme: const DividerThemeData(color: darkBorder, thickness: 1),
       cardTheme: CardThemeData(
         color: GrihoColors.darkCard,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
@@ -178,10 +228,15 @@ abstract final class GrihoTheme {
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: GrihoColors.darkCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: darkBorder),
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: GrihoColors.darkCard,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),

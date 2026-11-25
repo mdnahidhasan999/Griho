@@ -11,12 +11,12 @@ class ImageCompressionHelper {
 
   /// ছবিকে কম্প্রেস করে (ডিফল্ট ৫০ KB-এর মধ্যে) রিটার্ন করবে।
   static Future<File?> compressImage(
-      File file, {
-        int maxSizeKb = 50,
-        int initialQuality = 70,
-        int minWidth = 600,
-        int minHeight = 600,
-      }) async {
+    File file, {
+    int maxSizeKb = 50,
+    int initialQuality = 70,
+    int minWidth = 600,
+    int minHeight = 600,
+  }) async {
     File? firstPassFile;
     try {
       final dir = await getTemporaryDirectory();

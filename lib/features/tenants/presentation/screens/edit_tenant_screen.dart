@@ -95,11 +95,11 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
     // Skip Firestore write if nothing changed.
     final unchanged =
         property.id == widget.tenant.propertyId &&
-            unit.id == widget.tenant.unitId &&
-            name == widget.tenant.name.trim() &&
-            phone == widget.tenant.phone.trim() &&
-            email == (widget.tenant.email?.trim() ?? '') &&
-            nid == (widget.tenant.nidNumber?.trim() ?? '');
+        unit.id == widget.tenant.unitId &&
+        name == widget.tenant.name.trim() &&
+        phone == widget.tenant.phone.trim() &&
+        email == (widget.tenant.email?.trim() ?? '') &&
+        nid == (widget.tenant.nidNumber?.trim() ?? '');
 
     if (unchanged) {
       GrihoFeedback.showInfo(context, 'No changes to save.');
@@ -181,11 +181,11 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                 properties
                     .where(
                       (p) =>
-                  p.id ==
-                      (_selectedProperty?.id ?? widget.tenant.propertyId),
-                )
+                          p.id ==
+                          (_selectedProperty?.id ?? widget.tenant.propertyId),
+                    )
                     .firstOrNull ??
-                    properties.first;
+                properties.first;
 
             _selectedProperty ??= initialProperty;
 
@@ -238,11 +238,11 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                           onChanged: (tenantState.isLoading || _isActive)
                               ? null
                               : (property) {
-                            setState(() {
-                              _selectedProperty = property;
-                              _selectedUnit = null;
-                            });
-                          },
+                                  setState(() {
+                                    _selectedProperty = property;
+                                    _selectedUnit = null;
+                                  });
+                                },
                           validator: (value) {
                             if (value == null) {
                               return 'Please select a property.';
@@ -271,10 +271,10 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                             final initialUnit = units
                                 .where(
                                   (u) =>
-                              u.id ==
-                                  (_selectedUnit?.id ??
-                                      widget.tenant.unitId),
-                            )
+                                      u.id ==
+                                      (_selectedUnit?.id ??
+                                          widget.tenant.unitId),
+                                )
                                 .firstOrNull;
 
                             _selectedUnit ??= initialUnit;
@@ -303,7 +303,7 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                               onChanged: (tenantState.isLoading || _isActive)
                                   ? null
                                   : (unit) =>
-                                  setState(() => _selectedUnit = unit),
+                                        setState(() => _selectedUnit = unit),
                               validator: (value) {
                                 if (value == null) {
                                   return 'Please select a unit.';
@@ -340,7 +340,7 @@ class _EditTenantScreenState extends ConsumerState<EditTenantScreen> {
                           ),
                           textInputAction: TextInputAction.next,
                           onChanged: (phone) =>
-                          _phoneNumber = phone.completeNumber,
+                              _phoneNumber = phone.completeNumber,
                           validator: (phone) {
                             if (phone == null ||
                                 phone.completeNumber.trim().isEmpty) {

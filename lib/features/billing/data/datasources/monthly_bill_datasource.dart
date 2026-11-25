@@ -14,7 +14,7 @@ class MonthlyBillDataSource {
   final FirebaseFirestore _firestore;
 
   MonthlyBillDataSource({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collectionName = 'monthlyBills';
   static const String _rentCollectionName = 'monthlyRents';
@@ -140,7 +140,7 @@ class MonthlyBillDataSource {
 
       final canOverrideFixedWithVariable =
           existing.valueType == BillingValueType.fixed &&
-              request.valueType == BillingValueType.variable;
+          request.valueType == BillingValueType.variable;
 
       if (!canOverrideFixedWithVariable) {
         throw StateError(
@@ -287,9 +287,9 @@ class MonthlyBillDataSource {
           .where('unitId', isEqualTo: normalizedUnitId)
           .where('tenantId', isEqualTo: normalizedTenantId)
           .where(
-        'billingPeriodStart',
-        isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
-      )
+            'billingPeriodStart',
+            isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
+          )
           .limit(1)
           .get();
 
@@ -307,9 +307,9 @@ class MonthlyBillDataSource {
         .where('unitId', isEqualTo: normalizedUnitId)
         .where('tenantId', isEqualTo: normalizedTenantId)
         .where(
-      'billingPeriodStart',
-      isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
-    )
+          'billingPeriodStart',
+          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
+        )
         .where('type', isEqualTo: type.name)
         .limit(1)
         .get();
@@ -372,9 +372,9 @@ class MonthlyBillDataSource {
     final snapshot = await _rentCollection
         .where('tenantUserId', isEqualTo: normalizedTenantUserId)
         .where(
-      'billingPeriodStart',
-      isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
-    )
+          'billingPeriodStart',
+          isEqualTo: Timestamp.fromDate(normalizedPeriodStart),
+        )
         .limit(20)
         .get();
 

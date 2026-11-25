@@ -90,10 +90,10 @@ class MonthlyInvoicePdfData {
 class PdfReceiptService {
   PdfReceiptService._();
 
-  static const _brandEmerald = PdfColor.fromInt(0xFF059669);
-  static const _brandDark = PdfColor.fromInt(0xFF0F172A);
-  static const _lightSurface = PdfColor.fromInt(0xFFF8FAFC);
-  static const _borderColor = PdfColor.fromInt(0xFFE2E8F0);
+  static const _brandEmerald = PdfColor.fromInt(0xFF4EA674);
+  static const _brandDark = PdfColor.fromInt(0xFF023337);
+  static const _lightSurface = PdfColor.fromInt(0xFFE9F8E7);
+  static const _borderColor = PdfColor.fromInt(0xFFC0E6B9);
 
   static final NumberFormat _currencyFmt = NumberFormat('#,##0.00', 'en_US');
   static final DateFormat _dateFmt = DateFormat('dd MMM yyyy, hh:mm a');
@@ -138,7 +138,7 @@ class PdfReceiptService {
         footer: (context) => _buildFooter(
           context,
           leftText:
-              'Computer-generated receipt via Griho • No signature required.',
+          'Computer-generated receipt via Griho • No signature required.',
         ),
         build: (context) => [
           _buildTopBanner(
@@ -157,7 +157,7 @@ class PdfReceiptService {
               ),
               pw.Text(
                 'Method: ${data.paymentMethod.toUpperCase()}'
-                '${(data.referenceNumber != null && data.referenceNumber!.trim().isNotEmpty) ? '  |  Ref: ${data.referenceNumber!.trim()}' : ''}',
+                    '${(data.referenceNumber != null && data.referenceNumber!.trim().isNotEmpty) ? '  |  Ref: ${data.referenceNumber!.trim()}' : ''}',
                 style: const pw.TextStyle(
                   fontSize: 9.5,
                   fontWeight: pw.FontWeight.bold,
@@ -510,9 +510,7 @@ class PdfReceiptService {
       decoration: pw.BoxDecoration(
         color: _brandDark,
         borderRadius: pw.BorderRadius.circular(12),
-        border: const pw.Border(
-          bottom: pw.BorderSide(color: _brandEmerald, width: 3),
-        ),
+        border: pw.Border.all(color: _brandEmerald, width: 1.5),
       ),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -725,10 +723,10 @@ class PdfReceiptService {
   }
 
   static pw.Widget _cell(
-    String text, {
-    bool isHeader = false,
-    pw.TextAlign align = pw.TextAlign.left,
-  }) {
+      String text, {
+        bool isHeader = false,
+        pw.TextAlign align = pw.TextAlign.left,
+      }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: pw.Text(
@@ -744,11 +742,11 @@ class PdfReceiptService {
   }
 
   static pw.Widget _totalRow(
-    String label,
-    String value, {
-    bool bold = false,
-    PdfColor? valueColor,
-  }) {
+      String label,
+      String value, {
+        bool bold = false,
+        PdfColor? valueColor,
+      }) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
@@ -789,9 +787,9 @@ class PdfReceiptService {
   }
 
   static pw.Widget _buildFooter(
-    pw.Context context, {
-    required String leftText,
-  }) {
+      pw.Context context, {
+        required String leftText,
+      }) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(top: 14),
       padding: const pw.EdgeInsets.only(top: 8),

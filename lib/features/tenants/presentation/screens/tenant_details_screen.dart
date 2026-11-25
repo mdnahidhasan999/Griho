@@ -78,7 +78,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
           title: const Text('End Current Tenancy?'),
           content: Text(
             'Are you sure you want to end the active tenancy of "${tenant.name}"?\n\n'
-                'The resident will be marked as inactive and the assigned unit will immediately become vacant and available.',
+            'The resident will be marked as inactive and the assigned unit will immediately become vacant and available.',
           ),
           actions: [
             TextButton(
@@ -165,7 +165,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
           title: const Text('Delete Resident Record?'),
           content: Text(
             'Are you sure you want to permanently delete "${tenant.name}"?\n\n'
-                'This action cannot be undone and will detach all associated history.',
+            'This action cannot be undone and will detach all associated history.',
           ),
           actions: [
             TextButton(
@@ -270,7 +270,7 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
     final isActive = tenant.status == TenantStatus.active;
     final canStartNewTenancy =
         tenant.status == TenantStatus.inactive &&
-            tenant.accountStatus == TenantAccountStatus.registered;
+        tenant.accountStatus == TenantAccountStatus.registered;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -282,31 +282,31 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             onPressed: tenantState.isLoading
                 ? null
                 : () async {
-              final result = await context.push<Tenant>(
-                RouteNames.editTenant.replaceFirst(
-                  ':tenantId',
-                  tenant.id,
-                ),
-                extra: tenant,
-              );
+                    final result = await context.push<Tenant>(
+                      RouteNames.editTenant.replaceFirst(
+                        ':tenantId',
+                        tenant.id,
+                      ),
+                      extra: tenant,
+                    );
 
-              if (!context.mounted || result == null) {
-                return;
-              }
+                    if (!context.mounted || result == null) {
+                      return;
+                    }
 
-              setState(() => _tenant = result);
+                    setState(() => _tenant = result);
 
-              ref.invalidate(ownerTenantsProvider);
-              ref.invalidate(propertyTenantsProvider(result.propertyId));
-              ref.invalidate(propertyByIdProvider(result.propertyId));
-              ref.invalidate(unitByIdProvider(result.unitId));
-              ref.invalidate(
-                tenantHistoryProvider((
-                tenantId: result.id,
-                ownerId: result.ownerId,
-                )),
-              );
-            },
+                    ref.invalidate(ownerTenantsProvider);
+                    ref.invalidate(propertyTenantsProvider(result.propertyId));
+                    ref.invalidate(propertyByIdProvider(result.propertyId));
+                    ref.invalidate(unitByIdProvider(result.unitId));
+                    ref.invalidate(
+                      tenantHistoryProvider((
+                        tenantId: result.id,
+                        ownerId: result.ownerId,
+                      )),
+                    );
+                  },
             icon: const Icon(Iconsax.edit_2),
           ),
           IconButton(
@@ -324,8 +324,8 @@ class _TenantDetailsScreenState extends ConsumerState<TenantDetailsScreen> {
             if (currentTenant != null) {
               ref.invalidate(
                 tenantHistoryProvider((
-                tenantId: currentTenant.id,
-                ownerId: currentTenant.ownerId,
+                  tenantId: currentTenant.id,
+                  ownerId: currentTenant.ownerId,
                 )),
               );
             }
@@ -626,7 +626,7 @@ class _ActiveTenancyActionCard extends StatelessWidget {
     return GrihoSectionCard(
       title: 'End Active Lease',
       subtitle:
-      'Concluding this tenancy will finalize occupancy records and mark the assigned unit available.',
+          'Concluding this tenancy will finalize occupancy records and mark the assigned unit available.',
       icon: Iconsax.logout,
       children: [
         SizedBox(
@@ -664,7 +664,7 @@ class _NewTenancyActionCard extends StatelessWidget {
     return GrihoSectionCard(
       title: 'Initiate New Tenancy',
       subtitle:
-      'This resident is currently inactive. Assign them to a vacant apartment and establish recurring rent terms.',
+          'This resident is currently inactive. Assign them to a vacant apartment and establish recurring rent terms.',
       icon: Iconsax.building_4,
       children: [
         GrihoPrimaryButton(
@@ -809,17 +809,17 @@ class _DetailRow extends StatelessWidget {
         Expanded(
           child: isSelectable
               ? SelectableText(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          )
+                  value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                )
               : Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+                  value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
         ),
       ],
     );

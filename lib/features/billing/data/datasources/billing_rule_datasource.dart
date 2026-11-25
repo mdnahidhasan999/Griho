@@ -14,8 +14,8 @@ class BillingRuleDataSource {
   final FirebaseAuth _auth;
 
   BillingRuleDataSource({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   static const String _collectionName = 'billingRules';
   static const String _managerAccessCollection = 'managerAccess';
@@ -98,18 +98,18 @@ class BillingRuleDataSource {
 
     final previousFixedRule = request.valueType == BillingValueType.fixed
         ? _findPreviousRule(
-      rules: relatedRules,
-      effectiveFrom: effectiveFrom,
-      valueType: BillingValueType.fixed,
-    )
+            rules: relatedRules,
+            effectiveFrom: effectiveFrom,
+            valueType: BillingValueType.fixed,
+          )
         : null;
 
     final nextFixedRule = request.valueType == BillingValueType.fixed
         ? _findNextRule(
-      rules: relatedRules,
-      effectiveFrom: effectiveFrom,
-      valueType: BillingValueType.fixed,
-    )
+            rules: relatedRules,
+            effectiveFrom: effectiveFrom,
+            valueType: BillingValueType.fixed,
+          )
         : null;
 
     final now = DateTime.now();
@@ -300,14 +300,14 @@ class BillingRuleDataSource {
     if (request.chargeType != existingRule.chargeType) {
       throw StateError(
         'Charge Type cannot be changed on an existing billing rule. '
-            'Create a new billing rule instead.',
+        'Create a new billing rule instead.',
       );
     }
 
     if (request.valueType != existingRule.valueType) {
       throw StateError(
         'Value Type cannot be changed on an existing billing rule. '
-            'Create a new billing rule instead.',
+        'Create a new billing rule instead.',
       );
     }
 
@@ -400,20 +400,20 @@ class BillingRuleDataSource {
 
     final previousFixedRule = existingRule.valueType == BillingValueType.fixed
         ? _findPreviousRule(
-      rules: relatedRules,
-      effectiveFrom: effectiveFrom,
-      valueType: BillingValueType.fixed,
-      ignoredRuleId: existingRule.id,
-    )
+            rules: relatedRules,
+            effectiveFrom: effectiveFrom,
+            valueType: BillingValueType.fixed,
+            ignoredRuleId: existingRule.id,
+          )
         : null;
 
     final nextFixedRule = existingRule.valueType == BillingValueType.fixed
         ? _findNextRule(
-      rules: relatedRules,
-      effectiveFrom: effectiveFrom,
-      valueType: BillingValueType.fixed,
-      ignoredRuleId: existingRule.id,
-    )
+            rules: relatedRules,
+            effectiveFrom: effectiveFrom,
+            valueType: BillingValueType.fixed,
+            ignoredRuleId: existingRule.id,
+          )
         : null;
 
     final now = DateTime.now();
@@ -642,9 +642,9 @@ class BillingRuleDataSource {
   }
 
   bool _shouldClosePreviousRule(
-      BillingRuleModel previousRule,
-      DateTime newEffectiveFrom,
-      ) {
+    BillingRuleModel previousRule,
+    DateTime newEffectiveFrom,
+  ) {
     if (previousRule.valueType != BillingValueType.fixed) {
       return false;
     }
@@ -707,9 +707,9 @@ class BillingRuleDataSource {
     final fixedRules = rules
         .where(
           (rule) =>
-      rule.valueType == BillingValueType.fixed &&
-          (ignoredRuleId == null || rule.id != ignoredRuleId),
-    )
+              rule.valueType == BillingValueType.fixed &&
+              (ignoredRuleId == null || rule.id != ignoredRuleId),
+        )
         .toList();
 
     final previousFixedRule = _findPreviousRule(
@@ -759,10 +759,10 @@ class BillingRuleDataSource {
   }
 
   void _validatePreviousRuleStillMatches(
-      BillingRuleModel current,
-      BillingRuleModel expected,
-      DateTime newEffectiveFrom,
-      ) {
+    BillingRuleModel current,
+    BillingRuleModel expected,
+    DateTime newEffectiveFrom,
+  ) {
     if (current.id != expected.id ||
         !current.effectiveFrom.isAtSameMomentAs(expected.effectiveFrom)) {
       throw StateError(

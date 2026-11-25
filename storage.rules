@@ -1,37 +1,61 @@
 rules_version = '2';
-
 service firebase.storage {
   match /b/{bucket}/o {
-
-    function isAuthenticated() {
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isValidImage() {
+    function validImage() {
       return request.resource.size < 5 * 1024 * 1024
-             && request.resource.contentType.matches('image/.*');
+          && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
-    // 1. User Profile Photos (Only owner of profile can upload; authenticated users can read)
+    function property(propertyId) {
+      return firestore.get(
+        /databases/(default)/documents/properties/$(propertyId)
+      );
+    }
+
+    function isOwner(propertyId) {
+      return signedIn() && property(propertyId).data.ownerId == request.auth.uid;
+    }
+
+    function isManager(propertyId) {
+      return signedIn()
+          && firestore.exists(
+            /databases/(default)/documents/managerAccess/
+            $(request.auth.uid + '_' + propertyId)
+          );
+    }
+
+    function isTenant(propertyId) {
+      return signedIn()
+          && firestore.exists(
+            /databases/(default)/documents/tenantAccess/$(request.auth.uid)
+          )
+          && firestore.get(
+            /databases/(default)/documents/tenantAccess/$(request.auth.uid)
+          ).data.propertyId == propertyId;
+    }
+
+    function canManage(propertyId) {
+      return isOwner(propertyId) || isManager(propertyId);
+    }
+
     match /users/{userId}/profile/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated()
-                   && request.auth.uid == userId
-                   && isValidImage();
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if signedIn() && request.auth.uid == userId && validImage();
     }
 
-    // 2. Tenant Documents & NID (Scoped to owner/manager & the tenant)
     match /properties/{propertyId}/tenants/{tenantId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated()
-                   && isValidImage();
+      allow read: if canManage(propertyId) || isTenant(propertyId);
+      allow write: if canManage(propertyId) && validImage();
     }
 
-    // 3. Payment Proof / Receipt Screenshots
     match /properties/{propertyId}/payments/{paymentId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated()
-                   && isValidImage();
+      allow read: if canManage(propertyId) || isTenant(propertyId);
+      allow write: if (canManage(propertyId) || isTenant(propertyId))
+          && validImage();
     }
   }
 }

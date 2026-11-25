@@ -1,9 +1,9 @@
 // noinspection SpellCheckingInspection
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,6 +15,7 @@ import '../../../auth/presentation/providers/auth_controller.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../invitations/presentation/providers/work_invitations_providers.dart';
 import '../widgets/more_menu_item.dart';
+import 'profile_hub_screen.dart';
 
 /// Cached effective roles provider — avoids querying Firestore on every MoreScreen rebuild.
 final effectiveUserRolesProvider = FutureProvider<List<String>>((ref) async {
@@ -64,6 +65,25 @@ final effectiveUserRolesProvider = FutureProvider<List<String>>((ref) async {
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
 
+  Future<void> _refresh(WidgetRef ref) async {
+    ref.invalidate(currentUserProfileProvider);
+    ref.invalidate(effectiveUserRolesProvider);
+    ref.invalidate(pendingWorkInvitationsProvider);
+    await ref.read(currentUserProfileProvider.future);
+  }
+
+  void _openProfileHub(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ProfileHubScreen()));
+  }
+
+  void _copyPublicId(BuildContext context, String publicId) {
+    if (publicId.trim().isEmpty) return;
+    Clipboard.setData(ClipboardData(text: publicId));
+    GrihoFeedback.showSuccess(context, 'Griho ID copied to clipboard.');
+  }
+
   Future<void> _activateOwnerRole(
       BuildContext context,
       WidgetRef ref,
@@ -103,6 +123,7 @@ class MoreScreen extends ConsumerWidget {
       });
 
       ref.invalidate(currentUserProfileProvider);
+      ref.invalidate(effectiveUserRolesProvider);
 
       if (!context.mounted) {
         return;
@@ -126,10 +147,23 @@ class MoreScreen extends ConsumerWidget {
     final profileAsync = ref.watch(currentUserProfileProvider);
     final effectiveRolesAsync = ref.watch(effectiveUserRolesProvider);
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       extendBody: true,
-      appBar: AppBar(title: const Text('More')),
+      backgroundColor: isDark
+          ? GrihoColors.darkSurface
+          : GrihoColors.mintWhisper,
+      appBar: AppBar(
+        backgroundColor: isDark ? GrihoColors.darkCard : GrihoColors.deepTeal,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        title: const Text(
+          'More',
+          style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+        ),
+      ),
       body: profileAsync.when(
         loading: () => const GrihoLoadingView(message: 'Loading account...'),
         error: (_, _) => Center(
@@ -166,186 +200,384 @@ class MoreScreen extends ConsumerWidget {
                   effectiveRoles.contains('owner') ||
                   effectiveRoles.contains('manager');
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      _ProfileAvatar(
-                        name: profile.name,
-                        photoUrl: profile.photoUrl,
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              profile.name,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(profile.publicId),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Active Console: ${_roleLabel(profile.defaultDashboard)}',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
+          final profileSubtitle = switch (profile.defaultDashboard) {
+            'owner' => 'Edit profile & manage house rules',
+            'tenant' => 'Edit profile & view house rules',
+            _ => 'Personal info & verified details',
+          };
+
+          return RefreshIndicator(
+            color: GrihoColors.emerald,
+            onRefresh: () => _refresh(ref),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+              children: [
+                // Profile Hero Card (Deep Teal + Emerald + Soft Mint)
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    gradient: const LinearGradient(
+                      colors: [GrihoColors.deepTeal, Color(0xFF064C50)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: GrihoColors.deepTeal.withValues(alpha: 0.22),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                ),
-              ),
-              if (!effectiveRoles.contains('owner'))
-                Padding(
-                  padding: const EdgeInsets.only(top: 14, bottom: 2),
+                  clipBehavior: Clip.antiAlias,
                   child: Material(
-                    color: theme.colorScheme.primaryContainer.withValues(
-                      alpha: 0.45,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _openProfileHub(context),
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            right: -24,
+                            top: -24,
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: GrihoColors.emerald.withValues(
+                                  alpha: 0.22,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(2.5),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: GrihoColors.softMint,
+                                  ),
+                                  child: _ProfileAvatar(
+                                    name: profile.name,
+                                    photoUrl: profile.photoUrl,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        profile.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            profile.publicId,
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              color:
+                                              GrihoColors.mintWhisper,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          InkWell(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            onTap: () => _copyPublicId(
+                                              context,
+                                              profile.publicId,
+                                            ),
+                                            child: const Padding(
+                                              padding: EdgeInsets.all(4),
+                                              child: Icon(
+                                                Iconsax.copy,
+                                                size: 14,
+                                                color: GrihoColors.softMint,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: GrihoColors.emerald.withValues(
+                                            alpha: 0.28,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          border: Border.all(
+                                            color: GrihoColors.softMint
+                                                .withValues(alpha: 0.5),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Active Console: ${_roleLabel(profile.defaultDashboard)}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: GrihoColors.mintWhisper,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Iconsax.arrow_right_3,
+                                    size: 16,
+                                    color: GrihoColors.softMint,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: theme.colorScheme.primary,
-                        child: Icon(
-                          Iconsax.home_hashtag,
-                          color: theme.colorScheme.onPrimary,
-                          size: 20,
-                        ),
-                      ),
-                      title: const Text(
-                        'Become a Property Owner',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: const Text(
-                        'Register your own buildings & manage tenants',
-                      ),
-                      trailing: const Icon(Iconsax.arrow_right_3, size: 18),
-                      onTap: () =>
-                          _activateOwnerRole(context, ref, profile.uid),
                     ),
                   ),
                 ),
-              const SizedBox(height: 20),
-              Text('Account', style: theme.textTheme.titleSmall),
-              MoreMenuItem(
-                icon: Iconsax.user,
-                title: 'Profile',
-                subtitle: 'View and edit your profile',
-                onTap: () =>
-                    context.push(RouteNames.editProfile, extra: profile),
-              ),
-              MoreMenuItem(
-                icon: Iconsax.lock,
-                title: 'Change Password',
-                subtitle: 'Update your account password',
-                onTap: () => context.push(RouteNames.changePassword),
-              ),
-              MoreMenuItem(
-                icon: Iconsax.home_2,
-                title: 'Default Account',
-                subtitle: 'Choose your default dashboard',
-                onTap: () {
-                  _showDefaultAccountDialog(
-                    context,
-                    ref,
-                    profile.uid,
-                    effectiveRoles,
-                    profile.defaultDashboard,
-                  );
-                },
-              ),
-              if (effectiveRoles.length > 1)
-                MoreMenuItem(
-                  icon: Iconsax.arrange_square,
-                  title: 'Switch Account Console',
-                  subtitle:
-                  'Switch between your Owner, Manager, Staff & Resident views',
-                  onTap: () {
-                    _showSwitchAccountDialog(
-                      context,
-                      ref,
-                      profile.uid,
-                      effectiveRoles,
-                      profile.defaultDashboard,
-                    );
-                  },
+
+                // Become Owner Banner (Soft Mint + Emerald + Deep Teal)
+                if (!effectiveRoles.contains('owner'))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: Material(
+                      color: isDark
+                          ? GrihoColors.darkCard
+                          : GrihoColors.softMint.withValues(alpha: 0.55),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(
+                          color: GrihoColors.emerald,
+                          width: 1.2,
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: GrihoColors.deepTeal,
+                          child: Icon(
+                            Iconsax.home_hashtag,
+                            color: GrihoColors.softMint,
+                            size: 20,
+                          ),
+                        ),
+                        title: Text(
+                          'Become a Property Owner',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: isDark
+                                ? Colors.white
+                                : GrihoColors.deepTeal,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Register your own buildings & manage tenants',
+                          style: TextStyle(
+                            color: isDark
+                                ? GrihoColors.mintWhisper
+                                : GrihoColors.textSecondary,
+                          ),
+                        ),
+                        trailing: const Icon(
+                          Iconsax.arrow_right_3,
+                          size: 18,
+                          color: GrihoColors.emerald,
+                        ),
+                        onTap: () =>
+                            _activateOwnerRole(context, ref, profile.uid),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 18),
+
+                // 1. Account Section
+                GrihoSectionCard(
+                  title: 'Account',
+                  icon: Iconsax.user,
+                  children: [
+                    MoreMenuItem(
+                      icon: Iconsax.user_edit,
+                      title: 'Profile',
+                      subtitle: profileSubtitle,
+                      onTap: () => _openProfileHub(context),
+                    ),
+                    const Divider(height: 1),
+                    MoreMenuItem(
+                      icon: Iconsax.lock,
+                      title: 'Change Password',
+                      subtitle: 'Update your account password',
+                      onTap: () => context.push(RouteNames.changePassword),
+                    ),
+                    const Divider(height: 1),
+                    MoreMenuItem(
+                      icon: Iconsax.home_2,
+                      title: 'Default Account',
+                      subtitle: 'Choose your default dashboard',
+                      onTap: () {
+                        _showDefaultAccountDialog(
+                          context,
+                          ref,
+                          profile.uid,
+                          effectiveRoles,
+                          profile.defaultDashboard,
+                        );
+                      },
+                    ),
+                    if (effectiveRoles.length > 1) ...[
+                      const Divider(height: 1),
+                      MoreMenuItem(
+                        icon: Iconsax.arrange_square,
+                        title: 'Switch Account Console',
+                        subtitle:
+                        'Switch between your Owner, Manager, Staff & Resident views',
+                        onTap: () {
+                          _showSwitchAccountDialog(
+                            context,
+                            ref,
+                            profile.uid,
+                            effectiveRoles,
+                            profile.defaultDashboard,
+                          );
+                        },
+                      ),
+                    ],
+                  ],
                 ),
-              const Divider(height: 32),
-              Text('Activities & Audit', style: theme.textTheme.titleSmall),
-              if (isOwnerOrManager)
-                MoreMenuItem(
+
+                const SizedBox(height: 16),
+
+                // 2. Activities & Invitations Section
+                GrihoSectionCard(
+                  title: 'Activities & Invitations',
                   icon: Iconsax.document_text,
-                  title: 'Activity & Audit Trail',
-                  subtitle: 'Track manager actions, rent changes & billing logs',
-                  onTap: () => context.push(RouteNames.activityLogs),
+                  children: [
+                    if (isOwnerOrManager) ...[
+                      MoreMenuItem(
+                        icon: Iconsax.document_text,
+                        title: 'Activity & Audit Trail',
+                        subtitle:
+                        'Track manager actions, rent changes & billing logs',
+                        onTap: () => context.push(RouteNames.activityLogs),
+                      ),
+                      const Divider(height: 1),
+                    ],
+                    if (effectiveRoles.contains('owner')) ...[
+                      MoreMenuItem(
+                        icon: Iconsax.people,
+                        title: 'Team & Work Orders',
+                        subtitle: 'Managers, caretakers, electricians & tasks',
+                        onTap: () => context.push(RouteNames.ownerTeam),
+                      ),
+                      const Divider(height: 1),
+                    ],
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final count =
+                            ref
+                                .watch(pendingWorkInvitationsProvider)
+                                .value
+                                ?.length ??
+                                0;
+                        return MoreMenuItem(
+                          icon: Iconsax.briefcase,
+                          title: count > 0
+                              ? 'Work Invitations ($count new)'
+                              : 'Work Invitations',
+                          subtitle:
+                          'Manager, caretaker & electrician offers from owners',
+                          onTap: () async {
+                            await context.push(RouteNames.myInvitations);
+                            ref.invalidate(pendingWorkInvitationsProvider);
+                          },
+                        );
+                      },
+                    ),
+                    const Divider(height: 1),
+                    MoreMenuItem(
+                      icon: Iconsax.sms,
+                      title: 'Tenancy Invitations',
+                      subtitle: 'View your residential invitations',
+                      onTap: () => context.push(RouteNames.tenantInvitations),
+                    ),
+                  ],
                 ),
-              if (effectiveRoles.contains('owner'))
-                MoreMenuItem(
-                  icon: Iconsax.people,
-                  title: 'Team & Work Orders',
-                  subtitle: 'Managers, caretakers, electricians & tasks',
-                  onTap: () => context.push(RouteNames.ownerTeam),
+
+                const SizedBox(height: 16),
+
+                // 3. Preferences Section
+                GrihoSectionCard(
+                  title: 'Preferences',
+                  icon: Iconsax.setting_2,
+                  children: [
+                    MoreMenuItem(
+                      icon: Iconsax.setting_2,
+                      title: 'Settings',
+                      subtitle: 'App preferences & notifications',
+                      onTap: () => _showComingSoon(context, 'Settings'),
+                    ),
+                    const Divider(height: 1),
+                    MoreMenuItem(
+                      icon: Iconsax.message_question,
+                      title: 'Help & Support',
+                      subtitle: 'FAQs and customer support',
+                      onTap: () => _showComingSoon(context, 'Help & Support'),
+                    ),
+                  ],
                 ),
-              Consumer(
-                builder: (context, ref, _) {
-                  final count =
-                      ref.watch(pendingWorkInvitationsProvider).value?.length ??
-                          0;
-                  return MoreMenuItem(
-                    icon: Iconsax.briefcase,
-                    title: count > 0
-                        ? 'Work Invitations ($count new)'
-                        : 'Work Invitations',
-                    subtitle:
-                    'Manager, caretaker & electrician offers from owners',
-                    onTap: () async {
-                      await context.push(RouteNames.myInvitations);
-                      ref.invalidate(pendingWorkInvitationsProvider);
-                    },
-                  );
-                },
-              ),
-              MoreMenuItem(
-                icon: Iconsax.sms,
-                title: 'Tenancy Invitations',
-                subtitle: 'View your residential invitations',
-                onTap: () => context.push(RouteNames.tenantInvitations),
-              ),
-              const Divider(height: 32),
-              Text('Preferences', style: theme.textTheme.titleSmall),
-              MoreMenuItem(
-                icon: Iconsax.setting_2,
-                title: 'Settings',
-                onTap: () => _showComingSoon(context, 'Settings'),
-              ),
-              MoreMenuItem(
-                icon: Iconsax.message_question,
-                title: 'Help & Support',
-                onTap: () => _showComingSoon(context, 'Help & Support'),
-              ),
-              const Divider(height: 32),
-              MoreMenuItem(
-                icon: Iconsax.logout,
-                title: 'Logout',
-                subtitle: 'Sign out of your account',
-                isDestructive: true,
-                onTap: () => _confirmLogout(context, ref),
-              ),
-            ],
+
+                const SizedBox(height: 16),
+
+                // 4. Logout Card
+                Material(
+                  color: isDark ? GrihoColors.darkCard : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    side: BorderSide(
+                      color: GrihoColors.error.withValues(alpha: 0.4),
+                      width: 1.2,
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: MoreMenuItem(
+                    icon: Iconsax.logout,
+                    title: 'Logout',
+                    subtitle: 'Sign out of your account',
+                    isDestructive: true,
+                    onTap: () => _confirmLogout(context, ref),
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -445,16 +677,26 @@ class MoreScreen extends ConsumerWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: availableRoles.map((role) {
+              final isCurrent = role == currentRole;
               return ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 leading: Icon(
-                  role == currentRole
+                  isCurrent
                       ? Icons.radio_button_checked
                       : Icons.radio_button_unchecked,
+                  color: isCurrent ? GrihoColors.emerald : null,
                 ),
-                title: Text(_roleLabel(role)),
+                title: Text(
+                  _roleLabel(role),
+                  style: TextStyle(
+                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
                 onTap: () {
                   Navigator.of(dialogContext).pop();
-                  if (role != currentRole) {
+                  if (!isCurrent) {
                     _changeRole(
                       context,
                       ref,
@@ -522,6 +764,9 @@ class MoreScreen extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Logout'),
           ),
@@ -598,9 +843,19 @@ class _ProfileAvatarState extends State<_ProfileAvatar> {
 
     return CircleAvatar(
       radius: 28,
+      backgroundColor: GrihoColors.emerald.withValues(alpha: 0.25),
       backgroundImage: provider,
       child: provider == null
-          ? Text(widget.name.isNotEmpty ? widget.name[0].toUpperCase() : 'G')
+          ? Text(
+        widget.name.trim().isNotEmpty
+            ? widget.name.trim()[0].toUpperCase()
+            : 'G',
+        style: const TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          color: GrihoColors.mintWhisper,
+        ),
+      )
           : null,
     );
   }

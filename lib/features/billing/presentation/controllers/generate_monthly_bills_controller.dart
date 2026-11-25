@@ -7,10 +7,10 @@ import '../providers/monthly_bill_generation_provider.dart';
 import '../providers/monthly_bill_provider.dart';
 
 final generateMonthlyBillsControllerProvider =
-NotifierProvider<
-    GenerateMonthlyBillsController,
-    AsyncValue<List<MonthlyBill>>
->(GenerateMonthlyBillsController.new);
+    NotifierProvider<
+      GenerateMonthlyBillsController,
+      AsyncValue<List<MonthlyBill>>
+    >(GenerateMonthlyBillsController.new);
 
 class GenerateMonthlyBillsController
     extends Notifier<AsyncValue<List<MonthlyBill>>> {
@@ -44,15 +44,15 @@ class GenerateMonthlyBillsController
       if (bills.isNotEmpty) {
         ref.invalidate(
           monthlyBillsByPropertyAndPeriodProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
-          billingPeriodStart: billingPeriodStart,
+            ownerId: ownerId,
+            propertyId: propertyId,
+            billingPeriodStart: billingPeriodStart,
           )),
         );
         ref.invalidate(
           propertyMonthlyBillHistoryProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+            ownerId: ownerId,
+            propertyId: propertyId,
           )),
         );
       }

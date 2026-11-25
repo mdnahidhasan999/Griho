@@ -24,7 +24,7 @@ class FcmNotificationService {
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
-  FlutterLocalNotificationsPlugin();
+      FlutterLocalNotificationsPlugin();
 
   StreamSubscription<String>? _tokenRefreshSub;
   StreamSubscription<RemoteMessage>? _foregroundSub;
@@ -78,8 +78,8 @@ class FcmNotificationService {
 
       await _localNotifications
           .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-      >()
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.createNotificationChannel(_channel);
 
       await _messaging.setForegroundNotificationPresentationOptions(
@@ -141,9 +141,9 @@ class FcmNotificationService {
             .collection('users')
             .doc(user.uid)
             .update({
-          'fcmTokens': FieldValue.arrayRemove([token]),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+              'fcmTokens': FieldValue.arrayRemove([token]),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
       }
     } catch (_) {
     } finally {
@@ -175,7 +175,10 @@ class FcmNotificationService {
     final existing = List<String>.from(snap.data()?['fcmTokens'] ?? const []);
     if (!existing.contains(normalizedToken)) {
       if (existing.length >= 10) {
-        final trimmed = [...existing.skip(existing.length - 9), normalizedToken];
+        final trimmed = [
+          ...existing.skip(existing.length - 9),
+          normalizedToken,
+        ];
         await userRef.update({
           'fcmTokens': trimmed,
           'updatedAt': FieldValue.serverTimestamp(),

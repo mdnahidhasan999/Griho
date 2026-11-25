@@ -40,10 +40,10 @@ class AppBottomNavigation extends ConsumerWidget {
   }
 
   void _handleTap(
-      BuildContext context,
-      WidgetRef ref,
-      GrihoNavigationDestination destination,
-      ) {
+    BuildContext context,
+    WidgetRef ref,
+    GrihoNavigationDestination destination,
+  ) {
     if (destination == selectedDestination) {
       return;
     }
@@ -125,7 +125,7 @@ class AppBottomNavigation extends ConsumerWidget {
                     label: 'Home',
                     icon: Iconsax.home_2,
                     isSelected:
-                    selectedDestination == GrihoNavigationDestination.home,
+                        selectedDestination == GrihoNavigationDestination.home,
                     activeCapsuleBg: activeCapsuleBg,
                     activeFg: activeFg,
                     inactiveFg: inactiveFg,
@@ -139,7 +139,7 @@ class AppBottomNavigation extends ConsumerWidget {
                     label: 'Notices',
                     icon: Iconsax.notification,
                     isSelected:
-                    selectedDestination ==
+                        selectedDestination ==
                         GrihoNavigationDestination.notices,
                     activeCapsuleBg: activeCapsuleBg,
                     activeFg: activeFg,
@@ -155,12 +155,12 @@ class AppBottomNavigation extends ConsumerWidget {
                     builder: (context, badgeRef, _) {
                       final leaseCount = badgeRef.watch(
                         recipientPendingInvitationsProvider.select(
-                              (async) => async.value?.length ?? 0,
+                          (async) => async.value?.length ?? 0,
                         ),
                       );
                       final workCount = badgeRef.watch(
                         pendingWorkInvitationsProvider.select(
-                              (async) => async.value?.length ?? 0,
+                          (async) => async.value?.length ?? 0,
                         ),
                       );
                       return _FloatingNavItem(
@@ -168,7 +168,7 @@ class AppBottomNavigation extends ConsumerWidget {
                         icon: Iconsax.sms,
                         badgeCount: leaseCount + workCount,
                         isSelected:
-                        selectedDestination ==
+                            selectedDestination ==
                             GrihoNavigationDestination.invites,
                         activeCapsuleBg: activeCapsuleBg,
                         activeFg: activeFg,
@@ -185,7 +185,7 @@ class AppBottomNavigation extends ConsumerWidget {
                     label: 'More',
                     icon: Iconsax.category,
                     isSelected:
-                    selectedDestination == GrihoNavigationDestination.more,
+                        selectedDestination == GrihoNavigationDestination.more,
                     activeCapsuleBg: activeCapsuleBg,
                     activeFg: activeFg,
                     inactiveFg: inactiveFg,

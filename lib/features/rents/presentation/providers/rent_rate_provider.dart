@@ -47,8 +47,8 @@ final changePropertyRentProvider = Provider<ChangePropertyRent>((ref) {
 });
 
 final getRentRateApplicableAtProvider = Provider<GetRentRateApplicableAt>((
-    ref,
-    ) {
+  ref,
+) {
   return GetRentRateApplicableAt(
     repository: ref.read(rentRateRepositoryProvider),
   );
@@ -65,28 +65,28 @@ final getUnitRentRateHistoryProvider = Provider<GetUnitRentRateHistory>((ref) {
 });
 
 final getTenantRentRateHistoryProvider = Provider<GetTenantRentRateHistory>((
-    ref,
-    ) {
+  ref,
+) {
   return GetTenantRentRateHistory(
     repository: ref.read(rentRateRepositoryProvider),
   );
 });
 
 final currentRentRateProvider =
-FutureProvider.family<RentRate?, ({String unitId, String ownerId})>((
-    ref,
-    args,
+    FutureProvider.family<RentRate?, ({String unitId, String ownerId})>((
+      ref,
+      args,
     ) async {
-  return ref.read(getCurrentRentRateProvider)(
-    unitId: args.unitId,
-    ownerId: args.ownerId,
-  );
-});
+      return ref.read(getCurrentRentRateProvider)(
+        unitId: args.unitId,
+        ownerId: args.ownerId,
+      );
+    });
 
 final currentTenantRentRateProvider = FutureProvider.family<RentRate?, String>((
-    ref,
-    unitId,
-    ) async {
+  ref,
+  unitId,
+) async {
   final normalizedUnitId = unitId.trim();
   if (normalizedUnitId.isEmpty) {
     return null;
@@ -109,41 +109,41 @@ final currentTenantRentRateProvider = FutureProvider.family<RentRate?, String>((
 });
 
 final unitRentRateHistoryProvider =
-FutureProvider.family<List<RentRate>, ({String unitId, String ownerId})>((
-    ref,
-    args,
+    FutureProvider.family<List<RentRate>, ({String unitId, String ownerId})>((
+      ref,
+      args,
     ) async {
-  return ref.read(getUnitRentRateHistoryProvider)(
-    unitId: args.unitId,
-    ownerId: args.ownerId,
-  );
-});
+      return ref.read(getUnitRentRateHistoryProvider)(
+        unitId: args.unitId,
+        ownerId: args.ownerId,
+      );
+    });
 
 final tenantRentRateHistoryProvider =
-FutureProvider.family<
-    List<RentRate>,
-    ({String unitId, String ownerId, String tenantId})
->((ref, args) async {
-  return ref.read(getTenantRentRateHistoryProvider)(
-    unitId: args.unitId,
-    ownerId: args.ownerId,
-    tenantId: args.tenantId,
-  );
-});
+    FutureProvider.family<
+      List<RentRate>,
+      ({String unitId, String ownerId, String tenantId})
+    >((ref, args) async {
+      return ref.read(getTenantRentRateHistoryProvider)(
+        unitId: args.unitId,
+        ownerId: args.ownerId,
+        tenantId: args.tenantId,
+      );
+    });
 
 final rentRateControllerProvider =
-NotifierProvider<RentRateController, AsyncValue<void>>(
-  RentRateController.new,
-);
+    NotifierProvider<RentRateController, AsyncValue<void>>(
+      RentRateController.new,
+    );
 
 final rentRateApplicableAtProvider =
-FutureProvider.family<
-    RentRate?,
-    ({String unitId, String ownerId, DateTime effectiveAt})
->((ref, args) async {
-  return ref.read(getRentRateApplicableAtProvider)(
-    unitId: args.unitId,
-    ownerId: args.ownerId,
-    effectiveAt: args.effectiveAt,
-  );
-});
+    FutureProvider.family<
+      RentRate?,
+      ({String unitId, String ownerId, DateTime effectiveAt})
+    >((ref, args) async {
+      return ref.read(getRentRateApplicableAtProvider)(
+        unitId: args.unitId,
+        ownerId: args.ownerId,
+        effectiveAt: args.effectiveAt,
+      );
+    });

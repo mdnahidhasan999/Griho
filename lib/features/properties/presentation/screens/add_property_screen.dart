@@ -114,9 +114,7 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: theme.colorScheme.outlineVariant,
-                    ),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
                   ),
                   child: Row(
                     children: [
@@ -194,9 +192,9 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
                     Row(
                       children: [
                         for (
-                        var i = 0;
-                        i < PropertyType.values.length;
-                        i++
+                          var i = 0;
+                          i < PropertyType.values.length;
+                          i++
                         ) ...[
                           Expanded(
                             child: _PropertyCategoryTile(
@@ -205,7 +203,7 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
                               selected: _selectedType == PropertyType.values[i],
                               enabled: !isLoading,
                               onTap: () => setState(
-                                    () => _selectedType = PropertyType.values[i],
+                                () => _selectedType = PropertyType.values[i],
                               ),
                             ),
                           ),
@@ -277,7 +275,7 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
                       controller: _descriptionController,
                       label: 'Description / Rules',
                       hint:
-                      'e.g. Generator available, main gate closes at 11 PM',
+                          'e.g. Generator available, main gate closes at 11 PM',
                       prefixIcon: Iconsax.note_2,
                       textCapitalization: TextCapitalization.sentences,
                       enabled: !isLoading,

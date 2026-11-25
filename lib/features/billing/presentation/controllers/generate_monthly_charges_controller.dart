@@ -8,10 +8,10 @@ import '../providers/monthly_bill_provider.dart';
 import '../providers/monthly_charge_generation_provider.dart';
 
 final generateMonthlyChargesControllerProvider =
-NotifierProvider<
-    GenerateMonthlyChargesController,
-    AsyncValue<GenerateMonthlyChargesResult?>
->(GenerateMonthlyChargesController.new);
+    NotifierProvider<
+      GenerateMonthlyChargesController,
+      AsyncValue<GenerateMonthlyChargesResult?>
+    >(GenerateMonthlyChargesController.new);
 
 class GenerateMonthlyChargesController
     extends Notifier<AsyncValue<GenerateMonthlyChargesResult?>> {
@@ -65,8 +65,8 @@ class GenerateMonthlyChargesController
   }
 
   List<TenancyBillingTarget> _deduplicateTargets(
-      List<TenancyBillingTarget> targets,
-      ) {
+    List<TenancyBillingTarget> targets,
+  ) {
     final seen = <String>{};
     final uniqueTargets = <TenancyBillingTarget>[];
 
@@ -120,15 +120,15 @@ class GenerateMonthlyChargesController
           result.generatedBills.isNotEmpty) {
         ref.invalidate(
           propertyMonthlyBillHistoryProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
+            ownerId: ownerId,
+            propertyId: propertyId,
           )),
         );
         ref.invalidate(
           monthlyBillsByPropertyAndPeriodProvider((
-          ownerId: ownerId,
-          propertyId: propertyId,
-          billingPeriodStart: billingPeriodStart,
+            ownerId: ownerId,
+            propertyId: propertyId,
+            billingPeriodStart: billingPeriodStart,
           )),
         );
       }

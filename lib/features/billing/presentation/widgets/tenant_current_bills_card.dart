@@ -16,14 +16,14 @@ class TenantCurrentBillsCard extends ConsumerWidget {
   const TenantCurrentBillsCard({super.key});
 
   Future<void> _exportCurrentInvoicePdf(
-      BuildContext context,
-      WidgetRef ref, {
-        required DateTime periodStart,
-        required List<MonthlyBill> bills,
-        required double unbilledRentAmount,
-        required String unitLabel,
-        required bool share,
-      }) async {
+    BuildContext context,
+    WidgetRef ref, {
+    required DateTime periodStart,
+    required List<MonthlyBill> bills,
+    required double unbilledRentAmount,
+    required String unitLabel,
+    required bool share,
+  }) async {
     try {
       final tenant = ref.read(currentTenantProvider).value;
       final property = ref.read(currentTenantPropertyProvider).value;
@@ -48,7 +48,7 @@ class TenantCurrentBillsCard extends ConsumerWidget {
 
       final paidAmount = bills.fold<double>(
         0.0,
-            (sum, bill) => sum + bill.paidAmount,
+        (sum, bill) => sum + bill.paidAmount,
       );
       final dueDate = bills.isNotEmpty
           ? bills.first.dueDate
@@ -63,13 +63,13 @@ class TenantCurrentBillsCard extends ConsumerWidget {
         status: bills.any((b) => b.isOverdue)
             ? 'overdue'
             : paidAmount > 0 &&
-            bills.fold<double>(0, (s, b) => s + b.remainingAmount) +
-                unbilledRentAmount >
-                0
+                  bills.fold<double>(0, (s, b) => s + b.remainingAmount) +
+                          unbilledRentAmount >
+                      0
             ? 'partiallyPaid'
             : bills.fold<double>(0, (s, b) => s + b.remainingAmount) +
-            unbilledRentAmount <=
-            0
+                      unbilledRentAmount <=
+                  0
             ? 'paid'
             : 'unpaid',
         dueDate: dueDate,
@@ -117,8 +117,8 @@ class TenantCurrentBillsCard extends ConsumerWidget {
 
     final unitLabel = unit != null
         ? (unit.name?.trim().isNotEmpty == true
-        ? '${unit.name} (Unit ${unit.unitNumber})'
-        : 'Unit ${unit.unitNumber} • Floor ${unit.floorNumber}')
+              ? '${unit.name} (Unit ${unit.unitNumber})'
+              : 'Unit ${unit.unitNumber} • Floor ${unit.floorNumber}')
         : 'Assigned Unit';
 
     return Material(
@@ -145,23 +145,23 @@ class TenantCurrentBillsCard extends ConsumerWidget {
           data: (bills) {
             final activeRentAmount = rentRateAsync?.value?.amount;
             final hasRentInBills = bills.any(
-                  (bill) => bill.type == MonthlyBillType.rent,
+              (bill) => bill.type == MonthlyBillType.rent,
             );
             final unbilledRentAmount =
-            (!hasRentInBills &&
-                activeRentAmount != null &&
-                activeRentAmount > 0)
+                (!hasRentInBills &&
+                    activeRentAmount != null &&
+                    activeRentAmount > 0)
                 ? activeRentAmount
                 : 0.0;
 
             final billedTotal = bills.fold<double>(
               0,
-                  (sum, bill) => sum + bill.amount,
+              (sum, bill) => sum + bill.amount,
             );
             final totalPayable = billedTotal + unbilledRentAmount;
             final remainingDue = bills.fold<double>(
               0,
-                  (sum, bill) => sum + bill.remainingAmount,
+              (sum, bill) => sum + bill.remainingAmount,
             );
             final totalDue = remainingDue + unbilledRentAmount;
 
@@ -344,7 +344,7 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                           ? bills[i].title!.trim()
                           : monthlyBillTypeLabel(bills[i].type),
                       subtitle:
-                      '${bills[i].valueType == BillingValueType.fixed ? 'Fixed' : 'Variable'} • Due: ${formatBillingShortDate(bills[i].dueDate)}',
+                          '${bills[i].valueType == BillingValueType.fixed ? 'Fixed' : 'Variable'} • Due: ${formatBillingShortDate(bills[i].dueDate)}',
                       amount: bills[i].amount,
                       remainingAmount: bills[i].remainingAmount,
                     ),
@@ -357,7 +357,8 @@ class TenantCurrentBillsCard extends ConsumerWidget {
                       child: GrihoPrimaryButton(
                         label: 'Pay a Bill',
                         icon: Iconsax.wallet_3,
-                        onPressed: () => context.push(RouteNames.tenantPayments),
+                        onPressed: () =>
+                            context.push(RouteNames.tenantPayments),
                       ),
                     ),
                     if (!hasNoCharges) ...[

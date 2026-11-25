@@ -78,8 +78,8 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
         ref.read(getActiveTenantsByUnitIdProvider)(unit.id),
         ref.read(
           currentRentRateProvider((
-          unitId: unit.id,
-          ownerId: property.ownerId,
+            unitId: unit.id,
+            ownerId: property.ownerId,
           )).future,
         ),
       ]);
@@ -364,7 +364,7 @@ class _ChangeUnitRentScreenState extends ConsumerState<ChangeUnitRentScreen> {
               GrihoSectionCard(
                 title: 'New Rent Configuration',
                 subtitle:
-                'Specify the updated recurring monthly rate for this unit.',
+                    'Specify the updated recurring monthly rate for this unit.',
                 icon: Iconsax.wallet_3,
                 children: [
                   TextFormField(

@@ -170,10 +170,10 @@ class WorkOrder {
 }
 
 Stream<List<TeamMember>> _accessStream(
-    Ref ref,
-    String collection,
-    String? fixedRole,
-    ) {
+  Ref ref,
+  String collection,
+  String? fixedRole,
+) {
   ref.watch(authStateProvider);
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) {
@@ -186,14 +186,14 @@ Stream<List<TeamMember>> _accessStream(
       .snapshots()
       .map(
         (s) => s.docs.map((d) => TeamMember.fromAccess(d, fixedRole)).toList(),
-  );
+      );
 }
 
 Stream<List<TeamMember>> _pendingStream(
-    Ref ref,
-    String collection,
-    String? fixedRole,
-    ) {
+  Ref ref,
+  String collection,
+  String? fixedRole,
+) {
   ref.watch(authStateProvider);
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) {
@@ -207,30 +207,30 @@ Stream<List<TeamMember>> _pendingStream(
       .snapshots()
       .map(
         (s) => s.docs.map((d) => TeamMember.fromInvite(d, fixedRole)).toList(),
-  );
+      );
 }
 
 final ownerManagersProvider = StreamProvider.autoDispose<List<TeamMember>>(
-      (ref) => _accessStream(ref, 'managerAccess', 'manager'),
+  (ref) => _accessStream(ref, 'managerAccess', 'manager'),
 );
 
 final ownerStaffProvider = StreamProvider.autoDispose<List<TeamMember>>(
-      (ref) => _accessStream(ref, 'staffAccess', null),
+  (ref) => _accessStream(ref, 'staffAccess', null),
 );
 
 final ownerPendingManagerInvitesProvider =
-StreamProvider.autoDispose<List<TeamMember>>(
+    StreamProvider.autoDispose<List<TeamMember>>(
       (ref) => _pendingStream(ref, 'managerInvitations', 'manager'),
-);
+    );
 
 final ownerPendingStaffInvitesProvider =
-StreamProvider.autoDispose<List<TeamMember>>(
+    StreamProvider.autoDispose<List<TeamMember>>(
       (ref) => _pendingStream(ref, 'staffInvitations', null),
-);
+    );
 
 final ownerWorkOrdersProvider = StreamProvider.autoDispose<List<WorkOrder>>((
-    ref,
-    ) {
+  ref,
+) {
   ref.watch(authStateProvider);
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) {
@@ -242,12 +242,12 @@ final ownerWorkOrdersProvider = StreamProvider.autoDispose<List<WorkOrder>>((
       .limit(150)
       .snapshots()
       .map((s) {
-    final list = s.docs.map(WorkOrder.fromDoc).toList()
-      ..sort(
+        final list = s.docs.map(WorkOrder.fromDoc).toList()
+          ..sort(
             (a, b) => (b.createdAt?.millisecondsSinceEpoch ?? 0).compareTo(
-          a.createdAt?.millisecondsSinceEpoch ?? 0,
-        ),
-      );
-    return list;
-  });
+              a.createdAt?.millisecondsSinceEpoch ?? 0,
+            ),
+          );
+        return list;
+      });
 });

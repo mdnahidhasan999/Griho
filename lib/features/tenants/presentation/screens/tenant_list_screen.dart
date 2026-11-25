@@ -75,19 +75,19 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
     final filtered = _searchQuery.isEmpty
         ? List<Tenant>.from(tenants)
         : tenants.where((tenant) {
-      final name = tenant.name.toLowerCase();
-      final phone = tenant.phone.toLowerCase();
-      final email = tenant.email?.toLowerCase() ?? '';
-      final nid = tenant.nidNumber?.toLowerCase() ?? '';
+            final name = tenant.name.toLowerCase();
+            final phone = tenant.phone.toLowerCase();
+            final email = tenant.email?.toLowerCase() ?? '';
+            final nid = tenant.nidNumber?.toLowerCase() ?? '';
 
-      return name.contains(_searchQuery) ||
-          phone.contains(_searchQuery) ||
-          email.contains(_searchQuery) ||
-          nid.contains(_searchQuery);
-    }).toList();
+            return name.contains(_searchQuery) ||
+                phone.contains(_searchQuery) ||
+                email.contains(_searchQuery) ||
+                nid.contains(_searchQuery);
+          }).toList();
 
     filtered.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
     );
     return filtered;
   }
@@ -110,7 +110,8 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
       ),
       body: SafeArea(
         child: tenantsAsync.when(
-          loading: () => const GrihoLoadingView(message: 'Loading residents...'),
+          loading: () =>
+              const GrihoLoadingView(message: 'Loading residents...'),
           error: (error, _) => Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -223,7 +224,7 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
                       hintText:
-                      'Search active residents by name, phone, NID...',
+                          'Search active residents by name, phone, NID...',
                       prefixIcon: const Icon(
                         Iconsax.search_normal_1,
                         size: 19,
@@ -232,9 +233,9 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
                       suffixIcon: _searchQuery.isEmpty
                           ? null
                           : IconButton(
-                        onPressed: _searchController.clear,
-                        icon: const Icon(Iconsax.close_circle, size: 19),
-                      ),
+                              onPressed: _searchController.clear,
+                              icon: const Icon(Iconsax.close_circle, size: 19),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -266,7 +267,7 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
                       icon: Iconsax.people,
                       title: 'No Active Residents',
                       subtitle:
-                      'There are currently no active residents occupying units in this property.',
+                          'There are currently no active residents occupying units in this property.',
                       actionLabel: 'Add Resident',
                       onAction: _addTenant,
                     )
@@ -275,7 +276,7 @@ class _TenantListScreenState extends ConsumerState<TenantListScreen> {
                       icon: Iconsax.search_normal_1,
                       title: 'No matching residents found',
                       subtitle:
-                      'No resident matches "$_searchQuery" in this building.',
+                          'No resident matches "$_searchQuery" in this building.',
                     )
                   else
                     for (final tenant in filteredTenants)

@@ -99,8 +99,8 @@ class _InviteTeamMemberScreenState
     final profile = ref.read(currentUserProfileProvider).value;
 
     final property =
-    (_selectedProperty != null &&
-        properties.any((p) => p.id == _selectedProperty!.id))
+        (_selectedProperty != null &&
+            properties.any((p) => p.id == _selectedProperty!.id))
         ? _selectedProperty
         : (properties.isNotEmpty ? properties.first : null);
     if (property == null) {
@@ -283,15 +283,15 @@ class _InviteTeamMemberScreenState
                   icon: Iconsax.buildings_2,
                   title: 'No properties available',
                   subtitle:
-                  'Please create at least one building before inviting your team.',
+                      'Please create at least one building before inviting your team.',
                 ),
               ),
             );
           }
 
           final selectedProperty =
-          (_selectedProperty != null &&
-              properties.any((p) => p.id == _selectedProperty!.id))
+              (_selectedProperty != null &&
+                  properties.any((p) => p.id == _selectedProperty!.id))
               ? _selectedProperty!
               : properties.first;
 
@@ -374,7 +374,7 @@ class _InviteTeamMemberScreenState
                         : null,
                     onChanged: (p) => setState(() => _selectedProperty = p),
                     validator: (v) =>
-                    v == null ? 'Please select a property.' : null,
+                        v == null ? 'Please select a property.' : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(

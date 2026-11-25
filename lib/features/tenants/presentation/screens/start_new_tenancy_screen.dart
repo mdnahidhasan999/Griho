@@ -52,7 +52,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               icon: Iconsax.close_circle,
               title: 'Tenant is Already Active',
               subtitle:
-              'This tenant currently has an active tenancy. A new tenancy agreement can only be initiated for inactive or vacated tenants.',
+                  'This tenant currently has an active tenancy. A new tenancy agreement can only be initiated for inactive or vacated tenants.',
               actionLabel: 'Go Back',
               onAction: () => Navigator.of(context).pop(),
             ),
@@ -71,7 +71,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               icon: Iconsax.user_remove,
               title: 'Account Not Registered',
               subtitle:
-              'The tenant must register their personal Griho account before an official tenancy agreement can be initiated.',
+                  'The tenant must register their personal Griho account before an official tenancy agreement can be initiated.',
               actionLabel: 'Go Back',
               onAction: () => Navigator.of(context).pop(),
             ),
@@ -358,12 +358,12 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
       onChanged: _isSubmitting
           ? null
           : (propertyId) {
-        setState(() {
-          _selectedPropertyId = propertyId;
-          _selectedUnit = null;
-          _rentController.clear();
-        });
-      },
+              setState(() {
+                _selectedPropertyId = propertyId;
+                _selectedUnit = null;
+                _rentController.clear();
+              });
+            },
     );
   }
 
@@ -438,8 +438,8 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
               color: isSelected
                   ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
                   : theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.35,
-              ),
+                      alpha: 0.35,
+                    ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
                 side: BorderSide(
@@ -528,11 +528,7 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
         hintText: 'e.g. 15000',
         prefixText: '৳ ',
         suffixText: '/ month',
-        prefixIcon: Icon(
-          Iconsax.money_2,
-          color: GrihoColors.emerald,
-          size: 20,
-        ),
+        prefixIcon: Icon(Iconsax.money_2, color: GrihoColors.emerald, size: 20),
       ),
       onChanged: (_) => setState(() {}),
       validator: (val) {
@@ -657,11 +653,11 @@ class _StartNewTenancyScreenState extends ConsumerState<StartNewTenancyScreen> {
     final startedTenant = await ref
         .read(tenantControllerProvider.notifier)
         .startNewTenancy(
-      tenantId: widget.tenant.id,
-      propertyId: property.id,
-      unitId: unit.id,
-      amount: amount,
-    );
+          tenantId: widget.tenant.id,
+          propertyId: property.id,
+          unitId: unit.id,
+          amount: amount,
+        );
 
     if (!mounted) {
       return;

@@ -12,6 +12,7 @@ import '../../../../core/navigation/app_bottom_navigation.dart';
 import '../../../../core/services/fcm_notification_service.dart';
 import '../../../billing/presentation/widgets/tenant_current_bills_card.dart';
 import '../../../invitations/presentation/providers/work_invitations_providers.dart';
+import '../../../more/presentation/screens/house_rules_screen.dart';
 import '../../../rents/presentation/providers/rent_rate_provider.dart';
 import '../../../tenants/domain/entities/tenancy_history.dart';
 import '../../../tenants/domain/entities/tenant.dart';
@@ -85,6 +86,21 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _NoticesSheet(propertyId: propertyId),
+    );
+  }
+
+  void _openHouseRules(TenantDashboardData d) {
+    final ownerId = d.tenant?.ownerId.trim() ?? '';
+    if (ownerId.isEmpty) {
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TenantHouseRulesScreen(
+          ownerId: ownerId,
+          propertyName: d.currentPropertyName,
+        ),
+      ),
     );
   }
 
@@ -212,6 +228,14 @@ class _TenantHomeScreenState extends ConsumerState<TenantHomeScreen> {
                         subtitle: 'Pay & receipts',
                         color: GrihoColors.emerald,
                         onTap: _openPayments,
+                      ),
+                    if (active)
+                      GrihoQuickActionItem(
+                        icon: Iconsax.document_text_1,
+                        title: 'House rules',
+                        subtitle: 'Landlord policies',
+                        color: GrihoColors.deepTeal,
+                        onTap: () => _openHouseRules(dashboard),
                       ),
                     if (active)
                       GrihoQuickActionItem(

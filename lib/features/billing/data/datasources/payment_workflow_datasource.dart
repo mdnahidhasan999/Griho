@@ -15,8 +15,8 @@ enum PaymentReviewStatus { pending, confirmed, rejected }
 
 class PaymentWorkflowDataSource {
   PaymentWorkflowDataSource({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -310,9 +310,9 @@ class PaymentWorkflowDataSource {
         final uData = unitDoc.data();
         unitNameCache[unitId] =
             (uData?['name'] ??
-                (uData?['unitNumber'] != null
-                    ? 'Unit ${uData?['unitNumber']}'
-                    : 'Unit'))
+                    (uData?['unitNumber'] != null
+                        ? 'Unit ${uData?['unitNumber']}'
+                        : 'Unit'))
                 .toString();
       }
 
@@ -603,7 +603,10 @@ class PaymentWorkflowDataSource {
   // ------------------------------------------------------------
   PaymentQueryStream watchTenantPayments() {
     final uid = _currentUid;
-    return _payments.where('tenantUserId', isEqualTo: uid).limit(150).snapshots();
+    return _payments
+        .where('tenantUserId', isEqualTo: uid)
+        .limit(150)
+        .snapshots();
   }
 
   PaymentQueryStream watchOwnerPayments({

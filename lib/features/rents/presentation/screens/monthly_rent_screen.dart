@@ -71,17 +71,17 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
       }
 
       final periodArgs = (
-      unitId: unit.id,
-      ownerId: property.ownerId,
-      billingPeriodStart: _billingPeriodStart,
+        unitId: unit.id,
+        ownerId: property.ownerId,
+        billingPeriodStart: _billingPeriodStart,
       );
 
       if (forceRefresh) {
         ref.invalidate(monthlyRentByUnitAndPeriodProvider(periodArgs));
         ref.invalidate(
           unitMonthlyRentHistoryProvider((
-          unitId: unit.id,
-          ownerId: property.ownerId,
+            unitId: unit.id,
+            ownerId: property.ownerId,
           )),
         );
       }
@@ -170,9 +170,9 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
     }
 
     final periodArgs = (
-    unitId: unit.id,
-    ownerId: property.ownerId,
-    billingPeriodStart: _billingPeriodStart,
+      unitId: unit.id,
+      ownerId: property.ownerId,
+      billingPeriodStart: _billingPeriodStart,
     );
 
     if (invalidateFirst) {
@@ -314,8 +314,8 @@ class _MonthlyRentScreenState extends ConsumerState<MonthlyRentScreen> {
 
       ref.invalidate(
         unitMonthlyRentHistoryProvider((
-        unitId: unit.id,
-        ownerId: property.ownerId,
+          unitId: unit.id,
+          ownerId: property.ownerId,
         )),
       );
 
@@ -638,11 +638,11 @@ class _MonthlyRentSummaryCard extends StatelessWidget {
 
     final total = monthlyRents.fold<double>(
       0.0,
-          (sum, rent) => sum + rent.amount,
+      (sum, rent) => sum + rent.amount,
     );
     final chargeableDays = monthlyRents.fold<int>(
       0,
-          (days, rent) => days + rent.chargeableDays,
+      (days, rent) => days + rent.chargeableDays,
     );
 
     return Container(
@@ -790,12 +790,12 @@ class _GeneratedRentItem extends StatelessWidget {
         _DataRow(
           label: 'Charge Period',
           value:
-          '${formatRentDate(monthlyRent.chargePeriodStart)} - ${formatRentDate(monthlyRent.chargePeriodEnd)}',
+              '${formatRentDate(monthlyRent.chargePeriodStart)} - ${formatRentDate(monthlyRent.chargePeriodEnd)}',
         ),
         _DataRow(
           label: 'Billing Ratio',
           value:
-          '${monthlyRent.chargeableDays} of ${monthlyRent.daysInBillingPeriod} days',
+              '${monthlyRent.chargeableDays} of ${monthlyRent.daysInBillingPeriod} days',
         ),
         _DataRow(
           label: 'Monthly Rate',
@@ -837,7 +837,7 @@ class _GenerateMonthlyRentCard extends StatelessWidget {
           ? 'Check / Complete Monthly Rent'
           : 'Generate Monthly Rent',
       subtitle:
-      'Calculate rent using the tenancy periods and applicable rent rates. Existing records are skipped automatically.',
+          'Calculate rent using the tenancy periods and applicable rent rates. Existing records are skipped automatically.',
       icon: Iconsax.flash_1,
       children: [
         InkWell(

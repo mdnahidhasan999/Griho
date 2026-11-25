@@ -1,4 +1,5 @@
 // noinspection SpellCheckingInspection
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -28,6 +29,10 @@ class TenantInvitationReceiveScreen extends ConsumerStatefulWidget {
 class _TenantInvitationReceiveScreenState
     extends ConsumerState<TenantInvitationReceiveScreen> {
   TenantInvitation? _invitation;
+
+  List<String> _houseRules = const [];
+  String _ownerName = '';
+  bool _agreedToRules = false;
 
   bool _isLoading = true;
   bool _isAccepting = false;
@@ -60,6 +65,7 @@ class _TenantInvitationReceiveScreenState
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _agreedToRules = false;
     });
 
     try {
@@ -73,15 +79,49 @@ class _TenantInvitationReceiveScreenState
         setState(() {
           _isLoading = false;
           _invitation = null;
+          _houseRules = const [];
+          _ownerName = '';
           _errorMessage =
               'This invitation does not exist, has expired, or is no longer available.';
         });
         return;
       }
 
+      List<String> loadedRules = const [];
+      String loadedOwnerName = '';
+
+      final ownerId = invitation.ownerId.trim();
+      if (ownerId.isNotEmpty) {
+        try {
+          final rulesDoc = await FirebaseFirestore.instance
+              .collection('house_rules')
+              .doc(ownerId)
+              .get();
+          final rawData = rulesDoc.data();
+          loadedOwnerName = (rawData?['ownerName'] ?? '').toString().trim();
+          final rawRules = rawData?['rules'];
+          if (rawRules is List) {
+            loadedRules = rawRules
+                .whereType<String>()
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
+          }
+        } catch (_) {
+          // Keep invitation accessible even if house rules doc is unreadable or absent.
+          loadedRules = const [];
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _isLoading = false;
         _invitation = invitation;
+        _houseRules = loadedRules;
+        _ownerName = loadedOwnerName;
         _errorMessage = null;
       });
     } catch (error) {
@@ -91,6 +131,8 @@ class _TenantInvitationReceiveScreenState
       setState(() {
         _isLoading = false;
         _invitation = null;
+        _houseRules = const [];
+        _ownerName = '';
         _errorMessage = _cleanError(error);
       });
     }
@@ -108,6 +150,14 @@ class _TenantInvitationReceiveScreenState
           _errorMessage = 'This invitation is no longer valid or has expired.';
         });
       }
+      return;
+    }
+
+    if (_houseRules.isNotEmpty && !_agreedToRules) {
+      GrihoFeedback.showWarning(
+        context,
+        'অনুগ্রহ করে আগে মালিকের বাসা ভাড়ার নিয়মাবলীতে সম্মতি দিন।',
+      );
       return;
     }
 
@@ -329,6 +379,7 @@ class _TenantInvitationReceiveScreenState
     }
 
     final rentAmount = invitation.rentAmount;
+    final canAccept = !_isAccepting && (_houseRules.isEmpty || _agreedToRules);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
@@ -472,6 +523,92 @@ class _TenantInvitationReceiveScreenState
               ),
             ],
           ),
+          if (_houseRules.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            GrihoSectionCard(
+              title: 'House Rules & Policies (${_houseRules.length})',
+              subtitle: _ownerName.isNotEmpty
+                  ? '$_ownerName-এর নির্ধারিত বাসা ভাড়ার নিয়মাবলী'
+                  : 'মালিকের নির্ধারিত বাসা ভাড়ার নিয়মাবলী',
+              icon: Iconsax.document_text_1,
+              children: [
+                for (var i = 0; i < _houseRules.length; i++) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: GrihoColors.emerald.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${i + 1}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: GrihoColors.emerald,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _houseRules[i],
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (i != _houseRules.length - 1) const Divider(height: 1),
+                ],
+                if (!_isAccepted) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _agreedToRules
+                          ? GrihoColors.emerald.withValues(alpha: 0.1)
+                          : theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _agreedToRules
+                            ? GrihoColors.emerald
+                            : theme.colorScheme.outlineVariant,
+                      ),
+                    ),
+                    child: CheckboxListTile(
+                      value: _agreedToRules,
+                      activeColor: GrihoColors.emerald,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      title: Text(
+                        'আমি মালিকের নির্ধারিত সকল বাসা ভাড়ার নিয়মাবলী পড়েছি এবং মেনে চলতে সম্মত আছি।',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
+                        ),
+                      ),
+                      onChanged: _isAccepting
+                          ? null
+                          : (val) =>
+                                setState(() => _agreedToRules = val ?? false),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(14),
@@ -546,7 +683,7 @@ class _TenantInvitationReceiveScreenState
                   : 'Accept Tenancy Invitation',
               icon: Iconsax.tick_circle,
               isLoading: _isAccepting,
-              onPressed: _acceptInvitation,
+              onPressed: canAccept ? _acceptInvitation : null,
             ),
             const SizedBox(height: 12),
             GrihoSecondaryButton(

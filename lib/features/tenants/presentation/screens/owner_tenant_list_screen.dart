@@ -204,9 +204,9 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
                     suffixIcon: _searchQuery.isEmpty
                         ? null
                         : IconButton(
-                      onPressed: _searchController.clear,
-                      icon: const Icon(Iconsax.close_circle, size: 19),
-                    ),
+                            onPressed: _searchController.clear,
+                            icon: const Icon(Iconsax.close_circle, size: 19),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -238,7 +238,7 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
                     icon: Iconsax.people,
                     title: 'No Tenants Assigned Yet',
                     subtitle:
-                    'Add your first resident to allocate an apartment space and dispatch onboarding links.',
+                        'Add your first resident to allocate an apartment space and dispatch onboarding links.',
                     actionLabel: 'Add Tenant',
                     onAction: _openAddTenant,
                   )
@@ -247,47 +247,47 @@ class _OwnerTenantListScreenState extends ConsumerState<OwnerTenantListScreen> {
                     icon: Iconsax.search_normal_1,
                     title: 'No matching residents found',
                     subtitle:
-                    'No resident matches "$_searchQuery". Check for typos or try searching by phone or NID.',
+                        'No resident matches "$_searchQuery". Check for typos or try searching by phone or NID.',
                   )
                 else ...[
-                    if (activeTenants.isNotEmpty) ...[
-                      TenantSectionHeader(
-                        title: 'Active Residents',
-                        count: activeTenants.length,
-                        icon: Iconsax.verify,
-                        color: GrihoColors.emerald,
-                      ),
-                      const SizedBox(height: 10),
-                      for (final tenant in activeTenants)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: TenantListCard(
-                            tenant: tenant,
-                            showPropertyBadge: true,
-                            onTap: () => _openTenantDetails(tenant),
-                          ),
+                  if (activeTenants.isNotEmpty) ...[
+                    TenantSectionHeader(
+                      title: 'Active Residents',
+                      count: activeTenants.length,
+                      icon: Iconsax.verify,
+                      color: GrihoColors.emerald,
+                    ),
+                    const SizedBox(height: 10),
+                    for (final tenant in activeTenants)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TenantListCard(
+                          tenant: tenant,
+                          showPropertyBadge: true,
+                          onTap: () => _openTenantDetails(tenant),
                         ),
-                    ],
-                    if (inactiveTenants.isNotEmpty) ...[
-                      if (activeTenants.isNotEmpty) const SizedBox(height: 12),
-                      TenantSectionHeader(
-                        title: 'Inactive / Vacated',
-                        count: inactiveTenants.length,
-                        icon: Iconsax.clock,
-                        color: GrihoColors.warning,
                       ),
-                      const SizedBox(height: 10),
-                      for (final tenant in inactiveTenants)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: TenantListCard(
-                            tenant: tenant,
-                            showPropertyBadge: true,
-                            onTap: () => _openTenantDetails(tenant),
-                          ),
-                        ),
-                    ],
                   ],
+                  if (inactiveTenants.isNotEmpty) ...[
+                    if (activeTenants.isNotEmpty) const SizedBox(height: 12),
+                    TenantSectionHeader(
+                      title: 'Inactive / Vacated',
+                      count: inactiveTenants.length,
+                      icon: Iconsax.clock,
+                      color: GrihoColors.warning,
+                    ),
+                    const SizedBox(height: 10),
+                    for (final tenant in inactiveTenants)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TenantListCard(
+                          tenant: tenant,
+                          showPropertyBadge: true,
+                          onTap: () => _openTenantDetails(tenant),
+                        ),
+                      ),
+                  ],
+                ],
               ],
             ),
           );

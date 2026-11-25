@@ -69,16 +69,16 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
     final description = _descriptionController.text.trim();
     final numberOfFloors =
         int.tryParse(_numberOfFloorsController.text.trim()) ??
-            widget.property.numberOfFloors;
+        widget.property.numberOfFloors;
 
     // Skip Firestore write if nothing changed.
     final unchanged =
         name == widget.property.name.trim() &&
-            address == (widget.property.address?.trim() ?? '') &&
-            description == (widget.property.description?.trim() ?? '') &&
-            numberOfFloors == widget.property.numberOfFloors &&
-            _selectedType == widget.property.type &&
-            _selectedStatus == widget.property.status;
+        address == (widget.property.address?.trim() ?? '') &&
+        description == (widget.property.description?.trim() ?? '') &&
+        numberOfFloors == widget.property.numberOfFloors &&
+        _selectedType == widget.property.type &&
+        _selectedStatus == widget.property.status;
 
     if (unchanged) {
       GrihoFeedback.showInfo(context, 'No changes to save.');
@@ -157,9 +157,7 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: theme.colorScheme.outlineVariant,
-                    ),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
                   ),
                   child: Row(
                     children: [
@@ -206,10 +204,10 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                         ),
                         decoration: BoxDecoration(
                           color:
-                          (isActive
-                              ? GrihoColors.emerald
-                              : GrihoColors.warning)
-                              .withValues(alpha: 0.16),
+                              (isActive
+                                      ? GrihoColors.emerald
+                                      : GrihoColors.warning)
+                                  .withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -297,9 +295,9 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                     Row(
                       children: [
                         for (
-                        var i = 0;
-                        i < PropertyType.values.length;
-                        i++
+                          var i = 0;
+                          i < PropertyType.values.length;
+                          i++
                         ) ...[
                           Expanded(
                             child: _OptionTile(
@@ -309,7 +307,7 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                               selected: _selectedType == PropertyType.values[i],
                               enabled: !isLoading,
                               onTap: () => setState(
-                                    () => _selectedType = PropertyType.values[i],
+                                () => _selectedType = PropertyType.values[i],
                               ),
                             ),
                           ),
@@ -330,9 +328,9 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                     Row(
                       children: [
                         for (
-                        var i = 0;
-                        i < PropertyStatus.values.length;
-                        i++
+                          var i = 0;
+                          i < PropertyStatus.values.length;
+                          i++
                         ) ...[
                           Expanded(
                             child: _OptionTile(
@@ -340,22 +338,22 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                                 PropertyStatus.values[i],
                               ),
                               icon:
-                              PropertyStatus.values[i] ==
-                                  PropertyStatus.active
+                                  PropertyStatus.values[i] ==
+                                      PropertyStatus.active
                                   ? Iconsax.tick_circle
                                   : Iconsax.pause_circle,
                               accentColor:
-                              PropertyStatus.values[i] ==
-                                  PropertyStatus.active
+                                  PropertyStatus.values[i] ==
+                                      PropertyStatus.active
                                   ? GrihoColors.emerald
                                   : GrihoColors.warning,
                               selected:
-                              _selectedStatus == PropertyStatus.values[i],
+                                  _selectedStatus == PropertyStatus.values[i],
                               enabled: !isLoading,
                               horizontal: true,
                               onTap: () => setState(
-                                    () =>
-                                _selectedStatus = PropertyStatus.values[i],
+                                () =>
+                                    _selectedStatus = PropertyStatus.values[i],
                               ),
                             ),
                           ),
@@ -426,7 +424,7 @@ class _EditPropertyScreenState extends ConsumerState<EditPropertyScreen> {
                       controller: _descriptionController,
                       label: 'Description / Guidelines',
                       hint:
-                      'e.g. Generator available, gates locked after midnight',
+                          'e.g. Generator available, gates locked after midnight',
                       prefixIcon: Iconsax.note_2,
                       textCapitalization: TextCapitalization.sentences,
                       enabled: !isLoading,
@@ -495,43 +493,43 @@ class _OptionTile extends StatelessWidget {
         ),
         child: horizontal
             ? Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 19, color: fgColor),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: selected
-                      ? FontWeight.w800
-                      : FontWeight.w600,
-                  color: fgColor,
-                ),
-              ),
-            ),
-          ],
-        )
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 19, color: fgColor),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: selected
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                        color: fgColor,
+                      ),
+                    ),
+                  ),
+                ],
+              )
             : Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 21, color: fgColor),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                color: fgColor,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 21, color: fgColor),
+                  const SizedBox(height: 6),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      color: fgColor,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

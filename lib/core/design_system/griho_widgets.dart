@@ -272,7 +272,6 @@ class GrihoStatusState extends StatelessWidget {
 // ============================================================================
 // 5. REUSABLE SECTION CARD
 // ============================================================================
-
 class GrihoSectionCard extends StatelessWidget {
   const GrihoSectionCard({
     super.key,
@@ -290,13 +289,27 @@ class GrihoSectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        border: Border.all(
+          color: isDark
+              ? theme.colorScheme.outlineVariant
+              : GrihoColors.softMint,
+        ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: GrihoColors.deepTeal.withValues(alpha: 0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -304,28 +317,42 @@ class GrihoSectionCard extends StatelessWidget {
           Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? GrihoColors.emerald.withValues(alpha: 0.16)
+                        : GrihoColors.mintWhisper,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 18, color: GrihoColors.emerald),
+                ),
+                const SizedBox(width: 10),
               ],
               Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (subtitle != null && subtitle!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
           ),
-          if (subtitle != null && subtitle!.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              subtitle!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
           const SizedBox(height: 16),
           ...children,
         ],

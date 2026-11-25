@@ -33,7 +33,7 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
             icon: Iconsax.lock,
             title: 'Authentication Required',
             subtitle:
-            'Please sign in to view your past tenancy history and lease records.',
+                'Please sign in to view your past tenancy history and lease records.',
           ),
         ),
       );
@@ -48,7 +48,7 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
             icon: Iconsax.user_remove,
             title: 'Account Unavailable',
             subtitle:
-            'Your account information is currently unavailable. Please sign in again.',
+                'Your account information is currently unavailable. Please sign in again.',
           ),
         ),
       );
@@ -65,7 +65,7 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
             icon: Iconsax.warning_2,
             title: 'Unable to load tenancy history',
             subtitle:
-            'There was an error communicating with the server. Please try again.',
+                'There was an error communicating with the server. Please try again.',
             actionLabel: 'Retry',
             onAction: () =>
                 ref.invalidate(myTenancyHistoryProvider(tenantUserId)),
@@ -81,7 +81,7 @@ class TenantTenancyHistoryScreen extends ConsumerWidget {
                 icon: Iconsax.clock,
                 title: 'No Tenancy History',
                 subtitle:
-                'You do not have any past completed tenancies recorded with Griho.',
+                    'You do not have any past completed tenancies recorded with Griho.',
               ),
             ),
           );

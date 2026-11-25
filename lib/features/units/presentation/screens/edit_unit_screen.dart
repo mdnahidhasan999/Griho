@@ -67,9 +67,9 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
     // Skip Firestore write if nothing changed.
     final unchanged =
         floorNumber == widget.unit.floorNumber &&
-            unitNumber == widget.unit.unitNumber.trim() &&
-            name == (widget.unit.name?.trim() ?? '') &&
-            _selectedStatus == widget.unit.status;
+        unitNumber == widget.unit.unitNumber.trim() &&
+        name == (widget.unit.name?.trim() ?? '') &&
+        _selectedStatus == widget.unit.status;
 
     if (unchanged) {
       GrihoFeedback.showInfo(context, 'No changes to save.');
@@ -142,7 +142,7 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
                           ? nameText
                           : widget.unit.name,
                       floorNumber:
-                      int.tryParse(_floorController.text.trim()) ??
+                          int.tryParse(_floorController.text.trim()) ??
                           widget.unit.floorNumber,
                       status: _selectedStatus,
                     );
@@ -241,7 +241,7 @@ class _EditUnitScreenState extends ConsumerState<EditUnitScreen> {
                               selected: _selectedStatus == UnitStatus.values[i],
                               enabled: !isLoading,
                               onTap: () => setState(
-                                    () => _selectedStatus = UnitStatus.values[i],
+                                () => _selectedStatus = UnitStatus.values[i],
                               ),
                             ),
                           ),
